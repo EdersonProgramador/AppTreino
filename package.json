@@ -12,7 +12,7 @@
     "dev:web": "npm run build --workspace @app-treino/shared && npm run dev --workspace @app-treino/web",
     "dev:api": "npm run build --workspace @app-treino/shared && npm run dev --workspace @app-treino/api",
     "build": "npm run build --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run build --workspace @app-treino/shared && npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "prisma:generate": "npm run prisma:generate --workspace @app-treino/api",
     "prisma:migrate": "npm run prisma:migrate --workspace @app-treino/api"
