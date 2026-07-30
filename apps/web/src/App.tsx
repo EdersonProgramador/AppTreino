@@ -36,6 +36,8 @@ type View = "home" | "login" | "admin" | "user";
 type AuthMode = "login" | "register";
 type PlanCode = "monthly" | "annual";
 
+const assetUrl = (path: string) => `${import.meta.env.BASE_URL}${path}`;
+
 const resources = [
   {
     icon: Dumbbell,
@@ -318,7 +320,7 @@ export function App() {
     <div className="app-shell">
       <header className="topbar">
         <button className="brand" onClick={() => setView("home")} aria-label="Ir para inicio">
-          <img className="brand-logo" src="/assets/app-treino-logo.svg" alt="App Treino" />
+          <img className="brand-logo" src={assetUrl("assets/app-treino-logo.svg")} alt="App Treino" />
         </button>
         <nav className="nav-links" aria-label="Navegacao principal">
           <a href="#recursos" onClick={() => setView("home")}>
@@ -381,7 +383,7 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
 
           <div className="hero-panel hero-image-panel" aria-label="Imagem oficial do App Treino">
             <img
-              src="/assets/hero-banner-app-treino.png"
+              src={assetUrl("assets/hero-banner-app-treino.png")}
               alt="Mulher atleta usando o App Treino em um smartphone"
             />
           </div>
