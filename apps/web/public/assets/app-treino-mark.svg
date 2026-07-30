@@ -1,0 +1,9 @@
+<svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">APP TREINO</title>
+  <desc id="desc">Simbolo geometrico em A do App Treino.</desc>
+  <rect width="96" height="96" rx="18" fill="#FFFFFF"/>
+  <path d="M18 78L44 18H61L35 78H18Z" fill="#A33A2C"/>
+  <path d="M56 18L80 78H62L50 48L37 78H25L52 18H56Z" fill="#0C5A47"/>
+  <path d="M42 56H60L66 71H35L42 56Z" fill="#A33A2C"/>
+  <path d="M65 12H83L70 30H54L65 12Z" fill="#0C5A47"/>
+</svg>

@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "App Treino",
+    "slug": "app-treino",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "extra": {
+      "apiUrl": "http://localhost:3333"
+    }
+  }
+}

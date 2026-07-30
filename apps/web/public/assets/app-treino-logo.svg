@@ -1,0 +1,14 @@
+<svg width="292" height="72" viewBox="0 0 292 72" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">APP TREINO</title>
+  <desc id="desc">Logo horizontal do App Treino com simbolo geometrico em A.</desc>
+  <g>
+    <path d="M12 60L34.5 12H52L29.5 60H12Z" fill="#A33A2C"/>
+    <path d="M46.5 12L68 60H49.5L39.5 36L30 60H18.5L42.5 12H46.5Z" fill="#0C5A47"/>
+    <path d="M34 42H50L55 54H28.5L34 42Z" fill="#A33A2C"/>
+    <path d="M56 7H73L62.5 22.5H47.5L56 7Z" fill="#0C5A47"/>
+  </g>
+  <g font-family="Montserrat, Poppins, Inter, SF Pro Display, Arial, sans-serif" font-size="31" font-weight="700" letter-spacing="0">
+    <text x="92" y="45" fill="#A33A2C">APP</text>
+    <text x="154" y="45" fill="#0C5A47">TREINO</text>
+  </g>
+</svg>

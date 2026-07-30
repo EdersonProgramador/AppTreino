@@ -1,0 +1,243 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String       @id @default(cuid())
+  name        String
+  email       String       @unique
+  passwordHash String
+  role        UserRole     @default(USER)
+  status      UserStatus   @default(ACTIVE)
+  profile     Profile?
+  memberships Membership[]
+  attendances AttendanceRecord[]
+  physicalAssessments PhysicalAssessment[]
+  eventRegistrations EventRegistration[]
+  supportTickets SupportTicket[] @relation("SupportTicketStudent")
+  assignedTickets SupportTicket[] @relation("SupportTicketAssignee")
+  aiWorkoutPlans AiWorkoutPlan[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Profile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  phone       String?
+  document    String?
+  birthDate   DateTime?
+  objective   String?
+  level       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Plan {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  priceInCents Int
+  billingCycle BillingCycle
+  memberships Membership[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Membership {
+  id          String           @id @default(cuid())
+  userId      String
+  planId      String
+  user        User             @relation(fields: [userId], references: [id])
+  plan        Plan             @relation(fields: [planId], references: [id])
+  status      MembershipStatus @default(PENDING)
+  startsAt    DateTime
+  endsAt      DateTime?
+  payments    Payment[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  membershipId    String
+  membership      Membership    @relation(fields: [membershipId], references: [id])
+  amountInCents   Int
+  status          PaymentStatus @default(PENDING)
+  dueDate         DateTime
+  paidAt          DateTime?
+  asaasPaymentId  String?       @unique
+  paymentUrl      String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Workout {
+  id          String       @id @default(cuid())
+  title       String
+  objective   String?
+  days        WorkoutDay[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model WorkoutDay {
+  id          String     @id @default(cuid())
+  workoutId   String
+  workout     Workout    @relation(fields: [workoutId], references: [id])
+  title       String
+  sortOrder   Int
+  exercises   Exercise[]
+}
+
+model Exercise {
+  id          String     @id @default(cuid())
+  workoutDayId String
+  workoutDay WorkoutDay @relation(fields: [workoutDayId], references: [id])
+  name        String
+  sets        Int
+  reps        String
+  restSeconds Int?
+  notes       String?
+  sortOrder   Int
+}
+
+model AttendanceRecord {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  date      DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([userId, date])
+}
+
+model PhysicalAssessment {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  assessedAt  DateTime
+  weightKg    Float?
+  heightCm    Float?
+  bodyFatPct  Float?
+  waistCm     Float?
+  chestCm     Float?
+  hipCm       Float?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Event {
+  id          String              @id @default(cuid())
+  title       String
+  description String?
+  startsAt    DateTime
+  endsAt      DateTime?
+  location    String?
+  capacity    Int?
+  status      EventStatus         @default(SCHEDULED)
+  registrations EventRegistration[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+}
+
+model EventRegistration {
+  id        String   @id @default(cuid())
+  eventId   String
+  userId    String
+  event     Event    @relation(fields: [eventId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, userId])
+}
+
+model SupportTicket {
+  id          String        @id @default(cuid())
+  userId      String
+  assignedToId String?
+  user        User          @relation("SupportTicketStudent", fields: [userId], references: [id])
+  assignedTo  User?         @relation("SupportTicketAssignee", fields: [assignedToId], references: [id])
+  subject     String
+  message     String
+  category    TicketCategory @default(GENERAL)
+  status      TicketStatus   @default(OPEN)
+  priority    TicketPriority @default(NORMAL)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model AiWorkoutPlan {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  objective   String
+  level       String
+  daysPerWeek Int
+  focus       String?
+  plan        Json
+  createdAt   DateTime @default(now())
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum MembershipStatus {
+  ACTIVE
+  PENDING
+  OVERDUE
+  CANCELED
+}
+
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+  OVERDUE
+  REFUNDED
+  CANCELED
+}
+
+enum EventStatus {
+  SCHEDULED
+  CANCELED
+  FINISHED
+}
+
+enum TicketCategory {
+  GENERAL
+  WORKOUT
+  PAYMENT
+  TECHNICAL
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+}

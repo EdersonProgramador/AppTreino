@@ -1,0 +1,23 @@
+{
+  "name": "app-treino",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Monorepo do App Treino com web, API e pacotes compartilhados.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run build --workspace @app-treino/shared && npm run dev --workspace @app-treino/web",
+    "dev:web": "npm run build --workspace @app-treino/shared && npm run dev --workspace @app-treino/web",
+    "dev:api": "npm run build --workspace @app-treino/shared && npm run dev --workspace @app-treino/api",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "prisma:generate": "npm run prisma:generate --workspace @app-treino/api",
+    "prisma:migrate": "npm run prisma:migrate --workspace @app-treino/api"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
