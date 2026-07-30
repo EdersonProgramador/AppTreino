@@ -21,6 +21,18 @@ npm run dev:web
 npm run dev:api
 ```
 
+## GitHub Actions
+
+O projeto possui CI em `.github/workflows/ci.yml` para pushes e pull requests na branch `main`.
+
+Para reproduzir localmente as principais checagens:
+
+```bash
+npm run prisma:generate
+npm run typecheck
+npm run build
+```
+
 ## Ambiente
 
 Copie `.env.example` para `.env` na raiz e ajuste as credenciais. Para a API, tambem crie `apps/api/.env` se preferir manter variaveis especificas no app.
