@@ -8,123 +8,211 @@ datasource db {
 }
 
 model User {
-  id                    String                @id @default(cuid())
-  name                  String
-  email                 String?               @unique
-  phone                 String?               @unique
-  passwordHash          String?               @map("password_hash")
-  provider              String                @default("EMAIL")
-  googleId              String?               @unique @map("google_id")
-  role                  UserRole              @default(USER)
-  status                UserStatus            @default(ACTIVE)
-  profile               Profile?
-  memberships           Membership[]
-  attendances           AttendanceRecord[]
-  physicalAssessments   PhysicalAssessment[]
-  eventRegistrations    EventRegistration[]
-  supportTickets        SupportTicket[]       @relation("SupportTicketStudent")
-  assignedTickets       SupportTicket[]       @relation("SupportTicketAssignee")
-  aiWorkoutPlans        AiWorkoutPlan[]
-  createdAt             DateTime              @default(now()) @map("created_at")
-  updatedAt             DateTime              @updatedAt @map("updated_at")
+  id                  String               @id @default(cuid())
+  name                String
+  email               String?              @unique
+  phone               String?              @unique
+  passwordHash        String?              @map("password_hash")
+  provider            String               @default("EMAIL")
+  googleId            String?              @unique @map("google_id")
+  role                UserRole             @default(USER)
+  status              UserStatus           @default(ACTIVE)
+  enrollmentStatus    EnrollmentStatus     @default(PENDING) @map("enrollment_status")
+  profile             Profile?
+  memberships         Membership[]
+  enrollments         Enrollment[]
+  attendances         AttendanceRecord[]
+  physicalAssessments PhysicalAssessment[]
+  eventRegistrations  EventRegistration[]
+  supportTickets      SupportTicket[]      @relation("SupportTicketStudent")
+  assignedTickets     SupportTicket[]      @relation("SupportTicketAssignee")
+  aiWorkoutPlans      AiWorkoutPlan[]
+  userProgress        UserProgress[]
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
 
   @@map("users")
 }
 
+model Enrollment {
+  id        String           @id @default(cuid())
+  userId    String           @map("user_id")
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    EnrollmentStatus @default(PENDING)
+  planType  String           @map("plan_type")
+  asaasId   String?          @unique @map("asaas_id")
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  @@map("enrollments")
+}
+
 model Profile {
-  id          String   @id @default(cuid())
-  userId      String   @unique @map("user_id")
-  user        User     @relation(fields: [userId], references: [id])
-  phone       String?
-  document    String?
-  birthDate   DateTime? @map("birth_date")
-  objective   String?
-  level       String?
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String    @id @default(cuid())
+  userId    String    @unique @map("user_id")
+  user      User      @relation(fields: [userId], references: [id])
+  phone     String?
+  document  String?
+  birthDate DateTime? @map("birth_date")
+  objective String?
+  level     String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
 
   @@map("profiles")
 }
 
 model Plan {
-  id          String       @id @default(cuid())
-  code        String       @unique
-  name        String
-  priceInCents Int        @map("price_in_cents")
+  id           String       @id @default(cuid())
+  code         String       @unique
+  name         String
+  priceInCents Int          @map("price_in_cents")
   billingCycle BillingCycle @map("billing_cycle")
-  memberships Membership[]
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
+  memberships  Membership[]
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
 
   @@map("plans")
 }
 
 model Membership {
-  id          String           @id @default(cuid())
-  userId      String           @map("user_id")
-  planId      String           @map("plan_id")
-  user        User             @relation(fields: [userId], references: [id])
-  plan        Plan             @relation(fields: [planId], references: [id])
-  status      MembershipStatus @default(PENDING)
-  startsAt    DateTime         @map("starts_at")
-  endsAt      DateTime?        @map("ends_at")
-  payments    Payment[]
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
+  id        String           @id @default(cuid())
+  userId    String           @map("user_id")
+  planId    String           @map("plan_id")
+  user      User             @relation(fields: [userId], references: [id])
+  plan      Plan             @relation(fields: [planId], references: [id])
+  status    MembershipStatus @default(PENDING)
+  startsAt  DateTime         @map("starts_at")
+  endsAt    DateTime?        @map("ends_at")
+  payments  Payment[]
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
 
   @@map("memberships")
 }
 
 model Payment {
-  id              String        @id @default(cuid())
-  membershipId    String        @map("membership_id")
-  membership      Membership    @relation(fields: [membershipId], references: [id])
-  amountInCents   Int           @map("amount_in_cents")
-  status          PaymentStatus @default(PENDING)
-  dueDate         DateTime      @map("due_date")
-  paidAt          DateTime?     @map("paid_at")
-  asaasPaymentId  String?       @unique @map("asaas_payment_id")
-  paymentUrl      String?       @map("payment_url")
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  id             String        @id @default(cuid())
+  membershipId   String        @map("membership_id")
+  membership     Membership    @relation(fields: [membershipId], references: [id])
+  amountInCents  Int           @map("amount_in_cents")
+  status         PaymentStatus @default(PENDING)
+  dueDate        DateTime      @map("due_date")
+  paidAt         DateTime?     @map("paid_at")
+  asaasPaymentId String?       @unique @map("asaas_payment_id")
+  paymentUrl     String?       @map("payment_url")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
 
   @@map("payments")
 }
 
 model Workout {
-  id          String       @id @default(cuid())
-  title       String
-  objective   String?
-  days        WorkoutDay[]
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
+  id        String       @id @default(cuid())
+  title     String
+  objective String?
+  days      WorkoutDay[]
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
 
   @@map("workouts")
 }
 
 model WorkoutDay {
-  id          String     @id @default(cuid())
-  workoutId   String     @map("workout_id")
-  workout     Workout    @relation(fields: [workoutId], references: [id])
-  title       String
-  sortOrder   Int        @map("sort_order")
-  exercises   Exercise[]
+  id        String     @id @default(cuid())
+  workoutId String     @map("workout_id")
+  workout   Workout    @relation(fields: [workoutId], references: [id])
+  title     String
+  sortOrder Int        @map("sort_order")
+  exercises Exercise[]
 
   @@map("workout_days")
 }
 
 model Exercise {
-  id          String     @id @default(cuid())
-  workoutDayId String    @map("workout_day_id")
-  workoutDay WorkoutDay @relation(fields: [workoutDayId], references: [id])
-  name        String
-  sets        Int
-  reps        String
-  restSeconds Int?       @map("rest_seconds")
-  notes       String?
-  sortOrder   Int        @map("sort_order")
+  id               String                 @id @default(cuid())
+  workoutDayId     String?                @map("workout_day_id")
+  workoutDay       WorkoutDay?            @relation(fields: [workoutDayId], references: [id])
+  name             String?
+  title            String?
+  videoUrl         String?                @map("video_url")
+  audioUrl         String?                @map("audio_url")
+  targetMuscles    String[]               @default([]) @map("target_muscles")
+  equipmentTags    String[]               @default([]) @map("equipment_tags")
+  alternatives     Exercise[]             @relation("ExerciseAlternatives")
+  alternativeTo    Exercise[]             @relation("ExerciseAlternatives")
+  workoutExercises WorkoutBlockExercise[]
+  userProgress     UserProgress[]
+  sets             Int?
+  reps             String?
+  restSeconds      Int?                   @map("rest_seconds")
+  notes            String?
+  sortOrder        Int?                   @map("sort_order")
+  createdAt        DateTime               @default(now()) @map("created_at")
 
   @@map("exercises")
+}
+
+model WorkoutBlock {
+  id            String                 @id @default(cuid())
+  title         String
+  structureType StructureType          @default(NORMAL) @map("structure_type")
+  restTime      Int                    @map("rest_time")
+  createdAt     DateTime               @default(now()) @map("created_at")
+  exercises     WorkoutBlockExercise[]
+  programDays   ProgramDayWorkout[]
+
+  @@map("workout_blocks")
+}
+
+model WorkoutBlockExercise {
+  id             String       @id @default(cuid())
+  workoutBlockId String       @map("workout_block_id")
+  exerciseId     String       @map("exercise_id")
+  workoutBlock   WorkoutBlock @relation(fields: [workoutBlockId], references: [id], onDelete: Cascade)
+  exercise       Exercise     @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  sets           Int
+  repsRange      String       @map("reps_range")
+  order          Int
+
+  @@map("workout_block_exercises")
+}
+
+model Program {
+  id          String              @id @default(cuid())
+  title       String
+  description String
+  isActive    Boolean             @default(true) @map("is_active")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  days        ProgramDayWorkout[]
+
+  @@map("programs")
+}
+
+model ProgramDayWorkout {
+  id             String       @id @default(cuid())
+  programId      String       @map("program_id")
+  workoutBlockId String       @map("workout_block_id")
+  program        Program      @relation(fields: [programId], references: [id], onDelete: Cascade)
+  workoutBlock   WorkoutBlock @relation(fields: [workoutBlockId], references: [id], onDelete: Cascade)
+  dayNumber      Int          @map("day_number")
+  order          Int
+
+  @@map("program_day_workouts")
+}
+
+model UserProgress {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  exerciseId    String   @map("exercise_id")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercise      Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  weightUsed    Float    @map("weight_used")
+  repsCompleted Int      @map("reps_completed")
+  seriesIndex   Int      @map("series_index")
+  completedAt   DateTime @default(now()) @map("completed_at")
+
+  @@map("user_progress")
 }
 
 model AttendanceRecord {
@@ -139,35 +227,35 @@ model AttendanceRecord {
 }
 
 model PhysicalAssessment {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  user        User     @relation(fields: [userId], references: [id])
-  assessedAt  DateTime @map("assessed_at")
-  weightKg    Float?   @map("weight_kg")
-  heightCm    Float?   @map("height_cm")
-  bodyFatPct  Float?   @map("body_fat_pct")
-  waistCm     Float?   @map("waist_cm")
-  chestCm     Float?   @map("chest_cm")
-  hipCm       Float?   @map("hip_cm")
-  notes       String?
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id])
+  assessedAt DateTime @map("assessed_at")
+  weightKg   Float?   @map("weight_kg")
+  heightCm   Float?   @map("height_cm")
+  bodyFatPct Float?   @map("body_fat_pct")
+  waistCm    Float?   @map("waist_cm")
+  chestCm    Float?   @map("chest_cm")
+  hipCm      Float?   @map("hip_cm")
+  notes      String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   @@map("physical_assessments")
 }
 
 model Event {
-  id          String              @id @default(cuid())
-  title       String
-  description String?
-  startsAt    DateTime            @map("starts_at")
-  endsAt      DateTime?           @map("ends_at")
-  location    String?
-  capacity    Int?
-  status      EventStatus         @default(SCHEDULED)
+  id            String              @id @default(cuid())
+  title         String
+  description   String?
+  startsAt      DateTime            @map("starts_at")
+  endsAt        DateTime?           @map("ends_at")
+  location      String?
+  capacity      Int?
+  status        EventStatus         @default(SCHEDULED)
   registrations EventRegistration[]
-  createdAt   DateTime            @default(now()) @map("created_at")
-  updatedAt   DateTime            @updatedAt @map("updated_at")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
 
   @@map("events")
 }
@@ -185,18 +273,18 @@ model EventRegistration {
 }
 
 model SupportTicket {
-  id          String        @id @default(cuid())
-  userId      String        @map("user_id")
-  assignedToId String?      @map("assigned_to_id")
-  user        User          @relation("SupportTicketStudent", fields: [userId], references: [id])
-  assignedTo  User?         @relation("SupportTicketAssignee", fields: [assignedToId], references: [id])
-  subject     String
-  message     String
-  category    TicketCategory @default(GENERAL)
-  status      TicketStatus   @default(OPEN)
-  priority    TicketPriority @default(NORMAL)
-  createdAt   DateTime       @default(now()) @map("created_at")
-  updatedAt   DateTime       @updatedAt @map("updated_at")
+  id           String         @id @default(cuid())
+  userId       String         @map("user_id")
+  assignedToId String?        @map("assigned_to_id")
+  user         User           @relation("SupportTicketStudent", fields: [userId], references: [id])
+  assignedTo   User?          @relation("SupportTicketAssignee", fields: [assignedToId], references: [id])
+  subject      String
+  message      String
+  category     TicketCategory @default(GENERAL)
+  status       TicketStatus   @default(OPEN)
+  priority     TicketPriority @default(NORMAL)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
 
   @@map("support_tickets")
 }
@@ -243,6 +331,23 @@ enum MembershipStatus {
   CANCELED
 
   @@map("membership_status")
+}
+
+enum EnrollmentStatus {
+  PENDING
+  ACTIVE
+  CANCELED
+
+  @@map("enrollment_status")
+}
+
+enum StructureType {
+  NORMAL
+  BI_SET
+  DROP_SET
+  REST_PAUSE
+
+  @@map("structure_type")
 }
 
 enum PaymentStatus {

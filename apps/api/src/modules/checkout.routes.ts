@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { initialPlans } from "@app-treino/shared";
 import { z } from "zod";
-import { hashPassword, toAuthUser } from "../auth.js";
+import { hashPassword, requireAuth, toAuthUser } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 
@@ -24,6 +24,17 @@ const checkoutRegisterSchema = z
       });
     }
   });
+
+const checkoutSessionSchema = z.object({
+  planCode: z.enum(["monthly", "annual"], {
+    required_error: "Escolha um plano para continuar."
+  }),
+  billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED")
+});
+
+const checkoutSandboxConfirmationSchema = z.object({
+  paymentId: z.string().min(1)
+});
 
 function requireDatabase() {
   if (!env.DATABASE_URL) {
@@ -102,6 +113,202 @@ function asaasStatusToPaymentStatus(status?: string) {
 }
 
 export async function registerCheckoutRoutes(app: FastifyInstance) {
+  app.post("/checkout/session", async (request, reply) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    const body = checkoutSessionSchema.parse(request.body);
+    const planSeed = initialPlans.find((plan) => plan.code === body.planCode);
+
+    if (!planSeed) {
+      return reply.code(400).send({
+        message: "Plano invalido."
+      });
+    }
+
+    const activeMembership = await prisma.membership.findFirst({
+      where: {
+        userId: authUser.id,
+        status: "ACTIVE"
+      },
+      include: {
+        plan: true,
+        payments: {
+          orderBy: {
+            dueDate: "desc"
+          },
+          take: 1
+        }
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+
+    if (activeMembership) {
+      return reply.send({
+        membership: activeMembership,
+        payment: activeMembership.payments[0] ?? null,
+        alreadyActive: true
+      });
+    }
+
+    const pendingMembership = await prisma.membership.findFirst({
+      where: {
+        userId: authUser.id,
+        status: {
+          in: ["PENDING", "OVERDUE"]
+        }
+      },
+      include: {
+        plan: true,
+        payments: {
+          where: {
+            status: {
+              in: ["PENDING", "OVERDUE"]
+            }
+          },
+          orderBy: {
+            dueDate: "desc"
+          },
+          take: 1
+        }
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+
+    if (pendingMembership?.payments[0]) {
+      return reply.send({
+        membership: pendingMembership,
+        payment: pendingMembership.payments[0],
+        alreadyActive: false
+      });
+    }
+
+    const startsAt = todayUtcOnly();
+    const plan = await prisma.plan.upsert({
+      where: { code: planSeed.code },
+      create: planSeed,
+      update: {}
+    });
+
+    const { user, membership, payment } = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUniqueOrThrow({
+        where: {
+          id: authUser.id
+        }
+      });
+
+      const membership = await tx.membership.create({
+        data: {
+          userId: user.id,
+          planId: plan.id,
+          status: "PENDING",
+          startsAt,
+          endsAt: addCycleDate(startsAt, plan.billingCycle)
+        },
+        include: {
+          plan: true
+        }
+      });
+
+      const payment = await tx.payment.create({
+        data: {
+          membershipId: membership.id,
+          amountInCents: plan.priceInCents,
+          dueDate: startsAt
+        }
+      });
+
+      return { user, membership, payment };
+    });
+
+    const asaasPayment = await createAsaasPaymentLink({
+      paymentId: payment.id,
+      customerName: user.name,
+      amountInCents: payment.amountInCents,
+      dueDate: payment.dueDate,
+      billingType: body.billingType
+    });
+
+    const updatedPayment = asaasPayment
+      ? await prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            asaasPaymentId: asaasPayment.id,
+            paymentUrl: asaasPayment.url,
+            status: asaasStatusToPaymentStatus(asaasPayment.status)
+          }
+        })
+      : payment;
+
+    return reply.code(201).send({
+      membership,
+      payment: updatedPayment,
+      alreadyActive: false
+    });
+  });
+
+  app.post("/checkout/confirm-sandbox", async (request, reply) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    const body = checkoutSandboxConfirmationSchema.parse(request.body);
+
+    if (env.ASAAS_API_KEY) {
+      return reply.code(403).send({
+        message: "Confirmacao manual disponivel apenas no sandbox local sem Asaas configurado."
+      });
+    }
+
+    const payment = await prisma.payment.findFirst({
+      where: {
+        id: body.paymentId,
+        membership: {
+          userId: authUser.id
+        }
+      }
+    });
+
+    if (!payment) {
+      return reply.code(404).send({
+        message: "Pagamento nao encontrado."
+      });
+    }
+
+    const confirmedPayment = await prisma.payment.update({
+      where: {
+        id: payment.id
+      },
+      data: {
+        status: "CONFIRMED",
+        paidAt: new Date()
+      }
+    });
+
+    const membership = await prisma.membership.update({
+      where: {
+        id: confirmedPayment.membershipId
+      },
+      data: {
+        status: "ACTIVE",
+        user: {
+          update: {
+            enrollmentStatus: "ACTIVE"
+          }
+        }
+      },
+      include: {
+        plan: true
+      }
+    });
+
+    return reply.send({
+      membership,
+      payment: confirmedPayment
+    });
+  });
+
   app.post("/checkout/register", async (request, reply) => {
     requireDatabase();
     const body = checkoutRegisterSchema.parse(request.body);

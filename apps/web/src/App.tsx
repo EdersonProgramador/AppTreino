@@ -1,6 +1,7 @@
 import {
   Activity,
   ArrowRight,
+  Bell,
   Bot,
   CalendarDays,
   CalendarPlus,
@@ -12,16 +13,25 @@ import {
   Dumbbell,
   Flame,
   Headphones,
+  Home,
   LineChart,
   Loader2,
+  LockKeyhole,
+  LogOut,
   LogIn,
   MessageCircle,
+  Menu,
+  Package,
   Play,
+  QrCode,
   RefreshCw,
   Ruler,
   Save,
+  Settings,
   ShieldCheck,
+  ShoppingCart,
   Sparkles,
+  Star,
   Timer,
   Trash2,
   Trophy,
@@ -31,6 +41,8 @@ import {
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { formatPriceInBRL, initialPlans, type AuthUser } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "./api";
+import { LockedOverlay } from "./components/student/LockedOverlay";
+import { WorkoutPlayer, type WorkoutPlayerExercise } from "./components/student/WorkoutPlayer";
 
 type View = "home" | "login" | "admin" | "user";
 type AuthMode = "login" | "register";
@@ -150,6 +162,44 @@ interface WorkoutRow {
   }>;
 }
 
+interface CmsExerciseRow {
+  id: string;
+  title?: string | null;
+  name?: string | null;
+  videoUrl?: string | null;
+  audioUrl?: string | null;
+  targetMuscles: string[];
+  equipmentTags: string[];
+  alternatives: Array<{ id: string; title?: string | null; name?: string | null }>;
+}
+
+interface CmsWorkoutBlockRow {
+  id: string;
+  title: string;
+  structureType: "NORMAL" | "BI_SET" | "DROP_SET" | "REST_PAUSE";
+  restTime: number;
+  exercises: Array<{
+    id: string;
+    sets: number;
+    repsRange: string;
+    order: number;
+    exercise: CmsExerciseRow;
+  }>;
+}
+
+interface CmsProgramRow {
+  id: string;
+  title: string;
+  description: string;
+  isActive: boolean;
+  days: Array<{
+    id: string;
+    dayNumber: number;
+    order: number;
+    workoutBlock: CmsWorkoutBlockRow;
+  }>;
+}
+
 interface MembershipRow {
   id: string;
   userId: string;
@@ -158,6 +208,16 @@ interface MembershipRow {
   startsAt: string;
   endsAt?: string | null;
   user: AdminUser;
+  plan: PlanRow;
+}
+
+interface StudentMembershipRow {
+  id: string;
+  userId: string;
+  planId: string;
+  status: "ACTIVE" | "PENDING" | "OVERDUE" | "CANCELED";
+  startsAt: string;
+  endsAt?: string | null;
   plan: PlanRow;
 }
 
@@ -236,6 +296,25 @@ interface AiWorkoutPlanRow {
   };
   createdAt: string;
   user?: AdminUser;
+}
+
+interface CheckoutSessionResponse {
+  membership: StudentMembershipRow;
+  payment: PaymentRow | null;
+  alreadyActive: boolean;
+}
+
+interface TodayWorkoutResponse {
+  workout: {
+    programTitle: string;
+    dayNumber: number;
+    block: {
+      title: string;
+      structureType: "NORMAL" | "BI_SET" | "DROP_SET" | "REST_PAUSE";
+      restTime: number;
+      exercises: WorkoutPlayerExercise[];
+    };
+  };
 }
 
 export function App() {
@@ -394,26 +473,27 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <button className="brand" onClick={() => setView("home")} aria-label="Ir para inicio">
-          <img className="brand-logo" src={assetUrl("assets/app-treino-logo.svg")} alt="App Treino" />
-        </button>
-        <nav className="nav-links" aria-label="Navegacao principal">
-          <a href="#recursos" onClick={() => setView("home")}>
-            Recursos
-          </a>
-          <a href="#planos" onClick={() => setView("home")}>
-            Planos
-          </a>
-        </nav>
-        <div className="topbar-actions">
-          <button onClick={() => (user ? handleLogout() : setView("login"))}>
-            <LogIn size={18} />
-            {user ? "Sair" : "Entrar"}
+      {!user && (
+        <header className="topbar">
+          <button className="brand" onClick={() => setView("home")} aria-label="Ir para inicio">
+            <img className="brand-logo" src={assetUrl("assets/app-treino-logo.svg")} alt="App Treino" />
           </button>
-          <span className="area-badge">{currentArea}</span>
-        </div>
-      </header>
+          <nav className="nav-links" aria-label="Navegacao principal">
+            <a href="#recursos" onClick={() => setView("home")}>
+              Recursos
+            </a>
+            <a href="#planos" onClick={() => setView("home")}>
+              Planos
+            </a>
+          </nav>
+          <div className="topbar-actions">
+            <button onClick={() => setView("login")}>
+              <LogIn size={18} />
+              Entrar
+            </button>
+          </div>
+        </header>
+      )}
 
       {view === "home" && <HomeView onStart={handleStart} />}
       {view === "login" && (
@@ -427,8 +507,8 @@ export function App() {
           onUser={() => handleDemoLogin("USER")}
         />
       )}
-      {view === "admin" && <AdminView token={token} />}
-      {view === "user" && <UserView token={token} />}
+      {view === "admin" && <AdminView token={token} onLogout={handleLogout} />}
+      {view === "user" && <UserView token={token} onLogout={handleLogout} />}
     </div>
   );
 }
@@ -825,7 +905,10 @@ function LoginView({
   );
 }
 
-function AdminView({ token }: { token: string | null }) {
+function AdminView({ token, onLogout }: { token: string | null; onLogout: () => void }) {
+  const [adminSection, setAdminSection] = useState<
+    "overview" | "users" | "training" | "plans" | "memberships" | "payments" | "operations"
+  >("overview");
   const [summary, setSummary] = useState({
     users: 0,
     activeMemberships: 0,
@@ -834,6 +917,9 @@ function AdminView({ token }: { token: string | null }) {
   });
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [workouts, setWorkouts] = useState<WorkoutRow[]>([]);
+  const [cmsExercises, setCmsExercises] = useState<CmsExerciseRow[]>([]);
+  const [cmsWorkoutBlocks, setCmsWorkoutBlocks] = useState<CmsWorkoutBlockRow[]>([]);
+  const [cmsPrograms, setCmsPrograms] = useState<CmsProgramRow[]>([]);
   const [plans, setPlans] = useState<PlanRow[]>([]);
   const [memberships, setMemberships] = useState<MembershipRow[]>([]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
@@ -859,6 +945,9 @@ function AdminView({ token }: { token: string | null }) {
         summaryResponse,
         usersResponse,
         workoutsResponse,
+        cmsExercisesResponse,
+        cmsWorkoutBlocksResponse,
+        cmsProgramsResponse,
         plansResponse,
         membershipsResponse,
         paymentsResponse,
@@ -870,6 +959,9 @@ function AdminView({ token }: { token: string | null }) {
           apiGet<typeof summary>("/admin/summary", token),
           apiGet<{ users: AdminUser[] }>("/admin/users", token),
           apiGet<{ workouts: WorkoutRow[] }>("/admin/workouts", token),
+          apiGet<{ exercises: CmsExerciseRow[] }>("/admin/cms/exercises", token),
+          apiGet<{ workoutBlocks: CmsWorkoutBlockRow[] }>("/admin/cms/workout-blocks", token),
+          apiGet<{ programs: CmsProgramRow[] }>("/admin/cms/programs", token),
           apiGet<{ plans: PlanRow[] }>("/admin/plans", token),
           apiGet<{ memberships: MembershipRow[] }>("/admin/memberships", token),
           apiGet<{ payments: PaymentRow[] }>("/admin/payments", token),
@@ -882,6 +974,9 @@ function AdminView({ token }: { token: string | null }) {
       setSummary(summaryResponse);
       setUsers(usersResponse.users);
       setWorkouts(workoutsResponse.workouts);
+      setCmsExercises(cmsExercisesResponse.exercises);
+      setCmsWorkoutBlocks(cmsWorkoutBlocksResponse.workoutBlocks);
+      setCmsPrograms(cmsProgramsResponse.programs);
       setPlans(plansResponse.plans);
       setMemberships(membershipsResponse.memberships);
       setPayments(paymentsResponse.payments);
@@ -961,6 +1056,107 @@ function AdminView({ token }: { token: string | null }) {
       await loadAdminData();
     } catch {
       setFeedback("Nao foi possivel cadastrar o treino.");
+    }
+  }
+
+  function parseTagList(value: FormDataEntryValue | null) {
+    return String(value ?? "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  async function handleCreateCmsExercise(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+
+    try {
+      await apiPost(
+        "/admin/cms/exercises",
+        {
+          title: String(data.get("title") ?? ""),
+          videoUrl: String(data.get("videoUrl") ?? ""),
+          audioUrl: String(data.get("audioUrl") ?? ""),
+          targetMuscles: parseTagList(data.get("targetMuscles")),
+          equipmentTags: parseTagList(data.get("equipmentTags")),
+          alternativeIds: parseTagList(data.get("alternativeIds"))
+        },
+        token
+      );
+      form.reset();
+      await loadAdminData();
+    } catch {
+      setFeedback("Nao foi possivel cadastrar o exercicio CMS.");
+    }
+  }
+
+  async function handleCreateCmsWorkoutBlock(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+
+    try {
+      await apiPost(
+        "/admin/cms/workout-blocks",
+        {
+          title: String(data.get("title") ?? ""),
+          structureType: String(data.get("structureType") ?? "NORMAL"),
+          restTime: Number(data.get("restTime") ?? 60),
+          exercises: String(data.get("exercises") ?? "")
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .map((line, index) => {
+              const [exerciseId = "", sets = "3", repsRange = "10-12", order = String(index + 1)] = line.split(";");
+              return {
+                exerciseId: exerciseId.trim(),
+                sets: Number(sets),
+                repsRange: repsRange.trim(),
+                order: Number(order)
+              };
+            })
+        },
+        token
+      );
+      form.reset();
+      await loadAdminData();
+    } catch {
+      setFeedback("Nao foi possivel cadastrar o bloco CMS.");
+    }
+  }
+
+  async function handleCreateCmsProgram(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+
+    try {
+      await apiPost(
+        "/admin/cms/programs",
+        {
+          title: String(data.get("title") ?? ""),
+          description: String(data.get("description") ?? ""),
+          isActive: data.get("isActive") === "on",
+          days: String(data.get("days") ?? "")
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .map((line, index) => {
+              const [dayNumber = String(index + 1), workoutBlockId = "", order = "1"] = line.split(";");
+              return {
+                dayNumber: Number(dayNumber),
+                workoutBlockId: workoutBlockId.trim(),
+                order: Number(order)
+              };
+            })
+        },
+        token
+      );
+      form.reset();
+      await loadAdminData();
+    } catch {
+      setFeedback("Nao foi possivel cadastrar o programa CMS.");
     }
   }
 
@@ -1115,8 +1311,45 @@ function AdminView({ token }: { token: string | null }) {
   ];
 
   return (
-    <main className="dashboard">
-      <section className="dashboard-heading">
+    <main className="workspace-shell">
+      <aside className="workspace-sidebar" aria-label="Menu administrativo">
+        <div className="workspace-sidebar-brand">
+          <img src={assetUrl("assets/app-treino-mark.svg")} alt="" aria-hidden="true" />
+          <div>
+            <strong>Admin</strong>
+            <span>App Treino</span>
+          </div>
+        </div>
+        <nav className="workspace-nav">
+          <button className={adminSection === "overview" ? "active" : ""} onClick={() => setAdminSection("overview")}>
+            <Activity size={18} />Visao geral
+          </button>
+          <button className={adminSection === "users" ? "active" : ""} onClick={() => setAdminSection("users")}>
+            <UsersRound size={18} />Usuarios
+          </button>
+          <button className={adminSection === "training" ? "active" : ""} onClick={() => setAdminSection("training")}>
+            <Dumbbell size={18} />Treinos e CMS
+          </button>
+          <button className={adminSection === "plans" ? "active" : ""} onClick={() => setAdminSection("plans")}>
+            <CircleDollarSign size={18} />Planos
+          </button>
+          <button className={adminSection === "memberships" ? "active" : ""} onClick={() => setAdminSection("memberships")}>
+            <ShieldCheck size={18} />Matriculas
+          </button>
+          <button className={adminSection === "payments" ? "active" : ""} onClick={() => setAdminSection("payments")}>
+            <CreditCard size={18} />Pagamentos
+          </button>
+          <button className={adminSection === "operations" ? "active" : ""} onClick={() => setAdminSection("operations")}>
+            <ClipboardList size={18} />Operacao
+          </button>
+        </nav>
+        <button className="workspace-logout" onClick={onLogout}>
+          <LogOut size={18} />
+          Sair
+        </button>
+      </aside>
+      <section className="workspace-content">
+      <section className="dashboard-heading" id="admin-overview">
         <span className="eyebrow">Painel administrativo</span>
         <h1>Operacao do App Treino</h1>
         <button className="outline-button compact-button" onClick={loadAdminData} disabled={loading}>
@@ -1125,7 +1358,7 @@ function AdminView({ token }: { token: string | null }) {
         </button>
       </section>
       {feedback && <div className="error-box">{feedback}</div>}
-      <div className="stats-grid">
+      {adminSection === "overview" && <div className="stats-grid">
         {stats.map((stat) => (
           <article className="stat-card" key={stat.label}>
             <stat.icon size={22} />
@@ -1134,10 +1367,10 @@ function AdminView({ token }: { token: string | null }) {
             <small>{stat.trend}</small>
           </article>
         ))}
-      </div>
+      </div>}
 
-      <section className="admin-grid">
-        <article className="table-panel">
+      {adminSection === "users" && <section className="admin-grid">
+        <article className="table-panel" id="admin-users">
           <div className="panel-title">
             <h2>Usuarios</h2>
             <span>{users.length}</span>
@@ -1170,8 +1403,10 @@ function AdminView({ token }: { token: string | null }) {
             </div>
           ))}
         </article>
+      </section>}
 
-        <article className="table-panel">
+      {adminSection === "training" && <section className="admin-grid">
+        <article className="table-panel" id="admin-training">
           <div className="panel-title">
             <h2>Treinos</h2>
             <span>{workouts.length}</span>
@@ -1204,7 +1439,122 @@ function AdminView({ token }: { token: string | null }) {
           ))}
         </article>
 
-        <article className="table-panel">
+        <article className="table-panel wide-panel cms-panel" id="admin-cms">
+          <div className="panel-title">
+            <h2>CMS Fitness</h2>
+            <span>{cmsPrograms.length} programa(s)</span>
+          </div>
+          <div className="cms-admin-grid">
+            <section>
+              <div className="panel-title cms-subtitle">
+                <h2>Exercicios</h2>
+                <span>{cmsExercises.length}</span>
+              </div>
+              <form className="crud-form" onSubmit={handleCreateCmsExercise}>
+                <input name="title" placeholder="Titulo do exercicio" required />
+                <input name="videoUrl" type="url" placeholder="URL do video" />
+                <input name="audioUrl" type="url" placeholder="URL do audio" />
+                <input name="targetMuscles" placeholder="Musculos, separados por virgula" />
+                <input name="equipmentTags" placeholder="Equipamentos, separados por virgula" />
+                <input name="alternativeIds" placeholder="IDs de alternativas, separados por virgula" />
+                <button className="primary-button">
+                  <Save size={18} />
+                  Salvar exercicio CMS
+                </button>
+              </form>
+              {cmsExercises.slice(0, 8).map((item) => (
+                <div className="data-row cms-data-row" key={item.id}>
+                  <span>
+                    <strong>{item.title ?? item.name ?? "Exercicio"}</strong>
+                    {item.targetMuscles.join(", ") || "Sem musculos"} | ID: {item.id}
+                  </span>
+                  <small>{item.equipmentTags.join(", ") || "Sem equipamento"}</small>
+                  <button aria-label="Excluir exercicio CMS" onClick={() => handleDelete(`/admin/cms/exercises/${item.id}`)}>
+                    <Trash2 size={17} />
+                  </button>
+                </div>
+              ))}
+            </section>
+
+            <section>
+              <div className="panel-title cms-subtitle">
+                <h2>Blocos</h2>
+                <span>{cmsWorkoutBlocks.length}</span>
+              </div>
+              <form className="crud-form" onSubmit={handleCreateCmsWorkoutBlock}>
+                <input name="title" placeholder="Titulo do bloco" required />
+                <select name="structureType" defaultValue="NORMAL">
+                  <option value="NORMAL">Normal</option>
+                  <option value="BI_SET">Bi-set</option>
+                  <option value="DROP_SET">Drop-set</option>
+                  <option value="REST_PAUSE">Rest-pause</option>
+                </select>
+                <input name="restTime" type="number" min="0" defaultValue="60" placeholder="Descanso em segundos" required />
+                <textarea
+                  name="exercises"
+                  placeholder={"exerciseId;series;reps;ordem\nseed-ex-supino-reto;4;8-12;1"}
+                  required
+                />
+                <button className="primary-button">
+                  <Save size={18} />
+                  Salvar bloco CMS
+                </button>
+              </form>
+              {cmsWorkoutBlocks.slice(0, 8).map((item) => (
+                <div className="data-row cms-data-row" key={item.id}>
+                  <span>
+                    <strong>{item.title}</strong>
+                    {item.exercises.map((row) => row.exercise.title ?? row.exercise.name ?? "Exercicio").join(", ") || "Sem exercicios"} | ID: {item.id}
+                  </span>
+                  <small>{item.structureType} - {item.restTime}s</small>
+                  <button aria-label="Excluir bloco CMS" onClick={() => handleDelete(`/admin/cms/workout-blocks/${item.id}`)}>
+                    <Trash2 size={17} />
+                  </button>
+                </div>
+              ))}
+            </section>
+
+            <section className="cms-program-section">
+              <div className="panel-title cms-subtitle">
+                <h2>Programas</h2>
+                <span>{cmsPrograms.length}</span>
+              </div>
+              <form className="crud-form" onSubmit={handleCreateCmsProgram}>
+                <input name="title" placeholder="Titulo do programa" required />
+                <label className="checkbox-field">
+                  <input name="isActive" type="checkbox" defaultChecked />
+                  Ativo
+                </label>
+                <textarea name="description" placeholder="Descricao do programa" required />
+                <textarea
+                  name="days"
+                  placeholder={"dia;workoutBlockId;ordem\n1;seed-block-forca-superior;1"}
+                  required
+                />
+                <button className="primary-button">
+                  <Save size={18} />
+                  Salvar programa CMS
+                </button>
+              </form>
+              {cmsPrograms.slice(0, 8).map((item) => (
+                <div className="data-row cms-data-row" key={item.id}>
+                  <span>
+                    <strong>{item.title}</strong>
+                    {item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.title}`).join(" | ") || "Sem dias"}
+                  </span>
+                  <small>{item.isActive ? "Ativo" : "Inativo"}</small>
+                  <button aria-label="Excluir programa CMS" onClick={() => handleDelete(`/admin/cms/programs/${item.id}`)}>
+                    <Trash2 size={17} />
+                  </button>
+                </div>
+              ))}
+            </section>
+          </div>
+        </article>
+      </section>}
+
+      {adminSection === "plans" && <section className="admin-grid single-section-grid">
+        <article className="table-panel" id="admin-plans">
           <div className="panel-title">
             <h2>Planos</h2>
             <span>{plans.length}</span>
@@ -1235,8 +1585,10 @@ function AdminView({ token }: { token: string | null }) {
             </div>
           ))}
         </article>
+      </section>}
 
-        <article className="table-panel">
+      {adminSection === "memberships" && <section className="admin-grid single-section-grid">
+        <article className="table-panel" id="admin-memberships">
           <div className="panel-title">
             <h2>Matriculas</h2>
             <span>{memberships.length}</span>
@@ -1285,8 +1637,10 @@ function AdminView({ token }: { token: string | null }) {
             </div>
           ))}
         </article>
+      </section>}
 
-        <article className="table-panel wide-panel">
+      {adminSection === "payments" && <section className="admin-grid single-section-grid">
+        <article className="table-panel wide-panel" id="admin-payments">
           <div className="panel-title">
             <h2>Pagamentos</h2>
             <span>{payments.length}</span>
@@ -1328,9 +1682,9 @@ function AdminView({ token }: { token: string | null }) {
             </div>
           ))}
         </article>
-      </section>
+      </section>}
 
-      <section className="admin-grid phase-three-grid">
+      {adminSection === "operations" && <section className="admin-grid phase-three-grid" id="admin-operations">
         <article className="table-panel">
           <div className="panel-title">
             <h2>Avaliacoes fisicas</h2>
@@ -1446,83 +1800,112 @@ function AdminView({ token }: { token: string | null }) {
             </div>
           ))}
         </article>
-      </section>
+      </section>}
 
-      <section className="table-panel">
-        <div className="panel-title">
-          <h2>Fase 3</h2>
-          <span>Implementada</span>
-        </div>
-        <div className="task-row">
-          <Check size={18} />
-          Avaliacoes fisicas com historico por aluno
-        </div>
-        <div className="task-row">
-          <Check size={18} />
-          Eventos com inscricoes e controle de vagas
-        </div>
-        <div className="task-row">
-          <Check size={18} />
-          Atendimento com tickets e status operacional
-        </div>
-        <div className="task-row">
-          <Check size={18} />
-          App mobile e agente de treino IA conectados a mesma API
-        </div>
       </section>
     </main>
   );
 }
 
-function UserView({ token }: { token: string | null }) {
+function UserView({ token, onLogout }: { token: string | null; onLogout: () => void }) {
+  const [studentSection, setStudentSection] = useState<
+    | "home"
+    | "payments"
+    | "training"
+    | "products"
+    | "menu"
+    | "subscription"
+    | "locked"
+    | "player"
+    | "status"
+    | "assessments"
+    | "events"
+    | "support"
+    | "ai"
+  >("home");
   const [profile, setProfile] = useState<{ name: string; objective?: string; level?: string } | null>(null);
   const [workout, setWorkout] = useState<WorkoutRow | null>(null);
-  const [membership, setMembership] = useState<(MembershipRow & { plan: PlanRow }) | null>(null);
+  const [todayWorkout, setTodayWorkout] = useState<TodayWorkoutResponse["workout"] | null>(null);
+  const [membership, setMembership] = useState<StudentMembershipRow | null>(null);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [attendance, setAttendance] = useState<Array<{ id: string; date: string }>>([]);
   const [assessments, setAssessments] = useState<PhysicalAssessmentRow[]>([]);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [tickets, setTickets] = useState<SupportTicketRow[]>([]);
   const [aiPlans, setAiPlans] = useState<AiWorkoutPlanRow[]>([]);
+  const [checkoutPayment, setCheckoutPayment] = useState<PaymentRow | null>(null);
+  const [checkoutStep, setCheckoutStep] = useState<"plans" | "checkout" | "thanks">("plans");
+  const [checkoutLoading, setCheckoutLoading] = useState<PlanCode | "sandbox" | null>(null);
+  const [checkoutDraft, setCheckoutDraft] = useState<{
+    planCode: PlanCode;
+    billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED";
+  }>({
+    planCode: "monthly",
+    billingType: "UNDEFINED"
+  });
   const [error, setError] = useState<string | null>(null);
 
   async function loadUserData() {
     if (!token) return;
 
     try {
+      const [profileResponse, membershipResponse, paymentsResponse] = await Promise.all([
+        apiGet<{ profile: { name: string; objective?: string; level?: string } }>("/user/profile", token),
+        apiGet<{ membership: StudentMembershipRow | null }>("/user/membership", token),
+        apiGet<{ payments: PaymentRow[] }>("/user/payments", token)
+      ]);
+
+      const activeMembership = membershipResponse.membership?.status === "ACTIVE";
+
+      setProfile(profileResponse.profile);
+      setMembership(membershipResponse.membership);
+      setPayments(paymentsResponse.payments);
+      setCheckoutPayment(paymentsResponse.payments.find((item) => item.status === "PENDING") ?? null);
+
+      if (!activeMembership) {
+        if (paymentsResponse.payments.some((item) => item.status === "PENDING")) {
+          setCheckoutStep("checkout");
+        }
+        setWorkout(null);
+        setTodayWorkout(null);
+        setAttendance([]);
+        setAssessments([]);
+        setEvents([]);
+        setTickets([]);
+        setAiPlans([]);
+        return;
+      }
+
+      setCheckoutStep("plans");
+
       const [
-        profileResponse,
         workoutResponse,
-        membershipResponse,
-        paymentsResponse,
         attendanceResponse,
         assessmentsResponse,
         eventsResponse,
         ticketsResponse,
-        aiPlansResponse
+        aiPlansResponse,
+        todayWorkoutResponse
       ] = await Promise.all([
-        apiGet<{ profile: { name: string; objective?: string; level?: string } }>("/user/profile", token),
         apiGet<{ workout: WorkoutRow | null }>("/user/workout", token),
-        apiGet<{ membership: (MembershipRow & { plan: PlanRow }) | null }>("/user/membership", token),
-        apiGet<{ payments: PaymentRow[] }>("/user/payments", token),
         apiGet<{ records: Array<{ id: string; date: string }> }>("/user/attendance", token),
         apiGet<{ assessments: PhysicalAssessmentRow[] }>("/user/physical-assessments", token),
         apiGet<{ events: EventRow[] }>("/user/events", token),
         apiGet<{ tickets: SupportTicketRow[] }>("/user/support-tickets", token),
-        apiGet<{ plans: AiWorkoutPlanRow[] }>("/user/ai-workout-plans", token)
+        apiGet<{ plans: AiWorkoutPlanRow[] }>("/user/ai-workout-plans", token),
+        apiGet<TodayWorkoutResponse>("/student/workout/today", token).catch(() => ({ workout: null }))
       ]);
 
-      setProfile(profileResponse.profile);
       setWorkout(workoutResponse.workout);
-      setMembership(membershipResponse.membership);
-      setPayments(paymentsResponse.payments);
+      setTodayWorkout(todayWorkoutResponse.workout);
       setAttendance(attendanceResponse.records);
       setAssessments(assessmentsResponse.assessments);
       setEvents(eventsResponse.events);
       setTickets(ticketsResponse.tickets);
       setAiPlans(aiPlansResponse.plans);
-    } catch {
-      setError("Nao foi possivel carregar sua area. Verifique API e banco.");
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : null;
+      setError(message ?? "Nao foi possivel carregar sua area. Verifique API e banco.");
     }
   }
 
@@ -1584,185 +1967,634 @@ function UserView({ token }: { token: string | null }) {
     }
   }
 
+  async function handleCreateCheckout(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token) return;
+
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const planCode = String(data.get("planCode") ?? checkoutDraft.planCode) as PlanCode;
+    const billingType = String(data.get("billingType") ?? checkoutDraft.billingType) as
+      | "BOLETO"
+      | "CREDIT_CARD"
+      | "PIX"
+      | "UNDEFINED";
+
+    setError(null);
+    setCheckoutLoading(planCode);
+    setCheckoutDraft({
+      planCode,
+      billingType
+    });
+
+    try {
+      const response = await apiPost<CheckoutSessionResponse>(
+        "/checkout/session",
+        {
+          planCode,
+          billingType
+        },
+        token
+      );
+
+      setMembership(response.membership);
+      setCheckoutPayment(response.payment);
+      if (response.payment) {
+        setPayments((current) => {
+          const others = current.filter((item) => item.id !== response.payment?.id);
+          return [response.payment, ...others].filter(Boolean) as PaymentRow[];
+        });
+      }
+      setCheckoutStep(response.alreadyActive ? "thanks" : "checkout");
+      if (response.alreadyActive) {
+        await loadUserData();
+      }
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : null;
+      setError(message ?? "Nao foi possivel iniciar o checkout.");
+    } finally {
+      setCheckoutLoading(null);
+    }
+  }
+
+  async function handleConfirmSandboxPayment() {
+    if (!token || !checkoutPayment) return;
+
+    setError(null);
+    setCheckoutLoading("sandbox");
+
+    try {
+      const response = await apiPost<{ membership: StudentMembershipRow; payment: PaymentRow }>(
+        "/checkout/confirm-sandbox",
+        {
+          paymentId: checkoutPayment.id
+        },
+        token
+      );
+
+      setMembership(response.membership);
+      setCheckoutPayment(response.payment);
+      await loadUserData();
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : null;
+      setError(message ?? "Nao foi possivel confirmar o pagamento sandbox.");
+    } finally {
+      setCheckoutLoading(null);
+    }
+  }
+
+  async function handleRequestSubstitutes(exerciseId: string) {
+    const response = await apiPost<{ alternatives: WorkoutPlayerExercise["alternatives"] }>(
+      "/student/workout/substitute",
+      { exerciseId },
+      token
+    );
+
+    return response.alternatives;
+  }
+
   const firstDay = workout?.days[0];
   const pendingPayment = payments.find((item) => item.status === "PENDING");
   const latestAssessment = assessments[0];
   const latestAiPlan = aiPlans[0];
+  const hasActiveMembership = membership?.status === "ACTIVE";
+  const currentCheckoutPayment = checkoutPayment ?? pendingPayment;
+  const lockedFeatures = [
+    {
+      icon: Dumbbell,
+      title: "Ficha atual",
+      text: "Treinos, exercicios, series, repeticoes e descanso."
+    },
+    {
+      icon: Ruler,
+      title: "Avaliacao fisica",
+      text: "Medidas, historico corporal e acompanhamento de evolucao."
+    },
+    {
+      icon: CalendarPlus,
+      title: "Eventos",
+      text: "Inscricoes em aulas, desafios e encontros da comunidade."
+    },
+    {
+      icon: Headphones,
+      title: "Atendimento",
+      text: "Abertura de chamados para suporte de treino, pagamento e acesso."
+    },
+    {
+      icon: Bot,
+      title: "Agente de Treino IA",
+      text: "Geracao de planos personalizados conforme objetivo e nivel."
+    }
+  ];
+  const cmsExercisesToday = todayWorkout?.block.exercises ?? [];
+  const cmsMusclesToday = Array.from(
+    new Set(cmsExercisesToday.flatMap((exercise) => exercise.targetMuscles ?? []))
+  );
+  const workoutsCompleted = Math.min(attendance.length, 30);
+  const workoutProgressPercent = Math.min(100, Math.round((workoutsCompleted / 30) * 100));
+  const studentCode = profile?.name ? String(profile.name.length * 193 + 1) : "1931";
+
+  if (!hasActiveMembership) {
+    return (
+      <main className="workspace-shell">
+        <aside className="workspace-sidebar" aria-label="Menu do aluno">
+          <div className="workspace-sidebar-brand">
+            <img src={assetUrl("assets/app-treino-mark.svg")} alt="" aria-hidden="true" />
+            <div>
+              <strong>Aluno</strong>
+              <span>{profile?.name ?? "App Treino"}</span>
+            </div>
+          </div>
+          <nav className="workspace-nav">
+            <button className={studentSection === "subscription" ? "active" : ""} onClick={() => setStudentSection("subscription")}>
+              <CreditCard size={18} />Assinatura
+            </button>
+            <button className={studentSection === "locked" ? "active" : ""} onClick={() => setStudentSection("locked")}>
+              <LockKeyhole size={18} />Conteudos
+            </button>
+          </nav>
+          <button className="workspace-logout" onClick={onLogout}>
+            <LogOut size={18} />
+            Sair
+          </button>
+        </aside>
+        <section className="workspace-content">
+        <section className="dashboard-heading">
+          <span className="eyebrow">Area do aluno</span>
+          <h1>{profile?.name ?? "Comece a treinar"}</h1>
+        </section>
+        {error && <div className="error-box">{error}</div>}
+        {(studentSection === "subscription" || !["subscription", "locked"].includes(studentSection)) && <section className="subscription-flow">
+          <div className="flow-steps" aria-label="Fluxo de assinatura">
+            {["Login", "Assinatura", "Checkout", "Obrigado", "Acesso liberado"].map((step, index) => (
+              <span
+                className={
+                  index === 0 ||
+                  (checkoutStep !== "plans" && index <= 2) ||
+                  (checkoutStep === "thanks" && index <= 4)
+                    ? "active"
+                    : ""
+                }
+                key={step}
+              >
+                {step}
+              </span>
+            ))}
+          </div>
+
+          {checkoutStep === "thanks" ? (
+            <article className="table-panel checkout-panel">
+              <div className="auth-visual" aria-hidden="true">
+                <Check size={22} />
+              </div>
+              <span className="eyebrow">Obrigado</span>
+              <h2>{membership?.status === "ACTIVE" ? "Seu acesso esta liberado." : "Pagamento em processamento."}</h2>
+              <p>
+                {membership?.status === "ACTIVE"
+                  ? "A assinatura foi confirmada e as funcionalidades do aluno ja estao disponiveis."
+                  : "Assim que o Asaas confirmar a assinatura, sua area de treino sera liberada automaticamente."}
+              </p>
+              <div className="checkout-actions">
+                <button className="primary-button" onClick={() => void loadUserData()}>
+                  <RefreshCw size={18} />
+                  Atualizar acesso
+                </button>
+                <button className="outline-button" onClick={() => setCheckoutStep("checkout")}>
+                  Voltar ao checkout
+                </button>
+                <button className="outline-button" onClick={() => setCheckoutStep("plans")}>
+                  Voltar para assinatura
+                </button>
+              </div>
+            </article>
+          ) : checkoutStep === "checkout" && currentCheckoutPayment ? (
+            <article className="table-panel checkout-panel">
+              <span className="eyebrow">Tela de checkout</span>
+              <h2>Finalize sua assinatura.</h2>
+              <p>
+                Pagamento pendente de {formatPriceInBRL(currentCheckoutPayment.amountInCents)}. Depois da confirmacao,
+                voce sera levado para a etapa de obrigado e o acesso sera liberado.
+              </p>
+              <div className="checkout-actions">
+                {currentCheckoutPayment.paymentUrl && (
+                  <a className="primary-button" href={currentCheckoutPayment.paymentUrl} target="_blank" rel="noreferrer">
+                    Abrir checkout
+                    <ArrowRight size={18} />
+                  </a>
+                )}
+                {!currentCheckoutPayment.paymentUrl && (
+                  <button
+                    className="primary-button"
+                    onClick={handleConfirmSandboxPayment}
+                    disabled={checkoutLoading === "sandbox"}
+                  >
+                    {checkoutLoading === "sandbox" ? <Loader2 className="spin" size={18} /> : <CreditCard size={18} />}
+                    Finalizar checkout sandbox
+                  </button>
+                )}
+                <button className="outline-button" onClick={() => setCheckoutStep("plans")}>
+                  Voltar para assinatura
+                </button>
+                <button className="outline-button" onClick={() => setCheckoutStep("thanks")}>
+                  Ja concluí o pagamento
+                </button>
+              </div>
+            </article>
+          ) : (
+            <article className="table-panel checkout-panel">
+              <span className="eyebrow">Assinatura</span>
+              <h2>Comece a treinar com acesso completo.</h2>
+              <p>
+                Escolha uma assinatura para ir ao checkout. As fichas, eventos, avaliacoes, atendimento
+                e agente IA ficam liberados depois da confirmacao do pagamento.
+              </p>
+              <form className="checkout-form" onSubmit={handleCreateCheckout}>
+                <div className="checkout-plan-grid">
+                  {initialPlans.map((plan) => (
+                    <label className="checkout-plan-option" key={plan.code}>
+                      <input
+                        name="planCode"
+                        type="radio"
+                        value={plan.code}
+                        checked={checkoutDraft.planCode === plan.code}
+                        onChange={() =>
+                          setCheckoutDraft((current) => ({
+                            ...current,
+                            planCode: plan.code
+                          }))
+                        }
+                      />
+                      <span>
+                        <strong>{plan.name}</strong>
+                        {formatPriceInBRL(plan.priceInCents)}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <label>
+                  Pagamento
+                  <select
+                    name="billingType"
+                    value={checkoutDraft.billingType}
+                    onChange={(event) =>
+                      setCheckoutDraft((current) => ({
+                        ...current,
+                        billingType: event.target.value as typeof current.billingType
+                      }))
+                    }
+                  >
+                    <option value="UNDEFINED">Escolher no checkout</option>
+                    <option value="PIX">Pix</option>
+                    <option value="BOLETO">Boleto</option>
+                    <option value="CREDIT_CARD">Cartao</option>
+                  </select>
+                </label>
+                <button className="primary-button" disabled={Boolean(checkoutLoading)}>
+                  {checkoutLoading ? <Loader2 className="spin" size={18} /> : <Play size={18} />}
+                  Comece a treinar
+                </button>
+              </form>
+            </article>
+          )}
+        </section>}
+        {studentSection === "locked" && <section className="locked-content" aria-label="Funcionalidades bloqueadas">
+          <LockedOverlay onCheckout={() => setCheckoutStep("checkout")} />
+          <div className="section-heading locked-heading">
+            <span className="eyebrow">Acesso apos pagamento</span>
+            <h2>Conteudos bloqueados enquanto sua assinatura nao for confirmada.</h2>
+          </div>
+          <div className="locked-grid">
+            {lockedFeatures.map((feature) => (
+              <article className="locked-card" key={feature.title}>
+                <div className="locked-card-header">
+                  <feature.icon size={22} />
+                  <LockKeyhole size={18} />
+                </div>
+                <h3>{feature.title}</h3>
+                <p>{feature.text}</p>
+              </article>
+            ))}
+          </div>
+        </section>}
+        </section>
+      </main>
+    );
+  }
 
   return (
-    <main className="dashboard">
-      <section className="dashboard-heading">
-        <span className="eyebrow">Area do aluno</span>
-        <h1>{profile?.name ?? "Treino de hoje"}</h1>
+    <main className="student-app-shell">
+      <section className="student-app-header">
+        <div className="student-avatar">
+          <UserRound size={34} />
+        </div>
+        <div>
+          <strong>{profile?.name ?? "Aluno"}</strong>
+          <span>Codigo: {studentCode}</span>
+        </div>
+        <button className="student-icon-button" aria-label="Notificacoes">
+          <Bell size={24} />
+        </button>
       </section>
-      {error && <div className="error-box">{error}</div>}
-      <div className="student-grid">
-        <article className="table-panel workout-panel">
-          <div className="panel-title">
-            <h2>Ficha atual</h2>
-            <span>{firstDay?.title ?? "Sem treino"}</span>
-          </div>
-          {(firstDay?.exercises.length ? firstDay.exercises : workoutRows).map((exercise) => (
-            <div className="exercise-row" key={exercise.name}>
-              <span>{exercise.name}</span>
-              <strong>{"reps" in exercise ? `${exercise.sets}x ${exercise.reps}` : exercise.sets}</strong>
-              <small>{"load" in exercise ? exercise.load : `${exercise.restSeconds ?? 60}s`}</small>
-            </div>
-          ))}
-        </article>
-        <article className="table-panel">
-          <div className="panel-title">
-            <h2>Status</h2>
-            <span>{membership?.status ?? "Sem matricula"}</span>
-          </div>
-          <div className="task-row">
-            <CreditCard size={18} />
-            {membership ? `Plano ${membership.plan.name}` : "Nenhum plano ativo"}
-          </div>
-          <div className="task-row">
-            <CalendarDays size={18} />
-            {attendance.length > 0 ? "Frequencia registrada hoje" : "Frequencia aguardando acesso"}
-          </div>
-          <div className="task-row">
-            <MessageCircle size={18} />
-            {pendingPayment ? `Pagamento pendente: ${formatPriceInBRL(pendingPayment.amountInCents)}` : "Pagamentos em dia"}
-          </div>
-          <div className="mini-goals">
-            <span>
-              <Flame size={18} />
-              {attendance.length} acesso(s) recentes
-            </span>
-            <span>
-              <Timer size={18} />
-              {profile?.objective ?? "Objetivo nao informado"}
-            </span>
-            <span>
-              <Trophy size={18} />
-              {profile?.level ?? "Nivel nao informado"}
-            </span>
-          </div>
-          {pendingPayment?.paymentUrl && (
-            <a className="primary-button payment-link" href={pendingPayment.paymentUrl} target="_blank" rel="noreferrer">
-              Pagar agora
-              <ArrowRight size={18} />
-            </a>
-          )}
-        </article>
-      </div>
 
-      <section className="student-grid phase-three-grid">
-        <article className="table-panel">
-          <div className="panel-title">
-            <h2>Avaliacao fisica</h2>
-            <span>{latestAssessment ? new Date(latestAssessment.assessedAt).toLocaleDateString("pt-BR") : "Sem dados"}</span>
-          </div>
-          {latestAssessment ? (
-            <div className="metric-grid">
-              <span>
-                <strong>{latestAssessment.weightKg ?? "-"}</strong>
-                kg
-              </span>
-              <span>
-                <strong>{latestAssessment.heightCm ?? "-"}</strong>
-                cm
-              </span>
-              <span>
-                <strong>{latestAssessment.bodyFatPct ?? "-"}</strong>
-                % gordura
-              </span>
-              <span>
-                <strong>{latestAssessment.waistCm ?? "-"}</strong>
-                cm cintura
-              </span>
-            </div>
-          ) : (
-            <div className="task-row">
-              <Ruler size={18} />
-              Solicite sua primeira avaliacao com a equipe.
-            </div>
-          )}
-        </article>
+      <section className="student-app-content">
+        {error && <div className="error-box">{error}</div>}
 
-        <article className="table-panel">
-          <div className="panel-title">
-            <h2>Eventos</h2>
-            <span>{events.length}</span>
-          </div>
-          {events.slice(0, 4).map((item) => (
-            <div className="data-row" key={item.id}>
-              <span>
-                <strong>{item.title}</strong>
-                {new Date(item.startsAt).toLocaleString("pt-BR")} - {item.location ?? "Online"}
-              </span>
-              <small>{item.registrationCount ?? 0}/{item.capacity ?? "livre"}</small>
-              <button disabled={item.registered} onClick={() => handleEventRegistration(item.id)}>
-                {item.registered ? <Check size={17} /> : <CalendarPlus size={17} />}
-              </button>
-            </div>
-          ))}
-        </article>
-
-        <article className="table-panel">
-          <div className="panel-title">
-            <h2>Atendimento</h2>
-            <span>{tickets.length}</span>
-          </div>
-          <form className="crud-form support-form" onSubmit={handleCreateTicket}>
-            <input name="subject" placeholder="Assunto" required />
-            <select name="category" defaultValue="GENERAL">
-              <option value="GENERAL">Geral</option>
-              <option value="WORKOUT">Treino</option>
-              <option value="PAYMENT">Pagamento</option>
-              <option value="TECHNICAL">Tecnico</option>
-            </select>
-            <textarea name="message" placeholder="Descreva o que voce precisa" required />
-            <button className="primary-button">
-              <Headphones size={18} />
-              Abrir atendimento
-            </button>
-          </form>
-          {tickets.slice(0, 3).map((item) => (
-            <div className="task-row" key={item.id}>
-              <MessageCircle size={18} />
-              {item.subject} - {item.status}
-            </div>
-          ))}
-        </article>
-
-        <article className="table-panel">
-          <div className="panel-title">
-            <h2>Agente de Treino IA</h2>
-            <span>{aiPlans.length}</span>
-          </div>
-          <form className="crud-form support-form" onSubmit={handleCreateAiPlan}>
-            <input name="objective" placeholder="Objetivo" defaultValue={profile?.objective ?? ""} required />
-            <input name="level" placeholder="Nivel" defaultValue={profile?.level ?? ""} required />
-            <input name="focus" placeholder="Foco da semana" />
-            <select name="daysPerWeek" defaultValue="3">
-              <option value="2">2 dias</option>
-              <option value="3">3 dias</option>
-              <option value="4">4 dias</option>
-              <option value="5">5 dias</option>
-              <option value="6">6 dias</option>
-            </select>
-            <button className="primary-button">
-              <Bot size={18} />
-              Gerar plano
-            </button>
-          </form>
-          {latestAiPlan && (
-            <div className="ai-plan">
-              <strong>{latestAiPlan.plan.summary}</strong>
-              {latestAiPlan.plan.days.slice(0, 2).map((day) => (
-                <div className="task-row" key={day.title}>
-                  <ClipboardList size={18} />
-                  {day.title}: {day.exercises.map((exercise) => exercise.name).join(", ")}
+        {studentSection === "home" && (
+          <>
+            <section className="student-hero-card">
+              <span>É hora do treino</span>
+              <div className="student-workout-summary">
+                <div className="student-card-icon">
+                  <Dumbbell size={26} />
                 </div>
+                <div>
+                  <h2>{todayWorkout ? `Treino de hoje (${todayWorkout.block.title.replace(/^.*?([A-Z])\\b.*$/, "$1")})` : "Treino de hoje"}</h2>
+                  <p>{cmsMusclesToday.join(", ") || "Ficha de exercicios"}</p>
+                </div>
+                <strong>{workoutsCompleted}/30</strong>
+              </div>
+              <div className="student-progress-track">
+                <span style={{ width: `${workoutProgressPercent}%` }} />
+              </div>
+              <ol className="student-exercise-preview">
+                {cmsExercisesToday.slice(0, 3).map((exercise, index) => (
+                  <li key={exercise.id}>{index + 1}- {exercise.title}</li>
+                ))}
+                {cmsExercisesToday.length > 3 && <li>+{cmsExercisesToday.length - 3} exercicios</li>}
+              </ol>
+              <button className="student-green-button" onClick={() => setStudentSection("training")}>
+                Abrir treino
+              </button>
+            </section>
+
+            <h2 className="student-section-title">Funcionalidades</h2>
+            <section className="student-feature-grid">
+              {[
+                { icon: UserRound, title: "Perfil", text: "Dados cadastrais", section: "menu" as const },
+                { icon: Dumbbell, title: "Treino", text: "Ficha de exercicios", section: "training" as const },
+                { icon: ShieldCheck, title: "Matriculas", text: "Visualize seus planos", section: "payments" as const },
+                { icon: CreditCard, title: "Pagamentos", text: "Central de cobrancas", section: "payments" as const },
+                { icon: Ruler, title: "Avaliacoes", text: "Veja sua evolucao", section: "assessments" as const },
+                { icon: CalendarDays, title: "Frequencia", text: "Consulte seus acessos", section: "status" as const },
+                { icon: CalendarPlus, title: "Eventos", text: "Veja os eventos", section: "events" as const },
+                { icon: Headphones, title: "Atendimento", text: "Historico de conversas", section: "support" as const }
+              ].map((item) => (
+                <button className="student-feature-card" key={item.title} onClick={() => setStudentSection(item.section)}>
+                  <span><item.icon size={25} /></span>
+                  <strong>{item.title}</strong>
+                  <small>{item.text}</small>
+                </button>
+              ))}
+            </section>
+          </>
+        )}
+
+        {studentSection === "training" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Ficha de treino #1</span>
+              <h1>{todayWorkout?.programTitle ?? "CMS Fitness"}</h1>
+              <p>{todayWorkout?.block.title ?? "Treino do dia"}</p>
+            </div>
+            <div className="student-progress-row">
+              <span>Treinos realizados: <strong>{workoutsCompleted}/30</strong></span>
+              <div className="student-progress-track"><span style={{ width: `${workoutProgressPercent}%` }} /></div>
+            </div>
+            {todayWorkout ? (
+              <article className="student-training-card active">
+                <div className="student-card-icon">
+                  <Dumbbell size={24} />
+                </div>
+                <div>
+                  <h2>{todayWorkout.block.title}</h2>
+                  <p>{cmsMusclesToday.join(", ") || "Exercicios do CMS Fitness"}</p>
+                </div>
+                <button onClick={() => setStudentSection("player")}>Iniciar</button>
+              </article>
+            ) : (
+              <article className="student-training-card">
+                <Dumbbell size={24} />
+                <div>
+                  <h2>Treino indisponivel</h2>
+                  <p>Nenhum programa CMS ativo foi encontrado.</p>
+                </div>
+              </article>
+            )}
+            <div className="student-exercise-list">
+              {cmsExercisesToday.map((exercise) => (
+                <article className="student-exercise-card" key={exercise.id}>
+                  <div className="student-exercise-thumb">
+                    <Dumbbell size={22} />
+                  </div>
+                  <div>
+                    <strong>{exercise.title}</strong>
+                    <span>{(exercise.targetMuscles ?? []).join(", ") || `${exercise.sets} séries`}</span>
+                    <small>{exercise.sets}x {exercise.repsRange} • {exercise.videoUrl ? "Video disponivel" : "Sem video"}</small>
+                  </div>
+                  <span className="student-toggle" aria-hidden="true" />
+                </article>
               ))}
             </div>
-          )}
-        </article>
+          </section>
+        )}
+
+        {studentSection === "player" && todayWorkout && (
+          <section className="student-player-mobile">
+            <button className="student-back-button" onClick={() => setStudentSection("training")}>
+              <ArrowRight size={18} />
+              Voltar
+            </button>
+            <WorkoutPlayer
+              exercises={todayWorkout.block.exercises}
+              restTimeDefault={todayWorkout.block.restTime}
+              onRequestSubstitutes={handleRequestSubstitutes}
+            />
+          </section>
+        )}
+
+        {studentSection === "payments" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Financeiro</span>
+              <h1>Pagamentos e matricula</h1>
+              <p>{membership ? `Plano ${membership.plan.name}` : "Nenhum plano ativo"}</p>
+            </div>
+            <article className="student-info-card">
+              <ShieldCheck size={22} />
+              <div>
+                <strong>Status da matricula</strong>
+                <span>{membership?.status ?? "Sem matricula"}</span>
+              </div>
+            </article>
+            {payments.slice(0, 6).map((payment) => (
+              <article className="student-info-card" key={payment.id}>
+                <CreditCard size={22} />
+                <div>
+                  <strong>{formatPriceInBRL(payment.amountInCents)}</strong>
+                  <span>{payment.status} • {new Date(payment.dueDate).toLocaleDateString("pt-BR")}</span>
+                </div>
+                {payment.paymentUrl && <a href={payment.paymentUrl} target="_blank" rel="noreferrer">Abrir</a>}
+              </article>
+            ))}
+          </section>
+        )}
+
+        {studentSection === "products" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Produtos</span>
+              <h1>Vitrine online</h1>
+              <p>Produtos e compras serao conectados ao catalogo do App Treino.</p>
+            </div>
+            <article className="student-empty-state">
+              <Package size={34} />
+              <strong>Nenhum produto cadastrado</strong>
+              <span>Use esta area para uma futura loja fitness.</span>
+            </article>
+          </section>
+        )}
+
+        {studentSection === "assessments" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Avaliacoes</span>
+              <h1>Veja sua evolucao</h1>
+              <p>{latestAssessment ? new Date(latestAssessment.assessedAt).toLocaleDateString("pt-BR") : "Sem avaliacao cadastrada"}</p>
+            </div>
+            {latestAssessment ? (
+              <div className="student-metric-grid">
+                <span><strong>{latestAssessment.weightKg ?? "-"}</strong>kg</span>
+                <span><strong>{latestAssessment.heightCm ?? "-"}</strong>cm</span>
+                <span><strong>{latestAssessment.bodyFatPct ?? "-"}</strong>% gordura</span>
+                <span><strong>{latestAssessment.waistCm ?? "-"}</strong>cm cintura</span>
+              </div>
+            ) : (
+              <article className="student-empty-state">
+                <Ruler size={34} />
+                <strong>Nenhuma avaliacao</strong>
+                <span>Solicite sua primeira avaliacao com a equipe.</span>
+              </article>
+            )}
+          </section>
+        )}
+
+        {studentSection === "events" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Eventos</span>
+              <h1>Agenda da academia</h1>
+              <p>{events.length} evento(s) disponiveis</p>
+            </div>
+            {events.slice(0, 8).map((item) => (
+              <article className="student-info-card" key={item.id}>
+                <CalendarPlus size={22} />
+                <div>
+                  <strong>{item.title}</strong>
+                  <span>{new Date(item.startsAt).toLocaleString("pt-BR")} • {item.location ?? "Online"}</span>
+                </div>
+                <button disabled={item.registered} onClick={() => handleEventRegistration(item.id)}>
+                  {item.registered ? "Inscrito" : "Entrar"}
+                </button>
+              </article>
+            ))}
+          </section>
+        )}
+
+        {studentSection === "support" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Atendimento</span>
+              <h1>Suporte</h1>
+              <p>{tickets.length} chamado(s)</p>
+            </div>
+            <form className="student-form" onSubmit={handleCreateTicket}>
+              <input name="subject" placeholder="Assunto" required />
+              <select name="category" defaultValue="GENERAL">
+                <option value="GENERAL">Geral</option>
+                <option value="WORKOUT">Treino</option>
+                <option value="PAYMENT">Pagamento</option>
+                <option value="TECHNICAL">Tecnico</option>
+              </select>
+              <textarea name="message" placeholder="Descreva o que voce precisa" required />
+              <button className="student-green-button">Abrir atendimento</button>
+            </form>
+            {tickets.slice(0, 4).map((item) => (
+              <article className="student-info-card" key={item.id}>
+                <MessageCircle size={22} />
+                <div>
+                  <strong>{item.subject}</strong>
+                  <span>{item.status}</span>
+                </div>
+              </article>
+            ))}
+          </section>
+        )}
+
+        {studentSection === "ai" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Agente IA</span>
+              <h1>Plano inteligente</h1>
+              <p>Gere uma rotina baseada no seu objetivo.</p>
+            </div>
+            <form className="student-form" onSubmit={handleCreateAiPlan}>
+              <input name="objective" placeholder="Objetivo" defaultValue={profile?.objective ?? ""} required />
+              <input name="level" placeholder="Nivel" defaultValue={profile?.level ?? ""} required />
+              <input name="focus" placeholder="Foco da semana" />
+              <select name="daysPerWeek" defaultValue="3">
+                <option value="2">2 dias</option>
+                <option value="3">3 dias</option>
+                <option value="4">4 dias</option>
+                <option value="5">5 dias</option>
+                <option value="6">6 dias</option>
+              </select>
+              <button className="student-green-button">Gerar plano</button>
+            </form>
+            {latestAiPlan && <article className="student-info-card"><Bot size={22} /><div><strong>Ultimo plano</strong><span>{latestAiPlan.plan.summary}</span></div></article>}
+          </section>
+        )}
+
+        {studentSection === "menu" && (
+          <section className="student-menu-list">
+            {[
+              { icon: UserRound, title: "Perfil", action: () => setStudentSection("status") },
+              { icon: Dumbbell, title: "Treino", action: () => setStudentSection("training"), favorite: true },
+              { icon: ShieldCheck, title: "Matriculas", action: () => setStudentSection("payments") },
+              { icon: CreditCard, title: "Pagamentos", action: () => setStudentSection("payments"), favorite: true },
+              { icon: Ruler, title: "Avaliacoes", action: () => setStudentSection("assessments") },
+              { icon: CalendarDays, title: "Frequencia", action: () => setStudentSection("status") },
+              { icon: Package, title: "Produtos", action: () => setStudentSection("products"), favorite: true },
+              { icon: ShoppingCart, title: "Compras", action: () => setStudentSection("products") },
+              { icon: CalendarPlus, title: "Eventos", action: () => setStudentSection("events") },
+              { icon: Headphones, title: "Atendimento", action: () => setStudentSection("support") },
+              { icon: QrCode, title: "QR Code", action: () => setStudentSection("status") },
+              { icon: CreditCard, title: "Meus Cartoes", action: () => setStudentSection("payments") },
+              { icon: Settings, title: "Configuracoes", action: () => setStudentSection("status") },
+              { icon: MessageCircle, title: "Contato", action: () => setStudentSection("support") },
+              { icon: Star, title: "Favoritos", action: () => setStudentSection("training") },
+              { icon: Trophy, title: "Avaliar", action: () => setStudentSection("assessments") }
+            ].map((item) => (
+              <button className="student-menu-item" key={item.title} onClick={item.action}>
+                <item.icon size={24} />
+                <span>{item.title}</span>
+                {item.favorite && <Star size={18} />}
+              </button>
+            ))}
+            <button className="student-menu-item danger" onClick={onLogout}>
+              <LogOut size={24} />
+              <span>Sair</span>
+            </button>
+          </section>
+        )}
       </section>
+
+      <nav className="student-bottom-nav" aria-label="Navegacao do aluno">
+        <button className={studentSection === "home" ? "active" : ""} onClick={() => setStudentSection("home")}><Home size={22} />Home</button>
+        <button className={studentSection === "payments" ? "active" : ""} onClick={() => setStudentSection("payments")}><CreditCard size={22} />Pagamentos</button>
+        <button className={studentSection === "training" || studentSection === "player" ? "active" : ""} onClick={() => setStudentSection("training")}><Dumbbell size={22} />Treino</button>
+        <button className={studentSection === "products" ? "active" : ""} onClick={() => setStudentSection("products")}><Package size={22} />Produtos</button>
+        <button className={studentSection === "menu" ? "active" : ""} onClick={() => setStudentSection("menu")}><Menu size={22} />Menu</button>
+      </nav>
     </main>
   );
 }

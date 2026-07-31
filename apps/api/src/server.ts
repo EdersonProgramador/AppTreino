@@ -8,6 +8,7 @@ import { registerAsaasRoutes } from "./modules/asaas.routes.js";
 import { registerAuthRoutes } from "./modules/auth.routes.js";
 import { registerCheckoutRoutes } from "./modules/checkout.routes.js";
 import { registerPublicRoutes } from "./modules/public.routes.js";
+import { registerStudentRoutes } from "./modules/student.routes.js";
 import { registerUserRoutes } from "./modules/user.routes.js";
 
 const app = Fastify({
@@ -51,6 +52,7 @@ await registerAuthRoutes(app);
 await registerCheckoutRoutes(app);
 await registerAdminRoutes(app);
 await registerUserRoutes(app);
+await registerStudentRoutes(app);
 await registerAsaasRoutes(app);
 
 try {

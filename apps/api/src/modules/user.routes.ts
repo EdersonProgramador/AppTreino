@@ -55,6 +55,25 @@ async function recordDailyAttendance(userId: string) {
   });
 }
 
+async function requireActiveMembership(userId: string) {
+  const membership = await prisma.membership.findFirst({
+    where: {
+      userId,
+      status: "ACTIVE"
+    }
+  });
+
+  if (!membership) {
+    const error = new Error("Assinatura ativa obrigatoria para acessar esta funcionalidade.") as Error & {
+      statusCode: number;
+    };
+    error.statusCode = 402;
+    throw error;
+  }
+
+  return membership;
+}
+
 function buildAiWorkoutPlan(input: {
   objective: string;
   level: string;
@@ -104,7 +123,15 @@ export async function registerUserRoutes(app: FastifyInstance) {
   app.addHook("preHandler", async (request) => {
     if (request.url.startsWith("/user")) {
       const user = await requireAuth(app, request);
-      await recordDailyAttendance(user.id);
+      if (
+        env.DATABASE_URL &&
+        !request.url.startsWith("/user/profile") &&
+        !request.url.startsWith("/user/membership") &&
+        !request.url.startsWith("/user/payments")
+      ) {
+        await requireActiveMembership(user.id);
+        await recordDailyAttendance(user.id);
+      }
     }
   });
 

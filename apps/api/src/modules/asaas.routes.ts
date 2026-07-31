@@ -64,7 +64,12 @@ export async function registerAsaasRoutes(app: FastifyInstance) {
               id: payment.membershipId
             },
             data: {
-              status: "ACTIVE"
+              status: "ACTIVE",
+              user: {
+                update: {
+                  enrollmentStatus: "ACTIVE"
+                }
+              }
             }
           });
         }

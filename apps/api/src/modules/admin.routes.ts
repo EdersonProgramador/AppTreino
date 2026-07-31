@@ -44,6 +44,46 @@ const workoutSchema = z.object({
     .default([])
 });
 
+const cmsExerciseSchema = z.object({
+  title: z.string().min(2),
+  videoUrl: z.string().url().optional().or(z.literal("")),
+  audioUrl: z.string().url().optional().or(z.literal("")),
+  targetMuscles: z.array(z.string().min(1)).default([]),
+  equipmentTags: z.array(z.string().min(1)).default([]),
+  alternativeIds: z.array(z.string().min(1)).default([])
+});
+
+const cmsWorkoutBlockSchema = z.object({
+  title: z.string().min(2),
+  structureType: z.enum(["NORMAL", "BI_SET", "DROP_SET", "REST_PAUSE"]).default("NORMAL"),
+  restTime: z.coerce.number().int().min(0),
+  exercises: z
+    .array(
+      z.object({
+        exerciseId: z.string().min(1),
+        sets: z.coerce.number().int().min(1),
+        repsRange: z.string().min(1),
+        order: z.coerce.number().int().min(1)
+      })
+    )
+    .default([])
+});
+
+const cmsProgramSchema = z.object({
+  title: z.string().min(2),
+  description: z.string().min(2),
+  isActive: z.coerce.boolean().default(true),
+  days: z
+    .array(
+      z.object({
+        workoutBlockId: z.string().min(1),
+        dayNumber: z.coerce.number().int().min(1),
+        order: z.coerce.number().int().min(1)
+      })
+    )
+    .default([])
+});
+
 const planSchema = z.object({
   code: z.string().min(2),
   name: z.string().min(2),
@@ -438,6 +478,306 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  app.get("/admin/cms/exercises", async () => {
+    requireDatabase();
+    const exercises = await prisma.exercise.findMany({
+      where: {
+        workoutDayId: null
+      },
+      include: {
+        alternatives: true,
+        alternativeTo: true
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+
+    return { exercises };
+  });
+
+  app.post("/admin/cms/exercises", async (request, reply) => {
+    requireDatabase();
+    const body = cmsExerciseSchema.parse(request.body);
+    const exercise = await prisma.exercise.create({
+      data: {
+        title: body.title,
+        videoUrl: body.videoUrl || null,
+        audioUrl: body.audioUrl || null,
+        targetMuscles: body.targetMuscles,
+        equipmentTags: body.equipmentTags,
+        alternatives: {
+          connect: body.alternativeIds.map((id) => ({ id }))
+        }
+      },
+      include: {
+        alternatives: true,
+        alternativeTo: true
+      }
+    });
+
+    return reply.code(201).send({ exercise });
+  });
+
+  app.put("/admin/cms/exercises/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const body = cmsExerciseSchema.parse(request.body);
+    const current = await prisma.exercise.findUniqueOrThrow({
+      where: { id },
+      include: { alternatives: true }
+    });
+    const exercise = await prisma.exercise.update({
+      where: { id },
+      data: {
+        title: body.title,
+        videoUrl: body.videoUrl || null,
+        audioUrl: body.audioUrl || null,
+        targetMuscles: body.targetMuscles,
+        equipmentTags: body.equipmentTags,
+        alternatives: {
+          disconnect: current.alternatives.map((item) => ({ id: item.id })),
+          connect: body.alternativeIds.map((alternativeId) => ({ id: alternativeId }))
+        }
+      },
+      include: {
+        alternatives: true,
+        alternativeTo: true
+      }
+    });
+
+    return { exercise };
+  });
+
+  app.delete("/admin/cms/exercises/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    await prisma.$transaction([
+      prisma.userProgress.deleteMany({ where: { exerciseId: id } }),
+      prisma.workoutBlockExercise.deleteMany({ where: { exerciseId: id } }),
+      prisma.exercise.update({
+        where: { id },
+        data: {
+          alternatives: { set: [] },
+          alternativeTo: { set: [] }
+        }
+      }),
+      prisma.exercise.delete({ where: { id } })
+    ]);
+
+    return { ok: true };
+  });
+
+  app.get("/admin/cms/workout-blocks", async () => {
+    requireDatabase();
+    const workoutBlocks = await prisma.workoutBlock.findMany({
+      include: {
+        exercises: {
+          include: {
+            exercise: true
+          },
+          orderBy: {
+            order: "asc"
+          }
+        },
+        programDays: {
+          include: {
+            program: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+
+    return { workoutBlocks };
+  });
+
+  app.post("/admin/cms/workout-blocks", async (request, reply) => {
+    requireDatabase();
+    const body = cmsWorkoutBlockSchema.parse(request.body);
+    const workoutBlock = await prisma.workoutBlock.create({
+      data: {
+        title: body.title,
+        structureType: body.structureType,
+        restTime: body.restTime,
+        exercises: {
+          create: body.exercises.map((exercise) => ({
+            exerciseId: exercise.exerciseId,
+            sets: exercise.sets,
+            repsRange: exercise.repsRange,
+            order: exercise.order
+          }))
+        }
+      },
+      include: {
+        exercises: {
+          include: {
+            exercise: true
+          },
+          orderBy: {
+            order: "asc"
+          }
+        }
+      }
+    });
+
+    return reply.code(201).send({ workoutBlock });
+  });
+
+  app.put("/admin/cms/workout-blocks/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const body = cmsWorkoutBlockSchema.parse(request.body);
+
+    await prisma.$transaction([
+      prisma.workoutBlockExercise.deleteMany({ where: { workoutBlockId: id } }),
+      prisma.workoutBlock.update({
+        where: { id },
+        data: {
+          title: body.title,
+          structureType: body.structureType,
+          restTime: body.restTime,
+          exercises: {
+            create: body.exercises.map((exercise) => ({
+              exerciseId: exercise.exerciseId,
+              sets: exercise.sets,
+              repsRange: exercise.repsRange,
+              order: exercise.order
+            }))
+          }
+        }
+      })
+    ]);
+
+    const workoutBlock = await prisma.workoutBlock.findUniqueOrThrow({
+      where: { id },
+      include: {
+        exercises: {
+          include: {
+            exercise: true
+          },
+          orderBy: {
+            order: "asc"
+          }
+        }
+      }
+    });
+
+    return { workoutBlock };
+  });
+
+  app.delete("/admin/cms/workout-blocks/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    await prisma.$transaction([
+      prisma.programDayWorkout.deleteMany({ where: { workoutBlockId: id } }),
+      prisma.workoutBlockExercise.deleteMany({ where: { workoutBlockId: id } }),
+      prisma.workoutBlock.delete({ where: { id } })
+    ]);
+
+    return { ok: true };
+  });
+
+  app.get("/admin/cms/programs", async () => {
+    requireDatabase();
+    const programs = await prisma.program.findMany({
+      include: {
+        days: {
+          include: {
+            workoutBlock: true
+          },
+          orderBy: [{ dayNumber: "asc" }, { order: "asc" }]
+        }
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+
+    return { programs };
+  });
+
+  app.post("/admin/cms/programs", async (request, reply) => {
+    requireDatabase();
+    const body = cmsProgramSchema.parse(request.body);
+    const program = await prisma.program.create({
+      data: {
+        title: body.title,
+        description: body.description,
+        isActive: body.isActive,
+        days: {
+          create: body.days.map((day) => ({
+            workoutBlockId: day.workoutBlockId,
+            dayNumber: day.dayNumber,
+            order: day.order
+          }))
+        }
+      },
+      include: {
+        days: {
+          include: {
+            workoutBlock: true
+          },
+          orderBy: [{ dayNumber: "asc" }, { order: "asc" }]
+        }
+      }
+    });
+
+    return reply.code(201).send({ program });
+  });
+
+  app.put("/admin/cms/programs/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const body = cmsProgramSchema.parse(request.body);
+
+    await prisma.$transaction([
+      prisma.programDayWorkout.deleteMany({ where: { programId: id } }),
+      prisma.program.update({
+        where: { id },
+        data: {
+          title: body.title,
+          description: body.description,
+          isActive: body.isActive,
+          days: {
+            create: body.days.map((day) => ({
+              workoutBlockId: day.workoutBlockId,
+              dayNumber: day.dayNumber,
+              order: day.order
+            }))
+          }
+        }
+      })
+    ]);
+
+    const program = await prisma.program.findUniqueOrThrow({
+      where: { id },
+      include: {
+        days: {
+          include: {
+            workoutBlock: true
+          },
+          orderBy: [{ dayNumber: "asc" }, { order: "asc" }]
+        }
+      }
+    });
+
+    return { program };
+  });
+
+  app.delete("/admin/cms/programs/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    await prisma.$transaction([
+      prisma.programDayWorkout.deleteMany({ where: { programId: id } }),
+      prisma.program.delete({ where: { id } })
+    ]);
+
+    return { ok: true };
+  });
+
   app.get("/admin/plans", async () => {
     requireDatabase();
     const plans = await prisma.plan.findMany({ orderBy: { priceInCents: "asc" } });
@@ -517,6 +857,13 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       }
     });
 
+    if (membership.status === "ACTIVE") {
+      await prisma.user.update({
+        where: { id: membership.userId },
+        data: { enrollmentStatus: "ACTIVE" }
+      });
+    }
+
     return reply.code(201).send({ membership });
   });
 
@@ -532,6 +879,13 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         plan: true
       }
     });
+
+    if (membership.status === "ACTIVE") {
+      await prisma.user.update({
+        where: { id: membership.userId },
+        data: { enrollmentStatus: "ACTIVE" }
+      });
+    }
 
     return { membership };
   });
