@@ -41,23 +41,23 @@ const assetUrl = (path: string) => `${import.meta.env.BASE_URL}${path}`;
 const resources = [
   {
     icon: Dumbbell,
-    title: "Treinos organizados",
-    text: "Ficha por dias, exercicios, series, repeticoes e observacoes em uma rotina clara."
+    title: "Treino pronto para seguir",
+    text: "Receba sua rotina organizada por dias, exercicios, series, repeticoes e descanso."
   },
   {
     icon: LineChart,
-    title: "Evolucao visivel",
-    text: "Historico de acesso, frequencia e base para avaliacoes fisicas recorrentes."
+    title: "Evolucao que voce acompanha",
+    text: "Veja frequencia, historico, avaliacoes e sinais claros de progresso ao longo do tempo."
   },
   {
     icon: CircleDollarSign,
-    title: "Planos recorrentes",
-    text: "Estrutura pronta para mensalidade, anualidade e integracao com pagamentos."
+    title: "Planos simples",
+    text: "Escolha mensal ou anual, pague online e mantenha seu treino ativo sem complicacao."
   },
   {
     icon: MessageCircle,
-    title: "Atendimento centralizado",
-    text: "Contato, suporte e acompanhamento em um fluxo simples para aluno e equipe."
+    title: "Suporte quando precisar",
+    text: "Tire duvidas sobre treino, pagamento ou acesso em um canal direto com a equipe."
   }
 ];
 
@@ -69,24 +69,24 @@ const workoutRows = [
 
 const faqItems = [
   {
-    question: "O App Treino serve para alunos e administradores?",
+    question: "O App Treino e para quem quer treinar melhor?",
     answer:
-      "Sim. Alunos acompanham treinos, planos, pagamentos e avaliacoes. Administradores gerenciam usuarios, matriculas, treinos, eventos e suporte."
+      "Sim. O App Treino foi criado para pessoas que querem seguir uma rotina clara, acompanhar progresso e manter consistencia nos treinos."
   },
   {
-    question: "Consigo vender planos recorrentes pela plataforma?",
+    question: "Preciso ja ter experiencia com academia?",
     answer:
-      "A estrutura ja contempla planos mensais e anuais, matriculas e geracao de cobrancas para evoluir a operacao com pagamentos recorrentes."
+      "Nao. Voce pode comecar com um plano adequado ao seu nivel e evoluir com orientacoes simples, ficha organizada e acompanhamento."
   },
   {
-    question: "O aluno acessa o treino do dia pelo app?",
+    question: "Consigo acessar meu treino pelo celular?",
     answer:
-      "Sim. A area do aluno mostra a ficha atual, exercicios, frequencia, status do plano e informacoes importantes do acompanhamento."
+      "Sim. A area do aluno mostra sua ficha atual, exercicios do dia, frequencia, status do plano e informacoes importantes do acompanhamento."
   },
   {
-    question: "Existe suporte para evolucao fisica e atendimento?",
+    question: "O App Treino tambem ajuda a acompanhar minha evolucao?",
     answer:
-      "Sim. A plataforma inclui avaliacoes fisicas, historico, eventos, tickets de atendimento e base para planos de treino com IA."
+      "Sim. Voce pode acompanhar avaliacoes, historico, eventos, atendimento e planos de treino gerados com apoio de IA."
   }
 ];
 
@@ -329,12 +329,14 @@ export function App() {
           <a href="#planos" onClick={() => setView("home")}>
             Planos
           </a>
+        </nav>
+        <div className="topbar-actions">
           <button onClick={() => (user ? handleLogout() : setView("login"))}>
             <LogIn size={18} />
             {user ? "Sair" : "Entrar"}
           </button>
-        </nav>
-        <span className="area-badge">{currentArea}</span>
+          <span className="area-badge">{currentArea}</span>
+        </div>
       </header>
 
       {view === "home" && <HomeView onStart={handleStart} />}
@@ -363,15 +365,16 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
         </div>
         <div className="hero-content">
           <div className="hero-copy">
-            <span className="eyebrow">Gestao fitness de alta performance</span>
+            <span className="eyebrow">Treino digital para sua rotina</span>
             <h1>App Treino</h1>
             <p>
-              Uma plataforma para vender planos, liberar treinos, acompanhar alunos e centralizar
-              pagamentos recorrentes com uma experiencia premium para quem treina.
+              Treine com mais clareza, acompanhe sua evolucao e tenha sua ficha sempre a mao.
+              O App Treino conecta voce a planos, pagamentos e suporte em uma experiencia simples
+              para pessoa fisica.
             </p>
             <div className="hero-actions">
               <button className="primary-button" onClick={() => onStart()}>
-                Teste gratuitamente
+                Comecar meu treino
                 <ArrowRight size={18} />
               </button>
               <a className="secondary-link" href="#planos">
@@ -393,23 +396,23 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
       <section className="section-band">
         <div className="section-heading">
           <span className="eyebrow">Para quem e</span>
-          <h2>Controle de estudio, academia e assessoria em uma tela.</h2>
+          <h2>Para quem quer sair do improviso e treinar com direcao.</h2>
         </div>
         <div className="audience-grid">
           <article>
             <UserRound />
-            <h3>Alunos</h3>
-            <p>Acompanham treino, plano, pagamentos, avaliacoes e frequencia diaria.</p>
+            <h3>Iniciantes</h3>
+            <p>Comece com uma ficha clara, rotina simples e orientacao para manter constancia.</p>
           </article>
           <article>
             <ShieldCheck />
-            <h3>Administradores</h3>
-            <p>Gerenciam usuarios, matriculas, treinos e suporte em uma rotina organizada.</p>
+            <h3>Quem ja treina</h3>
+            <p>Organize exercicios, acompanhe frequencia e tenha mais controle da sua evolucao.</p>
           </article>
           <article>
             <Sparkles />
-            <h3>Assessoria fitness</h3>
-            <p>Cria uma base pronta para atendimento digital, recorrencia e evolucao futura.</p>
+            <h3>Rotina corrida</h3>
+            <p>Tenha seu plano no celular para treinar no horario que couber no seu dia.</p>
           </article>
         </div>
       </section>
@@ -417,10 +420,10 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
       <section className="section" id="recursos">
         <div className="section-heading">
           <span className="eyebrow">Recursos</span>
-          <h2>Tudo que uma operacao fitness precisa para subir de nivel.</h2>
+          <h2>Tudo para voce treinar com mais foco e acompanhar seus resultados.</h2>
           <p>
-            A interface combina rotina de treino, controle de aluno e visao operacional para manter
-            a experiencia simples no uso diario.
+            A experiencia combina ficha de treino, frequencia, pagamentos, avaliacoes e suporte
+            para deixar sua rotina fitness mais simples no uso diario.
           </p>
         </div>
         <div className="resource-grid">
@@ -437,8 +440,8 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
       <section className="section pricing" id="planos">
         <div className="section-heading">
           <span className="eyebrow">Planos</span>
-          <h2>Planos sob medida para seu treino fisico.</h2>
-          <p>No App Treino, voce encontra a estrutura ideal para comecar, vender e escalar.</p>
+          <h2>Escolha seu plano e comece a treinar com acompanhamento.</h2>
+          <p>No App Treino, voce encontra uma assinatura simples para manter sua rotina ativa.</p>
         </div>
         <div className="pricing-grid">
           {initialPlans.map((plan, index) => (
@@ -460,7 +463,7 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
         <div className="section-heading">
           <span className="eyebrow">FAQ</span>
           <h2>Perguntas frequentes sobre o App Treino.</h2>
-          <p>Respostas diretas para entender como a plataforma organiza treino, gestao e evolucao.</p>
+          <p>Respostas diretas para entender como o App Treino ajuda voce a treinar melhor.</p>
         </div>
         <div className="faq-grid">
           {faqItems.map((item) => (
@@ -478,19 +481,45 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
       <section className="final-cta">
         <div>
           <span className="eyebrow">Proximo passo</span>
-          <h2>Transforme cada acesso em consistencia.</h2>
-          <p>Comece hoje com uma base visual solida para evoluir produto, treino e atendimento.</p>
+          <h2>Transforme vontade em rotina de treino.</h2>
+          <p>Comece hoje com um plano claro, acompanhamento simples e acesso direto pelo celular.</p>
         </div>
         <button className="primary-button" onClick={() => onStart()}>
-          Comece hoje mesmo
+          Quero meu plano
           <ArrowRight size={18} />
         </button>
       </section>
 
       <footer className="footer">
-        <span>@2026 App Treino. Todos os direitos reservados.</span>
-        <span>Central de Ajuda | Documentacao | Fale conosco</span>
-        <span>Termos de Uso | Privacidade | Instagram | TikTok</span>
+        <div className="footer-brand">
+          <img src={assetUrl("assets/app-treino-mark.svg")} alt="" aria-hidden="true" />
+          <div>
+            <strong>App Treino</strong>
+            <p>Treino digital, acompanhamento e planos para sua rotina fitness.</p>
+          </div>
+        </div>
+        <nav className="footer-links" aria-label="Suporte">
+          <strong>Suporte</strong>
+          <a href="#faq">Central de Ajuda</a>
+          <a href="#faq">Dúvidas frequentes</a>
+          <a href="mailto:contato@apptreino.com">Fale conosco</a>
+        </nav>
+        <nav className="footer-links" aria-label="Institucional">
+          <strong>Institucional</strong>
+          <a href="#planos">Planos</a>
+          <a href="#recursos">Recursos</a>
+          <a href="#faq">Como funciona</a>
+        </nav>
+        <nav className="footer-links" aria-label="Legal e redes sociais">
+          <strong>Legal</strong>
+          <a href="#termos">Termos de Uso</a>
+          <a href="#privacidade">Privacidade</a>
+          <a href="https://instagram.com" target="_blank" rel="noreferrer">Instagram</a>
+        </nav>
+        <div className="footer-bottom">
+          <span>© 2026 App Treino. Todos os direitos reservados.</span>
+          <span>Feito para quem quer treinar com mais consistência.</span>
+        </div>
       </footer>
     </main>
   );

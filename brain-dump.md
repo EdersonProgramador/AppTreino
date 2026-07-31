@@ -96,4 +96,3 @@ Menu:
 
 
 ### Aspectos visuais (Design e UX)
-

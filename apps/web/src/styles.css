@@ -21,6 +21,25 @@ body {
   background: #08090b;
 }
 
+::selection {
+  background: rgba(242, 180, 97, 0.32);
+  color: #fff7ec;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #08090b;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid #08090b;
+  border-radius: 999px;
+  background: rgba(242, 180, 97, 0.46);
+}
+
 button,
 a {
   font: inherit;
@@ -35,12 +54,23 @@ button:disabled {
   opacity: 0.72;
 }
 
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 3px solid rgba(242, 180, 97, 0.34);
+  outline-offset: 3px;
+}
+
 .app-shell {
   min-height: 100vh;
   overflow-x: hidden;
   background:
-    radial-gradient(circle at 12% 0%, rgba(190, 48, 39, 0.22), transparent 32rem),
-    radial-gradient(circle at 88% 16%, rgba(41, 147, 115, 0.16), transparent 30rem),
+    radial-gradient(circle at 12% 0%, rgba(190, 48, 39, 0.24), transparent 32rem),
+    radial-gradient(circle at 88% 16%, rgba(41, 147, 115, 0.18), transparent 30rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 18rem),
     #08090b;
 }
 
@@ -48,15 +78,16 @@ button:disabled {
   position: sticky;
   top: 0;
   z-index: 20;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto minmax(150px, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 24px;
   min-height: 76px;
   padding: 16px clamp(20px, 4vw, 64px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(8, 9, 11, 0.82);
   backdrop-filter: blur(18px);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
 }
 
 .brand {
@@ -72,16 +103,25 @@ button:disabled {
   width: clamp(158px, 16vw, 218px);
   height: auto;
   border-radius: 8px;
+  filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.22));
 }
 
 .nav-links {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 22px;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
 .nav-links a,
-.nav-links button {
+.topbar-actions button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -95,7 +135,7 @@ button:disabled {
 }
 
 .nav-links a:hover,
-.nav-links button:hover {
+.topbar-actions button:hover {
   color: #fff8ee;
   transform: translateY(-1px);
 }
@@ -110,6 +150,7 @@ button:disabled {
   color: #f2b461;
   font-size: 13px;
   font-weight: 800;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .hero {
@@ -208,19 +249,29 @@ button:disabled {
   border: 1px solid #f2b461;
   background: linear-gradient(135deg, #f2b461, #df663c);
   color: #15100b;
-  box-shadow: 0 18px 42px rgba(223, 102, 60, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    0 18px 42px rgba(223, 102, 60, 0.28);
 }
 
 .outline-button {
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.06);
   color: #fff6eb;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .primary-button:hover,
 .outline-button:hover,
 .price-card button:hover {
   transform: translateY(-2px);
+}
+
+.primary-button:hover,
+.price-card button:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    0 22px 52px rgba(223, 102, 60, 0.34);
 }
 
 .secondary-link {
@@ -231,6 +282,14 @@ button:disabled {
   color: #fff6eb;
   font-weight: 900;
   text-decoration: none;
+  transition:
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.secondary-link:hover {
+  color: #f2b461;
+  transform: translateX(2px);
 }
 
 .hero-panel {
@@ -428,6 +487,20 @@ button:disabled {
     linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035)),
     #151817;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease;
+}
+
+.audience-grid article:hover,
+.resource-card:hover,
+.price-card:hover,
+.stat-card:hover {
+  border-color: rgba(242, 180, 97, 0.28);
+  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.3);
+  transform: translateY(-3px);
 }
 
 .audience-grid svg,
@@ -528,8 +601,11 @@ button:disabled {
 .price-card.featured {
   border-color: rgba(242, 180, 97, 0.52);
   background:
-    linear-gradient(180deg, rgba(242, 180, 97, 0.14), rgba(255, 255, 255, 0.04)),
+    linear-gradient(180deg, rgba(242, 180, 97, 0.16), rgba(255, 255, 255, 0.04)),
     #151817;
+  box-shadow:
+    0 24px 64px rgba(223, 102, 60, 0.18),
+    0 24px 60px rgba(0, 0, 0, 0.22);
 }
 
 .plan-badge {
@@ -584,6 +660,16 @@ button:disabled {
     linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035)),
     #151817;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+  transition:
+    border-color 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.faq-card:hover {
+  border-color: rgba(242, 180, 97, 0.26);
+  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.28);
+  transform: translateY(-2px);
 }
 
 .faq-card summary {
@@ -640,14 +726,80 @@ button:disabled {
 }
 
 .footer {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.6fr) repeat(3, minmax(150px, 1fr));
+  gap: 28px;
+  padding: 40px clamp(20px, 6vw, 88px) 22px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent),
+    #070808;
+  color: #a99f94;
+  font-size: 14px;
+}
+
+.footer-brand {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  max-width: 430px;
+}
+
+.footer-brand img {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background: rgba(242, 180, 97, 0.1);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24);
+}
+
+.footer-brand strong,
+.footer-links strong {
+  display: block;
+  margin-bottom: 10px;
+  color: #fff7ec;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.footer-brand p {
+  max-width: 340px;
+  margin: 0;
+  color: #bfb4a7;
+  line-height: 1.65;
+}
+
+.footer-links {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+}
+
+.footer-links a {
+  width: fit-content;
+  color: #a99f94;
+  text-decoration: none;
+  transition:
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.footer-links a:hover {
+  color: #f2b461;
+  transform: translateX(2px);
+}
+
+.footer-bottom {
+  grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: 16px;
-  padding: 24px clamp(20px, 6vw, 88px);
-  background: #070808;
-  color: #a99f94;
-  font-size: 14px;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: #8f857b;
 }
 
 .auth-layout {
@@ -879,6 +1031,19 @@ button:disabled {
   background: rgba(8, 9, 11, 0.74);
   color: #fff7ec;
   outline: none;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease;
+}
+
+.crud-form input:focus,
+.crud-form select:focus,
+.crud-form textarea:focus,
+.data-row select:focus {
+  border-color: rgba(242, 180, 97, 0.74);
+  background: rgba(8, 9, 11, 0.86);
+  box-shadow: 0 0 0 3px rgba(242, 180, 97, 0.12);
 }
 
 .crud-form textarea {
@@ -907,6 +1072,16 @@ button:disabled {
   padding: 12px;
   background: rgba(255, 255, 255, 0.05);
   color: #eee5da;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    transform 180ms ease;
+}
+
+.data-row:hover {
+  border-color: rgba(242, 180, 97, 0.22);
+  background: rgba(255, 255, 255, 0.075);
+  transform: translateY(-1px);
 }
 
 .data-row span {
@@ -941,6 +1116,16 @@ button:disabled {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.06);
   color: #ffd8d4;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    transform 180ms ease;
+}
+
+.data-row button:hover {
+  border-color: rgba(255, 216, 212, 0.38);
+  background: rgba(190, 48, 39, 0.14);
+  transform: translateY(-1px);
 }
 
 .data-row select {
@@ -1074,15 +1259,28 @@ button:disabled {
   .strip-metrics {
     width: 100%;
   }
+
+  .footer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .footer-brand {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 680px) {
   .topbar {
+    grid-template-columns: auto 1fr;
     gap: 12px;
   }
 
   .nav-links {
     display: none;
+  }
+
+  .topbar-actions {
+    justify-content: flex-end;
   }
 
   .area-badge {
@@ -1146,5 +1344,18 @@ button:disabled {
 
   .inline-form button {
     grid-column: 1 / -1;
+  }
+
+  .footer {
+    grid-template-columns: 1fr;
+    padding-top: 34px;
+  }
+
+  .footer-brand {
+    grid-column: auto;
+  }
+
+  .footer-bottom {
+    display: grid;
   }
 }
