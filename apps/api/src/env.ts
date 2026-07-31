@@ -14,6 +14,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().optional(),
   WEB_ORIGIN: z.string().url().default("http://localhost:5173"),
   JWT_SECRET: z.string().min(16).default("change-me-in-local-development"),
+  GOOGLE_CLIENT_ID: z.string().optional(),
   ASAAS_API_KEY: z.string().optional(),
   ASAAS_API_URL: z.string().url().default("https://api-sandbox.asaas.com/v3"),
   ASAAS_WEBHOOK_TOKEN: z.string().optional()

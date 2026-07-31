@@ -11,6 +11,8 @@ export interface AuthTokenPayload {
   name: string;
   email: string;
   role: UserRole;
+  phone?: string | null;
+  provider?: string;
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -20,7 +22,11 @@ export async function hashPassword(password: string): Promise<string> {
   return `${salt}:${derivedKey.toString("hex")}`;
 }
 
-export async function verifyPassword(password: string, passwordHash: string): Promise<boolean> {
+export async function verifyPassword(password: string, passwordHash: string | null | undefined): Promise<boolean> {
+  if (!passwordHash) {
+    return false;
+  }
+
   const [salt, storedKey] = passwordHash.split(":");
 
   if (!salt || !storedKey) {
@@ -36,14 +42,18 @@ export async function verifyPassword(password: string, passwordHash: string): Pr
 export function toAuthUser(user: {
   id: string;
   name: string;
-  email: string;
+  email?: string | null;
   role: UserRole;
+  phone?: string | null;
+  provider?: string | null;
 }): AuthTokenPayload {
   return {
     id: user.id,
     name: user.name,
-    email: user.email,
-    role: user.role
+    email: user.email ?? user.phone ?? "",
+    role: user.role,
+    phone: user.phone ?? null,
+    provider: user.provider ?? "EMAIL"
   };
 }
 

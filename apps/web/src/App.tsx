@@ -28,7 +28,7 @@ import {
   UserRound,
   UsersRound
 } from "lucide-react";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { formatPriceInBRL, initialPlans, type AuthUser } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "./api";
 
@@ -36,7 +36,34 @@ type View = "home" | "login" | "admin" | "user";
 type AuthMode = "login" | "register";
 type PlanCode = "monthly" | "annual";
 
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (options: {
+            client_id: string;
+            callback: (response: { credential?: string }) => void;
+          }) => void;
+          renderButton: (
+            parent: HTMLElement,
+            options: {
+              theme: "outline" | "filled_blue" | "filled_black";
+              size: "large" | "medium" | "small";
+              type: "standard" | "icon";
+              text: "signin_with" | "signup_with" | "continue_with";
+              shape: "rectangular" | "pill" | "circle" | "square";
+              width?: number;
+            }
+          ) => void;
+        };
+      };
+    };
+  }
+}
+
 const assetUrl = (path: string) => `${import.meta.env.BASE_URL}${path}`;
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
 const resources = [
   {
@@ -275,24 +302,57 @@ export function App() {
     setView("login");
   }
 
-  async function handleAuthSubmit(mode: AuthMode, formData: FormData) {
+  async function handleAuthSubmit(
+    mode: AuthMode,
+    formData: FormData,
+    provider: "EMAIL" | "GOOGLE" = "EMAIL"
+  ) {
     setLoginError(null);
     setLoginState("submitting");
 
     const name = String(formData.get("name") ?? "").trim();
     const email = String(formData.get("email") ?? "").trim().toLowerCase();
+    const phone = String(formData.get("phone") ?? "").trim();
+    const identifier = String(formData.get("identifier") ?? "").trim();
     const password = String(formData.get("password") ?? "");
     const billingType = String(formData.get("billingType") ?? "UNDEFINED");
+    const idToken = String(formData.get("idToken") ?? "").trim();
+    const credential = String(formData.get("credential") ?? "").trim();
     const isCheckoutRegister = mode === "register" && selectedPlanCode;
-    const endpoint = mode === "login" ? "/auth/login" : isCheckoutRegister ? "/checkout/register" : "/auth/register";
+    const endpoint =
+      provider === "GOOGLE"
+        ? "/auth/google"
+        : mode === "login"
+          ? "/auth/login"
+          : isCheckoutRegister
+            ? "/checkout/register"
+            : "/auth/register";
+
     const payload =
-      mode === "login"
-        ? { email, password }
-        : isCheckoutRegister
-          ? { name, email, password, planCode: selectedPlanCode, billingType }
-          : { name, email, password };
+      provider === "GOOGLE"
+        ? {
+            name: name || "Usuário Google",
+            email: email || (identifier.includes("@") ? identifier : undefined),
+            phone: phone || (!identifier.includes("@") ? identifier : undefined),
+            idToken: idToken || credential || undefined,
+            credential: credential || idToken || undefined
+          }
+        : mode === "login"
+          ? {
+              email: email || (identifier.includes("@") ? identifier : undefined),
+              phone: phone || (!identifier.includes("@") ? identifier : undefined),
+              password,
+              provider
+            }
+          : isCheckoutRegister
+            ? { name, email: email || undefined, phone: phone || undefined, password, planCode: selectedPlanCode, billingType }
+            : { name, email: email || undefined, phone: phone || undefined, password, provider };
 
     try {
+      if (provider === "GOOGLE" && !idToken && !credential) {
+        throw new ApiError(401, "Credencial do Google nao recebida. Recarregue a pagina e tente novamente.");
+      }
+
       const response = await apiPost<{ user: AuthUser; token: string }>(endpoint, payload);
       applySession(response);
       setSelectedPlanCode(null);
@@ -301,11 +361,27 @@ export function App() {
       setLoginError(
         message ??
           (mode === "login"
-          ? "E-mail ou senha invalidos, ou API indisponivel."
-          : "Nao foi possivel criar a conta. Verifique os dados e tente novamente.")
+            ? "E-mail, telefone ou senha invalidos, ou API indisponivel."
+            : "Nao foi possivel criar a conta. Verifique os dados e tente novamente.")
       );
     } finally {
       setLoginState("idle");
+    }
+  }
+
+  async function handleForgotPassword(formData: FormData) {
+    const email = String(formData.get("email") ?? "").trim().toLowerCase();
+    const phone = String(formData.get("phone") ?? "").trim();
+    const identifier = String(formData.get("identifier") ?? "").trim();
+
+    try {
+      await apiPost("/auth/forgot-password", {
+        email: email || (identifier.includes("@") ? identifier : undefined),
+        phone: phone || (!identifier.includes("@") ? identifier : undefined)
+      });
+      setLoginError("Se o e-mail ou telefone estiver cadastrado, as instruções de recuperação foram preparadas.");
+    } catch {
+      setLoginError("Nao foi possivel processar a recuperação de senha neste momento.");
     }
   }
 
@@ -346,6 +422,7 @@ export function App() {
           error={loginError}
           selectedPlanCode={selectedPlanCode}
           onSubmit={handleAuthSubmit}
+          onForgotPassword={handleForgotPassword}
           onAdmin={() => handleDemoLogin("ADMIN")}
           onUser={() => handleDemoLogin("USER")}
         />
@@ -555,17 +632,21 @@ function LoginView({
   error,
   selectedPlanCode,
   onSubmit,
+  onForgotPassword,
   onAdmin,
   onUser
 }: {
   loading: "idle" | "submitting" | "admin" | "user";
   error: string | null;
   selectedPlanCode: PlanCode | null;
-  onSubmit: (mode: AuthMode, formData: FormData) => Promise<void>;
+  onSubmit: (mode: AuthMode, formData: FormData, provider?: "EMAIL" | "GOOGLE") => Promise<void>;
+  onForgotPassword: (formData: FormData) => Promise<void>;
   onAdmin: () => Promise<void>;
   onUser: () => Promise<void>;
 }) {
   const [mode, setMode] = useState<AuthMode>(selectedPlanCode ? "register" : "login");
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const googleButtonRef = useRef<HTMLDivElement | null>(null);
   const isSubmitting = loading !== "idle";
   const selectedPlan = initialPlans.find((plan) => plan.code === selectedPlanCode);
 
@@ -575,9 +656,72 @@ function LoginView({
     }
   }, [selectedPlanCode]);
 
+  useEffect(() => {
+    if (!googleClientId || !googleButtonRef.current) return;
+
+    const renderGoogleButton = () => {
+      if (!window.google || !googleButtonRef.current) return;
+
+      googleButtonRef.current.innerHTML = "";
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: (response) => {
+          if (!response.credential || !formRef.current) {
+            return;
+          }
+
+          const data = new FormData(formRef.current);
+          data.set("idToken", response.credential);
+          data.set("credential", response.credential);
+          void onSubmit(mode, data, "GOOGLE");
+        }
+      });
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
+        theme: "outline",
+        size: "large",
+        type: "standard",
+        text: mode === "login" ? "signin_with" : "signup_with",
+        shape: "rectangular",
+        width: 320
+      });
+    };
+
+    if (window.google) {
+      renderGoogleButton();
+      return;
+    }
+
+    const existingScript = document.querySelector<HTMLScriptElement>("script[data-google-identity]");
+
+    if (existingScript) {
+      existingScript.addEventListener("load", renderGoogleButton, { once: true });
+      return () => existingScript.removeEventListener("load", renderGoogleButton);
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.dataset.googleIdentity = "true";
+    script.addEventListener("load", renderGoogleButton, { once: true });
+    document.head.appendChild(script);
+
+    return () => script.removeEventListener("load", renderGoogleButton);
+  }, [mode, onSubmit]);
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void onSubmit(mode, new FormData(event.currentTarget));
+    void onSubmit(mode, new FormData(event.currentTarget), "EMAIL");
+  }
+
+  function handleGoogleSubmit() {
+    if (!formRef.current) return;
+    void onSubmit(mode, new FormData(formRef.current), "GOOGLE");
+  }
+
+  function handleForgotPasswordClick() {
+    if (!formRef.current) return;
+    void onForgotPassword(new FormData(formRef.current));
   }
 
   return (
@@ -589,7 +733,7 @@ function LoginView({
         <span className="eyebrow">Acesso de desenvolvimento</span>
         <h1>Entrar no App Treino</h1>
         <p>
-          Acesse sua area de aluno ou entre com perfil administrativo para acompanhar a operacao.
+          Entre com e-mail, telefone ou Google para acessar sua area de aluno com o mesmo fluxo de autenticação.
         </p>
         {selectedPlan && (
           <div className="selected-plan-box">
@@ -610,17 +754,30 @@ function LoginView({
             Cadastro
           </button>
         </div>
-        <form className="auth-form" onSubmit={handleSubmit}>
+        <form ref={formRef} className="auth-form" onSubmit={handleSubmit}>
           {mode === "register" && (
             <label>
               Nome
               <input name="name" minLength={2} placeholder="Seu nome" required />
             </label>
           )}
-          <label>
-            E-mail
-            <input name="email" type="email" placeholder="voce@email.com" required />
-          </label>
+          {mode === "login" ? (
+            <label>
+              E-mail ou telefone
+              <input name="identifier" type="text" placeholder="Seu e-mail ou telefone" required />
+            </label>
+          ) : (
+            <>
+              <label>
+                E-mail
+                <input name="email" type="email" placeholder="voce@email.com" />
+              </label>
+              <label>
+                Telefone
+                <input name="phone" type="tel" placeholder="+55 11 99999-9999" />
+              </label>
+            </>
+          )}
           <label>
             Senha
             <input name="password" type="password" minLength={6} placeholder="Minimo 6 caracteres" required />
@@ -636,9 +793,20 @@ function LoginView({
               </select>
             </label>
           )}
-          <button className="primary-button" disabled={isSubmitting}>
+          {googleClientId ? (
+            <div className="google-signin-button" ref={googleButtonRef} />
+          ) : (
+            <button className="outline-button" type="button" onClick={handleGoogleSubmit} disabled={isSubmitting}>
+              {loading === "submitting" ? <Loader2 className="spin" size={18} /> : <UserRound size={18} />}
+              {mode === "login" ? "Entrar com Google" : "Criar conta com Google"}
+            </button>
+          )}
+          <button className="primary-button" type="submit" disabled={isSubmitting}>
             {loading === "submitting" ? <Loader2 className="spin" size={18} /> : <LogIn size={18} />}
             {mode === "login" ? "Entrar" : "Criar conta"}
+          </button>
+          <button className="link-button" type="button" onClick={handleForgotPasswordClick}>
+            Esqueci minha senha
           </button>
         </form>
         {error && <div className="error-box">{error}</div>}

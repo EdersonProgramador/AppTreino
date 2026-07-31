@@ -911,6 +911,13 @@ summary:focus-visible {
   box-shadow: 0 0 0 3px rgba(242, 180, 97, 0.14);
 }
 
+.google-signin-button {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+}
+
 .error-box {
   margin-top: 20px;
   border: 1px solid rgba(255, 105, 97, 0.42);

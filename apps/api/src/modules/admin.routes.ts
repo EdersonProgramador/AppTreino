@@ -232,6 +232,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       data: {
         name: body.name,
         email: body.email.toLowerCase(),
+        phone: body.phone,
         passwordHash: await hashPassword(body.password),
         role: body.role,
         status: body.status,
@@ -263,6 +264,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       data: {
         ...userData,
         email: userData.email?.toLowerCase(),
+        phone,
         passwordHash: password ? await hashPassword(password) : undefined,
         profile: {
           upsert: {

@@ -5,15 +5,25 @@ import { hashPassword, toAuthUser } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 
-const checkoutRegisterSchema = z.object({
-  name: z.string().trim().min(2, "Informe seu nome."),
-  email: z.string().trim().email("Informe um e-mail valido."),
-  password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
-  planCode: z.enum(["monthly", "annual"], {
-    required_error: "Escolha um plano para continuar."
-  }),
-  billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED")
-});
+const checkoutRegisterSchema = z
+  .object({
+    name: z.string().trim().min(2, "Informe seu nome."),
+    email: z.string().trim().email("Informe um e-mail valido.").optional().or(z.literal("")),
+    phone: z.string().trim().min(8, "Informe um telefone valido.").optional().or(z.literal("")),
+    password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
+    planCode: z.enum(["monthly", "annual"], {
+      required_error: "Escolha um plano para continuar."
+    }),
+    billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED")
+  })
+  .superRefine((data, ctx) => {
+    if (!data.email && !data.phone) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Informe e-mail ou telefone para continuar."
+      });
+    }
+  });
 
 function requireDatabase() {
   if (!env.DATABASE_URL) {
@@ -95,7 +105,9 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
   app.post("/checkout/register", async (request, reply) => {
     requireDatabase();
     const body = checkoutRegisterSchema.parse(request.body);
-    const email = body.email.toLowerCase();
+    const email = body.email ? body.email.toLowerCase() : null;
+    const phone = body.phone || null;
+    const fallbackEmail = email ?? (phone ? `phone-${phone.replace(/[^a-z0-9]+/gi, "").toLowerCase()}@app-treino.local` : null);
     const planSeed = initialPlans.find((plan) => plan.code === body.planCode);
 
     if (!planSeed) {
@@ -104,9 +116,9 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       });
     }
 
-    const existingUser = await prisma.user.findUnique({
-      where: { email }
-    });
+    const existingUser =
+      (email ? await prisma.user.findUnique({ where: { email } }) : null) ??
+      (phone ? await prisma.user.findUnique({ where: { phone } }) : null);
 
     if (existingUser) {
       return reply.code(409).send({
@@ -123,16 +135,17 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
 
     const { user, payment } = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
-        data: {
-          name: body.name,
-          email,
-          passwordHash: await hashPassword(body.password),
-          role: "USER",
-          profile: {
-            create: {}
+          data: {
+            name: body.name,
+            email: fallbackEmail,
+            phone,
+            passwordHash: await hashPassword(body.password),
+            role: "USER",
+            profile: {
+              create: { phone }
+            }
           }
-        }
-      });
+        });
 
       const membership = await tx.membership.create({
         data: {

@@ -23,6 +23,8 @@ export interface AuthUser {
   name: string;
   email: string;
   role: UserRole;
+  phone?: string | null;
+  provider?: string;
 }
 
 export interface WorkoutExercise {
