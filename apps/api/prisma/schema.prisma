@@ -21,6 +21,8 @@ model User {
   profile             Profile?
   memberships         Membership[]
   enrollments         Enrollment[]
+  programAssignments  UserProgram[]
+  workoutSessions     WorkoutSession[]
   attendances         AttendanceRecord[]
   physicalAssessments PhysicalAssessment[]
   eventRegistrations  EventRegistration[]
@@ -154,13 +156,14 @@ model Exercise {
 }
 
 model WorkoutBlock {
-  id            String                 @id @default(cuid())
-  title         String
-  structureType StructureType          @default(NORMAL) @map("structure_type")
-  restTime      Int                    @map("rest_time")
-  createdAt     DateTime               @default(now()) @map("created_at")
-  exercises     WorkoutBlockExercise[]
-  programDays   ProgramDayWorkout[]
+  id              String                 @id @default(cuid())
+  title           String
+  structureType   StructureType          @default(NORMAL) @map("structure_type")
+  restTime        Int                    @map("rest_time")
+  createdAt       DateTime               @default(now()) @map("created_at")
+  exercises       WorkoutBlockExercise[]
+  programDays     ProgramDayWorkout[]
+  workoutSessions WorkoutSession[]
 
   @@map("workout_blocks")
 }
@@ -179,14 +182,35 @@ model WorkoutBlockExercise {
 }
 
 model Program {
-  id          String              @id @default(cuid())
-  title       String
-  description String
-  isActive    Boolean             @default(true) @map("is_active")
-  createdAt   DateTime            @default(now()) @map("created_at")
-  days        ProgramDayWorkout[]
+  id              String              @id @default(cuid())
+  title           String
+  description     String
+  status          ProgramStatus       @default(DRAFT)
+  isActive        Boolean             @default(true) @map("is_active")
+  publishedAt     DateTime?           @map("published_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  days            ProgramDayWorkout[]
+  assignedUsers   UserProgram[]
+  workoutSessions WorkoutSession[]
 
   @@map("programs")
+}
+
+model UserProgram {
+  id              String            @id @default(cuid())
+  userId          String            @map("user_id")
+  programId       String            @map("program_id")
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  program         Program           @relation(fields: [programId], references: [id], onDelete: Cascade)
+  status          UserProgramStatus @default(ACTIVE)
+  currentDay      Int               @default(1) @map("current_day")
+  startedAt       DateTime          @default(now()) @map("started_at")
+  completedAt     DateTime?         @map("completed_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  workoutSessions WorkoutSession[]
+
+  @@unique([userId, programId])
+  @@map("user_programs")
 }
 
 model ProgramDayWorkout {
@@ -213,6 +237,26 @@ model UserProgress {
   completedAt   DateTime @default(now()) @map("completed_at")
 
   @@map("user_progress")
+}
+
+model WorkoutSession {
+  id              String               @id @default(cuid())
+  userId          String               @map("user_id")
+  assignmentId    String?              @map("assignment_id")
+  programId       String?              @map("program_id")
+  workoutBlockId  String?              @map("workout_block_id")
+  dayNumber       Int                  @map("day_number")
+  startedAt       DateTime             @default(now()) @map("started_at")
+  finishedAt      DateTime?            @map("finished_at")
+  durationSeconds Int?                 @map("duration_seconds")
+  status          WorkoutSessionStatus @default(IN_PROGRESS)
+  createdAt       DateTime             @default(now()) @map("created_at")
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignment      UserProgram?         @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  program         Program?             @relation(fields: [programId], references: [id], onDelete: SetNull)
+  workoutBlock    WorkoutBlock?        @relation(fields: [workoutBlockId], references: [id], onDelete: SetNull)
+
+  @@map("workout_sessions")
 }
 
 model AttendanceRecord {
@@ -348,6 +392,30 @@ enum StructureType {
   REST_PAUSE
 
   @@map("structure_type")
+}
+
+enum ProgramStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+
+  @@map("program_status")
+}
+
+enum UserProgramStatus {
+  ACTIVE
+  COMPLETED
+  CANCELED
+
+  @@map("user_program_status")
+}
+
+enum WorkoutSessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELED
+
+  @@map("workout_session_status")
 }
 
 enum PaymentStatus {

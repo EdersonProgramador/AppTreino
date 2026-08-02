@@ -6,6 +6,7 @@ import {
   CalendarDays,
   CalendarPlus,
   Check,
+  ChevronLeft,
   ChevronRight,
   CircleDollarSign,
   ClipboardList,
@@ -77,16 +78,45 @@ declare global {
 const assetUrl = (path: string) => `${import.meta.env.BASE_URL}${path}`;
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
+function monthLabel(year: number, month: number) {
+  return new Date(year, month - 1, 1).toLocaleDateString("pt-BR", {
+    month: "long",
+    year: "numeric"
+  });
+}
+
+function buildMonthCalendar(year: number, month: number) {
+  const firstDate = new Date(year, month - 1, 1);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const leadingDays = firstDate.getDay();
+  const cells: Array<{ day: number | null; isoDate: string | null }> = [];
+
+  for (let index = 0; index < leadingDays; index += 1) {
+    cells.push({ day: null, isoDate: null });
+  }
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const isoDate = new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10);
+    cells.push({ day, isoDate });
+  }
+
+  while (cells.length % 7 !== 0) {
+    cells.push({ day: null, isoDate: null });
+  }
+
+  return cells;
+}
+
 const resources = [
   {
     icon: Dumbbell,
-    title: "Treino pronto para seguir",
-    text: "Receba sua rotina organizada por dias, exercicios, series, repeticoes e descanso."
+    title: "Treino pronão para seguir",
+    text: "Receba sua rotina organizada por dias, exercícios, séries, repetições e descanso."
   },
   {
     icon: LineChart,
-    title: "Evolucao que voce acompanha",
-    text: "Veja frequencia, historico, avaliacoes e sinais claros de progresso ao longo do tempo."
+    title: "Evolução que você acompanha",
+    text: "Veja frequência, histórico, avaliações e sinais claros de progresso ao longo do tempo."
   },
   {
     icon: CircleDollarSign,
@@ -96,13 +126,13 @@ const resources = [
   {
     icon: MessageCircle,
     title: "Suporte quando precisar",
-    text: "Tire duvidas sobre treino, pagamento ou acesso em um canal direto com a equipe."
+    text: "Tire dúvidas sobre treino, pagamento ou acesso em um canal direto com a equipe."
   }
 ];
 
 const workoutRows = [
   { name: "Supino reto", sets: "4x 8-10", load: "72 kg" },
-  { name: "Triceps corda", sets: "3x 12", load: "34 kg" },
+  { name: "Tríceps corda", sets: "3x 12", load: "34 kg" },
   { name: "Desenvolvimento", sets: "3x 10", load: "28 kg" }
 ];
 
@@ -110,22 +140,22 @@ const faqItems = [
   {
     question: "O App Treino e para quem quer treinar melhor?",
     answer:
-      "Sim. O App Treino foi criado para pessoas que querem seguir uma rotina clara, acompanhar progresso e manter consistencia nos treinos."
+      "Sim. O App Treino foi criado para pessoas que querem seguir uma rotina clara, acompanhar progresso e manter consistência nos treinos."
   },
   {
-    question: "Preciso ja ter experiencia com academia?",
+    question: "Preciso já ter experiência com academia?",
     answer:
-      "Nao. Voce pode comecar com um plano adequado ao seu nivel e evoluir com orientacoes simples, ficha organizada e acompanhamento."
+      "Não. Você pode começar com um plano adequado ao seu nível e evoluir com orientações simples, ficha organizada e acompanhamento."
   },
   {
-    question: "Consigo acessar meu treino pelo celular?",
+    question: "Consigo acesso meu treino pelo celular?",
     answer:
-      "Sim. A area do aluno mostra sua ficha atual, exercicios do dia, frequencia, status do plano e informacoes importantes do acompanhamento."
+      "Sim. A área do aluno mostra sua ficha atual, exercícios do dia, frequência, status do plano e informações importantes do acompanhamento."
   },
   {
-    question: "O App Treino tambem ajuda a acompanhar minha evolucao?",
+    question: "O App Treino também ajuda a acompanhar minha evolução?",
     answer:
-      "Sim. Voce pode acompanhar avaliacoes, historico, eventos, atendimento e planos de treino gerados com apoio de IA."
+      "Sim. Você pode acompanhar avaliações, histórico, eventos, atendimento e planos de treino gerados com apoio de IA."
   }
 ];
 
@@ -191,7 +221,9 @@ interface CmsProgramRow {
   id: string;
   title: string;
   description: string;
+  status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   isActive: boolean;
+  assignedUsers?: Array<{ id: string; user: AdminUser; currentDay: number; status: "ACTIVE" | "COMPLETED" | "CANCELED" }>;
   days: Array<{
     id: string;
     dayNumber: number;
@@ -242,7 +274,7 @@ interface PhysicalAssessmentRow {
   chestCm?: number | null;
   hipCm?: number | null;
   notes?: string | null;
-  user?: AdminUser;
+  userá: AdminUser;
 }
 
 interface EventRow {
@@ -270,8 +302,16 @@ interface SupportTicketRow {
   priority: "LOW" | "NORMAL" | "HIGH";
   createdAt: string;
   updatedAt: string;
-  user?: AdminUser;
+  userá: AdminUser;
   assignedTo?: AdminUser | null;
+}
+
+interface NotificationRow {
+  id: string;
+  type: "WORKOUT_PROGRAM" | "EVENT" | "WORKOUT";
+  title: string;
+  message: string;
+  publishedAt: string;
 }
 
 interface AiWorkoutPlanRow {
@@ -295,7 +335,7 @@ interface AiWorkoutPlanRow {
     recommendations: string[];
   };
   createdAt: string;
-  user?: AdminUser;
+  userá: AdminUser;
 }
 
 interface CheckoutSessionResponse {
@@ -306,8 +346,11 @@ interface CheckoutSessionResponse {
 
 interface TodayWorkoutResponse {
   workout: {
+    programId: string;
     programTitle: string;
+    assignmentId: string;
     dayNumber: number;
+    totalDays: number;
     block: {
       title: string;
       structureType: "NORMAL" | "BI_SET" | "DROP_SET" | "REST_PAUSE";
@@ -315,6 +358,36 @@ interface TodayWorkoutResponse {
       exercises: WorkoutPlayerExercise[];
     };
   };
+}
+
+interface StudentWorkoutProgramsResponse {
+  workouts: TodayWorkoutResponse["workout"][];
+}
+
+interface WorkoutSessionResponse {
+  session: {
+    id: string;
+    status: "IN_PROGRESS" | "COMPLETED" | "CANCELED";
+    startedAt: string;
+    finishedAt?: string | null;
+    durationSeconds?: number | null;
+  };
+}
+
+interface WorkoutConsistencyResponse {
+  year: number;
+  month: number;
+  completedWorkoutCount: number;
+  totalWorkoutDays: number;
+  completedDates: string[];
+  historyDates: string[];
+  sessions: Array<{
+    id: string;
+    dayNumber: number;
+    startedAt: string;
+    finishedAt: string | null;
+    durationSeconds: number | null;
+  }>;
 }
 
 export function App() {
@@ -370,7 +443,7 @@ export function App() {
 
       applySession(response);
     } catch {
-      setLoginError("Nao foi possivel entrar agora. Verifique se a API e o banco estao rodando.");
+      setLoginError("Não foi possível entrar agora. Verifique se a API e o banco estáo rodando.");
     } finally {
       setLoginState("idle");
     }
@@ -429,7 +502,7 @@ export function App() {
 
     try {
       if (provider === "GOOGLE" && !idToken && !credential) {
-        throw new ApiError(401, "Credencial do Google nao recebida. Recarregue a pagina e tente novamente.");
+        throw new ApiError(401, "Credencial do Google não recebida. Recarregue a página e tente novamente.");
       }
 
       const response = await apiPost<{ user: AuthUser; token: string }>(endpoint, payload);
@@ -440,8 +513,8 @@ export function App() {
       setLoginError(
         message ??
           (mode === "login"
-            ? "E-mail, telefone ou senha invalidos, ou API indisponivel."
-            : "Nao foi possivel criar a conta. Verifique os dados e tente novamente.")
+            ? "E-mail, telefone ou senha inválidos, ou API indisponível."
+            : "Não foi possível criar a conta. Verifique os dados e tente novamente.")
       );
     } finally {
       setLoginState("idle");
@@ -460,7 +533,7 @@ export function App() {
       });
       setLoginError("Se o e-mail ou telefone estiver cadastrado, as instruções de recuperação foram preparadas.");
     } catch {
-      setLoginError("Nao foi possivel processar a recuperação de senha neste momento.");
+      setLoginError("Não foi possível processar a recuperação de senha neste momento.");
     }
   }
 
@@ -475,7 +548,7 @@ export function App() {
     <div className="app-shell">
       {!user && (
         <header className="topbar">
-          <button className="brand" onClick={() => setView("home")} aria-label="Ir para inicio">
+          <button className="brand" onClick={() => setView("home")} aria-label="Ir para início">
             <img className="brand-logo" src={assetUrl("assets/app-treino-logo.svg")} alt="App Treino" />
           </button>
           <nav className="nav-links" aria-label="Navegacao principal">
@@ -525,13 +598,13 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
             <span className="eyebrow">Treino digital para sua rotina</span>
             <h1>App Treino</h1>
             <p>
-              Treine com mais clareza, acompanhe sua evolucao e tenha sua ficha sempre a mao.
-              O App Treino conecta voce a planos, pagamentos e suporte em uma experiencia simples
-              para pessoa fisica.
+              Treine com mais clareza, acompanhe sua evolução e tenha sua ficha sempre a mão.
+              O App Treino conecta você a planos, pagamentos e suporte em uma experiência simples
+              para pessoa física.
             </p>
             <div className="hero-actions">
               <button className="primary-button" onClick={() => onStart()}>
-                Comecar meu treino
+                Começar meu treino
                 <ArrowRight size={18} />
               </button>
               <a className="secondary-link" href="#planos">
@@ -544,7 +617,7 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
           <div className="hero-panel hero-image-panel" aria-label="Imagem oficial do App Treino">
             <img
               src={assetUrl("assets/hero-banner-app-treino.png")}
-              alt="Mulher atleta usando o App Treino em um smartphone"
+              alt="Mulher atleta usanão o App Treino em um smartphone"
             />
           </div>
         </div>
@@ -553,7 +626,7 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
       <section className="section-band">
         <div className="section-heading">
           <span className="eyebrow">Para quem e</span>
-          <h2>Para quem quer sair do improviso e treinar com direcao.</h2>
+          <h2>Para quem quer sair do improvis? e treinar com direcao.</h2>
         </div>
         <div className="audience-grid">
           <article>
@@ -563,8 +636,8 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
           </article>
           <article>
             <ShieldCheck />
-            <h3>Quem ja treina</h3>
-            <p>Organize exercicios, acompanhe frequencia e tenha mais controle da sua evolucao.</p>
+            <h3>Quem já treina</h3>
+            <p>Organize exercícios, acompanhe frequência e tenha mais controle da sua evolução.</p>
           </article>
           <article>
             <Sparkles />
@@ -577,10 +650,10 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
       <section className="section" id="recursos">
         <div className="section-heading">
           <span className="eyebrow">Recursos</span>
-          <h2>Tudo para voce treinar com mais foco e acompanhar seus resultados.</h2>
+          <h2>Tudo para você treinar com mais foco e acompanhar seus resultados.</h2>
           <p>
-            A experiencia combina ficha de treino, frequencia, pagamentos, avaliacoes e suporte
-            para deixar sua rotina fitness mais simples no uso diario.
+            A experiência combina ficha de treino, frequência, pagamentos, avaliações e suporte
+            para deixar sua rotina fitness mais simples no uso diário.
           </p>
         </div>
         <div className="resource-grid">
@@ -598,7 +671,7 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
         <div className="section-heading">
           <span className="eyebrow">Planos</span>
           <h2>Escolha seu plano e comece a treinar com acompanhamento.</h2>
-          <p>No App Treino, voce encontra uma assinatura simples para manter sua rotina ativa.</p>
+          <p>No App Treino, você encontra uma assinatura simples para manter sua rotina ativa.</p>
         </div>
         <div className="pricing-grid">
           {initialPlans.map((plan, index) => (
@@ -606,7 +679,7 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
               {index === 1 && <span className="plan-badge">Mais escolhido</span>}
               <h3>{plan.name}</h3>
               <strong>{formatPriceInBRL(plan.priceInCents)}</strong>
-              <span>{plan.billingCycle === "MONTHLY" ? "por mes" : "por ano"}</span>
+              <span>{plan.billingCycle === "MONTHLY" ? "por mês" : "por ano"}</span>
               <button onClick={() => onStart(plan.code)}>
                 Comece a treinar
                 <ArrowRight size={18} />
@@ -620,7 +693,7 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
         <div className="section-heading">
           <span className="eyebrow">FAQ</span>
           <h2>Perguntas frequentes sobre o App Treino.</h2>
-          <p>Respostas diretas para entender como o App Treino ajuda voce a treinar melhor.</p>
+          <p>Respostas diretas para entender como o App Treino ajuda você a treinar melhor.</p>
         </div>
         <div className="faq-grid">
           {faqItems.map((item) => (
@@ -637,7 +710,7 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
 
       <section className="final-cta">
         <div>
-          <span className="eyebrow">Proximo passo</span>
+          <span className="eyebrow">Próximo passo</span>
           <h2>Transforme vontade em rotina de treino.</h2>
           <p>Comece hoje com um plano claro, acompanhamento simples e acesso direto pelo celular.</p>
         </div>
@@ -669,7 +742,7 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
         </nav>
         <nav className="footer-links" aria-label="Legal e redes sociais">
           <strong>Legal</strong>
-          <a href="#termos">Termos de Uso</a>
+          <a href="#termos">Termos de Us?</a>
           <a href="#privacidade">Privacidade</a>
           <a href="https://instagram.com" target="_blank" rel="noreferrer">Instagram</a>
         </nav>
@@ -701,7 +774,7 @@ function PhonePreview() {
       ))}
       <div className="attendance-strip">
         <CalendarDays size={18} />
-        Frequencia registrada hoje
+        Frequência registrada hoje
       </div>
     </div>
   );
@@ -810,10 +883,10 @@ function LoginView({
         <div className="auth-visual" aria-hidden="true">
           <Play size={22} />
         </div>
-        <span className="eyebrow">Acesso de desenvolvimento</span>
+        <span className="eyebrow">Acesso de desenãolvimenão</span>
         <h1>Entrar no App Treino</h1>
         <p>
-          Entre com e-mail, telefone ou Google para acessar sua area de aluno com o mesmo fluxo de autenticação.
+          Entre com e-mail, telefone ou Google para acesso sua área de aluno com o mesmo fluxo de autenticação.
         </p>
         {selectedPlan && (
           <div className="selected-plan-box">
@@ -850,7 +923,7 @@ function LoginView({
             <>
               <label>
                 E-mail
-                <input name="email" type="email" placeholder="voce@email.com" />
+                <input name="email" type="email" placeholder="seuemail@exemplo.com" />
               </label>
               <label>
                 Telefone
@@ -869,7 +942,7 @@ function LoginView({
                 <option value="UNDEFINED">Escolher no checkout</option>
                 <option value="PIX">Pix</option>
                 <option value="BOLETO">Boleto</option>
-                <option value="CREDIT_CARD">Cartao</option>
+                <option value="CREDIT_CARD">Cartão</option>
               </select>
             </label>
           )}
@@ -985,7 +1058,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       setTickets(ticketsResponse.tickets);
       setAiPlans(aiPlansResponse.plans);
     } catch {
-      setFeedback("Nao foi possivel carregar dados administrativos. Verifique API, banco e permissao.");
+      setFeedback("Não foi possível carregar dados administrativos. Verifique API, banco e permissão.");
     } finally {
       setLoading(false);
     }
@@ -1016,7 +1089,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       form.reset();
       await loadAdminData();
     } catch {
-      setFeedback("Nao foi possivel cadastrar o usuario.");
+      setFeedback("Não foi possível cadastrar o usuário.");
     }
   }
 
@@ -1055,7 +1128,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       form.reset();
       await loadAdminData();
     } catch {
-      setFeedback("Nao foi possivel cadastrar o treino.");
+      setFeedback("Não foi possível cadastrar o treino.");
     }
   }
 
@@ -1064,6 +1137,49 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean);
+  }
+
+  function cmsExerciseLabel(exercise: CmsExerciseRow) {
+    return exercise.title ?? exercise.name ?? "Exercício";
+  }
+
+  function parseCmsWorkoutBlockExercises(data: FormData) {
+    return Array.from({ length: 6 })
+      .map((_, index) => {
+        const row = index + 1;
+        const exerciseId = String(data.get(`exerciseId${row}`) ?? "").trim();
+
+        if (!exerciseId) {
+          return null;
+        }
+
+        return {
+          exerciseId,
+          sets: Number(data.get(`sets${row}`) ?? 3),
+          repsRange: String(data.get(`repsRange${row}`) ?? "10-12").trim(),
+          order: row
+        };
+      })
+      .filter((exercise): exercise is { exerciseId: string; sets: number; repsRange: string; order: number } => Boolean(exercise));
+  }
+
+  function parseCmsProgramDays(data: FormData) {
+    return Array.from({ length: 7 })
+      .map((_, index) => {
+        const dayNumber = index + 1;
+        const workoutBlockId = String(data.get(`workoutBlockId${dayNumber}`) ?? "").trim();
+
+        if (!workoutBlockId) {
+          return null;
+        }
+
+        return {
+          dayNumber,
+          workoutBlockId,
+          order: Number(data.get(`dayOrder${dayNumber}`) ?? 1)
+        };
+      })
+      .filter((day): day is { dayNumber: number; workoutBlockId: string; order: number } => Boolean(day));
   }
 
   async function handleCreateCmsExercise(event: FormEvent<HTMLFormElement>) {
@@ -1087,7 +1203,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       form.reset();
       await loadAdminData();
     } catch {
-      setFeedback("Nao foi possivel cadastrar o exercicio CMS.");
+      setFeedback("Não foi possível cadastrar o exercício CMS.");
     }
   }
 
@@ -1103,26 +1219,14 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           title: String(data.get("title") ?? ""),
           structureType: String(data.get("structureType") ?? "NORMAL"),
           restTime: Number(data.get("restTime") ?? 60),
-          exercises: String(data.get("exercises") ?? "")
-            .split("\n")
-            .map((line) => line.trim())
-            .filter(Boolean)
-            .map((line, index) => {
-              const [exerciseId = "", sets = "3", repsRange = "10-12", order = String(index + 1)] = line.split(";");
-              return {
-                exerciseId: exerciseId.trim(),
-                sets: Number(sets),
-                repsRange: repsRange.trim(),
-                order: Number(order)
-              };
-            })
+          exercises: parseCmsWorkoutBlockExercises(data)
         },
         token
       );
       form.reset();
       await loadAdminData();
     } catch {
-      setFeedback("Nao foi possivel cadastrar o bloco CMS.");
+      setFeedback("Não foi possível cadastrar o bloco CMS.");
     }
   }
 
@@ -1137,27 +1241,61 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         {
           title: String(data.get("title") ?? ""),
           description: String(data.get("description") ?? ""),
-          isActive: data.get("isActive") === "on",
-          days: String(data.get("days") ?? "")
-            .split("\n")
-            .map((line) => line.trim())
-            .filter(Boolean)
-            .map((line, index) => {
-              const [dayNumber = String(index + 1), workoutBlockId = "", order = "1"] = line.split(";");
-              return {
-                dayNumber: Number(dayNumber),
-                workoutBlockId: workoutBlockId.trim(),
-                order: Number(order)
-              };
-            })
+          status: String(data.get("status") ?? "DRAFT"),
+          isActive: String(data.get("status") ?? "DRAFT") === "PUBLISHED",
+          days: parseCmsProgramDays(data)
         },
         token
       );
       form.reset();
       await loadAdminData();
     } catch {
-      setFeedback("Nao foi possivel cadastrar o programa CMS.");
+      setFeedback("Não foi possível cadastrar o programa CMS.");
     }
+  }
+
+  async function handlePublishCmsProgram(programId: string) {
+    try {
+      await apiPost(`/admin/cms/programs/${programId}/publish`, {}, token);
+      await loadAdminData();
+    } catch {
+      setFeedback("Não foi possível publicar o programa CMS.");
+    }
+  }
+
+  async function handleArchiveCmsProgram(programId: string) {
+    try {
+      await apiPost(`/admin/cms/programs/${programId}/archive`, {}, token);
+      await loadAdminData();
+    } catch {
+      setFeedback("Não foi possível arquivar o programa CMS.");
+    }
+  }
+
+  async function handleAssignCmsProgram(programId: string, userIds?: string[], currentDay = 1) {
+    const targetUserIds = userIds?.length ? userIds : users.filter((item) => item.role === "USER").map((item) => item.id);
+
+    if (targetUserIds.length === 0) {
+      setFeedback("Cadastre alunos antes de atribuir o programa.");
+      return;
+    }
+
+    try {
+      await apiPost(`/admin/cms/programs/${programId}/assign`, { userIds: targetUserIds, currentDay }, token);
+      await loadAdminData();
+    } catch {
+      setFeedback("Não foi possível atribuir o programa aos alunos.");
+    }
+  }
+
+  async function handleAssignCmsProgramSubmit(event: FormEvent<HTMLFormElement>, programId: string) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const userId = String(data.get("userId") ?? "");
+    const currentDay = Number(data.get("currentDay") ?? 1);
+
+    await handleAssignCmsProgram(programId, userId ? [userId] : undefined, currentDay);
   }
 
   async function handleCreatePlan(event: FormEvent<HTMLFormElement>) {
@@ -1179,7 +1317,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       form.reset();
       await loadAdminData();
     } catch {
-      setFeedback("Nao foi possivel cadastrar o plano.");
+      setFeedback("Não foi possível cadastrar o plano.");
     }
   }
 
@@ -1202,7 +1340,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       form.reset();
       await loadAdminData();
     } catch {
-      setFeedback("Nao foi possivel criar a matricula.");
+      setFeedback("Não foi possível criar a matrícula.");
     }
   }
 
@@ -1225,7 +1363,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       form.reset();
       await loadAdminData();
     } catch {
-      setFeedback("Nao foi possivel gerar o pagamento.");
+      setFeedback("Não foi possível gerar o pagamento.");
     }
   }
 
@@ -1253,7 +1391,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       form.reset();
       await loadAdminData();
     } catch {
-      setFeedback("Nao foi possivel registrar a avaliacao fisica.");
+      setFeedback("Não foi possível registrar a avaliação física.");
     }
   }
 
@@ -1277,7 +1415,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       form.reset();
       await loadAdminData();
     } catch {
-      setFeedback("Nao foi possivel criar o evento.");
+      setFeedback("Não foi possível criar o evento.");
     }
   }
 
@@ -1286,7 +1424,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       await apiPut(`/admin/support-tickets/${ticketId}`, { status }, token);
       await loadAdminData();
     } catch {
-      setFeedback("Nao foi possivel atualizar o atendimento.");
+      setFeedback("Não foi possível atualizar o atendimento.");
     }
   }
 
@@ -1295,16 +1433,16 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       await apiDelete(path, token);
       await loadAdminData();
     } catch {
-      setFeedback("Nao foi possivel excluir o registro.");
+      setFeedback("Não foi possível excluir o registro.");
     }
   }
 
   const stats = [
-    { icon: UsersRound, label: "Usuarios", value: String(summary.users), trend: "Total" },
-    { icon: ShieldCheck, label: "Matriculas ativas", value: String(summary.activeMemberships), trend: "Ativas" },
+    { icon: UsersRound, label: "Usuários", value: String(summary.users), trend: "Total" },
+    { icon: ShieldCheck, label: "Matrículas ativas", value: String(summary.activeMemberships), trend: "Ativas" },
     { icon: CreditCard, label: "Pagamentos pendentes", value: String(summary.pendingPayments), trend: "Abertos" },
     { icon: Activity, label: "Acessos hoje", value: String(summary.todayAttendance), trend: "Hoje" },
-    { icon: Ruler, label: "Avaliacoes", value: String(assessments.length), trend: "Fisicas" },
+    { icon: Ruler, label: "Avaliações", value: String(assessments.length), trend: "Físicas" },
     { icon: CalendarPlus, label: "Eventos", value: String(events.length), trend: "Agenda" },
     { icon: Headphones, label: "Atendimentos", value: String(tickets.length), trend: "Suporte" },
     { icon: Bot, label: "Planos IA", value: String(aiPlans.length), trend: "Gerados" }
@@ -1325,7 +1463,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             <Activity size={18} />Visao geral
           </button>
           <button className={adminSection === "users" ? "active" : ""} onClick={() => setAdminSection("users")}>
-            <UsersRound size={18} />Usuarios
+            <UsersRound size={18} />Usuários
           </button>
           <button className={adminSection === "training" ? "active" : ""} onClick={() => setAdminSection("training")}>
             <Dumbbell size={18} />Treinos e CMS
@@ -1334,13 +1472,13 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             <CircleDollarSign size={18} />Planos
           </button>
           <button className={adminSection === "memberships" ? "active" : ""} onClick={() => setAdminSection("memberships")}>
-            <ShieldCheck size={18} />Matriculas
+            <ShieldCheck size={18} />Matrículas
           </button>
           <button className={adminSection === "payments" ? "active" : ""} onClick={() => setAdminSection("payments")}>
             <CreditCard size={18} />Pagamentos
           </button>
           <button className={adminSection === "operations" ? "active" : ""} onClick={() => setAdminSection("operations")}>
-            <ClipboardList size={18} />Operacao
+            <ClipboardList size={18} />Operação
           </button>
         </nav>
         <button className="workspace-logout" onClick={onLogout}>
@@ -1351,7 +1489,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       <section className="workspace-content">
       <section className="dashboard-heading" id="admin-overview">
         <span className="eyebrow">Painel administrativo</span>
-        <h1>Operacao do App Treino</h1>
+        <h1>Operação do App Treino</h1>
         <button className="outline-button compact-button" onClick={loadAdminData} disabled={loading}>
           {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
           Atualizar
@@ -1372,7 +1510,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       {adminSection === "users" && <section className="admin-grid">
         <article className="table-panel" id="admin-users">
           <div className="panel-title">
-            <h2>Usuarios</h2>
+            <h2>Usuários</h2>
             <span>{users.length}</span>
           </div>
           <form className="crud-form" onSubmit={handleCreateUser}>
@@ -1384,10 +1522,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               <option value="ADMIN">Admin</option>
             </select>
             <input name="objective" placeholder="Objetivo" />
-            <input name="level" placeholder="Nivel" />
+            <input name="level" placeholder="Nível" />
             <button className="primary-button">
               <Save size={18} />
-              Salvar usuario
+              Salvar usuário
             </button>
           </form>
           {users.slice(0, 8).map((item) => (
@@ -1397,7 +1535,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 {item.email}
               </span>
               <small>{item.role}</small>
-              <button aria-label="Excluir usuario" onClick={() => handleDelete(`/admin/users/${item.id}`)}>
+              <button aria-label="Excluir usuário" onClick={() => handleDelete(`/admin/users/${item.id}`)}>
                 <Trash2 size={17} />
               </button>
             </div>
@@ -1412,12 +1550,12 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             <span>{workouts.length}</span>
           </div>
           <form className="crud-form" onSubmit={handleCreateWorkout}>
-            <input name="title" placeholder="Titulo do treino" required />
+            <input name="title" placeholder="Título do treino" required />
             <input name="objective" placeholder="Objetivo" />
             <input name="dayTitle" placeholder="Dia, ex: Peito e triceps" required />
             <textarea
               name="exercises"
-              placeholder={"Exercicio;series;reps;descanso\nSupino reto;4;8-10;90"}
+              placeholder={"Exercício;séries;reps;descanso\nSupino reto;4;8-10;90"}
               required
             />
             <button className="primary-button">
@@ -1442,34 +1580,56 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         <article className="table-panel wide-panel cms-panel" id="admin-cms">
           <div className="panel-title">
             <h2>CMS Fitness</h2>
-            <span>{cmsPrograms.length} programa(s)</span>
+            <span>Fluxo de conteúdo</span>
+          </div>
+          <div className="cms-workflow">
+            <article>
+              <strong>1</strong>
+              <span>Criar exercícios</span>
+              <small>{cmsExercises.length} cadastrado(s)</small>
+            </article>
+            <article>
+              <strong>2</strong>
+              <span>Montar blocos</span>
+              <small>{cmsWorkoutBlocks.length} bloco(s)</small>
+            </article>
+            <article>
+              <strong>3</strong>
+              <span>Publicar programa</span>
+              <small>{cmsPrograms.filter((item) => item.status === "PUBLISHED").length} publicado(s)</small>
+            </article>
+            <article>
+              <strong>4</strong>
+              <span>Atribuir e acompanhar</span>
+              <small>{cmsPrograms.reduce((total, item) => total + (item.assignedUsers?.length ?? 0), 0)} atribuição(ões)</small>
+            </article>
           </div>
           <div className="cms-admin-grid">
             <section>
               <div className="panel-title cms-subtitle">
-                <h2>Exercicios</h2>
+                <h2>1. Exercícios</h2>
                 <span>{cmsExercises.length}</span>
               </div>
               <form className="crud-form" onSubmit={handleCreateCmsExercise}>
-                <input name="title" placeholder="Titulo do exercicio" required />
-                <input name="videoUrl" type="url" placeholder="URL do video" />
-                <input name="audioUrl" type="url" placeholder="URL do audio" />
+                <input name="title" placeholder="Título do exercício" required />
+                <input name="videoUrl" type="url" placeholder="URL do vídeo, imagem ou GIF" />
+                <input name="audioUrl" type="url" placeholder="URL do ?udio" />
                 <input name="targetMuscles" placeholder="Musculos, separados por virgula" />
                 <input name="equipmentTags" placeholder="Equipamentos, separados por virgula" />
                 <input name="alternativeIds" placeholder="IDs de alternativas, separados por virgula" />
                 <button className="primary-button">
                   <Save size={18} />
-                  Salvar exercicio CMS
+                  Salvar exercício CMS
                 </button>
               </form>
               {cmsExercises.slice(0, 8).map((item) => (
                 <div className="data-row cms-data-row" key={item.id}>
                   <span>
-                    <strong>{item.title ?? item.name ?? "Exercicio"}</strong>
+                    <strong>{item.title ?? item.name ?? "Exercício"}</strong>
                     {item.targetMuscles.join(", ") || "Sem musculos"} | ID: {item.id}
                   </span>
                   <small>{item.equipmentTags.join(", ") || "Sem equipamento"}</small>
-                  <button aria-label="Excluir exercicio CMS" onClick={() => handleDelete(`/admin/cms/exercises/${item.id}`)}>
+                  <button aria-label="Excluir exercício CMS" onClick={() => handleDelete(`/admin/cms/exercises/${item.id}`)}>
                     <Trash2 size={17} />
                   </button>
                 </div>
@@ -1478,11 +1638,11 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
             <section>
               <div className="panel-title cms-subtitle">
-                <h2>Blocos</h2>
+                <h2>2. Blocos</h2>
                 <span>{cmsWorkoutBlocks.length}</span>
               </div>
               <form className="crud-form" onSubmit={handleCreateCmsWorkoutBlock}>
-                <input name="title" placeholder="Titulo do bloco" required />
+                <input name="title" placeholder="Título do bloco" required />
                 <select name="structureType" defaultValue="NORMAL">
                   <option value="NORMAL">Normal</option>
                   <option value="BI_SET">Bi-set</option>
@@ -1490,11 +1650,26 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   <option value="REST_PAUSE">Rest-pause</option>
                 </select>
                 <input name="restTime" type="number" min="0" defaultValue="60" placeholder="Descanso em segundos" required />
-                <textarea
-                  name="exercises"
-                  placeholder={"exerciseId;series;reps;ordem\nseed-ex-supino-reto;4;8-12;1"}
-                  required
-                />
+                <div className="cms-builder-list">
+                  {Array.from({ length: 6 }).map((_, index) => {
+                    const row = index + 1;
+
+                    return (
+                      <div className="cms-builder-row" key={`block-exercise-${row}`}>
+                        <select name={`exerciseId${row}`} required={row === 1} defaultValue="">
+                          <option value="">{row === 1 ? "Selecione o exercício" : "Exercício opcional"}</option>
+                          {cmsExercises.map((exercise) => (
+                            <option value={exercise.id} key={exercise.id}>
+                              {cmsExerciseLabel(exercise)}
+                            </option>
+                          ))}
+                        </select>
+                        <input name={`sets${row}`} type="number" min="1" defaultValue="3" aria-label={`Séries do exercício ${row}`} />
+                        <input name={`repsRange${row}`} defaultValue="10-12" aria-label={`Repetições do exercício ${row}`} />
+                      </div>
+                    );
+                  })}
+                </div>
                 <button className="primary-button">
                   <Save size={18} />
                   Salvar bloco CMS
@@ -1504,7 +1679,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 <div className="data-row cms-data-row" key={item.id}>
                   <span>
                     <strong>{item.title}</strong>
-                    {item.exercises.map((row) => row.exercise.title ?? row.exercise.name ?? "Exercicio").join(", ") || "Sem exercicios"} | ID: {item.id}
+                    {item.exercises.map((row) => row.exercise.title ?? row.exercise.name ?? "Exercício").join(", ") || "Sem exercícios"} | ID: {item.id}
                   </span>
                   <small>{item.structureType} - {item.restTime}s</small>
                   <button aria-label="Excluir bloco CMS" onClick={() => handleDelete(`/admin/cms/workout-blocks/${item.id}`)}>
@@ -1516,37 +1691,93 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
             <section className="cms-program-section">
               <div className="panel-title cms-subtitle">
-                <h2>Programas</h2>
+                <h2>3. Programas</h2>
                 <span>{cmsPrograms.length}</span>
               </div>
               <form className="crud-form" onSubmit={handleCreateCmsProgram}>
-                <input name="title" placeholder="Titulo do programa" required />
-                <label className="checkbox-field">
-                  <input name="isActive" type="checkbox" defaultChecked />
-                  Ativo
-                </label>
-                <textarea name="description" placeholder="Descricao do programa" required />
-                <textarea
-                  name="days"
-                  placeholder={"dia;workoutBlockId;ordem\n1;seed-block-forca-superior;1"}
-                  required
-                />
+                <input name="title" placeholder="Título do programa" required />
+                <select name="status" defaultValue="DRAFT">
+                  <option value="DRAFT">Salvar como rascunho</option>
+                  <option value="PUBLISHED">Publicar agora</option>
+                </select>
+                <textarea name="description" placeholder="Descrição do programa" required />
+                <div className="cms-builder-list">
+                  {Array.from({ length: 7 }).map((_, index) => {
+                    const dayNumber = index + 1;
+
+                    return (
+                      <div className="cms-builder-row program-day-row" key={`program-day-${dayNumber}`}>
+                        <span>Dia {dayNumber}</span>
+                        <select name={`workoutBlockId${dayNumber}`} required={dayNumber === 1} defaultValue="">
+                          <option value="">{dayNumber === 1 ? "Selecione o bloco" : "Bloco opcional"}</option>
+                          {cmsWorkoutBlocks.map((block) => (
+                            <option value={block.id} key={block.id}>
+                              {block.title}
+                            </option>
+                          ))}
+                        </select>
+                        <input name={`dayOrder${dayNumber}`} type="number" min="1" defaultValue="1" aria-label={`Ordem do dia ${dayNumber}`} />
+                      </div>
+                    );
+                  })}
+                </div>
                 <button className="primary-button">
                   <Save size={18} />
                   Salvar programa CMS
                 </button>
               </form>
               {cmsPrograms.slice(0, 8).map((item) => (
-                <div className="data-row cms-data-row" key={item.id}>
-                  <span>
-                    <strong>{item.title}</strong>
-                    {item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.title}`).join(" | ") || "Sem dias"}
-                  </span>
-                  <small>{item.isActive ? "Ativo" : "Inativo"}</small>
-                  <button aria-label="Excluir programa CMS" onClick={() => handleDelete(`/admin/cms/programs/${item.id}`)}>
-                    <Trash2 size={17} />
-                  </button>
-                </div>
+                <article className="cms-program-card" key={item.id}>
+                  <div className="cms-program-main">
+                    <span className={`cms-status ${item.status.toLowerCase()}`}>{item.status}</span>
+                    <h3>{item.title}</h3>
+                    <p>{item.description}</p>
+                    <small>{item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.title}`).join(" | ") || "Sem dias cadastrados"}</small>
+                  </div>
+                  <div className="cms-program-actions">
+                    <button className="outline-button" onClick={() => handlePublishCmsProgram(item.id)} disabled={item.status === "PUBLISHED"}>
+                      <Check size={17} />
+                      Publicar
+                    </button>
+                    <button className="outline-button" onClick={() => handleArchiveCmsProgram(item.id)} disabled={item.status === "ARCHIVED"}>
+                      <LockKeyhole size={17} />
+                      Arquivar
+                    </button>
+                    <button className="outline-button danger-button" onClick={() => handleDelete(`/admin/cms/programs/${item.id}`)}>
+                      <Trash2 size={17} />
+                      Excluir
+                    </button>
+                  </div>
+                  <form className="cms-assign-form" onSubmit={(event) => handleAssignCmsProgramSubmit(event, item.id)}>
+                    <select name="userId" disabled={item.status !== "PUBLISHED"}>
+                      <option value="">Todos os alunos</option>
+                      {users
+                        .filter((user) => user.role === "USER")
+                        .map((user) => (
+                          <option value={user.id} key={user.id}>
+                            {user.name}
+                          </option>
+                        ))}
+                    </select>
+                    <input name="currentDay" type="number" min="1" defaultValue="1" disabled={item.status !== "PUBLISHED"} />
+                    <button className="primary-button" disabled={item.status !== "PUBLISHED"}>
+                      <UsersRound size={17} />
+                      Atribuir
+                    </button>
+                  </form>
+                  <div className="cms-assignment-list">
+                    <strong>4. Acompanhamento</strong>
+                    {(item.assignedUsers ?? []).length > 0 ? (
+                      item.assignedUsers?.slice(0, 8).map((assignment) => (
+                        <span key={assignment.id}>
+                          {assignment.user.name} • dia {assignment.currentDay} • {assignment.status}
+                        </span>
+                      ))
+                    ) : (
+                      <span>Nenhum aluno atribuído.</span>
+                    )}
+                  </div>
+                </article>
               ))}
             </section>
           </div>
@@ -1560,7 +1791,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             <span>{plans.length}</span>
           </div>
           <form className="crud-form" onSubmit={handleCreatePlan}>
-            <input name="code" placeholder="Codigo" required />
+            <input name="code" placeholder="Código" required />
             <input name="name" placeholder="Nome" required />
             <input name="price" type="number" step="0.01" min="1" placeholder="Valor" required />
             <select name="billingCycle" defaultValue="MONTHLY">
@@ -1590,7 +1821,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       {adminSection === "memberships" && <section className="admin-grid single-section-grid">
         <article className="table-panel" id="admin-memberships">
           <div className="panel-title">
-            <h2>Matriculas</h2>
+            <h2>Matrículas</h2>
             <span>{memberships.length}</span>
           </div>
           <form className="crud-form" onSubmit={handleCreateMembership}>
@@ -1621,7 +1852,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             </select>
             <button className="primary-button">
               <Save size={18} />
-              Salvar matricula
+              Salvar matrícula
             </button>
           </form>
           {memberships.slice(0, 8).map((item) => (
@@ -1631,7 +1862,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 {item.plan.name}
               </span>
               <small>{item.status}</small>
-              <button aria-label="Excluir matricula" onClick={() => handleDelete(`/admin/memberships/${item.id}`)}>
+              <button aria-label="Excluir matrícula" onClick={() => handleDelete(`/admin/memberships/${item.id}`)}>
                 <Trash2 size={17} />
               </button>
             </div>
@@ -1647,7 +1878,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           </div>
           <form className="crud-form inline-form" onSubmit={handleCreatePayment}>
             <select name="membershipId" required>
-              <option value="">Matricula</option>
+              <option value="">Matrícula</option>
               {memberships.map((item) => (
                 <option value={item.id} key={item.id}>
                   {item.user.name} - {item.plan.name}
@@ -1660,7 +1891,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               <option value="UNDEFINED">Escolha do aluno</option>
               <option value="PIX">Pix</option>
               <option value="BOLETO">Boleto</option>
-              <option value="CREDIT_CARD">Cartao</option>
+              <option value="CREDIT_CARD">Cartão</option>
             </select>
             <button className="primary-button">
               <CreditCard size={18} />
@@ -1687,7 +1918,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       {adminSection === "operations" && <section className="admin-grid phase-three-grid" id="admin-operations">
         <article className="table-panel">
           <div className="panel-title">
-            <h2>Avaliacoes fisicas</h2>
+            <h2>Avaliações físicas</h2>
             <span>{assessments.length}</span>
           </div>
           <form className="crud-form" onSubmit={handleCreateAssessment}>
@@ -1706,22 +1937,22 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             <input name="heightCm" type="number" step="0.1" min="1" placeholder="Altura cm" />
             <input name="bodyFatPct" type="number" step="0.1" min="0" max="100" placeholder="Gordura %" />
             <input name="waistCm" type="number" step="0.1" min="1" placeholder="Cintura cm" />
-            <input name="chestCm" type="number" step="0.1" min="1" placeholder="Torax cm" />
+            <input name="chestCm" type="number" step="0.1" min="1" placeholder="Tórax cm" />
             <input name="hipCm" type="number" step="0.1" min="1" placeholder="Quadril cm" />
-            <textarea name="notes" placeholder="Observacoes da avaliacao" />
+            <textarea name="notes" placeholder="Observações da avaliação" />
             <button className="primary-button">
               <Ruler size={18} />
-              Salvar avaliacao
+              Salvar avaliação
             </button>
           </form>
           {assessments.slice(0, 8).map((item) => (
             <div className="data-row" key={item.id}>
               <span>
-                <strong>{item.user?.name ?? "Aluno"}</strong>
+                <strong>{item.userá.name ?? "Aluno"}</strong>
                 {new Date(item.assessedAt).toLocaleDateString("pt-BR")} - {item.weightKg ?? "-"} kg
               </span>
               <small>{item.bodyFatPct ? `${item.bodyFatPct}% gordura` : "Sem dobra"}</small>
-              <button aria-label="Excluir avaliacao" onClick={() => handleDelete(`/admin/physical-assessments/${item.id}`)}>
+              <button aria-label="Excluir avaliação" onClick={() => handleDelete(`/admin/physical-assessments/${item.id}`)}>
                 <Trash2 size={17} />
               </button>
             </div>
@@ -1734,11 +1965,11 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             <span>{events.length}</span>
           </div>
           <form className="crud-form" onSubmit={handleCreateEvent}>
-            <input name="title" placeholder="Titulo do evento" required />
+            <input name="title" placeholder="Título do evento" required />
             <input name="startsAt" type="datetime-local" required />
             <input name="location" placeholder="Local" />
             <input name="capacity" type="number" min="1" placeholder="Vagas" />
-            <textarea name="description" placeholder="Descricao" />
+            <textarea name="description" placeholder="Descrição" />
             <button className="primary-button">
               <CalendarPlus size={18} />
               Salvar evento
@@ -1767,7 +1998,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             <div className="data-row ticket-row" key={item.id}>
               <span>
                 <strong>{item.subject}</strong>
-                {item.user?.name ?? "Aluno"} - {item.category} - {item.message}
+                {item.userá.name ?? "Aluno"} - {item.category} - {item.message}
               </span>
               <select
                 aria-label="Status do atendimento"
@@ -1792,7 +2023,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           {aiPlans.slice(0, 8).map((item) => (
             <div className="data-row" key={item.id}>
               <span>
-                <strong>{item.user?.name ?? "Aluno"}</strong>
+                <strong>{item.userá.name ?? "Aluno"}</strong>
                 {item.plan.summary}
               </span>
               <small>{item.daysPerWeek}x/sem</small>
@@ -1826,16 +2057,23 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
   const [profile, setProfile] = useState<{ name: string; objective?: string; level?: string } | null>(null);
   const [workout, setWorkout] = useState<WorkoutRow | null>(null);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkoutResponse["workout"] | null>(null);
+  const [publishedWorkouts, setPublishedWorkouts] = useState<TodayWorkoutResponse["workout"][]>([]);
+  const [workoutSession, setWorkoutSession] = useState<WorkoutSessionResponse["session"] | null>(null);
+  const [consistency, setConsistency] = useState<WorkoutConsistencyResponse | null>(null);
   const [membership, setMembership] = useState<StudentMembershipRow | null>(null);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [attendance, setAttendance] = useState<Array<{ id: string; date: string }>>([]);
   const [assessments, setAssessments] = useState<PhysicalAssessmentRow[]>([]);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [tickets, setTickets] = useState<SupportTicketRow[]>([]);
+  const [notifications, setNotifications] = useState<NotificationRow[]>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [aiPlans, setAiPlans] = useState<AiWorkoutPlanRow[]>([]);
   const [checkoutPayment, setCheckoutPayment] = useState<PaymentRow | null>(null);
   const [checkoutStep, setCheckoutStep] = useState<"plans" | "checkout" | "thanks">("plans");
   const [checkoutLoading, setCheckoutLoading] = useState<PlanCode | "sandbox" | null>(null);
+  const [streakCalendarOpen, setStreakCalendarOpen] = useState(false);
+  const [streakCalendarMonth, setStreakCalendarMonth] = useState(() => new Date().getMonth() + 1);
   const [checkoutDraft, setCheckoutDraft] = useState<{
     planCode: PlanCode;
     billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED";
@@ -1849,17 +2087,21 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     if (!token) return;
 
     try {
-      const [profileResponse, membershipResponse, paymentsResponse] = await Promise.all([
+      const [profileResponse, membershipResponse, paymentsResponse, workoutProgramsResponse] = await Promise.all([
         apiGet<{ profile: { name: string; objective?: string; level?: string } }>("/user/profile", token),
         apiGet<{ membership: StudentMembershipRow | null }>("/user/membership", token),
-        apiGet<{ payments: PaymentRow[] }>("/user/payments", token)
+        apiGet<{ payments: PaymentRow[] }>("/user/payments", token),
+        apiGet<StudentWorkoutProgramsResponse>("/student/workout/programs", token).catch(() => ({ workouts: [] }))
       ]);
 
       const activeMembership = membershipResponse.membership?.status === "ACTIVE";
+      const firstPublishedWorkout = workoutProgramsResponse.workouts[0] ?? null;
 
       setProfile(profileResponse.profile);
       setMembership(membershipResponse.membership);
       setPayments(paymentsResponse.payments);
+      setPublishedWorkouts(workoutProgramsResponse.workouts);
+      setTodayWorkout(firstPublishedWorkout);
       setCheckoutPayment(paymentsResponse.payments.find((item) => item.status === "PENDING") ?? null);
 
       if (!activeMembership) {
@@ -1868,10 +2110,15 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
         }
         setWorkout(null);
         setTodayWorkout(null);
+        setPublishedWorkouts([]);
+        setWorkoutSession(null);
+        setConsistency(null);
         setAttendance([]);
         setAssessments([]);
         setEvents([]);
         setTickets([]);
+        setNotifications([]);
+        setNotificationsOpen(false);
         setAiPlans([]);
         return;
       }
@@ -1884,28 +2131,31 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
         assessmentsResponse,
         eventsResponse,
         ticketsResponse,
+        notificationsResponse,
         aiPlansResponse,
-        todayWorkoutResponse
+        consistencyResponse
       ] = await Promise.all([
         apiGet<{ workout: WorkoutRow | null }>("/user/workout", token),
         apiGet<{ records: Array<{ id: string; date: string }> }>("/user/attendance", token),
         apiGet<{ assessments: PhysicalAssessmentRow[] }>("/user/physical-assessments", token),
         apiGet<{ events: EventRow[] }>("/user/events", token),
         apiGet<{ tickets: SupportTicketRow[] }>("/user/support-tickets", token),
+        apiGet<{ notifications: NotificationRow[] }>("/user/notifications", token),
         apiGet<{ plans: AiWorkoutPlanRow[] }>("/user/ai-workout-plans", token),
-        apiGet<TodayWorkoutResponse>("/student/workout/today", token).catch(() => ({ workout: null }))
+        apiGet<WorkoutConsistencyResponse>("/student/workout/consistency", token).catch(() => null)
       ]);
 
       setWorkout(workoutResponse.workout);
-      setTodayWorkout(todayWorkoutResponse.workout);
       setAttendance(attendanceResponse.records);
       setAssessments(assessmentsResponse.assessments);
       setEvents(eventsResponse.events);
       setTickets(ticketsResponse.tickets);
+      setNotifications(notificationsResponse.notifications);
       setAiPlans(aiPlansResponse.plans);
+      setConsistency(consistencyResponse);
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;
-      setError(message ?? "Nao foi possivel carregar sua area. Verifique API e banco.");
+      setError(message ?? "Não foi possível carregar sua área. Verifique API e banco.");
     }
   }
 
@@ -1918,7 +2168,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
       await apiPost("/user/events/register", { eventId }, token);
       await loadUserData();
     } catch {
-      setError("Nao foi possivel confirmar sua inscricao no evento.");
+      setError("Não foi possível confirmar sua inscrição no evento.");
     }
   }
 
@@ -1940,7 +2190,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
       form.reset();
       await loadUserData();
     } catch {
-      setError("Nao foi possivel abrir o atendimento.");
+      setError("Não foi possível abrir o atendimento.");
     }
   }
 
@@ -1953,7 +2203,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
       await apiPost(
         "/user/ai-workout-plans",
         {
-          objective: String(data.get("objective") ?? profile?.objective ?? "condicionamento"),
+          objective: String(data.get("objective") ?? profile?.objective ?? "condicionamenão"),
           level: String(data.get("level") ?? profile?.level ?? "iniciante"),
           daysPerWeek: Number(data.get("daysPerWeek") ?? 3),
           focus: String(data.get("focus") ?? "")
@@ -1963,7 +2213,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
       form.reset();
       await loadUserData();
     } catch {
-      setError("Nao foi possivel gerar o plano pelo agente IA.");
+      setError("Não foi possível gerar o plano pelo agente IA.");
     }
   }
 
@@ -2011,7 +2261,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
       }
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;
-      setError(message ?? "Nao foi possivel iniciar o checkout.");
+      setError(message ?? "Não foi possível iniciar o checkout.");
     } finally {
       setCheckoutLoading(null);
     }
@@ -2037,7 +2287,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
       await loadUserData();
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;
-      setError(message ?? "Nao foi possivel confirmar o pagamento sandbox.");
+      setError(message ?? "Não foi possível confirmar o pagamento sandbox.");
     } finally {
       setCheckoutLoading(null);
     }
@@ -2053,27 +2303,103 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     return response.alternatives;
   }
 
+  async function handleStartWorkoutSession(workoutToStart = todayWorkout) {
+    if (!workoutToStart) return;
+
+    try {
+      const response = await apiPost<WorkoutSessionResponse>(
+        "/student/workout/start-session",
+        {
+          assignmentId: workoutToStart.assignmentId
+        },
+        token
+      );
+      setTodayWorkout(workoutToStart);
+      setWorkoutSession(response.session);
+      setStudentSection("player");
+    } catch {
+      setError("Não foi possível iniciar o cronômetro do treino.");
+    }
+  }
+
+  async function handleCompleteWorkoutDay() {
+    if (!todayWorkout) return;
+
+    try {
+      await apiPost(
+        "/student/workout/complete-day",
+        {
+          assignmentId: todayWorkout.assignmentId,
+          sessionId: workoutSession?.id
+        },
+        token
+      );
+      setWorkoutSession(null);
+      await loadUserData();
+    } catch {
+      setError("Não foi possível concluir o treino agora.");
+    }
+  }
+
+  async function handleCancelWorkoutSession() {
+    if (!workoutSession?.id) {
+      setWorkoutSession(null);
+      return;
+    }
+
+    try {
+      await apiPost(
+        "/student/workout/cancel-session",
+        {
+          sessionId: workoutSession.id
+        },
+        token
+      );
+      setWorkoutSession(null);
+    } catch {
+      setError("Não foi possível cancelar o treino agora.");
+    }
+  }
+
+  async function handleExerciseProgressChange(input: {
+    exerciseId: string;
+    completed: boolean;
+    weightUsed: number;
+    repsCompleted: number;
+    sets: number;
+  }) {
+    await apiPost(
+      "/student/workout/exercise-progress",
+      {
+        sessionId: workoutSession?.id,
+        ...input
+      },
+      token
+    );
+  }
+
   const firstDay = workout?.days[0];
   const pendingPayment = payments.find((item) => item.status === "PENDING");
   const latestAssessment = assessments[0];
   const latestAiPlan = aiPlans[0];
   const hasActiveMembership = membership?.status === "ACTIVE";
+  const hasStudentAreaAccess = hasActiveMembership;
   const currentCheckoutPayment = checkoutPayment ?? pendingPayment;
   const lockedFeatures = [
     {
       icon: Dumbbell,
       title: "Ficha atual",
-      text: "Treinos, exercicios, series, repeticoes e descanso."
+      text: "Treinos, exercícios, séries, repetições e descanso."
     },
     {
       icon: Ruler,
-      title: "Avaliacao fisica",
-      text: "Medidas, historico corporal e acompanhamento de evolucao."
+      title: "Avalia??o física",
+      text: "Medidas, histórico corporal e acompanhamento de evolução."
     },
     {
       icon: CalendarPlus,
       title: "Eventos",
-      text: "Inscricoes em aulas, desafios e encontros da comunidade."
+      text: "Inscricoes em aulas, desafios e enãontros da comunidade."
     },
     {
       icon: Headphones,
@@ -2083,18 +2409,66 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     {
       icon: Bot,
       title: "Agente de Treino IA",
-      text: "Geracao de planos personalizados conforme objetivo e nivel."
+      text: "Geração de planos personalizados conãorme objetivo e nível."
     }
   ];
   const cmsExercisesToday = todayWorkout?.block.exercises ?? [];
   const cmsMusclesToday = Array.from(
     new Set(cmsExercisesToday.flatMap((exercise) => exercise.targetMuscles ?? []))
   );
-  const workoutsCompleted = Math.min(attendance.length, 30);
-  const workoutProgressPercent = Math.min(100, Math.round((workoutsCompleted / 30) * 100));
+  const totalWorkoutDaysFromPrograms = publishedWorkouts.reduce((total, item) => total + item.totalDays, 0);
+  const workoutsCompleted = consistency?.completedWorkoutCount ?? 0;
+  const totalWorkoutDays = consistency?.totalWorkoutDays ?? totalWorkoutDaysFromPrograms;
+  const workoutProgressPercent = Math.min(100, Math.round((workoutsCompleted / Math.max(totalWorkoutDays, 1)) * 100));
   const studentCode = profile?.name ? String(profile.name.length * 193 + 1) : "1931";
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentCalendarMonth = currentDate.getMonth() + 1;
+  const currentMonth = useMemo(
+    () => ({
+      year: currentYear,
+      month: streakCalendarMonth
+    }),
+    [currentYear, streakCalendarMonth]
+  );
+  const calendarCells = useMemo(
+    () => buildMonthCalendar(currentMonth.year, currentMonth.month),
+    [currentMonth.month, currentMonth.year]
+  );
+  const todayIsoDate = new Date().toISOString().slice(0, 10);
+  const streakDateSet = useMemo(
+    () => new Set(consistency?.historyDates ?? consistency?.completedDates ?? []),
+    [consistency?.completedDates, consistency?.historyDates]
+  );
+  const monthPrefix = `${currentMonth.year}-${String(currentMonth.month).padStart(2, "0")}-`;
+  const completedDateSet = useMemo(
+    () => new Set(Array.from(streakDateSet).filter((date) => date.startsWith(monthPrefix))),
+    [monthPrefix, streakDateSet]
+  );
+  const currentStreak = useMemo(() => {
+    const date = new Date();
+    const todayKey = date.toISOString().slice(0, 10);
 
-  if (!hasActiveMembership) {
+    if (!streakDateSet.has(todayKey)) {
+      date.setDate(date.getDate() - 1);
+      const yesterdayKey = date.toISOString().slice(0, 10);
+
+      if (!streakDateSet.has(yesterdayKey)) {
+        return 0;
+      }
+    }
+
+    let streak = 0;
+
+    while (streakDateSet.has(date.toISOString().slice(0, 10))) {
+      streak += 1;
+      date.setDate(date.getDate() - 1);
+    }
+
+    return streak;
+  }, [streakDateSet]);
+
+  if (!hasStudentAreaAccess) {
     return (
       <main className="workspace-shell">
         <aside className="workspace-sidebar" aria-label="Menu do aluno">
@@ -2110,7 +2484,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
               <CreditCard size={18} />Assinatura
             </button>
             <button className={studentSection === "locked" ? "active" : ""} onClick={() => setStudentSection("locked")}>
-              <LockKeyhole size={18} />Conteudos
+              <LockKeyhole size={18} />Conteúdos
             </button>
           </nav>
           <button className="workspace-logout" onClick={onLogout}>
@@ -2120,7 +2494,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
         </aside>
         <section className="workspace-content">
         <section className="dashboard-heading">
-          <span className="eyebrow">Area do aluno</span>
+          <span className="eyebrow">área do aluno</span>
           <h1>{profile?.name ?? "Comece a treinar"}</h1>
         </section>
         {error && <div className="error-box">{error}</div>}
@@ -2148,11 +2522,11 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                 <Check size={22} />
               </div>
               <span className="eyebrow">Obrigado</span>
-              <h2>{membership?.status === "ACTIVE" ? "Seu acesso esta liberado." : "Pagamento em processamento."}</h2>
+              <h2>{membership?.status === "ACTIVE" ? "Seu acesso está liberado." : "Pagamento em processamenão."}</h2>
               <p>
                 {membership?.status === "ACTIVE"
-                  ? "A assinatura foi confirmada e as funcionalidades do aluno ja estao disponiveis."
-                  : "Assim que o Asaas confirmar a assinatura, sua area de treino sera liberada automaticamente."}
+                  ? "A assinatura foi confirmada e as funcionalidades do aluno já estáo disponíveis."
+                  : "Assim que o Asaas confirmar a assinatura, sua área de treino será liberada automaticamente."}
               </p>
               <div className="checkout-actions">
                 <button className="primary-button" onClick={() => void loadUserData()}>
@@ -2172,8 +2546,8 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
               <span className="eyebrow">Tela de checkout</span>
               <h2>Finalize sua assinatura.</h2>
               <p>
-                Pagamento pendente de {formatPriceInBRL(currentCheckoutPayment.amountInCents)}. Depois da confirmacao,
-                voce sera levado para a etapa de obrigado e o acesso sera liberado.
+                Pagamento pendente de {formatPriceInBRL(currentCheckoutPayment.amountInCents)}. Depois da confirmação,
+                você será levado para a etapa de obrigado e o acesso será liberado.
               </p>
               <div className="checkout-actions">
                 {currentCheckoutPayment.paymentUrl && (
@@ -2196,7 +2570,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                   Voltar para assinatura
                 </button>
                 <button className="outline-button" onClick={() => setCheckoutStep("thanks")}>
-                  Ja concluí o pagamento
+                  J? concluí o pagamento
                 </button>
               </div>
             </article>
@@ -2205,13 +2579,13 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
               <span className="eyebrow">Assinatura</span>
               <h2>Comece a treinar com acesso completo.</h2>
               <p>
-                Escolha uma assinatura para ir ao checkout. As fichas, eventos, avaliacoes, atendimento
-                e agente IA ficam liberados depois da confirmacao do pagamento.
+                Escolha uma assinatura para ir ao checkout. As fichas, eventos, avaliações, atendimento
+                e agente IA ficam liberados depois da confirmação do pagamento.
               </p>
               <form className="checkout-form" onSubmit={handleCreateCheckout}>
                 <div className="checkout-plan-grid">
                   {initialPlans.map((plan) => (
-                    <label className="checkout-plan-option" key={plan.code}>
+                    <label className="checkout-planãoption" key={plan.code}>
                       <input
                         name="planCode"
                         type="radio"
@@ -2246,7 +2620,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                     <option value="UNDEFINED">Escolher no checkout</option>
                     <option value="PIX">Pix</option>
                     <option value="BOLETO">Boleto</option>
-                    <option value="CREDIT_CARD">Cartao</option>
+                    <option value="CREDIT_CARD">Cartão</option>
                   </select>
                 </label>
                 <button className="primary-button" disabled={Boolean(checkoutLoading)}>
@@ -2261,7 +2635,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
           <LockedOverlay onCheckout={() => setCheckoutStep("checkout")} />
           <div className="section-heading locked-heading">
             <span className="eyebrow">Acesso apos pagamento</span>
-            <h2>Conteudos bloqueados enquanto sua assinatura nao for confirmada.</h2>
+            <h2>Conteúdos bloqueados enquando sua assinatura não for confirmada.</h2>
           </div>
           <div className="locked-grid">
             {lockedFeatures.map((feature) => (
@@ -2289,11 +2663,43 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
         </div>
         <div>
           <strong>{profile?.name ?? "Aluno"}</strong>
-          <span>Codigo: {studentCode}</span>
+          <span>Código: {studentCode}</span>
         </div>
-        <button className="student-icon-button" aria-label="Notificacoes">
-          <Bell size={24} />
-        </button>
+        <div className="student-header-actions">
+          <button className="student-streak-button" aria-label={`Ofensiva de ${currentStreak} dias`} onClick={() => setStreakCalendarOpen(true)}>
+            <Flame size={18} />
+            <span>Ofensiva</span>
+            <strong>{currentStreak}</strong>
+          </button>
+          <div className="student-notification-wrap">
+            <button className="student-icon-button" aria-label="Notificações" onClick={() => setNotificationsOpen((open) => !open)}>
+              <Bell size={24} />
+              {notifications.length > 0 && <span className="student-notification-badge">{notifications.length}</span>}
+            </button>
+            {notificationsOpen && (
+              <section className="student-notification-panel" aria-label="Notificações publicadas">
+                <div>
+                  <strong>Notificações</strong>
+                  <span>{notifications.length}</span>
+                </div>
+                {notifications.length > 0 ? (
+                  notifications.slice(0, 8).map((notification) => (
+                    <article key={notification.id}>
+                      <strong>{notification.title}</strong>
+                      <span>{notification.message}</span>
+                      <small>{new Date(notification.publishedAt).toLocaleDateString("pt-BR")}</small>
+                    </article>
+                  ))
+                ) : (
+                  <article>
+                    <strong>Nenhuma publicação</strong>
+                    <span>Novidades publicadas pelo admin aparecerao aqui.</span>
+                  </article>
+                )}
+              </section>
+            )}
+          </div>
+        </div>
       </section>
 
       <section className="student-app-content">
@@ -2309,18 +2715,18 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                 </div>
                 <div>
                   <h2>{todayWorkout ? `Treino de hoje (${todayWorkout.block.title.replace(/^.*?([A-Z])\\b.*$/, "$1")})` : "Treino de hoje"}</h2>
-                  <p>{cmsMusclesToday.join(", ") || "Ficha de exercicios"}</p>
+                  <p>{cmsMusclesToday.join(", ") || "Ficha de exercícios"}</p>
                 </div>
-                <strong>{workoutsCompleted}/30</strong>
+                <strong>{workoutsCompleted}/{totalWorkoutDays}</strong>
               </div>
-              <div className="student-progress-track">
+              <div className="student-progressotrack">
                 <span style={{ width: `${workoutProgressPercent}%` }} />
               </div>
               <ol className="student-exercise-preview">
                 {cmsExercisesToday.slice(0, 3).map((exercise, index) => (
                   <li key={exercise.id}>{index + 1}- {exercise.title}</li>
                 ))}
-                {cmsExercisesToday.length > 3 && <li>+{cmsExercisesToday.length - 3} exercicios</li>}
+                {cmsExercisesToday.length > 3 && <li>+{cmsExercisesToday.length - 3} exercícios</li>}
               </ol>
               <button className="student-green-button" onClick={() => setStudentSection("training")}>
                 Abrir treino
@@ -2331,13 +2737,13 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
             <section className="student-feature-grid">
               {[
                 { icon: UserRound, title: "Perfil", text: "Dados cadastrais", section: "menu" as const },
-                { icon: Dumbbell, title: "Treino", text: "Ficha de exercicios", section: "training" as const },
-                { icon: ShieldCheck, title: "Matriculas", text: "Visualize seus planos", section: "payments" as const },
+                { icon: Dumbbell, title: "Treino", text: "Ficha de exercícios", section: "training" as const },
+                { icon: ShieldCheck, title: "Matrículas", text: "Visualize seus planos", section: "payments" as const },
                 { icon: CreditCard, title: "Pagamentos", text: "Central de cobrancas", section: "payments" as const },
-                { icon: Ruler, title: "Avaliacoes", text: "Veja sua evolucao", section: "assessments" as const },
-                { icon: CalendarDays, title: "Frequencia", text: "Consulte seus acessos", section: "status" as const },
+                { icon: Ruler, title: "Avaliações", text: "Veja sua evolução", section: "assessments" as const },
+                { icon: CalendarDays, title: "Frequência", text: "Consulte seus acessos", section: "status" as const },
                 { icon: CalendarPlus, title: "Eventos", text: "Veja os eventos", section: "events" as const },
-                { icon: Headphones, title: "Atendimento", text: "Historico de conversas", section: "support" as const }
+                { icon: Headphones, title: "Atendimento", text: "Histórico de conversas", section: "support" as const }
               ].map((item) => (
                 <button className="student-feature-card" key={item.title} onClick={() => setStudentSection(item.section)}>
                   <span><item.icon size={25} /></span>
@@ -2352,62 +2758,63 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
         {studentSection === "training" && (
           <section className="student-sheet">
             <div className="student-sheet-heading">
-              <span>Ficha de treino #1</span>
-              <h1>{todayWorkout?.programTitle ?? "CMS Fitness"}</h1>
-              <p>{todayWorkout?.block.title ?? "Treino do dia"}</p>
+              <span>Programas publicados</span>
+              <h1>Treinos</h1>
+              <p>{publishedWorkouts.length} programa(s) disponível(is)</p>
             </div>
-            <div className="student-progress-row">
-              <span>Treinos realizados: <strong>{workoutsCompleted}/30</strong></span>
-              <div className="student-progress-track"><span style={{ width: `${workoutProgressPercent}%` }} /></div>
+            <div className="student-progressorow">
+                <span>Treinos realizados: <strong>{workoutsCompleted}/{totalWorkoutDays}</strong></span>
+              <div className="student-progressotrack"><span style={{ width: `${workoutProgressPercent}%` }} /></div>
             </div>
-            {todayWorkout ? (
-              <article className="student-training-card active">
-                <div className="student-card-icon">
-                  <Dumbbell size={24} />
-                </div>
-                <div>
-                  <h2>{todayWorkout.block.title}</h2>
-                  <p>{cmsMusclesToday.join(", ") || "Exercicios do CMS Fitness"}</p>
-                </div>
-                <button onClick={() => setStudentSection("player")}>Iniciar</button>
-              </article>
+            {publishedWorkouts.length > 0 ? (
+              <div className="student-program-list">
+                {publishedWorkouts.map((programWorkout) => {
+                  const programMuscles = Array.from(
+                    new Set(programWorkout.block.exercises.flatMap((exercise) => exercise.targetMuscles ?? []))
+                  );
+
+                  return (
+                    <article className="student-program-card" key={programWorkout.programId}>
+                      <div className="student-training-card active">
+                        <div className="student-card-icon">
+                          <Dumbbell size={24} />
+                        </div>
+                        <div>
+                          <span>Dia {programWorkout.dayNumber}/{programWorkout.totalDays}</span>
+                          <h2>{programWorkout.programTitle}</h2>
+                          <p>{programWorkout.block.title} • {programMuscles.join(", ") || "Exercícios do CMS Fitness"}</p>
+                        </div>
+                        <button onClick={() => void handleStartWorkoutSession(programWorkout)}>Iniciar</button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
             ) : (
               <article className="student-training-card">
                 <Dumbbell size={24} />
                 <div>
-                  <h2>Treino indisponivel</h2>
+                  <h2>Treino indisponível</h2>
                   <p>Nenhum programa CMS ativo foi encontrado.</p>
                 </div>
               </article>
             )}
-            <div className="student-exercise-list">
-              {cmsExercisesToday.map((exercise) => (
-                <article className="student-exercise-card" key={exercise.id}>
-                  <div className="student-exercise-thumb">
-                    <Dumbbell size={22} />
-                  </div>
-                  <div>
-                    <strong>{exercise.title}</strong>
-                    <span>{(exercise.targetMuscles ?? []).join(", ") || `${exercise.sets} séries`}</span>
-                    <small>{exercise.sets}x {exercise.repsRange} • {exercise.videoUrl ? "Video disponivel" : "Sem video"}</small>
-                  </div>
-                  <span className="student-toggle" aria-hidden="true" />
-                </article>
-              ))}
-            </div>
           </section>
         )}
 
         {studentSection === "player" && todayWorkout && (
           <section className="student-player-mobile">
-            <button className="student-back-button" onClick={() => setStudentSection("training")}>
-              <ArrowRight size={18} />
-              Voltar
-            </button>
             <WorkoutPlayer
+              programTitle={todayWorkout.programTitle}
+              blockTitle={todayWorkout.block.title}
               exercises={todayWorkout.block.exercises}
               restTimeDefault={todayWorkout.block.restTime}
-              onRequestSubstitutes={handleRequestSubstitutes}
+              sessionId={workoutSession?.id ?? null}
+              sessionStartedAt={workoutSession?.startedAt ?? null}
+              onBack={() => setStudentSection("training")}
+              onCancelSession={handleCancelWorkoutSession}
+              onExerciseProgressChange={handleExerciseProgressChange}
+              onWorkoutComplete={handleCompleteWorkoutDay}
             />
           </section>
         )}
@@ -2416,14 +2823,14 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
           <section className="student-sheet">
             <div className="student-sheet-heading">
               <span>Financeiro</span>
-              <h1>Pagamentos e matricula</h1>
+              <h1>Pagamentos e matrícula</h1>
               <p>{membership ? `Plano ${membership.plan.name}` : "Nenhum plano ativo"}</p>
             </div>
             <article className="student-info-card">
               <ShieldCheck size={22} />
               <div>
-                <strong>Status da matricula</strong>
-                <span>{membership?.status ?? "Sem matricula"}</span>
+                <strong>Status da matrícula</strong>
+                <span>{membership?.status ?? "Sem matrícula"}</span>
               </div>
             </article>
             {payments.slice(0, 6).map((payment) => (
@@ -2444,12 +2851,12 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
             <div className="student-sheet-heading">
               <span>Produtos</span>
               <h1>Vitrine online</h1>
-              <p>Produtos e compras serao conectados ao catalogo do App Treino.</p>
+              <p>Produtos e compras seráo conectados ao catálogo do App Treino.</p>
             </div>
             <article className="student-empty-state">
               <Package size={34} />
               <strong>Nenhum produto cadastrado</strong>
-              <span>Use esta area para uma futura loja fitness.</span>
+              <span>Use está área para uma futura lojá fitness.</span>
             </article>
           </section>
         )}
@@ -2457,9 +2864,9 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
         {studentSection === "assessments" && (
           <section className="student-sheet">
             <div className="student-sheet-heading">
-              <span>Avaliacoes</span>
-              <h1>Veja sua evolucao</h1>
-              <p>{latestAssessment ? new Date(latestAssessment.assessedAt).toLocaleDateString("pt-BR") : "Sem avaliacao cadastrada"}</p>
+              <span>Avaliações</span>
+              <h1>Veja sua evolução</h1>
+              <p>{latestAssessment ? new Date(latestAssessment.assessedAt).toLocaleDateString("pt-BR") : "Sem avaliação cadastrada"}</p>
             </div>
             {latestAssessment ? (
               <div className="student-metric-grid">
@@ -2471,8 +2878,8 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
             ) : (
               <article className="student-empty-state">
                 <Ruler size={34} />
-                <strong>Nenhuma avaliacao</strong>
-                <span>Solicite sua primeira avaliacao com a equipe.</span>
+                <strong>Nenhuma avaliação</strong>
+                <span>Solicite sua primeira avaliação com a equipe.</span>
               </article>
             )}
           </section>
@@ -2483,7 +2890,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
             <div className="student-sheet-heading">
               <span>Eventos</span>
               <h1>Agenda da academia</h1>
-              <p>{events.length} evento(s) disponiveis</p>
+              <p>{events.length} evento(s) disponíveis</p>
             </div>
             {events.slice(0, 8).map((item) => (
               <article className="student-info-card" key={item.id}>
@@ -2513,9 +2920,9 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                 <option value="GENERAL">Geral</option>
                 <option value="WORKOUT">Treino</option>
                 <option value="PAYMENT">Pagamento</option>
-                <option value="TECHNICAL">Tecnico</option>
+                <option value="TECHNICAL">Técnico</option>
               </select>
-              <textarea name="message" placeholder="Descreva o que voce precisa" required />
+              <textarea name="message" placeholder="Descreva o que você precisa" required />
               <button className="student-green-button">Abrir atendimento</button>
             </form>
             {tickets.slice(0, 4).map((item) => (
@@ -2539,7 +2946,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
             </div>
             <form className="student-form" onSubmit={handleCreateAiPlan}>
               <input name="objective" placeholder="Objetivo" defaultValue={profile?.objective ?? ""} required />
-              <input name="level" placeholder="Nivel" defaultValue={profile?.level ?? ""} required />
+              <input name="level" placeholder="Nível" defaultValue={profile?.level ?? ""} required />
               <input name="focus" placeholder="Foco da semana" />
               <select name="daysPerWeek" defaultValue="3">
                 <option value="2">2 dias</option>
@@ -2550,7 +2957,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
               </select>
               <button className="student-green-button">Gerar plano</button>
             </form>
-            {latestAiPlan && <article className="student-info-card"><Bot size={22} /><div><strong>Ultimo plano</strong><span>{latestAiPlan.plan.summary}</span></div></article>}
+            {latestAiPlan && <article className="student-info-card"><Bot size={22} /><div><strong>?ltimo plano</strong><span>{latestAiPlan.plan.summary}</span></div></article>}
           </section>
         )}
 
@@ -2559,10 +2966,10 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
             {[
               { icon: UserRound, title: "Perfil", action: () => setStudentSection("status") },
               { icon: Dumbbell, title: "Treino", action: () => setStudentSection("training"), favorite: true },
-              { icon: ShieldCheck, title: "Matriculas", action: () => setStudentSection("payments") },
+              { icon: ShieldCheck, title: "Matrículas", action: () => setStudentSection("payments") },
               { icon: CreditCard, title: "Pagamentos", action: () => setStudentSection("payments"), favorite: true },
-              { icon: Ruler, title: "Avaliacoes", action: () => setStudentSection("assessments") },
-              { icon: CalendarDays, title: "Frequencia", action: () => setStudentSection("status") },
+              { icon: Ruler, title: "Avaliações", action: () => setStudentSection("assessments") },
+              { icon: CalendarDays, title: "Frequência", action: () => setStudentSection("status") },
               { icon: Package, title: "Produtos", action: () => setStudentSection("products"), favorite: true },
               { icon: ShoppingCart, title: "Compras", action: () => setStudentSection("products") },
               { icon: CalendarPlus, title: "Eventos", action: () => setStudentSection("events") },
@@ -2587,6 +2994,75 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
           </section>
         )}
       </section>
+
+      {streakCalendarOpen && (
+        <div className="student-streak-modal-backdrop" role="presentation" onClick={() => setStreakCalendarOpen(false)}>
+          <section
+            className="student-streak-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Calendario da ofensiva"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="student-streak-modal-header">
+              <div>
+                <span>Ano atual: {currentYear}</span>
+                <strong>{currentStreak} dia(s)</strong>
+                <small>consecutivo(s)</small>
+              </div>
+              <button className="student-icon-button" aria-label="Fechar calendário" onClick={() => setStreakCalendarOpen(false)}>
+                <Check size={20} />
+              </button>
+            </div>
+            <div className="student-consistency-calendar in-modal">
+              <div className="student-consistency-heading">
+                <button
+                  className="student-calendar-arrow"
+                  aria-label="Mes anterior"
+                  disabled={streakCalendarMonth <= 1}
+                  onClick={() => setStreakCalendarMonth((month) => Math.max(1, month - 1))}
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <div>
+                  <span>Histórico</span>
+                  <strong>{monthLabel(currentMonth.year, currentMonth.month)}</strong>
+                </div>
+                <button
+                  className="student-calendar-arrow"
+                  aria-label="Próximo mês"
+                  disabled={streakCalendarMonth >= currentCalendarMonth}
+                  onClick={() => setStreakCalendarMonth((month) => Math.min(currentCalendarMonth, month + 1))}
+                >
+                  <ChevronRight size={20} />
+                </button>
+                <small>{completedDateSet.size} treino(s) no mês</small>
+              </div>
+              <div className="student-calendar-weekdays" aria-hidden="true">
+                {["D", "S", "T", "Q", "Q", "S", "S"].map((day, index) => (
+                  <span key={`${day}-${index}`}>{day}</span>
+                ))}
+              </div>
+              <div className="student-calendar-grid">
+                {calendarCells.map((cell, index) => {
+                  const isCompleted = Boolean(cell.isoDate && completedDateSet.has(cell.isoDate));
+                  const isToday = cell.isoDate === todayIsoDate;
+
+                  return (
+                    <span
+                      className={`${cell.day ? "" : "empty"} ${isCompleted ? "completed" : ""} ${isToday ? "today" : ""}`}
+                      key={`${cell.isoDate ?? "modal-empty"}-${index}`}
+                    >
+                      {cell.day}
+                    </span>
+                  );
+                })}
+              </div>
+              <p>Dias marcados representam treinos concluídos em {currentYear}. O calendário mostra o mês atual e meses anteriores.</p>
+            </div>
+          </section>
+        </div>
+      )}
 
       <nav className="student-bottom-nav" aria-label="Navegacao do aluno">
         <button className={studentSection === "home" ? "active" : ""} onClick={() => setStudentSection("home")}><Home size={22} />Home</button>

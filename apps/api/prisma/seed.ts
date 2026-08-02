@@ -83,11 +83,17 @@ async function main() {
       id: "seed-program-definicao-30-dias",
       title: "Projeto Definicao 30 Dias",
       description: "Treinos intensos focados em queima de gordura e ganho de massa magra."
+      ,
+      status: "PUBLISHED",
+      isActive: true,
+      publishedAt: new Date()
     },
     update: {
       title: "Projeto Definicao 30 Dias",
       description: "Treinos intensos focados em queima de gordura e ganho de massa magra.",
-      isActive: true
+      status: "PUBLISHED",
+      isActive: true,
+      publishedAt: new Date()
     }
   });
 

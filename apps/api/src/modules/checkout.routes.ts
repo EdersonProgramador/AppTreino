@@ -38,7 +38,7 @@ const checkoutSandboxConfirmationSchema = z.object({
 
 function requireDatabase() {
   if (!env.DATABASE_URL) {
-    const error = new Error("Banco de dados nao configurado para esta operacao.") as Error & {
+    const error = new Error("Banco de dados não configurado para esta operação.") as Error & {
       statusCode: number;
     };
     error.statusCode = 503;
@@ -121,7 +121,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
 
     if (!planSeed) {
       return reply.code(400).send({
-        message: "Plano invalido."
+        message: "Plano inválido."
       });
     }
 
@@ -257,7 +257,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
 
     if (env.ASAAS_API_KEY) {
       return reply.code(403).send({
-        message: "Confirmacao manual disponivel apenas no sandbox local sem Asaas configurado."
+        message: "Confirmação manual disponível apenas no sandbox local sem Asaas configurado."
       });
     }
 
@@ -272,7 +272,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
 
     if (!payment) {
       return reply.code(404).send({
-        message: "Pagamento nao encontrado."
+        message: "Pagamento não encontrado."
       });
     }
 
@@ -319,7 +319,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
 
     if (!planSeed) {
       return reply.code(400).send({
-        message: "Plano invalido."
+        message: "Plano inválido."
       });
     }
 
@@ -329,7 +329,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
 
     if (existingUser) {
       return reply.code(409).send({
-        message: "E-mail ja cadastrado. Faca login para continuar o pagamento."
+        message: "E-mail já cadastrado. Faça login para continuar o pagamento."
       });
     }
 

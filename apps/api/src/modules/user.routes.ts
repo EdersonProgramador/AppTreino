@@ -24,7 +24,7 @@ const aiWorkoutRequestSchema = z.object({
 
 function requireDatabase() {
   if (!env.DATABASE_URL) {
-    const error = new Error("Banco de dados nao configurado para esta operacao.") as Error & {
+    const error = new Error("Banco de dados não configurado para esta operação.") as Error & {
       statusCode: number;
     };
     error.statusCode = 503;
@@ -64,7 +64,7 @@ async function requireActiveMembership(userId: string) {
   });
 
   if (!membership) {
-    const error = new Error("Assinatura ativa obrigatoria para acessar esta funcionalidade.") as Error & {
+    const error = new Error("Assinatura ativa obrigatória para acessar esta funcionalidade.") as Error & {
       statusCode: number;
     };
     error.statusCode = 402;
@@ -94,16 +94,16 @@ function buildAiWorkoutPlan(input: {
     ["Agachamento", "Supino reto", "Remada curvada", "Prancha"],
     ["Levantamento terra romeno", "Desenvolvimento", "Puxada alta", "Panturrilha"],
     ["Leg press", "Flexao de bracos", "Remada baixa", "Abdominal dead bug"],
-    ["Avanco", "Crucifixo", "Face pull", "Farmer walk"],
-    ["Cadeira extensora", "Mesa flexora", "Elevacao lateral", "Cardio intervalado"],
+    ["Avanão", "Crucifixo", "Face pull", "Farmer walk"],
+    ["Cadeira extensora", "Mesa flexora", "Elevação lateral", "Cardio intervalado"],
     ["Mobilidade de quadril", "Mobilidade toracica", "Core anti-rotacao", "Caminhada inclinada"]
   ];
 
   return {
     summary: `Plano ${input.daysPerWeek}x por semana para ${input.objective}, com foco em ${focus}.`,
     recommendations: [
-      "Registrar carga e repeticoes a cada sessao.",
-      "Manter 1 a 2 repeticoes em reserva nos exercicios principais.",
+      "Registrar carga e repetições a cada sessão.",
+      "Manter 1 a 2 repetições em reserva nos exercícios principais.",
       "Reavaliar medidas e desempenho em 30 dias."
     ],
     days: split.slice(0, input.daysPerWeek).map((title, index) => ({
@@ -222,6 +222,67 @@ export async function registerUserRoutes(app: FastifyInstance) {
     return { payments };
   });
 
+  app.get("/user/notifications", async (request) => {
+    requireDatabase();
+    await requireAuth(app, request);
+
+    const [programs, events, workouts] = await Promise.all([
+      prisma.program.findMany({
+        where: {
+          status: "PUBLISHED",
+          isActive: true
+        },
+        orderBy: {
+          publishedAt: "desc"
+        },
+        take: 10
+      }),
+      prisma.event.findMany({
+        where: {
+          status: "SCHEDULED"
+        },
+        orderBy: {
+          startsAt: "asc"
+        },
+        take: 10
+      }),
+      prisma.workout.findMany({
+        orderBy: {
+          createdAt: "desc"
+        },
+        take: 10
+      })
+    ]);
+
+    const notifications = [
+      ...programs.map((program) => ({
+        id: `program-${program.id}`,
+        type: "WORKOUT_PROGRAM",
+        title: "Novo programa de treino",
+        message: program.title,
+        publishedAt: program.publishedAt ?? program.createdAt
+      })),
+      ...events.map((event) => ({
+        id: `event-${event.id}`,
+        type: "EVENT",
+        title: "Evento publicado",
+        message: event.title,
+        publishedAt: event.createdAt
+      })),
+      ...workouts.map((workout) => ({
+        id: `workout-${workout.id}`,
+        type: "WORKOUT",
+        title: "Treino publicado",
+        message: workout.title,
+        publishedAt: workout.createdAt
+      }))
+    ].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+
+    return {
+      notifications: notifications.slice(0, 20)
+    };
+  });
+
   app.get("/user/attendance", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);
@@ -290,7 +351,7 @@ export async function registerUserRoutes(app: FastifyInstance) {
     });
 
     if (event.status !== "SCHEDULED") {
-      return reply.code(400).send({ message: "Evento indisponivel para inscricao." });
+      return reply.code(400).send({ message: "Evento indisponível para inscrição." });
     }
 
     if (event.capacity && event.registrations.length >= event.capacity) {

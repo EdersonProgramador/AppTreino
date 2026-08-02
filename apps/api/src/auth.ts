@@ -85,7 +85,7 @@ export async function requireAuth(app: FastifyInstance, request: FastifyRequest)
   const user = await getAuthUser(app, request);
 
   if (!user) {
-    throw httpError(401, "Autenticacao obrigatoria.");
+    throw httpError(401, "Autenticação obrigatória.");
   }
 
   return user;
@@ -99,7 +99,7 @@ export async function requireRole(
   const user = await requireAuth(app, request);
 
   if (user.role !== role) {
-    throw httpError(403, "Perfil sem permissao para acessar este recurso.");
+    throw httpError(403, "Perfil sem permissão para acessar este recurso.");
   }
 
   return user;

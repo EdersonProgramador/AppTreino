@@ -66,12 +66,13 @@ const cmsWorkoutBlockSchema = z.object({
         order: z.coerce.number().int().min(1)
       })
     )
-    .default([])
+    .min(1, "Cadastre ao menos um exercício no bloco.")
 });
 
 const cmsProgramSchema = z.object({
   title: z.string().min(2),
   description: z.string().min(2),
+  status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).default("DRAFT"),
   isActive: z.coerce.boolean().default(true),
   days: z
     .array(
@@ -81,7 +82,12 @@ const cmsProgramSchema = z.object({
         order: z.coerce.number().int().min(1)
       })
     )
-    .default([])
+    .min(1, "Cadastre ao menos um dia no programa.")
+});
+
+const cmsProgramAssignSchema = z.object({
+  userIds: z.array(z.string().min(1)).min(1),
+  currentDay: z.coerce.number().int().min(1).default(1)
 });
 
 const planSchema = z.object({
@@ -140,7 +146,7 @@ const idParamSchema = z.object({
 
 function requireDatabase() {
   if (!env.DATABASE_URL) {
-    const error = new Error("Banco de dados nao configurado para esta operacao.") as Error & {
+    const error = new Error("Banco de dados não configurado para esta operação.") as Error & {
       statusCode: number;
     };
     error.statusCode = 503;
@@ -211,6 +217,133 @@ async function createAsaasPaymentLink(input: {
     url?: string;
     status?: string;
   };
+}
+
+function httpError(statusCode: number, message: string) {
+  const error = new Error(message) as Error & { statusCode: number };
+  error.statusCode = statusCode;
+
+  return error;
+}
+
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+async function assertCmsExercisesExist(exerciseIds: string[]) {
+  const uniqueIds = uniqueValues(exerciseIds);
+
+  if (uniqueIds.length === 0) {
+    return;
+  }
+
+  const existing = await prisma.exercise.findMany({
+    where: {
+      id: {
+        in: uniqueIds
+      },
+      workoutDayId: null
+    },
+    select: {
+      id: true
+    }
+  });
+  const existingIds = new Set(existing.map((exercise) => exercise.id));
+  const missingIds = uniqueIds.filter((id) => !existingIds.has(id));
+
+  if (missingIds.length > 0) {
+    throw httpError(400, `Exercício CMS não encontrado: ${missingIds.join(", ")}.`);
+  }
+}
+
+async function assertWorkoutBlocksExist(workoutBlockIds: string[]) {
+  const uniqueIds = uniqueValues(workoutBlockIds);
+
+  if (uniqueIds.length === 0) {
+    return;
+  }
+
+  const existing = await prisma.workoutBlock.findMany({
+    where: {
+      id: {
+        in: uniqueIds
+      }
+    },
+    select: {
+      id: true
+    }
+  });
+  const existingIds = new Set(existing.map((block) => block.id));
+  const missingIds = uniqueIds.filter((id) => !existingIds.has(id));
+
+  if (missingIds.length > 0) {
+    throw httpError(400, `Bloco CMS não encontrado: ${missingIds.join(", ")}.`);
+  }
+}
+
+async function assignProgramToStudents(programId: string, currentDay = 1) {
+  return assignProgramToActiveStudents(programId, currentDay);
+}
+
+async function getActiveStudentIds(userIds?: string[]) {
+  const students = await prisma.user.findMany({
+    where: {
+      role: "USER",
+      id: userIds
+        ? {
+            in: userIds
+          }
+        : undefined,
+      OR: [
+        {
+          enrollmentStatus: "ACTIVE"
+        },
+        {
+          memberships: {
+            some: {
+              status: "ACTIVE"
+            }
+          }
+        }
+      ]
+    },
+    select: {
+      id: true
+    }
+  });
+  return students.map((student) => student.id);
+}
+
+async function assignProgramToActiveStudents(programId: string, currentDay = 1, userIds?: string[]) {
+  const activeStudentIds = await getActiveStudentIds(userIds);
+
+  if (activeStudentIds.length === 0) {
+    return [];
+  }
+
+  return prisma.$transaction(
+    activeStudentIds.map((userId) =>
+      prisma.userProgram.upsert({
+        where: {
+          userId_programId: {
+            userId,
+            programId
+          }
+        },
+        create: {
+          userId,
+          programId,
+          currentDay,
+          status: "ACTIVE"
+        },
+        update: {
+          currentDay,
+          status: "ACTIVE",
+          completedAt: null
+        }
+      })
+    )
+  );
 }
 
 export async function registerAdminRoutes(app: FastifyInstance) {
@@ -597,6 +730,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.post("/admin/cms/workout-blocks", async (request, reply) => {
     requireDatabase();
     const body = cmsWorkoutBlockSchema.parse(request.body);
+    await assertCmsExercisesExist(body.exercises.map((exercise) => exercise.exerciseId));
     const workoutBlock = await prisma.workoutBlock.create({
       data: {
         title: body.title,
@@ -630,6 +764,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
     const body = cmsWorkoutBlockSchema.parse(request.body);
+    await assertCmsExercisesExist(body.exercises.map((exercise) => exercise.exerciseId));
 
     await prisma.$transaction([
       prisma.workoutBlockExercise.deleteMany({ where: { workoutBlockId: id } }),
@@ -689,6 +824,14 @@ export async function registerAdminRoutes(app: FastifyInstance) {
             workoutBlock: true
           },
           orderBy: [{ dayNumber: "asc" }, { order: "asc" }]
+        },
+        assignedUsers: {
+          include: {
+            user: true
+          },
+          orderBy: {
+            startedAt: "desc"
+          }
         }
       },
       orderBy: {
@@ -702,11 +845,14 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.post("/admin/cms/programs", async (request, reply) => {
     requireDatabase();
     const body = cmsProgramSchema.parse(request.body);
+    await assertWorkoutBlocksExist(body.days.map((day) => day.workoutBlockId));
     const program = await prisma.program.create({
       data: {
         title: body.title,
         description: body.description,
+        status: body.status,
         isActive: body.isActive,
+        publishedAt: body.status === "PUBLISHED" ? new Date() : null,
         days: {
           create: body.days.map((day) => ({
             workoutBlockId: day.workoutBlockId,
@@ -721,9 +867,18 @@ export async function registerAdminRoutes(app: FastifyInstance) {
             workoutBlock: true
           },
           orderBy: [{ dayNumber: "asc" }, { order: "asc" }]
+        },
+        assignedUsers: {
+          include: {
+            user: true
+          }
         }
       }
     });
+
+    if (program.status === "PUBLISHED" && program.isActive) {
+      await assignProgramToStudents(program.id);
+    }
 
     return reply.code(201).send({ program });
   });
@@ -732,6 +887,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
     const body = cmsProgramSchema.parse(request.body);
+    await assertWorkoutBlocksExist(body.days.map((day) => day.workoutBlockId));
 
     await prisma.$transaction([
       prisma.programDayWorkout.deleteMany({ where: { programId: id } }),
@@ -740,7 +896,9 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         data: {
           title: body.title,
           description: body.description,
+          status: body.status,
           isActive: body.isActive,
+          publishedAt: body.status === "PUBLISHED" ? new Date() : null,
           days: {
             create: body.days.map((day) => ({
               workoutBlockId: day.workoutBlockId,
@@ -760,11 +918,112 @@ export async function registerAdminRoutes(app: FastifyInstance) {
             workoutBlock: true
           },
           orderBy: [{ dayNumber: "asc" }, { order: "asc" }]
+        },
+        assignedUsers: {
+          include: {
+            user: true
+          }
         }
       }
     });
 
+    if (program.status === "PUBLISHED" && program.isActive) {
+      await assignProgramToStudents(program.id);
+    }
+
     return { program };
+  });
+
+  app.post("/admin/cms/programs/:id/publish", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const currentProgram = await prisma.program.findUniqueOrThrow({
+      where: { id },
+      include: {
+        days: true
+      }
+    });
+
+    if (currentProgram.days.length === 0) {
+      throw httpError(409, "Cadastre ao menos um dia antes de publicar o programa.");
+    }
+
+    const program = await prisma.program.update({
+      where: { id },
+      data: {
+        status: "PUBLISHED",
+        isActive: true,
+        publishedAt: new Date()
+      },
+      include: {
+        days: {
+          include: {
+            workoutBlock: true
+          },
+          orderBy: [{ dayNumber: "asc" }, { order: "asc" }]
+        },
+        assignedUsers: {
+          include: {
+            user: true
+          }
+        }
+      }
+    });
+    await assignProgramToStudents(program.id);
+
+    return { program };
+  });
+
+  app.post("/admin/cms/programs/:id/archive", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const program = await prisma.program.update({
+      where: { id },
+      data: {
+        status: "ARCHIVED",
+        isActive: false
+      }
+    });
+
+    await prisma.userProgram.updateMany({
+      where: {
+        programId: id,
+        status: "ACTIVE"
+      },
+      data: {
+        status: "CANCELED"
+      }
+    });
+
+    return { program };
+  });
+
+  app.post("/admin/cms/programs/:id/assign", async (request, reply) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const body = cmsProgramAssignSchema.parse(request.body);
+    const program = await prisma.program.findUniqueOrThrow({
+      where: { id },
+      include: {
+        days: true
+      }
+    });
+
+    if (program.status !== "PUBLISHED" || !program.isActive || program.days.length === 0) {
+      return reply.code(409).send({
+        message: "Publique o programa e cadastre ao menos um dia antes de atribuir aos alunos."
+      });
+    }
+
+    const assignments = await assignProgramToActiveStudents(id, body.currentDay, body.userIds);
+
+    if (assignments.length === 0) {
+      return reply.code(409).send({
+        message: "Nenhum aluno ativo foi encontrado para receber este programa."
+      });
+    }
+
+    return reply.code(201).send({ assignments });
   });
 
   app.delete("/admin/cms/programs/:id", async (request) => {

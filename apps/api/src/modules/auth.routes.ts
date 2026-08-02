@@ -92,7 +92,7 @@ const forgotPasswordSchema = z
     if (!data.email && !data.phone) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Informe um e-mail ou telefone para recuperar o acesso."
+        message: "Informe um e-mail ou telefone para recuperação acesso."
       });
     }
   });
@@ -140,7 +140,7 @@ async function verifyGoogleIdToken(idToken?: string | null) {
   const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
 
   if (!response.ok) {
-    throw new Error("Token do Google invalido.");
+    throw new Error("Token do Google inválido.");
   }
 
   const payload = (await response.json()) as {
@@ -162,7 +162,7 @@ async function verifyGoogleIdToken(idToken?: string | null) {
   return {
     googleId: payload.sub,
     email: normalizeEmail(payload.email),
-    name: payload.name?.trim() || "Usuario Google"
+    name: payload.name?.trim() || "Usuário Google"
   };
 }
 
@@ -204,7 +204,7 @@ async function findOrCreateDevUser(email: string | null, phone: string | null, p
     const role = email ? roleForDemoEmail(email) : "USER";
     const user = {
       id: `dev-${role.toLowerCase()}-1`,
-      name: provider === "GOOGLE" ? "Usuario Google" : role === "ADMIN" ? "Administrador" : "Aluno App Treino",
+      name: provider === "GOOGLE" ? "Usuário Google" : role === "ADMIN" ? "Administrador" : "Aluno App Treino",
       email,
       phone,
       passwordHash: await hashPassword(password ?? "123456"),
@@ -273,13 +273,13 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
       if (!user) {
         return reply.code(401).send({
-          message: "E-mail ou senha invalidos."
+          message: "E-mail ou senha inválidos."
         });
       }
 
       if (provider === "EMAIL" && !(await verifyPassword(credentials.password ?? "", user.passwordHash))) {
         return reply.code(401).send({
-          message: "E-mail ou senha invalidos."
+          message: "E-mail ou senha inválidos."
         });
       }
 
@@ -308,7 +308,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
                 create: {
                   phone,
                   objective: "Ganhar massa muscular",
-                  level: "Intermediario"
+                  level: "Intermediário"
                 }
             }
           }
@@ -346,21 +346,21 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
     if (!user) {
       return reply.code(401).send({
-        message: "E-mail ou senha invalidos."
+        message: "E-mail ou senha inválidos."
       });
     }
 
     if (provider === "EMAIL") {
       if (!(await verifyPassword(credentials.password ?? "", user.passwordHash))) {
         return reply.code(401).send({
-          message: "E-mail ou senha invalidos."
+          message: "E-mail ou senha inválidos."
         });
       }
     }
 
     if (user.status !== "ACTIVE") {
       return reply.code(403).send({
-        message: "Usuario inativo."
+        message: "Usuário inativo."
       });
     }
 
@@ -387,7 +387,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
       if (existingKey && devUsers.has(existingKey)) {
         return reply.code(409).send({
-          message: "E-mail ou telefone ja cadastrado."
+          message: "E-mail ou telefone já cadastrado."
         });
       }
 
@@ -421,7 +421,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
     if (existingUser) {
       return reply.code(409).send({
-        message: "E-mail ou telefone ja cadastrado."
+        message: "E-mail ou telefone já cadastrado."
       });
     }
 
@@ -478,11 +478,11 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     const phone = normalizePhone(body.phone);
     const idToken = body.idToken || body.credential || null;
     let googleId: string | null = null;
-    let name = body.name?.trim() || "Usuario Google";
+    let name = body.name?.trim() || "Usuário Google";
 
     if (!idToken && !email && !phone) {
       return reply.code(401).send({
-        message: "Credencial do Google nao recebida. Recarregue a pagina e tente novamente."
+        message: "Credencial do Google não recebida. Recarregue a página e tente novamente."
       });
     }
 
@@ -496,7 +496,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       }
     } catch (error) {
       return reply.code(401).send({
-        message: error instanceof Error ? error.message : "Token do Google invalido."
+        message: error instanceof Error ? error.message : "Token do Google inválido."
       });
     }
 
@@ -505,7 +505,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
       if (!user) {
         return reply.code(401).send({
-          message: "Nao foi possivel entrar com o Google neste momento."
+          message: "Não foi possível entrar com o Google neste momento."
         });
       }
 
@@ -558,7 +558,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
     if (!user) {
       return reply.code(401).send({
-        message: "Nao foi possivel entrar com o Google neste momento."
+        message: "Não foi possível entrar com o Google neste momento."
       });
     }
 
