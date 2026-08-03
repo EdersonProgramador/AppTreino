@@ -409,3 +409,13 @@ Use o código com cuidado.Verificação Sandbox de Matrícula:Execute a chamada 
 Quando o usuário entar no Apptreino ele se deparará com o Treino de Hoje, ele entrará no treino terá uma lista completa demostrando quais serão os treinos, cada treino com um uma imagem, nome do treino e descrição, terá a opção de marcar e desmarcar treino o treino como concluido.
 
 O aluno então 
+
+## Fase 7
+
+
+Principais modalidades de Exercícios
+- Musculação
+- Treino Aeróbico
+- Hiit (Treino Intervalado de Alta Intensidade)
+- Treino Funcional
+- Crossfit

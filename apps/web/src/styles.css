@@ -2607,30 +2607,30 @@ summary:focus-visible {
   font-size: 18px;
 }
 
-.student-progress-row {
-  display: grid;
-  gap: 10px;
-  color: #4a4a50;
-  font-size: 18px;
-}
-
 .student-training-card,
 .student-exercise-card,
 .student-info-card,
 .student-menu-item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 16px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 14px 12px;
   border: 0;
   border-radius: 14px;
-  padding: 18px;
+  padding: 16px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035)),
     #151817;
   color: #fff7ec;
   text-align: left;
   box-shadow: 0 12px 26px rgba(0, 0, 0, 0.075);
+}
+
+.student-training-card > div:not(.student-card-icon),
+.student-exercise-card > div:not(.student-card-icon),
+.student-info-card > div:not(.student-card-icon),
+.student-menu-item > div:not(.student-card-icon) {
+  min-width: 0;
 }
 
 .student-training-card.active {
@@ -2641,7 +2641,9 @@ summary:focus-visible {
 .student-info-card button,
 .student-info-card a {
   display: inline-flex;
-  min-width: 106px;
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
   min-height: 48px;
   align-items: center;
   justify-content: center;
@@ -2671,12 +2673,211 @@ summary:focus-visible {
   gap: 10px;
 }
 
+.student-modality-list {
+  display: grid;
+  gap: 14px;
+}
+
+.student-modality-card {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgba(242, 180, 97, 0.2);
+  border-radius: 14px;
+  padding: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035)),
+    #151817;
+  color: #fff7ec;
+  text-align: left;
+}
+
+.student-modality-card span {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(242, 180, 97, 0.12);
+  color: #f2b461;
+}
+
+.student-modality-card strong,
+.student-modality-card small {
+  grid-column: 2;
+}
+
+.student-modality-card strong {
+  color: #fff7ec;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.student-modality-card small {
+  color: #c9c0b5;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.student-training-back-button {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f2b461;
+  font-weight: 900;
+}
+
+.student-training-sheet-card {
+  display: grid;
+  gap: 18px;
+  border: 1px solid rgba(242, 180, 97, 0.18);
+  border-radius: 18px;
+  padding: 20px 16px;
+  background:
+    linear-gradient(180deg, rgba(242, 180, 97, 0.12), rgba(255, 255, 255, 0.035)),
+    #151817;
+  color: #fff7ec;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.18);
+}
+
+.student-training-sheet-header {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.student-training-sheet-header span {
+  color: #f2b461;
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.student-training-sheet-header h1 {
+  margin: 0;
+  color: #fff7ec;
+  font-size: 30px;
+  line-height: 1.08;
+}
+
+.student-training-sheet-header p {
+  margin: 0;
+  color: #c9c0b5;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.student-training-sheet-icon {
+  display: grid;
+  width: 104px;
+  height: 104px;
+  place-items: center;
+  border-radius: 34px;
+  background: linear-gradient(135deg, rgba(242, 180, 97, 0.22), rgba(223, 102, 60, 0.14));
+  color: #df663c;
+}
+
+.student-training-sheet-meta {
+  display: grid;
+  gap: 8px;
+  color: #c9c0b5;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.student-training-sheet-meta span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.student-training-sheet-meta strong {
+  color: #fff7ec;
+  font-size: 20px;
+}
+
+.student-training-sheet-card .student-training-card {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035)),
+    #151817;
+  color: #fff7ec;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+}
+
+.student-training-sheet-card .student-training-card h2 {
+  color: #fff7ec;
+}
+
+.student-training-sheet-card .student-training-card p {
+  color: #c9c0b5;
+}
+
+.student-history-button {
+  display: inline-flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff7ec;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.student-training-info-grid {
+  display: grid;
+  gap: 14px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.18);
+  padding-top: 18px;
+}
+
+.student-training-info-grid div {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.student-training-info-grid svg {
+  color: #df663c;
+}
+
+.student-training-info-grid span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  color: #c9c0b5;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.student-training-info-grid strong {
+  color: #fff7ec;
+  font-size: 17px;
+}
+
 .student-training-card span {
   display: block;
   margin-bottom: 4px;
   color: #f2b461;
   font-size: 12px;
   font-weight: 900;
+}
+
+.student-training-card h2,
+.student-training-card p {
+  overflow-wrap: anywhere;
 }
 
 .student-exercise-list.compact {
@@ -2732,6 +2933,7 @@ summary:focus-visible {
 
 .student-player-mobile {
   display: grid;
+  width: 100%;
   justify-items: center;
   gap: 14px;
 }
@@ -2739,29 +2941,30 @@ summary:focus-visible {
 .workout-runner {
   position: relative;
   display: grid;
-  width: min(100%, 430px);
-  min-height: calc(100vh - 112px);
+  width: 100%;
+  max-width: 430px;
+  min-height: calc(100svh - 96px);
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
-  border-radius: 0 0 28px 28px;
+  border-radius: 0 0 22px 22px;
   background: #eeeeee;
   color: #2e2f33;
 }
 
 .workout-runner-header {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) 52px;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
   align-items: center;
-  min-height: 140px;
-  padding: 22px 20px 34px;
+  min-height: 116px;
+  padding: 16px 14px 28px;
   background: linear-gradient(135deg, #be3027, #df663c 62%, #f2b461);
   color: #fff;
 }
 
 .workout-runner-header button {
   display: grid;
-  width: 46px;
-  height: 46px;
+  width: 42px;
+  height: 42px;
   place-items: center;
   border: 0;
   border-radius: 50%;
@@ -2778,7 +2981,7 @@ summary:focus-visible {
 .workout-runner-header strong {
   overflow: hidden;
   max-width: 100%;
-  font-size: 26px;
+  font-size: 22px;
   line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2786,18 +2989,18 @@ summary:focus-visible {
 
 .workout-runner-header span {
   color: rgba(255, 255, 255, 0.88);
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 800;
 }
 
 .workout-runner-body {
   display: grid;
   align-content: start;
-  gap: 18px;
+  gap: 12px;
   overflow-y: auto;
-  border-radius: 34px 34px 0 0;
-  margin-top: -20px;
-  padding: 28px 20px 130px;
+  border-radius: 26px 26px 0 0;
+  margin-top: -16px;
+  padding: 22px 12px 116px;
   background: #eeeeee;
 }
 
@@ -2816,9 +3019,9 @@ summary:focus-visible {
 
 .workout-runner-card {
   display: grid;
-  gap: 12px;
-  border-radius: 16px;
-  padding: 18px;
+  gap: 10px;
+  border-radius: 14px;
+  padding: 12px;
   background: #fff;
   box-shadow: 0 12px 26px rgba(0, 0, 0, 0.08);
 }
@@ -2829,18 +3032,18 @@ summary:focus-visible {
 
 .runner-exercise-main {
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr) 76px;
+  grid-template-columns: 58px minmax(0, 1fr) 50px;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
 }
 
 .runner-media {
   display: grid;
-  width: 82px;
-  height: 82px;
+  width: 58px;
+  height: 58px;
   place-items: center;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: 10px;
   background: #eef0f2;
   color: #df663c;
 }
@@ -2867,7 +3070,7 @@ summary:focus-visible {
 .runner-exercise-copy strong {
   overflow: hidden;
   color: #2d2f33;
-  font-size: 22px;
+  font-size: 18px;
   line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2876,7 +3079,7 @@ summary:focus-visible {
 .runner-exercise-copy span {
   overflow: hidden;
   color: #55575d;
-  font-size: 17px;
+  font-size: 14px;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2884,19 +3087,19 @@ summary:focus-visible {
 
 .runner-toggle {
   display: flex;
-  width: 70px;
-  height: 38px;
+  width: 48px;
+  height: 30px;
   align-items: center;
   border: 2px solid #d5d5d5;
   border-radius: 999px;
-  padding: 3px;
+  padding: 2px;
   background: #fff;
 }
 
 .runner-toggle span {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   place-items: center;
   border-radius: 50%;
   background: #d8d8d8;
@@ -2906,7 +3109,7 @@ summary:focus-visible {
 
 .runner-toggle.checked span {
   background: linear-gradient(135deg, #f2b461, #df663c);
-  transform: translateX(30px);
+  transform: translateX(18px);
 }
 
 .runner-metrics {
@@ -2945,12 +3148,12 @@ summary:focus-visible {
   position: sticky;
   bottom: 0;
   display: grid;
-  grid-template-columns: 74px minmax(112px, 128px) 74px;
+  grid-template-columns: 58px minmax(96px, 108px) 58px;
   align-items: center;
   justify-content: center;
   gap: clamp(8px, 3vw, 14px);
-  min-height: 150px;
-  padding: 16px 14px 24px;
+  min-height: 132px;
+  padding: 14px 10px 20px;
   background: linear-gradient(90deg, #be3027, #df663c 58%, #f2b461);
   border-radius: 58px 58px 0 0;
   box-shadow: 0 -12px 26px rgba(0, 0, 0, 0.14);
@@ -2959,10 +3162,10 @@ summary:focus-visible {
 .workout-runner-controls::before {
   content: "";
   position: absolute;
-  top: 9px;
+  top: 8px;
   left: 50%;
-  width: 136px;
-  height: 136px;
+  width: 120px;
+  height: 120px;
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
@@ -2982,23 +3185,23 @@ summary:focus-visible {
 }
 
 .runner-round-button {
-  width: 64px;
-  height: 64px;
+  width: 54px;
+  height: 54px;
   justify-self: center;
 }
 
 .runner-start-button {
-  width: 118px;
-  height: 118px;
+  width: 104px;
+  height: 104px;
   justify-self: center;
-  border: 6px solid rgba(255, 255, 255, 0.92);
+  border: 5px solid rgba(255, 255, 255, 0.92);
   box-shadow:
     inset 0 0 0 2px rgba(255, 255, 255, 0.28),
     0 8px 18px rgba(0, 0, 0, 0.18);
 }
 
 .runner-start-button span {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 900;
 }
 
@@ -3052,32 +3255,247 @@ summary:focus-visible {
   color: #2d2f33;
 }
 
-@media (max-width: 380px) {
+.runner-finish-modal {
+  display: grid;
+  width: min(100%, 366px);
+  gap: 16px;
+  border-radius: 18px;
+  padding: 30px 20px 22px;
+  background: #fff;
+  color: #303136;
+  text-align: center;
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.26);
+}
+
+.runner-finish-trophy {
+  display: grid;
+  width: 86px;
+  height: 86px;
+  place-items: center;
+  justify-self: center;
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(242, 180, 97, 0.22), rgba(223, 102, 60, 0.14));
+  color: #df663c;
+}
+
+.runner-finish-modal h2 {
+  margin: 0;
+  color: #303136;
+  font-size: 22px;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.runner-finish-modal p {
+  margin: 0;
+  color: #4f5157;
+  font-size: 16px;
+  line-height: 1.38;
+}
+
+.runner-finish-duration {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  margin-top: 4px;
+}
+
+.runner-finish-duration span {
+  color: #4f5157;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.runner-finish-duration strong {
+  color: #2d2f33;
+  font-size: 42px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.runner-finish-primary,
+.runner-finish-cancel {
+  min-height: 58px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.runner-finish-primary {
+  border: 0;
+  background: linear-gradient(135deg, #f2b461, #df663c);
+  color: #15100b;
+}
+
+.runner-finish-primary:disabled {
+  opacity: 0.7;
+}
+
+.runner-finish-cancel {
+  border: 1px solid #d6d6d8;
+  background: #fff;
+  color: #3d3f45;
+}
+
+.runner-share-modal {
+  display: grid;
+  width: min(100%, 366px);
+  gap: 18px;
+  border-radius: 18px;
+  padding: 32px 20px 24px;
+  background: #fff;
+  color: #303136;
+  text-align: center;
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.26);
+}
+
+.runner-share-icon {
+  display: grid;
+  width: 82px;
+  height: 82px;
+  place-items: center;
+  justify-self: center;
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 24% 28%, rgba(242, 180, 97, 0.3), transparent 32px),
+    linear-gradient(135deg, rgba(242, 180, 97, 0.2), rgba(223, 102, 60, 0.14));
+  color: #df663c;
+}
+
+.runner-share-modal h2 {
+  margin: 0;
+  color: #303136;
+  font-size: 22px;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.runner-share-modal p {
+  margin: 0;
+  color: #4f5157;
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.runner-share-primary,
+.runner-share-cancel {
+  min-height: 58px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.runner-share-primary {
+  border: 0;
+  background: linear-gradient(135deg, #f2b461, #df663c);
+  color: #15100b;
+}
+
+.runner-share-cancel {
+  border: 1px solid #d6d6d8;
+  background: #fff;
+  color: #3d3f45;
+}
+
+@media (min-width: 431px) {
+  .workout-runner {
+    min-height: calc(100vh - 112px);
+    border-radius: 0 0 28px 28px;
+  }
+
+  .workout-runner-header {
+    grid-template-columns: 52px minmax(0, 1fr) 52px;
+    min-height: 140px;
+    padding: 22px 20px 34px;
+  }
+
+  .workout-runner-header button {
+    width: 46px;
+    height: 46px;
+  }
+
+  .workout-runner-header strong {
+    font-size: 26px;
+  }
+
+  .workout-runner-header span {
+    font-size: 20px;
+  }
+
+  .workout-runner-body {
+    gap: 18px;
+    border-radius: 34px 34px 0 0;
+    margin-top: -20px;
+    padding: 28px 20px 130px;
+  }
+
+  .workout-runner-card {
+    gap: 12px;
+    border-radius: 16px;
+    padding: 18px;
+  }
+
+  .runner-exercise-main {
+    grid-template-columns: 82px minmax(0, 1fr) 76px;
+    gap: 14px;
+  }
+
+  .runner-media {
+    width: 82px;
+    height: 82px;
+    border-radius: 12px;
+  }
+
+  .runner-exercise-copy strong {
+    font-size: 22px;
+  }
+
+  .runner-exercise-copy span {
+    font-size: 17px;
+  }
+
+  .runner-toggle {
+    width: 70px;
+    height: 38px;
+    padding: 3px;
+  }
+
+  .runner-toggle span {
+    width: 28px;
+    height: 28px;
+  }
+
+  .runner-toggle.checked span {
+    transform: translateX(30px);
+  }
+
   .workout-runner-controls {
-    grid-template-columns: 58px minmax(96px, 108px) 58px;
-    min-height: 132px;
-    padding-inline: 10px;
+    grid-template-columns: 74px minmax(112px, 128px) 74px;
+    min-height: 150px;
+    padding: 16px 14px 24px;
   }
 
   .workout-runner-controls::before {
-    top: 8px;
-    width: 120px;
-    height: 120px;
+    top: 9px;
+    width: 136px;
+    height: 136px;
   }
 
   .runner-round-button {
-    width: 54px;
-    height: 54px;
+    width: 64px;
+    height: 64px;
   }
 
   .runner-start-button {
-    width: 104px;
-    height: 104px;
-    border-width: 5px;
+    width: 118px;
+    height: 118px;
+    border-width: 6px;
   }
 
   .runner-start-button span {
-    font-size: 16px;
+    font-size: 18px;
   }
 }
 
@@ -3237,6 +3655,30 @@ summary:focus-visible {
 @keyframes pulse {
   50% {
     transform: scale(1.035);
+  }
+}
+
+@media (min-width: 681px) {
+  .student-training-card,
+  .student-exercise-card,
+  .student-info-card,
+  .student-menu-item {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+    padding: 18px;
+  }
+
+  .student-training-card button,
+  .student-info-card button,
+  .student-info-card a {
+    grid-column: auto;
+    width: auto;
+    min-width: 106px;
+  }
+
+  .student-training-info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

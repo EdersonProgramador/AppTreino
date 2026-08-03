@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Check, Grid2X2, Pause, Play, Trophy, X } from "lucide-react";
+import { ArrowLeft, Check, Grid2X2, Pause, Play, Share2, Trophy, X } from "lucide-react";
 
 export interface WorkoutPlayerExercise {
   id: string;
@@ -25,10 +25,11 @@ interface WorkoutPlayerProps {
   exercises: WorkoutPlayerExercise[];
   restTimeDefault: number;
   sessionId?: string | null;
-  sessionStartedAt?: string | null;
   onBack: () => void;
+  onWorkoutStart?: () => Promise<{ id: string } | void> | { id: string } | void;
   onCancelSession?: () => Promise<void> | void;
   onExerciseProgressChange?: (input: {
+    sessionId?: string | null;
     exerciseId: string;
     completed: boolean;
     weightUsed: number;
@@ -69,8 +70,9 @@ export function WorkoutPlayer({
   blockTitle,
   exercises,
   restTimeDefault,
-  sessionStartedAt,
+  sessionId,
   onBack,
+  onWorkoutStart,
   onCancelSession,
   onExerciseProgressChange,
   onWorkoutComplete
@@ -78,8 +80,12 @@ export function WorkoutPlayer({
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(sessionId ?? null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [finishOpen, setFinishOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [completedIds, setCompletedIds] = useState<Set<string>>(() => new Set());
   const [dayCompleted, setDayCompleted] = useState(false);
   const [loads, setLoads] = useState<Record<string, string>>(() =>
@@ -90,40 +96,48 @@ export function WorkoutPlayer({
   const allCompleted = exercises.length > 0 && completedCount === exercises.length;
 
   useEffect(() => {
+    setActiveSessionId(sessionId ?? null);
+  }, [sessionId]);
+
+  useEffect(() => {
     setLoads(
       Object.fromEntries(exercises.map((exercise) => [exerciseInstanceKey(exercise), exercise.latestWeightUsed ? String(exercise.latestWeightUsed) : ""]))
     );
     setCompletedIds(new Set());
     setDayCompleted(false);
+    setFinishOpen(false);
+    setShareOpen(false);
   }, [exercises]);
 
   useEffect(() => {
     if (!isRunning || isPaused) return;
 
-    const getBaseSeconds = () => {
-      if (!sessionStartedAt) return elapsedSeconds;
-
-      return Math.max(0, Math.round((Date.now() - new Date(sessionStartedAt).getTime()) / 1000));
-    };
-
-    setElapsedSeconds(getBaseSeconds());
     const interval = window.setInterval(() => {
-      setElapsedSeconds((current) => (sessionStartedAt ? getBaseSeconds() : current + 1));
+      setElapsedSeconds((current) => current + 1);
     }, 1000);
 
     return () => window.clearInterval(interval);
-  }, [elapsedSeconds, isPaused, isRunning, sessionStartedAt]);
+  }, [isPaused, isRunning]);
 
   useEffect(() => {
     if (!allCompleted || dayCompleted) return;
 
-    setDayCompleted(true);
-    void onWorkoutComplete?.();
-  }, [allCompleted, dayCompleted, onWorkoutComplete]);
+    setFinishOpen(true);
+  }, [allCompleted, dayCompleted]);
 
   async function toggleExercise(exercise: WorkoutPlayerExercise) {
     const instanceKey = exerciseInstanceKey(exercise);
     const nextCompleted = !completedIds.has(instanceKey);
+    let sessionIdForProgress = activeSessionId;
+
+    if (nextCompleted && !isRunning) {
+      sessionIdForProgress = await startWorkout();
+
+      if (!sessionIdForProgress) {
+        return;
+      }
+    }
+
     const nextSet = new Set(completedIds);
 
     if (nextCompleted) {
@@ -137,6 +151,7 @@ export function WorkoutPlayer({
 
     try {
       await onExerciseProgressChange?.({
+        sessionId: sessionIdForProgress,
         exerciseId: exercise.id,
         completed: nextCompleted,
         weightUsed: Number(loads[instanceKey] || 0),
@@ -154,6 +169,67 @@ export function WorkoutPlayer({
     onBack();
   }
 
+  async function startWorkout() {
+    if (isRunning) return activeSessionId;
+    if (isStarting) return null;
+
+    setIsStarting(true);
+    try {
+      const session = await onWorkoutStart?.();
+      const nextSessionId = session?.id ?? null;
+      setActiveSessionId(nextSessionId);
+      setElapsedSeconds(0);
+      setIsRunning(true);
+      setIsPaused(false);
+      return nextSessionId;
+    } catch {
+      setIsRunning(false);
+      setIsPaused(false);
+      return null;
+    } finally {
+      setIsStarting(false);
+    }
+  }
+
+  async function completeWorkout() {
+    if (!allCompleted || dayCompleted) return;
+
+    setDayCompleted(true);
+    try {
+      await onWorkoutComplete?.();
+      setIsRunning(false);
+      setIsPaused(false);
+      setElapsedSeconds(0);
+      setCompletedIds(new Set());
+      setActiveSessionId(null);
+      setFinishOpen(false);
+      setShareOpen(false);
+    } catch {
+      setDayCompleted(false);
+    }
+  }
+
+  function openSharePrompt() {
+    setIsRunning(false);
+    setIsPaused(true);
+    setFinishOpen(false);
+    setShareOpen(true);
+  }
+
+  async function shareWorkout() {
+    const shareData = {
+      title: "O TREINO DE HOJE TÁ PAGO!",
+      text: "Acabei de concluir meu treino no App Treino."
+    };
+
+    if (navigator.share) {
+      await navigator.share(shareData);
+    } else if (navigator.clipboard) {
+      await navigator.clipboard.writeText(shareData.text);
+    }
+
+  }
+
   if (exercises.length === 0) {
     return <div className="workout-player-empty">Nenhum exercício carregado.</div>;
   }
@@ -161,7 +237,7 @@ export function WorkoutPlayer({
   return (
     <div className="workout-runner">
       <header className="workout-runner-header">
-        <button aria-label="Voltar para treinos" onClick={onBack}>
+        <button aria-label="Voltar para treinos" onClick={() => setCancelOpen(true)}>
           <ArrowLeft size={28} />
         </button>
         <div>
@@ -252,17 +328,31 @@ export function WorkoutPlayer({
         </button>
         <button
           className="runner-start-button"
-          aria-label="Iniciar sequência do treino"
+          aria-label={allCompleted ? "Finalizar treino" : "Iniciar sequência do treino"}
           onClick={() => {
-            setIsRunning(true);
-            setIsPaused(false);
+            if (allCompleted) {
+              setFinishOpen(true);
+              return;
+            }
+
+            void startWorkout();
           }}
+          disabled={isStarting || dayCompleted}
         >
           <Trophy size={32} />
-          <span>Iniciar</span>
+          <span>{isStarting ? "Iniciando" : allCompleted ? "Finalizar" : isRunning ? "Continuar" : "Iniciar"}</span>
         </button>
-        <button className="runner-round-button" aria-label="Pausar cronograma de tempo" onClick={() => setIsPaused((current) => !current)}>
-          {isPaused ? <Play size={24} /> : <Pause size={24} />}
+        <button
+          className="runner-round-button"
+          aria-label={isRunning ? (isPaused ? "Retomar cronograma de tempo" : "Pausar cronograma de tempo") : "Cronômetro aguardando início"}
+          onClick={() => {
+            if (isRunning) {
+              setIsPaused((current) => !current);
+            }
+          }}
+          disabled={!isRunning}
+        >
+          {!isRunning || isPaused ? <Play size={24} /> : <Pause size={24} />}
         </button>
       </footer>
 
@@ -279,6 +369,46 @@ export function WorkoutPlayer({
                 Não
               </button>
             </div>
+          </section>
+        </div>
+      )}
+
+      {finishOpen && (
+        <div className="runner-confirm-backdrop" role="presentation" onClick={() => setFinishOpen(false)}>
+          <section className="runner-finish-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className="runner-finish-trophy" aria-hidden="true">
+              <Trophy size={62} />
+            </div>
+            <h2>PARABÉNS, TREINO CONCLUÍDO</h2>
+            <p>Um passo de cada vez e você vai conquistar todos os seus objetivos. Bom descanso e até o próximo treino!</p>
+            <div className="runner-finish-duration">
+              <span>Duração do treino</span>
+              <strong>{formatElapsedTime(elapsedSeconds)}</strong>
+            </div>
+            <button className="runner-finish-primary" onClick={openSharePrompt} disabled={dayCompleted}>
+              FINALIZAR O TREINO
+            </button>
+            <button className="runner-finish-cancel" onClick={() => setFinishOpen(false)}>
+              CANCELAR
+            </button>
+          </section>
+        </div>
+      )}
+
+      {shareOpen && (
+        <div className="runner-confirm-backdrop" role="presentation">
+          <section className="runner-share-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className="runner-share-icon" aria-hidden="true">
+              <Share2 size={58} />
+            </div>
+            <h2>O TREINO DE HOJE TÁ PAGO!</h2>
+            <p>Aproveite para compartilhar essa conquista com seus amigos nas redes sociais!</p>
+            <button className="runner-share-primary" onClick={() => void shareWorkout()} disabled={dayCompleted}>
+              COMPARTILHAR
+            </button>
+            <button className="runner-share-cancel" onClick={() => void completeWorkout()} disabled={dayCompleted}>
+              Não, obrigado!
+            </button>
           </section>
         </div>
       )}

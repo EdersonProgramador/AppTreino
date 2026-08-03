@@ -165,6 +165,8 @@ interface AdminUser {
   email: string;
   role: "ADMIN" | "USER";
   status: "ACTIVE" | "INACTIVE";
+  enrollmentStatus: "PENDING" | "ACTIVE" | "CANCELED";
+  memberships?: Array<{ id: string; status: MembershipRow["status"] }>;
 }
 
 interface PlanRow {
@@ -230,6 +232,22 @@ interface CmsProgramRow {
     order: number;
     workoutBlock: CmsWorkoutBlockRow;
   }>;
+}
+
+function parseProgramMetadata(description: string) {
+  try {
+    const parsed = JSON.parse(description) as { description?: string; modality?: string };
+
+    return {
+      description: parsed.description || description,
+      modality: parsed.modality || "Hipertrofia"
+    };
+  } catch {
+    return {
+      description,
+      modality: "Hipertrofia"
+    };
+  }
 }
 
 interface MembershipRow {
@@ -351,6 +369,28 @@ interface TodayWorkoutResponse {
     assignmentId: string;
     dayNumber: number;
     totalDays: number;
+    completed?: boolean;
+    modality?: string;
+    description?: string;
+    completedWorkouts?: number;
+    teacherNames?: string[];
+    unitName?: string;
+    membershipStartsAt?: string | null;
+    membershipEndsAt?: string | null;
+    sequence?: Array<{
+      programId: string;
+      programTitle: string;
+      assignmentId: string;
+      dayNumber: number;
+      totalDays: number;
+      completed?: boolean;
+      block: {
+        title: string;
+        structureType: "NORMAL" | "BI_SET" | "DROP_SET" | "REST_PAUSE";
+        restTime: number;
+        exercises: WorkoutPlayerExercise[];
+      };
+    }>;
     block: {
       title: string;
       structureType: "NORMAL" | "BI_SET" | "DROP_SET" | "REST_PAUSE";
@@ -989,7 +1029,6 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     todayAttendance: 0
   });
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [workouts, setWorkouts] = useState<WorkoutRow[]>([]);
   const [cmsExercises, setCmsExercises] = useState<CmsExerciseRow[]>([]);
   const [cmsWorkoutBlocks, setCmsWorkoutBlocks] = useState<CmsWorkoutBlockRow[]>([]);
   const [cmsPrograms, setCmsPrograms] = useState<CmsProgramRow[]>([]);
@@ -1002,6 +1041,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const [aiPlans, setAiPlans] = useState<AiWorkoutPlanRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<string | null>(null);
+
+  function getApiErrorMessage(error: unknown, fallback: string) {
+    return error instanceof ApiError ? error.message : fallback;
+  }
 
   function optionalNumber(value: FormDataEntryValue | null) {
     const stringValue = String(value ?? "").trim();
@@ -1017,7 +1060,6 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       const [
         summaryResponse,
         usersResponse,
-        workoutsResponse,
         cmsExercisesResponse,
         cmsWorkoutBlocksResponse,
         cmsProgramsResponse,
@@ -1031,7 +1073,6 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       ] = await Promise.all([
           apiGet<typeof summary>("/admin/summary", token),
           apiGet<{ users: AdminUser[] }>("/admin/users", token),
-          apiGet<{ workouts: WorkoutRow[] }>("/admin/workouts", token),
           apiGet<{ exercises: CmsExerciseRow[] }>("/admin/cms/exercises", token),
           apiGet<{ workoutBlocks: CmsWorkoutBlockRow[] }>("/admin/cms/workout-blocks", token),
           apiGet<{ programs: CmsProgramRow[] }>("/admin/cms/programs", token),
@@ -1046,7 +1087,6 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
       setSummary(summaryResponse);
       setUsers(usersResponse.users);
-      setWorkouts(workoutsResponse.workouts);
       setCmsExercises(cmsExercisesResponse.exercises);
       setCmsWorkoutBlocks(cmsWorkoutBlocksResponse.workoutBlocks);
       setCmsPrograms(cmsProgramsResponse.programs);
@@ -1088,47 +1128,8 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       );
       form.reset();
       await loadAdminData();
-    } catch {
-      setFeedback("Não foi possível cadastrar o usuário.");
-    }
-  }
-
-  async function handleCreateWorkout(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const data = new FormData(form);
-
-    try {
-      await apiPost(
-        "/admin/workouts",
-        {
-          title: String(data.get("title") ?? ""),
-          objective: String(data.get("objective") ?? ""),
-          days: [
-            {
-              title: String(data.get("dayTitle") ?? "Treino A"),
-              exercises: String(data.get("exercises") ?? "")
-                .split("\n")
-                .map((line) => line.trim())
-                .filter(Boolean)
-                .map((line) => {
-                  const [name = "", sets = "3", reps = "10", restSeconds = "60"] = line.split(";");
-                  return {
-                    name: name.trim(),
-                    sets: Number(sets),
-                    reps: reps.trim(),
-                    restSeconds: Number(restSeconds)
-                  };
-                })
-            }
-          ]
-        },
-        token
-      );
-      form.reset();
-      await loadAdminData();
-    } catch {
-      setFeedback("Não foi possível cadastrar o treino.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar o usuário."));
     }
   }
 
@@ -1202,8 +1203,8 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       );
       form.reset();
       await loadAdminData();
-    } catch {
-      setFeedback("Não foi possível cadastrar o exercício CMS.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar o exercício CMS."));
     }
   }
 
@@ -1225,8 +1226,8 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       );
       form.reset();
       await loadAdminData();
-    } catch {
-      setFeedback("Não foi possível cadastrar o bloco CMS.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar o bloco CMS."));
     }
   }
 
@@ -1241,6 +1242,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         {
           title: String(data.get("title") ?? ""),
           description: String(data.get("description") ?? ""),
+          modality: String(data.get("modality") ?? "Hipertrofia"),
           status: String(data.get("status") ?? "DRAFT"),
           isActive: String(data.get("status") ?? "DRAFT") === "PUBLISHED",
           days: parseCmsProgramDays(data)
@@ -1249,8 +1251,8 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       );
       form.reset();
       await loadAdminData();
-    } catch {
-      setFeedback("Não foi possível cadastrar o programa CMS.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar o programa CMS."));
     }
   }
 
@@ -1258,8 +1260,8 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     try {
       await apiPost(`/admin/cms/programs/${programId}/publish`, {}, token);
       await loadAdminData();
-    } catch {
-      setFeedback("Não foi possível publicar o programa CMS.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível publicar o programa CMS."));
     }
   }
 
@@ -1267,13 +1269,13 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     try {
       await apiPost(`/admin/cms/programs/${programId}/archive`, {}, token);
       await loadAdminData();
-    } catch {
-      setFeedback("Não foi possível arquivar o programa CMS.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível arquivar o programa CMS."));
     }
   }
 
   async function handleAssignCmsProgram(programId: string, userIds?: string[], currentDay = 1) {
-    const targetUserIds = userIds?.length ? userIds : users.filter((item) => item.role === "USER").map((item) => item.id);
+    const targetUserIds = userIds?.length ? userIds : activeStudents.map((item) => item.id);
 
     if (targetUserIds.length === 0) {
       setFeedback("Cadastre alunos antes de atribuir o programa.");
@@ -1283,8 +1285,8 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     try {
       await apiPost(`/admin/cms/programs/${programId}/assign`, { userIds: targetUserIds, currentDay }, token);
       await loadAdminData();
-    } catch {
-      setFeedback("Não foi possível atribuir o programa aos alunos.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atribuir o programa aos alunos."));
     }
   }
 
@@ -1447,6 +1449,12 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     { icon: Headphones, label: "Atendimentos", value: String(tickets.length), trend: "Suporte" },
     { icon: Bot, label: "Planos IA", value: String(aiPlans.length), trend: "Gerados" }
   ];
+  const activeStudents = users.filter(
+    (item) =>
+      item.role === "USER" &&
+      item.status === "ACTIVE" &&
+      (item.enrollmentStatus === "ACTIVE" || item.memberships?.some((membership) => membership.status === "ACTIVE"))
+  );
 
   return (
     <main className="workspace-shell">
@@ -1544,39 +1552,6 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       </section>}
 
       {adminSection === "training" && <section className="admin-grid">
-        <article className="table-panel" id="admin-training">
-          <div className="panel-title">
-            <h2>Treinos</h2>
-            <span>{workouts.length}</span>
-          </div>
-          <form className="crud-form" onSubmit={handleCreateWorkout}>
-            <input name="title" placeholder="Título do treino" required />
-            <input name="objective" placeholder="Objetivo" />
-            <input name="dayTitle" placeholder="Dia, ex: Peito e triceps" required />
-            <textarea
-              name="exercises"
-              placeholder={"Exercício;séries;reps;descanso\nSupino reto;4;8-10;90"}
-              required
-            />
-            <button className="primary-button">
-              <Save size={18} />
-              Salvar treino
-            </button>
-          </form>
-          {workouts.slice(0, 6).map((item) => (
-            <div className="data-row" key={item.id}>
-              <span>
-                <strong>{item.title}</strong>
-                {item.days.length} dia(s)
-              </span>
-              <small>{item.objective ?? "Sem objetivo"}</small>
-              <button aria-label="Excluir treino" onClick={() => handleDelete(`/admin/workouts/${item.id}`)}>
-                <Trash2 size={17} />
-              </button>
-            </div>
-          ))}
-        </article>
-
         <article className="table-panel wide-panel cms-panel" id="admin-cms">
           <div className="panel-title">
             <h2>CMS Fitness</h2>
@@ -1696,6 +1671,12 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               </div>
               <form className="crud-form" onSubmit={handleCreateCmsProgram}>
                 <input name="title" placeholder="Título do programa" required />
+                <select name="modality" defaultValue="Hipertrofia">
+                  <option value="Hipertrofia">Hipertrofia</option>
+                  <option value="Emagrecimento">Emagrecimento</option>
+                  <option value="Máximo de força">Máximo de força</option>
+                  <option value="Resistência">Resistência</option>
+                </select>
                 <select name="status" defaultValue="DRAFT">
                   <option value="DRAFT">Salvar como rascunho</option>
                   <option value="PUBLISHED">Publicar agora</option>
@@ -1731,7 +1712,8 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   <div className="cms-program-main">
                     <span className={`cms-status ${item.status.toLowerCase()}`}>{item.status}</span>
                     <h3>{item.title}</h3>
-                    <p>{item.description}</p>
+                    <p>{parseProgramMetadata(item.description).description}</p>
+                    <small>Modalidade: {parseProgramMetadata(item.description).modality}</small>
                     <small>{item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.title}`).join(" | ") || "Sem dias cadastrados"}</small>
                   </div>
                   <div className="cms-program-actions">
@@ -1751,9 +1733,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   <form className="cms-assign-form" onSubmit={(event) => handleAssignCmsProgramSubmit(event, item.id)}>
                     <select name="userId" disabled={item.status !== "PUBLISHED"}>
                       <option value="">Todos os alunos</option>
-                      {users
-                        .filter((user) => user.role === "USER")
-                        .map((user) => (
+                      {activeStudents.map((user) => (
                           <option value={user.id} key={user.id}>
                             {user.name}
                           </option>
@@ -2058,6 +2038,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
   const [workout, setWorkout] = useState<WorkoutRow | null>(null);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkoutResponse["workout"] | null>(null);
   const [publishedWorkouts, setPublishedWorkouts] = useState<TodayWorkoutResponse["workout"][]>([]);
+  const [selectedWorkoutModality, setSelectedWorkoutModality] = useState<string | null>(null);
   const [workoutSession, setWorkoutSession] = useState<WorkoutSessionResponse["session"] | null>(null);
   const [consistency, setConsistency] = useState<WorkoutConsistencyResponse | null>(null);
   const [membership, setMembership] = useState<StudentMembershipRow | null>(null);
@@ -2162,6 +2143,10 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
   useEffect(() => {
     void loadUserData();
   }, [token]);
+
+  useEffect(() => {
+    setSelectedWorkoutModality(null);
+  }, [publishedWorkouts]);
 
   async function handleEventRegistration(eventId: string) {
     try {
@@ -2306,19 +2291,28 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
   async function handleStartWorkoutSession(workoutToStart = todayWorkout) {
     if (!workoutToStart) return;
 
+    setTodayWorkout(workoutToStart);
+    setWorkoutSession(null);
+    setStudentSection("player");
+  }
+
+  async function handleBeginWorkoutSession() {
+    if (!todayWorkout) return;
+
     try {
       const response = await apiPost<WorkoutSessionResponse>(
         "/student/workout/start-session",
         {
-          assignmentId: workoutToStart.assignmentId
+          assignmentId: todayWorkout.assignmentId,
+          dayNumber: todayWorkout.dayNumber
         },
         token
       );
-      setTodayWorkout(workoutToStart);
       setWorkoutSession(response.session);
-      setStudentSection("player");
+      return response.session;
     } catch {
       setError("Não foi possível iniciar o cronômetro do treino.");
+      throw new Error("Não foi possível iniciar o cronômetro do treino.");
     }
   }
 
@@ -2336,6 +2330,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
       );
       setWorkoutSession(null);
       await loadUserData();
+      setStudentSection("home");
     } catch {
       setError("Não foi possível concluir o treino agora.");
     }
@@ -2362,6 +2357,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
   }
 
   async function handleExerciseProgressChange(input: {
+    sessionId?: string | null;
     exerciseId: string;
     completed: boolean;
     weightUsed: number;
@@ -2371,8 +2367,8 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     await apiPost(
       "/student/workout/exercise-progress",
       {
-        sessionId: workoutSession?.id,
-        ...input
+        ...input,
+        sessionId: input.sessionId ?? workoutSession?.id
       },
       token
     );
@@ -2417,9 +2413,27 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     new Set(cmsExercisesToday.flatMap((exercise) => exercise.targetMuscles ?? []))
   );
   const totalWorkoutDaysFromPrograms = publishedWorkouts.reduce((total, item) => total + item.totalDays, 0);
-  const workoutsCompleted = consistency?.completedWorkoutCount ?? 0;
   const totalWorkoutDays = consistency?.totalWorkoutDays ?? totalWorkoutDaysFromPrograms;
+  const workoutsCompleted = Math.min(consistency?.completedWorkoutCount ?? 0, totalWorkoutDays);
   const workoutProgressPercent = Math.min(100, Math.round((workoutsCompleted / Math.max(totalWorkoutDays, 1)) * 100));
+  const publishedModalities = useMemo(
+    () =>
+      Array.from(new Set(publishedWorkouts.map((item) => item.modality ?? "Hipertrofia"))).map((modality) => ({
+        modality,
+        count: publishedWorkouts.filter((item) => (item.modality ?? "Hipertrofia") === modality).length
+      })),
+    [publishedWorkouts]
+  );
+  const modalityWorkouts = selectedWorkoutModality
+    ? publishedWorkouts.filter((item) => (item.modality ?? "Hipertrofia") === selectedWorkoutModality)
+    : [];
+  const workoutSheet = modalityWorkouts[0] ?? (selectedWorkoutModality && todayWorkout?.modality === selectedWorkoutModality ? todayWorkout : null);
+  const workoutSequence = workoutSheet?.sequence?.length ? workoutSheet.sequence : publishedWorkouts;
+  const sheetCompleted = Math.min(workoutSheet?.completedWorkouts ?? workoutsCompleted, workoutSheet?.totalDays ?? totalWorkoutDays);
+  const sheetTotal = workoutSheet?.totalDays ?? totalWorkoutDays;
+  const sheetProgressPercent = Math.min(100, Math.round((sheetCompleted / Math.max(sheetTotal, 1)) * 100));
+  const currentSequenceWorkout = workoutSequence.find((item) => item.dayNumber === workoutSheet?.dayNumber) ?? workoutSequence[0];
+  const formatStudentDate = (date?: string | null) => (date ? new Date(date).toLocaleDateString("pt-BR") : "Não informado");
   const studentCode = profile?.name ? String(profile.name.length * 193 + 1) : "1931";
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
@@ -2719,7 +2733,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                 </div>
                 <strong>{workoutsCompleted}/{totalWorkoutDays}</strong>
               </div>
-              <div className="student-progressotrack">
+              <div className="student-progress-track">
                 <span style={{ width: `${workoutProgressPercent}%` }} />
               </div>
               <ol className="student-exercise-preview">
@@ -2757,40 +2771,95 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
 
         {studentSection === "training" && (
           <section className="student-sheet">
-            <div className="student-sheet-heading">
-              <span>Programas publicados</span>
-              <h1>Treinos</h1>
-              <p>{publishedWorkouts.length} programa(s) disponível(is)</p>
-            </div>
-            <div className="student-progressorow">
-                <span>Treinos realizados: <strong>{workoutsCompleted}/{totalWorkoutDays}</strong></span>
-              <div className="student-progressotrack"><span style={{ width: `${workoutProgressPercent}%` }} /></div>
-            </div>
-            {publishedWorkouts.length > 0 ? (
-              <div className="student-program-list">
-                {publishedWorkouts.map((programWorkout) => {
-                  const programMuscles = Array.from(
-                    new Set(programWorkout.block.exercises.flatMap((exercise) => exercise.targetMuscles ?? []))
-                  );
+            {!selectedWorkoutModality && publishedModalities.length > 0 && (
+              <>
+                <div className="student-sheet-heading">
+                  <span>Modalidades publicadas</span>
+                  <h1>Treinos</h1>
+                  <p>Escolha uma modalidade para acessar sua ficha.</p>
+                </div>
+                <div className="student-modality-list">
+                  {publishedModalities.map((item) => (
+                    <button className="student-modality-card" key={item.modality} onClick={() => setSelectedWorkoutModality(item.modality)}>
+                      <span><Dumbbell size={26} /></span>
+                      <strong>{item.modality}</strong>
+                      <small>{item.count} ficha(s) publicada(s)</small>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
 
-                  return (
-                    <article className="student-program-card" key={programWorkout.programId}>
-                      <div className="student-training-card active">
-                        <div className="student-card-icon">
-                          <Dumbbell size={24} />
+            {selectedWorkoutModality && workoutSheet && workoutSequence.length > 0 ? (
+              <article className="student-training-sheet-card">
+                <header className="student-training-sheet-header">
+                  <button className="student-training-back-button" onClick={() => setSelectedWorkoutModality(null)}>
+                    <ChevronLeft size={18} />
+                    Modalidades
+                  </button>
+                  <span>Ficha de treino</span>
+                  <h1>{workoutSheet.programTitle}</h1>
+                  <p>{workoutSheet.modality ?? "Hipertrofia"}</p>
+                  <div className="student-training-sheet-icon">
+                    <Dumbbell size={58} />
+                  </div>
+                </header>
+                <div className="student-training-sheet-meta">
+                  <span>Treino de hoje: <strong>{currentSequenceWorkout?.block.title ?? workoutSheet.block.title}</strong></span>
+                  <span>Treinos realizados: <strong>{sheetCompleted}/{sheetTotal}</strong> <Settings size={22} /></span>
+                </div>
+                <div className="student-progress-track">
+                  <span style={{ width: `${sheetProgressPercent}%` }} />
+                </div>
+                <div className="student-program-list">
+                  {workoutSequence.map((programWorkout) => {
+                    const programMuscles = Array.from(
+                      new Set(programWorkout.block.exercises.flatMap((exercise) => exercise.targetMuscles ?? []))
+                    );
+                    const isCurrent = programWorkout.dayNumber === workoutSheet.dayNumber;
+
+                    return (
+                      <article className="student-program-card" key={`${programWorkout.programId}-${programWorkout.dayNumber}`}>
+                        <div className={`student-training-card ${isCurrent ? "active" : ""}`}>
+                          <div className="student-card-icon">
+                            <Dumbbell size={24} />
+                          </div>
+                          <div>
+                            <h2>{programWorkout.block.title}</h2>
+                            <p>{programMuscles.join(", ") || "Exercícios do CMS Fitness"}</p>
+                          </div>
+                          <button onClick={() => void handleStartWorkoutSession(programWorkout)}>
+                            {programWorkout.completed ? "Concluído" : "Iniciar"}
+                          </button>
                         </div>
-                        <div>
-                          <span>Dia {programWorkout.dayNumber}/{programWorkout.totalDays}</span>
-                          <h2>{programWorkout.programTitle}</h2>
-                          <p>{programWorkout.block.title} • {programMuscles.join(", ") || "Exercícios do CMS Fitness"}</p>
-                        </div>
-                        <button onClick={() => void handleStartWorkoutSession(programWorkout)}>Iniciar</button>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            ) : (
+                      </article>
+                    );
+                  })}
+                </div>
+                <button className="student-history-button">
+                  <ClipboardList size={22} />
+                  Histórico de treinos
+                </button>
+                <div className="student-training-info-grid">
+                  <div>
+                    <UsersRound size={24} />
+                    <span><strong>Professores:</strong>{workoutSheet.teacherNames?.join(", ") || "Não informado"}</span>
+                  </div>
+                  <div>
+                    <Home size={24} />
+                    <span><strong>Unidade:</strong>{workoutSheet.unitName || "Não informada"}</span>
+                  </div>
+                  <div>
+                    <CalendarDays size={24} />
+                    <span><strong>Início:</strong>{formatStudentDate(workoutSheet.membershipStartsAt)}</span>
+                  </div>
+                  <div>
+                    <CalendarDays size={24} />
+                    <span><strong>Vencimento:</strong>{formatStudentDate(workoutSheet.membershipEndsAt)}</span>
+                  </div>
+                </div>
+              </article>
+            ) : selectedWorkoutModality ? (
               <article className="student-training-card">
                 <Dumbbell size={24} />
                 <div>
@@ -2798,7 +2867,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                   <p>Nenhum programa CMS ativo foi encontrado.</p>
                 </div>
               </article>
-            )}
+            ) : null}
           </section>
         )}
 
@@ -2810,8 +2879,8 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
               exercises={todayWorkout.block.exercises}
               restTimeDefault={todayWorkout.block.restTime}
               sessionId={workoutSession?.id ?? null}
-              sessionStartedAt={workoutSession?.startedAt ?? null}
               onBack={() => setStudentSection("training")}
+              onWorkoutStart={handleBeginWorkoutSession}
               onCancelSession={handleCancelWorkoutSession}
               onExerciseProgressChange={handleExerciseProgressChange}
               onWorkoutComplete={handleCompleteWorkoutDay}

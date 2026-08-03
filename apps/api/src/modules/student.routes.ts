@@ -14,7 +14,8 @@ const completeWorkoutSchema = z.object({
 });
 
 const startWorkoutSessionSchema = z.object({
-  assignmentId: z.string().min(1)
+  assignmentId: z.string().min(1),
+  dayNumber: z.coerce.number().int().min(1).optional()
 });
 
 const cancelWorkoutSessionSchema = z.object({
@@ -22,7 +23,7 @@ const cancelWorkoutSessionSchema = z.object({
 });
 
 const exerciseProgressSchema = z.object({
-  sessionId: z.string().min(1).optional(),
+  sessionId: z.string().min(1),
   exerciseId: z.string().min(1),
   completed: z.coerce.boolean(),
   weightUsed: z.coerce.number().min(0).default(0),
@@ -43,6 +44,13 @@ function requireDatabase() {
     error.statusCode = 503;
     throw error;
   }
+}
+
+function httpError(statusCode: number, message: string) {
+  const error = new Error(message) as Error & { statusCode: number };
+  error.statusCode = statusCode;
+
+  return error;
 }
 
 export function verifyEnrollmentGating(status: string, pathname: string) {
@@ -138,6 +146,22 @@ function mapWorkoutExercise(item: {
   };
 }
 
+function parseProgramMetadata(description: string) {
+  try {
+    const parsed = JSON.parse(description) as { description?: string; modality?: string };
+
+    return {
+      description: parsed.description || description,
+      modality: parsed.modality || "Hipertrofia"
+    };
+  } catch {
+    return {
+      description,
+      modality: "Hipertrofia"
+    };
+  }
+}
+
 export async function getTodayWorkout(userId: string, dayNumber: number) {
   const status = await getEnrollmentStatus(userId);
 
@@ -176,6 +200,35 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
   if (publishedPrograms.length === 0) {
     return [];
   }
+
+  const [membership, profile, teachers] = await Promise.all([
+    prisma.membership.findFirst({
+      where: {
+        userId,
+        status: {
+          in: ["ACTIVE", "PENDING", "OVERDUE"]
+        }
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    }),
+    prisma.profile.findUnique({
+      where: {
+        userId
+      }
+    }),
+    prisma.user.findMany({
+      where: {
+        role: "ADMIN",
+        status: "ACTIVE"
+      },
+      select: {
+        name: true
+      },
+      take: 3
+    })
+  ]);
 
   const workouts = await Promise.all(
     publishedPrograms.map(async (publishedProgram) => {
@@ -226,9 +279,8 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
       }
 
       const currentDay = assignment.currentDay;
-      const programDay = await prisma.programDayWorkout.findFirst({
+      const programDays = await prisma.programDayWorkout.findMany({
         where: {
-          dayNumber: currentDay,
           programId: assignment.programId
         },
         include: {
@@ -251,30 +303,62 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
           }
         },
         orderBy: {
-          order: "asc"
+          dayNumber: "asc"
         }
       });
+      const programDay = programDays.find((day) => day.dayNumber === currentDay) ?? programDays[0] ?? null;
 
       if (!programDay) {
         return null;
       }
 
+      const allExerciseIds = Array.from(
+        new Set(programDays.flatMap((day) => day.workoutBlock.exercises.map((workoutExercise) => workoutExercise.exerciseId)))
+      );
       const latestProgressEntries = await Promise.all(
-        programDay.workoutBlock.exercises.map(async (workoutExercise) => {
+        allExerciseIds.map(async (exerciseId) => {
           const latestProgress = await prisma.userProgress.findFirst({
             where: {
               userId,
-              exerciseId: workoutExercise.exerciseId
+              exerciseId
             },
             orderBy: {
               completedAt: "desc"
             }
           });
 
-          return [workoutExercise.exerciseId, latestProgress?.weightUsed ?? 0] as const;
+          return [exerciseId, latestProgress?.weightUsed ?? 0] as const;
         })
       );
       const latestWeightByExercise = new Map(latestProgressEntries);
+      const completedSessions = await prisma.workoutSession.findMany({
+        where: {
+          userId,
+          programId: assignment.programId,
+          status: "COMPLETED"
+        },
+        select: {
+          dayNumber: true
+        }
+      });
+      const completedDaySet = new Set(completedSessions.map((session) => session.dayNumber));
+      const metadata = parseProgramMetadata(programDay.program.description);
+      const sequence = programDays.map((day) => ({
+        programId: day.program.id,
+        programTitle: day.program.title,
+        assignmentId: assignment.id,
+        dayNumber: day.dayNumber,
+        totalDays: assignment.program.days.length,
+        completed: completedDaySet.has(day.dayNumber),
+        block: {
+          title: day.workoutBlock.title,
+          structureType: day.workoutBlock.structureType,
+          restTime: day.workoutBlock.restTime,
+          exercises: day.workoutBlock.exercises.map((exercise) =>
+            mapWorkoutExercise(exercise, latestWeightByExercise.get(exercise.exerciseId) ?? 0, day.workoutBlock.restTime)
+          )
+        }
+      }));
 
       return {
         programId: programDay.program.id,
@@ -282,6 +366,14 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
         assignmentId: assignment.id,
         dayNumber: currentDay,
         totalDays: assignment.program.days.length,
+        modality: metadata.modality,
+        description: metadata.description,
+        completedWorkouts: completedDaySet.size,
+        teacherNames: teachers.map((teacher) => teacher.name),
+        unitName: "Unidade não informada",
+        membershipStartsAt: membership?.startsAt ?? null,
+        membershipEndsAt: membership?.endsAt ?? null,
+        sequence,
         block: {
           title: programDay.workoutBlock.title,
           structureType: programDay.workoutBlock.structureType,
@@ -347,7 +439,7 @@ export async function registerStudentRoutes(app: FastifyInstance) {
     const programDay = await prisma.programDayWorkout.findFirstOrThrow({
       where: {
         programId: assignment.programId,
-        dayNumber: assignment.currentDay
+        dayNumber: body.dayNumber ?? assignment.currentDay
       },
       orderBy: {
         order: "asc"
@@ -373,7 +465,7 @@ export async function registerStudentRoutes(app: FastifyInstance) {
           assignmentId: assignment.id,
           programId: assignment.programId,
           workoutBlockId: programDay.workoutBlockId,
-          dayNumber: assignment.currentDay
+          dayNumber: programDay.dayNumber
         }
       }));
 
@@ -408,26 +500,44 @@ export async function registerStudentRoutes(app: FastifyInstance) {
     requireDatabase();
     const authUser = await requireActiveEnrollment(app, request);
     const body = exerciseProgressSchema.parse(request.body);
-    const session = body.sessionId
-      ? await prisma.workoutSession.findFirst({
-          where: {
-            id: body.sessionId,
-            userId: authUser.id
+    const session = await prisma.workoutSession.findFirst({
+      where: {
+        id: body.sessionId,
+        userId: authUser.id,
+        status: "IN_PROGRESS"
+      },
+      include: {
+        workoutBlock: {
+          include: {
+            exercises: {
+              select: {
+                exerciseId: true
+              }
+            }
           }
-        })
-      : null;
+        }
+      }
+    });
+
+    if (!session) {
+      throw httpError(409, "Inicie o treino antes de registrar exercícios concluídos.");
+    }
+
+    const exerciseBelongsToWorkout = session.workoutBlock?.exercises.some(
+      (workoutExercise) => workoutExercise.exerciseId === body.exerciseId
+    );
+
+    if (!exerciseBelongsToWorkout) {
+      throw httpError(400, "Este exercício não pertence ao bloco de treino iniciado.");
+    }
 
     await prisma.userProgress.deleteMany({
       where: {
         userId: authUser.id,
         exerciseId: body.exerciseId,
-        ...(session
-          ? {
-              completedAt: {
-                gte: session.startedAt
-              }
-            }
-          : {})
+        completedAt: {
+          gte: session.startedAt
+        }
       }
     });
 
@@ -469,7 +579,7 @@ export async function registerStudentRoutes(app: FastifyInstance) {
     const endsAt = new Date(Date.UTC(year, month, 1));
     const historyStartsAt = new Date(Date.UTC(year - 1, month - 1, 1));
 
-    const [sessions, attendanceRecords, historySessions, historyAttendanceRecords, completedWorkoutCount, userPrograms] = await Promise.all([
+    const [sessions, attendanceRecords, historySessions, historyAttendanceRecords, completedSessions, userPrograms] = await Promise.all([
       prisma.workoutSession.findMany({
         where: {
           userId: authUser.id,
@@ -526,10 +636,20 @@ export async function registerStudentRoutes(app: FastifyInstance) {
           date: "asc"
         }
       }),
-      prisma.workoutSession.count({
+      prisma.workoutSession.findMany({
         where: {
           userId: authUser.id,
-          status: "COMPLETED"
+          status: "COMPLETED",
+          programId: {
+            not: null
+          },
+          dayNumber: {
+            gt: 0
+          }
+        },
+        select: {
+          programId: true,
+          dayNumber: true
         }
       }),
       prisma.userProgram.findMany({
@@ -568,12 +688,20 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       }
     });
     historyAttendanceRecords.forEach((record) => historyDateSet.add(record.date.toISOString().slice(0, 10)));
+    const activeProgramIds = new Set(userPrograms.map((assignment) => assignment.programId));
+    const completedProgramDaySet = new Set(
+      completedSessions
+        .filter((session) => session.programId && activeProgramIds.has(session.programId))
+        .map((session) => `${session.programId}:${session.dayNumber}`)
+    );
+    const totalWorkoutDays = userPrograms.reduce((total, assignment) => total + assignment.program.days.length, 0);
+    const completedWorkoutCount = Math.min(completedProgramDaySet.size, totalWorkoutDays);
 
     return {
       year,
       month,
       completedWorkoutCount,
-      totalWorkoutDays: userPrograms.reduce((total, assignment) => total + assignment.program.days.length, 0),
+      totalWorkoutDays,
       completedDates: Array.from(completedDateSet).sort(),
       historyDates: Array.from(historyDateSet).sort(),
       sessions: sessions.map((session) => ({
@@ -654,8 +782,6 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       }
     });
 
-    const totalDays = assignment.program.days.length;
-    const isLastDay = assignment.currentDay >= totalDays;
     const finishedAt = new Date();
     const session = body.sessionId
       ? await prisma.workoutSession.findFirst({
@@ -666,12 +792,15 @@ export async function registerStudentRoutes(app: FastifyInstance) {
           }
         })
       : null;
+    const completedDayNumber = session?.dayNumber ?? assignment.currentDay;
+    const totalDays = assignment.program.days.length;
+    const isLastDay = completedDayNumber >= totalDays;
     const updatedAssignment = await prisma.userProgram.update({
       where: {
         id: assignment.id
       },
       data: {
-        currentDay: isLastDay ? assignment.currentDay : assignment.currentDay + 1,
+        currentDay: isLastDay ? completedDayNumber : completedDayNumber + 1,
         status: isLastDay ? "COMPLETED" : "ACTIVE",
         completedAt: isLastDay ? new Date() : null
       }
@@ -693,7 +822,7 @@ export async function registerStudentRoutes(app: FastifyInstance) {
             userId: authUser.id,
             assignmentId: assignment.id,
             programId: assignment.programId,
-            dayNumber: assignment.currentDay,
+            dayNumber: completedDayNumber,
             startedAt: finishedAt,
             finishedAt,
             durationSeconds: 1,

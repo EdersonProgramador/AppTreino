@@ -44,6 +44,11 @@ const workoutSchema = z.object({
     .default([])
 });
 
+const workoutProgramSchema = workoutSchema.extend({
+  publish: z.coerce.boolean().default(true),
+  assignToActiveStudents: z.coerce.boolean().default(true)
+});
+
 const cmsExerciseSchema = z.object({
   title: z.string().min(2),
   videoUrl: z.string().url().optional().or(z.literal("")),
@@ -72,6 +77,7 @@ const cmsWorkoutBlockSchema = z.object({
 const cmsProgramSchema = z.object({
   title: z.string().min(2),
   description: z.string().min(2),
+  modality: z.enum(["Hipertrofia", "Emagrecimento", "Máximo de força", "Resistência"]).default("Hipertrofia"),
   status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).default("DRAFT"),
   isActive: z.coerce.boolean().default(true),
   days: z
@@ -230,6 +236,13 @@ function uniqueValues(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
+function buildProgramDescription(description: string, modality?: string) {
+  return JSON.stringify({
+    description,
+    modality: modality || "Hipertrofia"
+  });
+}
+
 async function assertCmsExercisesExist(exerciseIds: string[]) {
   const uniqueIds = uniqueValues(exerciseIds);
 
@@ -289,6 +302,7 @@ async function getActiveStudentIds(userIds?: string[]) {
   const students = await prisma.user.findMany({
     where: {
       role: "USER",
+      status: "ACTIVE",
       id: userIds
         ? {
             in: userIds
@@ -344,6 +358,109 @@ async function assignProgramToActiveStudents(programId: string, currentDay = 1, 
       })
     )
   );
+}
+
+async function getCmsProgramById(programId: string) {
+  return prisma.program.findUniqueOrThrow({
+    where: { id: programId },
+    include: {
+      days: {
+        include: {
+          workoutBlock: {
+            include: {
+              exercises: {
+                include: {
+                  exercise: true
+                },
+                orderBy: {
+                  order: "asc"
+                }
+              }
+            }
+          }
+        },
+        orderBy: [{ dayNumber: "asc" }, { order: "asc" }]
+      },
+      assignedUsers: {
+        include: {
+          user: true
+        },
+        orderBy: {
+          startedAt: "desc"
+        }
+      }
+    }
+  });
+}
+
+async function createCmsProgramFromWorkout(input: z.infer<typeof workoutProgramSchema>) {
+  if (input.days.length === 0 || input.days.every((day) => day.exercises.length === 0)) {
+    throw httpError(400, "Cadastre ao menos um dia com exercício para distribuir o treino.");
+  }
+
+  const programStatus = input.publish ? "PUBLISHED" : "DRAFT";
+  const program = await prisma.$transaction(async (tx) => {
+    const createdProgram = await tx.program.create({
+      data: {
+        title: input.title,
+        description: input.objective || `Programa criado a partir do treino ${input.title}.`,
+        status: programStatus,
+        isActive: input.publish,
+        publishedAt: input.publish ? new Date() : null
+      }
+    });
+
+    for (const [dayIndex, day] of input.days.entries()) {
+      const workoutBlock = await tx.workoutBlock.create({
+        data: {
+          title: day.title,
+          structureType: "NORMAL",
+          restTime: day.exercises[0]?.restSeconds ?? 60
+        }
+      });
+
+      for (const [exerciseIndex, exercise] of day.exercises.entries()) {
+        const cmsExercise = await tx.exercise.create({
+          data: {
+            title: exercise.name,
+            name: exercise.name,
+            notes: exercise.notes,
+            sets: exercise.sets,
+            reps: exercise.reps,
+            restSeconds: exercise.restSeconds,
+            sortOrder: exerciseIndex
+          }
+        });
+
+        await tx.workoutBlockExercise.create({
+          data: {
+            workoutBlockId: workoutBlock.id,
+            exerciseId: cmsExercise.id,
+            sets: exercise.sets,
+            repsRange: exercise.reps,
+            order: exerciseIndex + 1
+          }
+        });
+      }
+
+      await tx.programDayWorkout.create({
+        data: {
+          programId: createdProgram.id,
+          workoutBlockId: workoutBlock.id,
+          dayNumber: dayIndex + 1,
+          order: 1
+        }
+      });
+    }
+
+    return createdProgram;
+  });
+
+  const assignments =
+    input.publish && input.assignToActiveStudents ? await assignProgramToActiveStudents(program.id) : [];
+  const cmsProgram = await getCmsProgramById(program.id);
+
+  return { program: cmsProgram, assignments };
 }
 
 export async function registerAdminRoutes(app: FastifyInstance) {
@@ -510,6 +627,22 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   });
 
   app.post("/admin/workouts", async (request, reply) => {
+    requireDatabase();
+    const body = workoutProgramSchema.parse(request.body);
+    const result = await createCmsProgramFromWorkout(body);
+
+    return reply.code(201).send(result);
+  });
+
+  app.post("/admin/workout-programs", async (request, reply) => {
+    requireDatabase();
+    const body = workoutProgramSchema.parse(request.body);
+    const result = await createCmsProgramFromWorkout(body);
+
+    return reply.code(201).send(result);
+  });
+
+  app.post("/admin/workouts/legacy", async (request, reply) => {
     requireDatabase();
     const body = workoutSchema.parse(request.body);
     const workout = await prisma.workout.create({
@@ -849,7 +982,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     const program = await prisma.program.create({
       data: {
         title: body.title,
-        description: body.description,
+        description: buildProgramDescription(body.description, body.modality),
         status: body.status,
         isActive: body.isActive,
         publishedAt: body.status === "PUBLISHED" ? new Date() : null,
@@ -895,7 +1028,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         where: { id },
         data: {
           title: body.title,
-          description: body.description,
+          description: buildProgramDescription(body.description, body.modality),
           status: body.status,
           isActive: body.isActive,
           publishedAt: body.status === "PUBLISHED" ? new Date() : null,
