@@ -2212,12 +2212,17 @@ summary:focus-visible {
 }
 
 .student-app-shell {
+  position: relative;
+  width: min(100%, 430px);
   min-height: 100vh;
+  margin: 0 auto;
   padding-bottom: 112px;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at 78% 0%, rgba(242, 180, 97, 0.13), transparent 26rem),
     #0d100f;
   color: #fff7ec;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 28px 90px rgba(0, 0, 0, 0.36);
 }
 
 .student-app-header {
@@ -4456,15 +4461,14 @@ summary:focus-visible {
 
 .student-bottom-nav {
   position: fixed;
-  right: 0;
   bottom: 0;
-  left: 0;
+  left: 50%;
   z-index: 20;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  width: min(100%, 760px);
+  width: min(100%, 430px);
   min-height: 82px;
-  margin: 0 auto;
+  transform: translateX(-50%);
   border-radius: 32px 32px 0 0;
   padding: 9px 12px 12px;
   background: #101412;
