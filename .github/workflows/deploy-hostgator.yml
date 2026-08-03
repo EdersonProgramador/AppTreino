@@ -1,0 +1,146 @@
+name: Deploy API to HostGator
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - app.js
+      - package.json
+      - package-lock.json
+      - tsconfig.base.json
+      - "apps/api/**"
+      - "packages/shared/**"
+      - .github/workflows/deploy-hostgator.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hostgator-api
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build and deploy API
+    runs-on: ubuntu-latest
+
+    env:
+      RELEASE_DIR: hostgator-release
+
+    steps:
+      - name: Check HostGator secrets
+        id: deploy_secrets
+        env:
+          HOSTGATOR_HOST: ${{ secrets.HOSTGATOR_HOST }}
+          HOSTGATOR_USER: ${{ secrets.HOSTGATOR_USER }}
+          HOSTGATOR_SSH_KEY: ${{ secrets.HOSTGATOR_SSH_KEY }}
+          PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          PRODUCTION_JWT_SECRET: ${{ secrets.PRODUCTION_JWT_SECRET }}
+        shell: bash
+        run: |
+          if [ -n "$HOSTGATOR_HOST" ] && [ -n "$HOSTGATOR_USER" ] && [ -n "$HOSTGATOR_SSH_KEY" ] && [ -n "$PRODUCTION_DATABASE_URL" ] && [ -n "$PRODUCTION_JWT_SECRET" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "HostGator secrets not fully configured. Deploy skipped."
+          fi
+
+      - name: Checkout
+        if: steps.deploy_secrets.outputs.available == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        if: steps.deploy_secrets.outputs.available == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.deploy_secrets.outputs.available == 'true'
+        run: npm ci
+
+      - name: Generate Prisma client
+        if: steps.deploy_secrets.outputs.available == 'true'
+        run: npm run prisma:generate
+
+      - name: Build API package
+        if: steps.deploy_secrets.outputs.available == 'true'
+        run: |
+          npm run build --workspace @app-treino/shared
+          npm run build --workspace @app-treino/api
+
+      - name: Prepare production release
+        if: steps.deploy_secrets.outputs.available == 'true'
+        shell: bash
+        run: |
+          rm -rf "$RELEASE_DIR"
+          mkdir -p "$RELEASE_DIR/apps/api" "$RELEASE_DIR/packages/shared"
+
+          cp app.js package.json package-lock.json "$RELEASE_DIR/"
+          cp apps/api/package.json "$RELEASE_DIR/apps/api/package.json"
+          cp -R apps/api/dist "$RELEASE_DIR/apps/api/dist"
+          cp -R apps/api/prisma "$RELEASE_DIR/apps/api/prisma"
+          cp packages/shared/package.json "$RELEASE_DIR/packages/shared/package.json"
+          cp -R packages/shared/dist "$RELEASE_DIR/packages/shared/dist"
+
+      - name: Upload release to HostGator
+        if: steps.deploy_secrets.outputs.available == 'true'
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOSTGATOR_HOST }}
+          username: ${{ secrets.HOSTGATOR_USER }}
+          key: ${{ secrets.HOSTGATOR_SSH_KEY }}
+          port: ${{ secrets.HOSTGATOR_PORT || 22 }}
+          source: hostgator-release/*
+          target: _app_treino_api_release
+          strip_components: 1
+          rm: true
+
+      - name: Install and restart on HostGator
+        if: steps.deploy_secrets.outputs.available == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          HOSTGATOR_APP_DIR: ${{ vars.HOSTGATOR_APP_DIR }}
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.PRODUCTION_JWT_SECRET }}
+          WEB_ORIGIN: ${{ vars.PRODUCTION_WEB_ORIGIN }}
+          ASAAS_API_KEY: ${{ secrets.PRODUCTION_ASAAS_API_KEY }}
+          ASAAS_WEBHOOK_TOKEN: ${{ secrets.PRODUCTION_ASAAS_WEBHOOK_TOKEN }}
+          GOOGLE_CLIENT_ID: ${{ vars.PRODUCTION_GOOGLE_CLIENT_ID }}
+        with:
+          host: ${{ secrets.HOSTGATOR_HOST }}
+          username: ${{ secrets.HOSTGATOR_USER }}
+          key: ${{ secrets.HOSTGATOR_SSH_KEY }}
+          port: ${{ secrets.HOSTGATOR_PORT || 22 }}
+          envs: HOSTGATOR_APP_DIR,DATABASE_URL,JWT_SECRET,WEB_ORIGIN,ASAAS_API_KEY,ASAAS_WEBHOOK_TOKEN,GOOGLE_CLIENT_ID
+          script: |
+            set -e
+
+            APP_DIR="${HOSTGATOR_APP_DIR:-app-treino-api}"
+            WEB_ORIGIN="${WEB_ORIGIN:-https://edersonprogramador.github.io}"
+
+            mkdir -p "$APP_DIR/apps/api/uploads" "$APP_DIR/tmp"
+            rm -rf "$APP_DIR/apps/api/dist" "$APP_DIR/apps/api/prisma" "$APP_DIR/packages/shared/dist"
+
+            cp -R _app_treino_api_release/. "$APP_DIR/"
+            rm -rf _app_treino_api_release
+
+            cd "$APP_DIR"
+
+            cat > .env <<EOF
+            NODE_ENV=production
+            DATABASE_URL=$DATABASE_URL
+            JWT_SECRET=$JWT_SECRET
+            WEB_ORIGIN=$WEB_ORIGIN
+            ASAAS_API_KEY=$ASAAS_API_KEY
+            ASAAS_WEBHOOK_TOKEN=$ASAAS_WEBHOOK_TOKEN
+            GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
+            EOF
+
+            npm ci --omit=dev
+            npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+
+            touch tmp/restart.txt

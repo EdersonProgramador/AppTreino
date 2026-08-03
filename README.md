@@ -25,8 +25,7 @@ npm run dev:api
 
 O projeto possui CI em `.github/workflows/ci.yml` para pushes e pull requests na branch `main`.
 O deploy da web para GitHub Pages fica em `.github/workflows/deploy-pages.yml`.
-O deploy da API/backend fica em `.github/workflows/deploy-api.yml`.
-O deploy gratuito da API/backend para Koyeb fica em `.github/workflows/deploy-koyeb.yml`.
+O deploy da API/backend para HostGator/cPanel fica em `.github/workflows/deploy-hostgator.yml`.
 
 Para reproduzir localmente as principais checagens:
 
@@ -36,38 +35,35 @@ npm run typecheck
 npm run build
 ```
 
-### Deploy da API/backend
+### Deploy da API/backend na HostGator
 
-O workflow `Deploy API` faz:
+O workflow `Deploy API to HostGator` faz:
 
-- build da imagem Docker da API;
-- publish no GitHub Container Registry (`ghcr.io`);
-- deploy opcional por SSH em um servidor de produção;
-- execução de `prisma migrate deploy` antes de iniciar o container.
+- build da API e do pacote compartilhado no GitHub Actions;
+- envio dos arquivos de produção por SSH/SCP para o cPanel;
+- criação do `.env` remoto;
+- instalação com `npm ci --omit=dev`;
+- execução de `prisma migrate deploy`;
+- restart por `touch tmp/restart.txt`, compatível com aplicações Node.js gerenciadas por Passenger/cPanel.
 
-Configure estes secrets no GitHub para ativar o deploy por SSH:
+Configure estes secrets no GitHub:
 
 ```txt
-PRODUCTION_HOST
-PRODUCTION_USER
-PRODUCTION_SSH_KEY
+HOSTGATOR_HOST
+HOSTGATOR_USER
+HOSTGATOR_SSH_KEY
+HOSTGATOR_PORT
 PRODUCTION_DATABASE_URL
 PRODUCTION_JWT_SECRET
 PRODUCTION_ASAAS_API_KEY
 PRODUCTION_ASAAS_WEBHOOK_TOKEN
 ```
 
-Se a imagem no GHCR ficar privada, configure tambem:
-
-```txt
-GHCR_USERNAME
-GHCR_TOKEN
-```
-
 Configure estas variables no GitHub quando aplicável:
 
 ```txt
 VITE_API_URL
+HOSTGATOR_APP_DIR
 PRODUCTION_WEB_ORIGIN
 PRODUCTION_GOOGLE_CLIENT_ID
 ```
@@ -76,22 +72,8 @@ Para GitHub Pages, `VITE_API_URL` deve apontar para a API publica em HTTPS, por 
 Para o CORS da API, `PRODUCTION_WEB_ORIGIN` deve incluir a origem do Pages: `https://edersonprogramador.github.io`.
 Se precisar liberar mais de uma origem, separe por virgula, por exemplo `https://edersonprogramador.github.io,http://localhost:5173`.
 
-Se os secrets de produção não estiverem completos, o workflow publica a imagem no GHCR e pula o deploy no servidor.
-
-### Deploy gratuito da API no Koyeb
-
-O workflow `Deploy API to Koyeb` usa o Dockerfile da API e publica o backend em uma Free Instance do Koyeb.
-
-Configure estes secrets no GitHub:
-
-```txt
-KOYEB_API_TOKEN
-PRODUCTION_DATABASE_URL
-PRODUCTION_JWT_SECRET
-```
-
-Use um PostgreSQL externo no `PRODUCTION_DATABASE_URL`, como Supabase ou Neon no plano gratuito.
-Depois que o Koyeb gerar a URL publica da API, configure `VITE_API_URL` no GitHub Pages com essa URL HTTPS.
+No cPanel da HostGator, crie uma aplicacao Node.js apontando para a mesma pasta de `HOSTGATOR_APP_DIR`, com `app.js` como arquivo inicial.
+Se `HOSTGATOR_APP_DIR` nao for configurado, o workflow usa `app-treino-api`.
 
 ## Ambiente
 
