@@ -55,6 +55,7 @@ const cmsExerciseSchema = z.object({
   audioUrl: z.string().url().optional().or(z.literal("")),
   targetMuscles: z.array(z.string().min(1)).default([]),
   equipmentTags: z.array(z.string().min(1)).default([]),
+  modalityIds: z.array(z.string().min(1)).default([]),
   alternativeIds: z.array(z.string().min(1)).default([])
 });
 
@@ -77,7 +78,7 @@ const cmsWorkoutBlockSchema = z.object({
 const cmsProgramSchema = z.object({
   title: z.string().min(2),
   description: z.string().min(2),
-  modality: z.enum(["Hipertrofia", "Emagrecimento", "Máximo de força", "Resistência"]).default("Hipertrofia"),
+  modalityId: z.string().min(1),
   status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).default("DRAFT"),
   isActive: z.coerce.boolean().default(true),
   days: z
@@ -89,6 +90,17 @@ const cmsProgramSchema = z.object({
       })
     )
     .min(1, "Cadastre ao menos um dia no programa.")
+});
+
+const cmsModalitySchema = z.object({
+  name: z.string().min(2),
+  slug: z.string().min(2).optional(),
+  description: z.string().optional(),
+  icon: z.string().optional(),
+  imageUrl: z.string().url().optional().or(z.literal("")),
+  type: z.string().default("EXERCISE"),
+  isActive: z.coerce.boolean().default(true),
+  sortOrder: z.coerce.number().int().min(0).default(0)
 });
 
 const cmsProgramAssignSchema = z.object({
@@ -236,11 +248,83 @@ function uniqueValues(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
+function slugify(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+const defaultModalities = [
+  "Musculação",
+  "Treino Aeróbico",
+  "Hiit (Treino Intervalado de Alta Intensidade)",
+  "Treino Funcional",
+  "Crossfit",
+  "Jump",
+  "Pilates",
+  "FitDance",
+  "Dança de Salão",
+  "Run (Roridão)"
+];
+
+async function ensureDefaultModalities() {
+  const count = await prisma.modality.count();
+
+  if (count > 0) {
+    return;
+  }
+
+  await prisma.$transaction(
+    defaultModalities.map((name, index) =>
+      prisma.modality.upsert({
+        where: {
+          slug: slugify(name)
+        },
+        create: {
+          name,
+          slug: slugify(name),
+          sortOrder: index + 1,
+          isActive: true
+        },
+        update: {}
+      })
+    )
+  );
+}
+
 function buildProgramDescription(description: string, modality?: string) {
   return JSON.stringify({
     description,
     modality: modality || "Hipertrofia"
   });
+}
+
+async function assertModalitiesExist(modalityIds: string[]) {
+  const uniqueIds = uniqueValues(modalityIds);
+
+  if (uniqueIds.length === 0) {
+    return;
+  }
+
+  const existing = await prisma.modality.findMany({
+    where: {
+      id: {
+        in: uniqueIds
+      }
+    },
+    select: {
+      id: true
+    }
+  });
+  const existingIds = new Set(existing.map((modality) => modality.id));
+  const missingIds = uniqueIds.filter((id) => !existingIds.has(id));
+
+  if (missingIds.length > 0) {
+    throw httpError(400, `Modalidade não encontrada: ${missingIds.join(", ")}.`);
+  }
 }
 
 async function assertCmsExercisesExist(exerciseIds: string[]) {
@@ -744,6 +828,69 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  app.get("/admin/cms/modalities", async () => {
+    requireDatabase();
+    await ensureDefaultModalities();
+    const modalities = await prisma.modality.findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }]
+    });
+
+    return { modalities };
+  });
+
+  app.post("/admin/cms/modalities", async (request, reply) => {
+    requireDatabase();
+    const body = cmsModalitySchema.parse(request.body);
+    const modality = await prisma.modality.create({
+      data: {
+        name: body.name,
+        slug: body.slug ? slugify(body.slug) : slugify(body.name),
+        description: body.description,
+        icon: body.icon,
+        imageUrl: body.imageUrl || null,
+        type: body.type,
+        isActive: body.isActive,
+        sortOrder: body.sortOrder
+      }
+    });
+
+    return reply.code(201).send({ modality });
+  });
+
+  app.put("/admin/cms/modalities/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const body = cmsModalitySchema.partial().parse(request.body);
+    const modality = await prisma.modality.update({
+      where: { id },
+      data: {
+        name: body.name,
+        slug: body.slug ? slugify(body.slug) : undefined,
+        description: body.description,
+        icon: body.icon,
+        imageUrl: body.imageUrl || null,
+        type: body.type,
+        isActive: body.isActive,
+        sortOrder: body.sortOrder
+      }
+    });
+
+    return { modality };
+  });
+
+  app.delete("/admin/cms/modalities/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    await prisma.modality.update({
+      where: { id },
+      data: {
+        isActive: false
+      }
+    });
+
+    return { ok: true };
+  });
+
   app.get("/admin/cms/exercises", async () => {
     requireDatabase();
     const exercises = await prisma.exercise.findMany({
@@ -752,7 +899,12 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       },
       include: {
         alternatives: true,
-        alternativeTo: true
+        alternativeTo: true,
+        modalityLinks: {
+          include: {
+            modality: true
+          }
+        }
       },
       orderBy: {
         createdAt: "desc"
@@ -765,6 +917,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.post("/admin/cms/exercises", async (request, reply) => {
     requireDatabase();
     const body = cmsExerciseSchema.parse(request.body);
+    await assertModalitiesExist(body.modalityIds);
     const exercise = await prisma.exercise.create({
       data: {
         title: body.title,
@@ -772,13 +925,24 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         audioUrl: body.audioUrl || null,
         targetMuscles: body.targetMuscles,
         equipmentTags: body.equipmentTags,
+        modalityLinks: {
+          create: body.modalityIds.map((modalityId, index) => ({
+            modalityId,
+            principal: index === 0
+          }))
+        },
         alternatives: {
           connect: body.alternativeIds.map((id) => ({ id }))
         }
       },
       include: {
         alternatives: true,
-        alternativeTo: true
+        alternativeTo: true,
+        modalityLinks: {
+          include: {
+            modality: true
+          }
+        }
       }
     });
 
@@ -789,26 +953,45 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
     const body = cmsExerciseSchema.parse(request.body);
+    await assertModalitiesExist(body.modalityIds);
     const current = await prisma.exercise.findUniqueOrThrow({
       where: { id },
       include: { alternatives: true }
     });
-    const exercise = await prisma.exercise.update({
-      where: { id },
-      data: {
-        title: body.title,
-        videoUrl: body.videoUrl || null,
-        audioUrl: body.audioUrl || null,
-        targetMuscles: body.targetMuscles,
-        equipmentTags: body.equipmentTags,
-        alternatives: {
-          disconnect: current.alternatives.map((item) => ({ id: item.id })),
-          connect: body.alternativeIds.map((alternativeId) => ({ id: alternativeId }))
+    await prisma.$transaction([
+      prisma.exerciseModality.deleteMany({ where: { exerciseId: id } }),
+      prisma.exercise.update({
+        where: { id },
+        data: {
+          title: body.title,
+          videoUrl: body.videoUrl || null,
+          audioUrl: body.audioUrl || null,
+          targetMuscles: body.targetMuscles,
+          equipmentTags: body.equipmentTags,
+          modalityLinks: {
+            create: body.modalityIds.map((modalityId, index) => ({
+              modalityId,
+              principal: index === 0
+            }))
+          },
+          alternatives: {
+            disconnect: current.alternatives.map((item) => ({ id: item.id })),
+            connect: body.alternativeIds.map((alternativeId) => ({ id: alternativeId }))
+          }
         }
-      },
+      })
+    ]);
+
+    const exercise = await prisma.exercise.findUniqueOrThrow({
+      where: { id },
       include: {
         alternatives: true,
-        alternativeTo: true
+        alternativeTo: true,
+        modalityLinks: {
+          include: {
+            modality: true
+          }
+        }
       }
     });
 
@@ -821,6 +1004,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     await prisma.$transaction([
       prisma.userProgress.deleteMany({ where: { exerciseId: id } }),
       prisma.workoutBlockExercise.deleteMany({ where: { exerciseId: id } }),
+      prisma.exerciseModality.deleteMany({ where: { exerciseId: id } }),
       prisma.exercise.update({
         where: { id },
         data: {
@@ -952,6 +1136,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     const programs = await prisma.program.findMany({
       include: {
+        modality: true,
         days: {
           include: {
             workoutBlock: true
@@ -978,11 +1163,14 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.post("/admin/cms/programs", async (request, reply) => {
     requireDatabase();
     const body = cmsProgramSchema.parse(request.body);
+    await assertModalitiesExist([body.modalityId]);
+    const modality = await prisma.modality.findUniqueOrThrow({ where: { id: body.modalityId } });
     await assertWorkoutBlocksExist(body.days.map((day) => day.workoutBlockId));
     const program = await prisma.program.create({
       data: {
+        modalityId: body.modalityId,
         title: body.title,
-        description: buildProgramDescription(body.description, body.modality),
+        description: buildProgramDescription(body.description, modality.name),
         status: body.status,
         isActive: body.isActive,
         publishedAt: body.status === "PUBLISHED" ? new Date() : null,
@@ -995,6 +1183,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         }
       },
       include: {
+        modality: true,
         days: {
           include: {
             workoutBlock: true
@@ -1020,6 +1209,8 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
     const body = cmsProgramSchema.parse(request.body);
+    await assertModalitiesExist([body.modalityId]);
+    const modality = await prisma.modality.findUniqueOrThrow({ where: { id: body.modalityId } });
     await assertWorkoutBlocksExist(body.days.map((day) => day.workoutBlockId));
 
     await prisma.$transaction([
@@ -1027,8 +1218,9 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       prisma.program.update({
         where: { id },
         data: {
+          modalityId: body.modalityId,
           title: body.title,
-          description: buildProgramDescription(body.description, body.modality),
+          description: buildProgramDescription(body.description, modality.name),
           status: body.status,
           isActive: body.isActive,
           publishedAt: body.status === "PUBLISHED" ? new Date() : null,
@@ -1046,6 +1238,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     const program = await prisma.program.findUniqueOrThrow({
       where: { id },
       include: {
+        modality: true,
         days: {
           include: {
             workoutBlock: true
@@ -1089,6 +1282,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         publishedAt: new Date()
       },
       include: {
+        modality: true,
         days: {
           include: {
             workoutBlock: true

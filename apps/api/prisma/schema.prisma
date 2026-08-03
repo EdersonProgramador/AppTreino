@@ -144,6 +144,7 @@ model Exercise {
   alternatives     Exercise[]             @relation("ExerciseAlternatives")
   alternativeTo    Exercise[]             @relation("ExerciseAlternatives")
   workoutExercises WorkoutBlockExercise[]
+  modalityLinks    ExerciseModality[]
   userProgress     UserProgress[]
   sets             Int?
   reps             String?
@@ -153,6 +154,36 @@ model Exercise {
   createdAt        DateTime               @default(now()) @map("created_at")
 
   @@map("exercises")
+}
+
+model Modality {
+  id            String             @id @default(cuid())
+  name          String
+  slug          String             @unique
+  description   String?
+  icon          String?
+  imageUrl      String?            @map("image_url")
+  type          String             @default("EXERCISE")
+  isActive      Boolean            @default(true) @map("is_active")
+  sortOrder     Int                @default(0) @map("sort_order")
+  programs      Program[]
+  exerciseLinks ExerciseModality[]
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  @@map("modalities")
+}
+
+model ExerciseModality {
+  id         String   @id @default(cuid())
+  exerciseId String   @map("exercise_id")
+  modalityId String   @map("modality_id")
+  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  modality   Modality @relation(fields: [modalityId], references: [id], onDelete: Cascade)
+  principal  Boolean  @default(false)
+
+  @@unique([exerciseId, modalityId])
+  @@map("exercise_modalities")
 }
 
 model WorkoutBlock {
@@ -183,6 +214,8 @@ model WorkoutBlockExercise {
 
 model Program {
   id              String              @id @default(cuid())
+  modalityId      String?             @map("modality_id")
+  modality        Modality?           @relation(fields: [modalityId], references: [id], onDelete: SetNull)
   title           String
   description     String
   status          ProgramStatus       @default(DRAFT)

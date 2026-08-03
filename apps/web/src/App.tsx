@@ -203,6 +203,19 @@ interface CmsExerciseRow {
   targetMuscles: string[];
   equipmentTags: string[];
   alternatives: Array<{ id: string; title?: string | null; name?: string | null }>;
+  modalityLinks?: Array<{ id: string; principal: boolean; modality: CmsModalityRow }>;
+}
+
+interface CmsModalityRow {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  icon?: string | null;
+  imageUrl?: string | null;
+  type: string;
+  isActive: boolean;
+  sortOrder: number;
 }
 
 interface CmsWorkoutBlockRow {
@@ -225,6 +238,7 @@ interface CmsProgramRow {
   description: string;
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   isActive: boolean;
+  modality?: CmsModalityRow | null;
   assignedUsers?: Array<{ id: string; user: AdminUser; currentDay: number; status: "ACTIVE" | "COMPLETED" | "CANCELED" }>;
   days: Array<{
     id: string;
@@ -1029,6 +1043,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     todayAttendance: 0
   });
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [cmsModalities, setCmsModalities] = useState<CmsModalityRow[]>([]);
   const [cmsExercises, setCmsExercises] = useState<CmsExerciseRow[]>([]);
   const [cmsWorkoutBlocks, setCmsWorkoutBlocks] = useState<CmsWorkoutBlockRow[]>([]);
   const [cmsPrograms, setCmsPrograms] = useState<CmsProgramRow[]>([]);
@@ -1060,6 +1075,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       const [
         summaryResponse,
         usersResponse,
+        cmsModalitiesResponse,
         cmsExercisesResponse,
         cmsWorkoutBlocksResponse,
         cmsProgramsResponse,
@@ -1073,6 +1089,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       ] = await Promise.all([
           apiGet<typeof summary>("/admin/summary", token),
           apiGet<{ users: AdminUser[] }>("/admin/users", token),
+          apiGet<{ modalities: CmsModalityRow[] }>("/admin/cms/modalities", token),
           apiGet<{ exercises: CmsExerciseRow[] }>("/admin/cms/exercises", token),
           apiGet<{ workoutBlocks: CmsWorkoutBlockRow[] }>("/admin/cms/workout-blocks", token),
           apiGet<{ programs: CmsProgramRow[] }>("/admin/cms/programs", token),
@@ -1087,6 +1104,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
       setSummary(summaryResponse);
       setUsers(usersResponse.users);
+      setCmsModalities(cmsModalitiesResponse.modalities);
       setCmsExercises(cmsExercisesResponse.exercises);
       setCmsWorkoutBlocks(cmsWorkoutBlocksResponse.workoutBlocks);
       setCmsPrograms(cmsProgramsResponse.programs);
@@ -1144,6 +1162,32 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     return exercise.title ?? exercise.name ?? "Exercício";
   }
 
+  async function handleCreateCmsModality(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+
+    try {
+      await apiPost(
+        "/admin/cms/modalities",
+        {
+          name: String(data.get("name") ?? ""),
+          description: String(data.get("description") ?? ""),
+          icon: String(data.get("icon") ?? ""),
+          imageUrl: String(data.get("imageUrl") ?? ""),
+          type: String(data.get("type") ?? "EXERCISE"),
+          sortOrder: Number(data.get("sortOrder") ?? cmsModalities.length + 1),
+          isActive: true
+        },
+        token
+      );
+      form.reset();
+      await loadAdminData();
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar a modalidade."));
+    }
+  }
+
   function parseCmsWorkoutBlockExercises(data: FormData) {
     return Array.from({ length: 6 })
       .map((_, index) => {
@@ -1197,6 +1241,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           audioUrl: String(data.get("audioUrl") ?? ""),
           targetMuscles: parseTagList(data.get("targetMuscles")),
           equipmentTags: parseTagList(data.get("equipmentTags")),
+          modalityIds: data.getAll("modalityIds").map((item) => String(item)).filter(Boolean),
           alternativeIds: parseTagList(data.get("alternativeIds"))
         },
         token
@@ -1242,7 +1287,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         {
           title: String(data.get("title") ?? ""),
           description: String(data.get("description") ?? ""),
-          modality: String(data.get("modality") ?? "Hipertrofia"),
+          modalityId: String(data.get("modalityId") ?? ""),
           status: String(data.get("status") ?? "DRAFT"),
           isActive: String(data.get("status") ?? "DRAFT") === "PUBLISHED",
           days: parseCmsProgramDays(data)
@@ -1560,21 +1605,26 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           <div className="cms-workflow">
             <article>
               <strong>1</strong>
+              <span>Criar modalidades</span>
+              <small>{cmsModalities.filter((item) => item.isActive).length} ativa(s)</small>
+            </article>
+            <article>
+              <strong>2</strong>
               <span>Criar exercícios</span>
               <small>{cmsExercises.length} cadastrado(s)</small>
             </article>
             <article>
-              <strong>2</strong>
+              <strong>3</strong>
               <span>Montar blocos</span>
               <small>{cmsWorkoutBlocks.length} bloco(s)</small>
             </article>
             <article>
-              <strong>3</strong>
+              <strong>4</strong>
               <span>Publicar programa</span>
               <small>{cmsPrograms.filter((item) => item.status === "PUBLISHED").length} publicado(s)</small>
             </article>
             <article>
-              <strong>4</strong>
+              <strong>5</strong>
               <span>Atribuir e acompanhar</span>
               <small>{cmsPrograms.reduce((total, item) => total + (item.assignedUsers?.length ?? 0), 0)} atribuição(ões)</small>
             </article>
@@ -1582,7 +1632,37 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           <div className="cms-admin-grid">
             <section>
               <div className="panel-title cms-subtitle">
-                <h2>1. Exercícios</h2>
+                <h2>1. Modalidades</h2>
+                <span>{cmsModalities.length}</span>
+              </div>
+              <form className="crud-form" onSubmit={handleCreateCmsModality}>
+                <input name="name" placeholder="Nome da modalidade" required />
+                <input name="description" placeholder="Descrição da modalidade" />
+                <input name="icon" placeholder="Ícone ou emoji" />
+                <input name="imageUrl" type="url" placeholder="URL da imagem" />
+                <input name="sortOrder" type="number" min="0" defaultValue={cmsModalities.length + 1} placeholder="Ordem" />
+                <button className="primary-button">
+                  <Save size={18} />
+                  Salvar modalidade
+                </button>
+              </form>
+              {cmsModalities.slice(0, 10).map((item) => (
+                <div className="data-row cms-data-row" key={item.id}>
+                  <span>
+                    <strong>{item.name}</strong>
+                    {item.description || item.slug} | ID: {item.id}
+                  </span>
+                  <small>{item.isActive ? "Ativa" : "Inativa"} - ordem {item.sortOrder}</small>
+                  <button aria-label="Desativar modalidade" onClick={() => handleDelete(`/admin/cms/modalities/${item.id}`)}>
+                    <Trash2 size={17} />
+                  </button>
+                </div>
+              ))}
+            </section>
+
+            <section>
+              <div className="panel-title cms-subtitle">
+                <h2>2. Exercícios/Aulas</h2>
                 <span>{cmsExercises.length}</span>
               </div>
               <form className="crud-form" onSubmit={handleCreateCmsExercise}>
@@ -1591,6 +1671,15 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 <input name="audioUrl" type="url" placeholder="URL do ?udio" />
                 <input name="targetMuscles" placeholder="Musculos, separados por virgula" />
                 <input name="equipmentTags" placeholder="Equipamentos, separados por virgula" />
+                <select name="modalityIds" multiple>
+                  {cmsModalities
+                    .filter((item) => item.isActive)
+                    .map((modality) => (
+                      <option value={modality.id} key={modality.id}>
+                        {modality.name}
+                      </option>
+                    ))}
+                </select>
                 <input name="alternativeIds" placeholder="IDs de alternativas, separados por virgula" />
                 <button className="primary-button">
                   <Save size={18} />
@@ -1601,7 +1690,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 <div className="data-row cms-data-row" key={item.id}>
                   <span>
                     <strong>{item.title ?? item.name ?? "Exercício"}</strong>
-                    {item.targetMuscles.join(", ") || "Sem musculos"} | ID: {item.id}
+                    {(item.modalityLinks ?? []).map((link) => link.modality.name).join(", ") || "Sem modalidade"} | ID: {item.id}
                   </span>
                   <small>{item.equipmentTags.join(", ") || "Sem equipamento"}</small>
                   <button aria-label="Excluir exercício CMS" onClick={() => handleDelete(`/admin/cms/exercises/${item.id}`)}>
@@ -1613,7 +1702,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
             <section>
               <div className="panel-title cms-subtitle">
-                <h2>2. Blocos</h2>
+                <h2>3. Treinos/Fichas</h2>
                 <span>{cmsWorkoutBlocks.length}</span>
               </div>
               <form className="crud-form" onSubmit={handleCreateCmsWorkoutBlock}>
@@ -1666,16 +1755,20 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
             <section className="cms-program-section">
               <div className="panel-title cms-subtitle">
-                <h2>3. Programas</h2>
+                <h2>4. Programas publicados</h2>
                 <span>{cmsPrograms.length}</span>
               </div>
               <form className="crud-form" onSubmit={handleCreateCmsProgram}>
                 <input name="title" placeholder="Título do programa" required />
-                <select name="modality" defaultValue="Hipertrofia">
-                  <option value="Hipertrofia">Hipertrofia</option>
-                  <option value="Emagrecimento">Emagrecimento</option>
-                  <option value="Máximo de força">Máximo de força</option>
-                  <option value="Resistência">Resistência</option>
+                <select name="modalityId" required defaultValue="">
+                  <option value="">Selecione a modalidade</option>
+                  {cmsModalities
+                    .filter((item) => item.isActive)
+                    .map((modality) => (
+                      <option value={modality.id} key={modality.id}>
+                        {modality.name}
+                      </option>
+                    ))}
                 </select>
                 <select name="status" defaultValue="DRAFT">
                   <option value="DRAFT">Salvar como rascunho</option>
@@ -1713,7 +1806,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     <span className={`cms-status ${item.status.toLowerCase()}`}>{item.status}</span>
                     <h3>{item.title}</h3>
                     <p>{parseProgramMetadata(item.description).description}</p>
-                    <small>Modalidade: {parseProgramMetadata(item.description).modality}</small>
+                    <small>Modalidade: {item.modality?.name ?? parseProgramMetadata(item.description).modality}</small>
                     <small>{item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.title}`).join(" | ") || "Sem dias cadastrados"}</small>
                   </div>
                   <div className="cms-program-actions">

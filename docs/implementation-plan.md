@@ -412,10 +412,18 @@ O aluno então
 
 ## Fase 7
 
+Ajuste de publicação no Painel admin
 
-Principais modalidades de Exercícios
-- Musculação
-- Treino Aeróbico
-- Hiit (Treino Intervalado de Alta Intensidade)
-- Treino Funcional
-- Crossfit
+1 Criar modalidade de treino:
+
+    Principais modalidades de Exercícios
+    - Musculação
+    - Treino Aeróbico
+    - Hiit (Treino Intervalado de Alta Intensidade)
+    - Treino Funcional
+    - Crossfit
+    - Jump
+    - Pilates
+    - FitDance
+    - Dança de Salão
+    - Run (Roridão)

@@ -252,7 +252,8 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
         include: {
           program: {
             include: {
-              days: true
+              days: true,
+              modality: true
             }
           }
         }
@@ -271,7 +272,8 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
           include: {
             program: {
               include: {
-                days: true
+                days: true,
+                modality: true
               }
             }
           }
@@ -284,7 +286,11 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
           programId: assignment.programId
         },
         include: {
-          program: true,
+          program: {
+            include: {
+              modality: true
+            }
+          },
           workoutBlock: {
             include: {
               exercises: {
@@ -343,6 +349,7 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
       });
       const completedDaySet = new Set(completedSessions.map((session) => session.dayNumber));
       const metadata = parseProgramMetadata(programDay.program.description);
+      const modalityName = programDay.program.modality?.name ?? metadata.modality;
       const sequence = programDays.map((day) => ({
         programId: day.program.id,
         programTitle: day.program.title,
@@ -366,7 +373,7 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
         assignmentId: assignment.id,
         dayNumber: currentDay,
         totalDays: assignment.program.days.length,
-        modality: metadata.modality,
+        modality: modalityName,
         description: metadata.description,
         completedWorkouts: completedDaySet.size,
         teacherNames: teachers.map((teacher) => teacher.name),
