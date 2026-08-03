@@ -84,6 +84,17 @@ function resolveMembershipEndsAt(membership: {
   return addCycleDate(cycleStart, membership.plan.billingCycle);
 }
 
+function resolveMembershipStartsAt(membership: {
+  startsAt: Date;
+  payments: Array<{ status: string; dueDate: Date; paidAt: Date | null }>;
+}) {
+  const latestConfirmedPayment = membership.payments
+    .filter((payment) => payment.status === "CONFIRMED")
+    .sort((a, b) => b.dueDate.getTime() - a.dueDate.getTime())[0];
+
+  return latestConfirmedPayment?.paidAt ?? latestConfirmedPayment?.dueDate ?? membership.startsAt;
+}
+
 export function verifyEnrollmentGating(status: string, pathname: string) {
   const protectedRoutes = ["/student/workout"];
   const isProtected = protectedRoutes.some((route) => pathname.startsWith(route));
@@ -434,7 +445,7 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
         completedWorkouts: completedDaySet.size,
         teacherNames: teachers.map((teacher) => teacher.name),
         unitName: "Unidade não informada",
-        membershipStartsAt: membership?.startsAt ?? null,
+        membershipStartsAt: membership ? resolveMembershipStartsAt(membership) : null,
         membershipEndsAt: membership ? resolveMembershipEndsAt(membership) : null,
         sequence,
         block: {

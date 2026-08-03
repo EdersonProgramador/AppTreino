@@ -68,6 +68,17 @@ function resolveMembershipEndsAt(membership: {
   return addCycleDate(cycleStart, membership.plan.billingCycle);
 }
 
+function resolveMembershipStartsAt(membership: {
+  startsAt: Date;
+  payments: Array<{ status: string; dueDate: Date; paidAt: Date | null }>;
+}) {
+  const latestConfirmedPayment = membership.payments
+    .filter((payment) => payment.status === "CONFIRMED")
+    .sort((a, b) => b.dueDate.getTime() - a.dueDate.getTime())[0];
+
+  return latestConfirmedPayment?.paidAt ?? latestConfirmedPayment?.dueDate ?? membership.startsAt;
+}
+
 async function recordDailyAttendance(userId: string) {
   if (!env.DATABASE_URL) return;
 
@@ -261,6 +272,7 @@ export async function registerUserRoutes(app: FastifyInstance) {
       membership: membership
         ? {
             ...membership,
+            startsAt: resolveMembershipStartsAt(membership),
             endsAt: resolveMembershipEndsAt(membership)
           }
         : null
