@@ -37,6 +37,37 @@ function todayUtcOnly() {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
+function addCycleDate(start: Date, cycle: string) {
+  const end = new Date(start);
+  if (cycle === "YEARLY") {
+    end.setFullYear(end.getFullYear() + 1);
+  } else {
+    end.setMonth(end.getMonth() + 1);
+  }
+
+  return end;
+}
+
+function resolveMembershipEndsAt(membership: {
+  startsAt: Date;
+  endsAt: Date | null;
+  plan: { billingCycle: string };
+  payments: Array<{ status: string; dueDate: Date; paidAt: Date | null }>;
+}) {
+  const hasPlaceholderEnd = membership.endsAt ? membership.endsAt.getFullYear() >= 2099 : true;
+
+  if (!hasPlaceholderEnd) {
+    return membership.endsAt;
+  }
+
+  const latestConfirmedPayment = membership.payments
+    .filter((payment) => payment.status === "CONFIRMED")
+    .sort((a, b) => b.dueDate.getTime() - a.dueDate.getTime())[0];
+  const cycleStart = latestConfirmedPayment?.dueDate ?? latestConfirmedPayment?.paidAt ?? membership.startsAt;
+
+  return addCycleDate(cycleStart, membership.plan.billingCycle);
+}
+
 async function recordDailyAttendance(userId: string) {
   if (!env.DATABASE_URL) return;
 
@@ -72,6 +103,43 @@ async function requireActiveMembership(userId: string) {
   }
 
   return membership;
+}
+
+async function getCurrentUserMembership(userId: string) {
+  const now = new Date();
+  const activeMembership = await prisma.membership.findFirst({
+    where: {
+      userId,
+      status: "ACTIVE",
+      startsAt: {
+        lte: now
+      },
+      OR: [{ endsAt: null }, { endsAt: { gte: now } }]
+    },
+    include: {
+      plan: true,
+      payments: true
+    },
+    orderBy: [{ startsAt: "desc" }, { createdAt: "desc" }]
+  });
+
+  if (activeMembership) {
+    return activeMembership;
+  }
+
+  return prisma.membership.findFirst({
+    where: {
+      userId,
+      status: {
+        in: ["ACTIVE", "PENDING", "OVERDUE"]
+      }
+    },
+    include: {
+      plan: true,
+      payments: true
+    },
+    orderBy: [{ startsAt: "desc" }, { createdAt: "desc" }]
+  });
 }
 
 function buildAiWorkoutPlan(input: {
@@ -187,22 +255,16 @@ export async function registerUserRoutes(app: FastifyInstance) {
   app.get("/user/membership", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);
-    const membership = await prisma.membership.findFirst({
-      where: {
-        userId: user.id,
-        status: {
-          in: ["ACTIVE", "PENDING", "OVERDUE"]
-        }
-      },
-      include: {
-        plan: true
-      },
-      orderBy: {
-        createdAt: "desc"
-      }
-    });
+    const membership = await getCurrentUserMembership(user.id);
 
-    return { membership };
+    return {
+      membership: membership
+        ? {
+            ...membership,
+            endsAt: resolveMembershipEndsAt(membership)
+          }
+        : null
+    };
   });
 
   app.get("/user/payments", async (request) => {

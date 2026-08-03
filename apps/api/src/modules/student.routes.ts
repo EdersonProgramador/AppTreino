@@ -53,6 +53,37 @@ function httpError(statusCode: number, message: string) {
   return error;
 }
 
+function addCycleDate(start: Date, cycle: string) {
+  const end = new Date(start);
+  if (cycle === "YEARLY") {
+    end.setFullYear(end.getFullYear() + 1);
+  } else {
+    end.setMonth(end.getMonth() + 1);
+  }
+
+  return end;
+}
+
+function resolveMembershipEndsAt(membership: {
+  startsAt: Date;
+  endsAt: Date | null;
+  plan: { billingCycle: string };
+  payments: Array<{ status: string; dueDate: Date; paidAt: Date | null }>;
+}) {
+  const hasPlaceholderEnd = membership.endsAt ? membership.endsAt.getFullYear() >= 2099 : true;
+
+  if (!hasPlaceholderEnd) {
+    return membership.endsAt;
+  }
+
+  const latestConfirmedPayment = membership.payments
+    .filter((payment) => payment.status === "CONFIRMED")
+    .sort((a, b) => b.dueDate.getTime() - a.dueDate.getTime())[0];
+  const cycleStart = latestConfirmedPayment?.dueDate ?? latestConfirmedPayment?.paidAt ?? membership.startsAt;
+
+  return addCycleDate(cycleStart, membership.plan.billingCycle);
+}
+
 export function verifyEnrollmentGating(status: string, pathname: string) {
   const protectedRoutes = ["/student/workout"];
   const isProtected = protectedRoutes.some((route) => pathname.startsWith(route));
@@ -87,6 +118,41 @@ async function getEnrollmentStatus(userId: string) {
   ]);
 
   return activeMembership || user?.enrollmentStatus === "ACTIVE" ? "ACTIVE" : user?.enrollmentStatus ?? "PENDING";
+}
+
+async function getCurrentStudentMembership(userId: string) {
+  const now = new Date();
+  const currentMembership = await prisma.membership.findFirst({
+    where: {
+      userId,
+      status: "ACTIVE",
+      startsAt: {
+        lte: now
+      },
+      OR: [{ endsAt: null }, { endsAt: { gte: now } }]
+    },
+    include: {
+      plan: true,
+      payments: true
+    },
+    orderBy: [{ startsAt: "desc" }, { createdAt: "desc" }]
+  });
+
+  if (currentMembership) {
+    return currentMembership;
+  }
+
+  return prisma.membership.findFirst({
+    where: {
+      userId,
+      status: "ACTIVE"
+    },
+    include: {
+      plan: true,
+      payments: true
+    },
+    orderBy: [{ startsAt: "desc" }, { createdAt: "desc" }]
+  });
 }
 
 async function requireActiveEnrollment(app: FastifyInstance, request: FastifyRequest) {
@@ -202,17 +268,7 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
   }
 
   const [membership, profile, teachers] = await Promise.all([
-    prisma.membership.findFirst({
-      where: {
-        userId,
-        status: {
-          in: ["ACTIVE", "PENDING", "OVERDUE"]
-        }
-      },
-      orderBy: {
-        createdAt: "desc"
-      }
-    }),
+    getCurrentStudentMembership(userId),
     prisma.profile.findUnique({
       where: {
         userId
@@ -379,7 +435,7 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
         teacherNames: teachers.map((teacher) => teacher.name),
         unitName: "Unidade não informada",
         membershipStartsAt: membership?.startsAt ?? null,
-        membershipEndsAt: membership?.endsAt ?? null,
+        membershipEndsAt: membership ? resolveMembershipEndsAt(membership) : null,
         sequence,
         block: {
           title: programDay.workoutBlock.title,

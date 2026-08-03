@@ -2526,6 +2526,8 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
   const sheetTotal = workoutSheet?.totalDays ?? totalWorkoutDays;
   const sheetProgressPercent = Math.min(100, Math.round((sheetCompleted / Math.max(sheetTotal, 1)) * 100));
   const currentSequenceWorkout = workoutSequence.find((item) => item.dayNumber === workoutSheet?.dayNumber) ?? workoutSequence[0];
+  const sheetMembershipStartsAt = workoutSheet?.membershipStartsAt ?? membership?.startsAt ?? null;
+  const sheetMembershipEndsAt = workoutSheet?.membershipEndsAt ?? membership?.endsAt ?? null;
   const formatStudentDate = (date?: string | null) => (date ? new Date(date).toLocaleDateString("pt-BR") : "Não informado");
   const studentCode = profile?.name ? String(profile.name.length * 193 + 1) : "1931";
   const currentDate = new Date();
@@ -2944,11 +2946,11 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                   </div>
                   <div>
                     <CalendarDays size={24} />
-                    <span><strong>Início:</strong>{formatStudentDate(workoutSheet.membershipStartsAt)}</span>
+                    <span><strong>Início:</strong>{formatStudentDate(sheetMembershipStartsAt)}</span>
                   </div>
                   <div>
                     <CalendarDays size={24} />
-                    <span><strong>Vencimento:</strong>{formatStudentDate(workoutSheet.membershipEndsAt)}</span>
+                    <span><strong>Vencimento:</strong>{formatStudentDate(sheetMembershipEndsAt)}</span>
                   </div>
                 </div>
               </article>
