@@ -1,6 +1,11 @@
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
+import multipart from "@fastify/multipart";
+import staticFiles from "@fastify/static";
 import Fastify from "fastify";
+import { mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { ZodError } from "zod";
 import { env } from "./env.js";
 import { registerAdminRoutes } from "./modules/admin.routes.js";
@@ -14,6 +19,12 @@ import { registerUserRoutes } from "./modules/user.routes.js";
 const app = Fastify({
   logger: true
 });
+const uploadsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../uploads");
+const allowedOrigins = env.WEB_ORIGIN.split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+mkdirSync(uploadsDir, { recursive: true });
 
 app.setErrorHandler((error, _request, reply) => {
   if (error instanceof ZodError) {
@@ -34,12 +45,31 @@ app.setErrorHandler((error, _request, reply) => {
 });
 
 await app.register(cors, {
-  origin: env.WEB_ORIGIN,
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error("Origem nao permitida pelo CORS."), false);
+  },
   credentials: true
 });
 
 await app.register(jwt, {
   secret: env.JWT_SECRET
+});
+
+await app.register(multipart, {
+  limits: {
+    fileSize: 250 * 1024 * 1024,
+    files: 1
+  }
+});
+
+await app.register(staticFiles, {
+  root: uploadsDir,
+  prefix: "/uploads/"
 });
 
 app.get("/health", async () => ({

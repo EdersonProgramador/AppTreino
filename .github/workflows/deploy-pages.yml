@@ -36,6 +36,22 @@ jobs:
       - name: Build shared package
         run: npm run build --workspace @app-treino/shared
 
+      - name: Check production API URL
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+        shell: bash
+        run: |
+          if [ -z "$VITE_API_URL" ]; then
+            echo "VITE_API_URL is required for GitHub Pages deploy."
+            echo "Create a repository variable VITE_API_URL with the public HTTPS API URL."
+            exit 1
+          fi
+
+          if [[ "$VITE_API_URL" == http://localhost* || "$VITE_API_URL" == http://127.0.0.1* ]]; then
+            echo "VITE_API_URL cannot point to localhost in production: $VITE_API_URL"
+            exit 1
+          fi
+
       - name: Build web app
         run: npm run build --workspace @app-treino/web
         env:

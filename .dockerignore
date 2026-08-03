@@ -1,0 +1,14 @@
+node_modules
+dist
+build
+coverage
+.git
+.github
+.env
+.env.*
+*.log
+apps/api/uploads
+apps/web/dist
+apps/web/node_modules
+apps/api/node_modules
+packages/shared/node_modules

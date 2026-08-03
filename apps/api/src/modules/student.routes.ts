@@ -194,6 +194,8 @@ function mapWorkoutExercise(item: {
     title: string | null;
     name: string | null;
     videoUrl: string | null;
+    materialUrl: string | null;
+    notes: string | null;
     targetMuscles: string[];
     equipmentTags: string[];
     alternatives: Array<{
@@ -208,6 +210,8 @@ function mapWorkoutExercise(item: {
     id: item.exercise.id,
     title: item.exercise.title ?? item.exercise.name ?? "Exercício",
     videoUrl: item.exercise.videoUrl ?? "",
+    materialUrl: item.exercise.materialUrl ?? "",
+    description: item.exercise.notes ?? "",
     targetMuscles: item.exercise.targetMuscles,
     equipmentTags: item.exercise.equipmentTags,
     sets: item.sets,

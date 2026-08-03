@@ -20,6 +20,7 @@ import {
   LockKeyhole,
   LogOut,
   LogIn,
+  FileText,
   MessageCircle,
   Menu,
   Package,
@@ -29,19 +30,22 @@ import {
   Ruler,
   Save,
   Settings,
+  Share2,
   ShieldCheck,
   ShoppingCart,
   Sparkles,
   Star,
+  Target,
   Timer,
   Trash2,
   Trophy,
+  UploadCloud,
   UserRound,
   UsersRound
 } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { formatPriceInBRL, initialPlans, type AuthUser } from "@app-treino/shared";
-import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "./api";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "./api";
 import { LockedOverlay } from "./components/student/LockedOverlay";
 import { WorkoutPlayer, type WorkoutPlayerExercise } from "./components/student/WorkoutPlayer";
 
@@ -200,6 +204,8 @@ interface CmsExerciseRow {
   name?: string | null;
   videoUrl?: string | null;
   audioUrl?: string | null;
+  materialUrl?: string | null;
+  notes?: string | null;
   targetMuscles: string[];
   equipmentTags: string[];
   alternatives: Array<{ id: string; title?: string | null; name?: string | null }>;
@@ -374,6 +380,15 @@ interface CheckoutSessionResponse {
   membership: StudentMembershipRow;
   payment: PaymentRow | null;
   alreadyActive: boolean;
+}
+
+interface UploadResponse {
+  file: {
+    url: string;
+    originalName: string;
+    mimeType: string;
+    path: string;
+  };
 }
 
 interface TodayWorkoutResponse {
@@ -1056,6 +1071,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const [aiPlans, setAiPlans] = useState<AiWorkoutPlanRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [cmsStep, setCmsStep] = useState<"modalities" | "lessons" | "blocks" | "publish">("lessons");
 
   function getApiErrorMessage(error: unknown, fallback: string) {
     return error instanceof ApiError ? error.message : fallback;
@@ -1158,6 +1174,18 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       .filter(Boolean);
   }
 
+  async function uploadCmsFile(value: FormDataEntryValue | null, group: "lessons" | "materials" | "images" | "audio") {
+    if (!(value instanceof File) || value.size === 0) {
+      return "";
+    }
+
+    const uploadData = new FormData();
+    uploadData.append("file", value);
+    const response = await apiUpload<UploadResponse>(`/admin/uploads?group=${group}`, uploadData, token);
+
+    return response.file.url;
+  }
+
   function cmsExerciseLabel(exercise: CmsExerciseRow) {
     return exercise.title ?? exercise.name ?? "Exercício";
   }
@@ -1233,12 +1261,16 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     const data = new FormData(form);
 
     try {
+      const uploadedLessonUrl = await uploadCmsFile(data.get("lessonFile"), "lessons");
+      const uploadedMaterialUrl = await uploadCmsFile(data.get("materialFile"), "materials");
       await apiPost(
         "/admin/cms/exercises",
         {
           title: String(data.get("title") ?? ""),
-          videoUrl: String(data.get("videoUrl") ?? ""),
+          videoUrl: uploadedLessonUrl || String(data.get("videoUrl") ?? ""),
           audioUrl: String(data.get("audioUrl") ?? ""),
+          materialUrl: uploadedMaterialUrl || String(data.get("materialUrl") ?? ""),
+          notes: String(data.get("notes") ?? ""),
           targetMuscles: parseTagList(data.get("targetMuscles")),
           equipmentTags: parseTagList(data.get("equipmentTags")),
           modalityIds: data.getAll("modalityIds").map((item) => String(item)).filter(Boolean),
@@ -1500,6 +1532,38 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       item.status === "ACTIVE" &&
       (item.enrollmentStatus === "ACTIVE" || item.memberships?.some((membership) => membership.status === "ACTIVE"))
   );
+  const cmsPublishedCount = cmsPrograms.filter((item) => item.status === "PUBLISHED").length;
+  const cmsAssignmentCount = cmsPrograms.reduce((total, item) => total + (item.assignedUsers?.length ?? 0), 0);
+  const cmsStepCards = [
+    {
+      id: "modalities" as const,
+      icon: Dumbbell,
+      title: "Modalidades",
+      text: "Organize categorias antes de cadastrar aulas.",
+      metric: `${cmsModalities.filter((item) => item.isActive).length} ativa(s)`
+    },
+    {
+      id: "lessons" as const,
+      icon: UploadCloud,
+      title: "Aulas e materiais",
+      text: "Cadastre exercícios com video, audio e arquivos de apoio.",
+      metric: `${cmsExercises.length} item(ns)`
+    },
+    {
+      id: "blocks" as const,
+      icon: ClipboardList,
+      title: "Ficha de treino",
+      text: "Monte sequencias com series, repeticoes e descanso.",
+      metric: `${cmsWorkoutBlocks.length} bloco(s)`
+    },
+    {
+      id: "publish" as const,
+      icon: Check,
+      title: "Publicar",
+      text: "Revise, publique e atribua para alunos.",
+      metric: `${cmsPublishedCount} publicado(s)`
+    }
+  ];
 
   return (
     <main className="workspace-shell">
@@ -1600,47 +1664,67 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         <article className="table-panel wide-panel cms-panel" id="admin-cms">
           <div className="panel-title">
             <h2>CMS Fitness</h2>
-            <span>Fluxo de conteúdo</span>
+            <span>Publicação para alunos</span>
+          </div>
+          <div className="cms-hero">
+            <div>
+              <span className="eyebrow">Bancada de publicação</span>
+              <h3>Crie uma aula, monte a ficha e publique para alunos sem procurar campos escondidos.</h3>
+              <p>
+                O fluxo agora está separado por etapas: modalidades, aulas com materiais, fichas de treino e publicação.
+              </p>
+            </div>
+            <div className="cms-hero-metrics">
+              <span><strong>{cmsExercises.length}</strong>Aulas</span>
+              <span><strong>{cmsWorkoutBlocks.length}</strong>Fichas</span>
+              <span><strong>{cmsAssignmentCount}</strong>Alunos</span>
+            </div>
           </div>
           <div className="cms-workflow">
-            <article>
-              <strong>1</strong>
-              <span>Criar modalidades</span>
-              <small>{cmsModalities.filter((item) => item.isActive).length} ativa(s)</small>
-            </article>
-            <article>
-              <strong>2</strong>
-              <span>Criar exercícios</span>
-              <small>{cmsExercises.length} cadastrado(s)</small>
-            </article>
-            <article>
-              <strong>3</strong>
-              <span>Montar blocos</span>
-              <small>{cmsWorkoutBlocks.length} bloco(s)</small>
-            </article>
-            <article>
-              <strong>4</strong>
-              <span>Publicar programa</span>
-              <small>{cmsPrograms.filter((item) => item.status === "PUBLISHED").length} publicado(s)</small>
-            </article>
-            <article>
-              <strong>5</strong>
-              <span>Atribuir e acompanhar</span>
-              <small>{cmsPrograms.reduce((total, item) => total + (item.assignedUsers?.length ?? 0), 0)} atribuição(ões)</small>
-            </article>
+            {cmsStepCards.map((step, index) => (
+              <button
+                className={cmsStep === step.id ? "active" : ""}
+                key={step.id}
+                onClick={() => setCmsStep(step.id)}
+                type="button"
+              >
+                <strong>{index + 1}</strong>
+                <span><step.icon size={18} />{step.title}</span>
+                <small>{step.text}</small>
+                <small className="cms-step-metric">{step.metric}</small>
+              </button>
+            ))}
           </div>
-          <div className="cms-admin-grid">
-            <section>
+          <div className="cms-admin-grid cms-studio-grid">
+            {cmsStep === "modalities" && <section className="cms-studio-card">
               <div className="panel-title cms-subtitle">
-                <h2>1. Modalidades</h2>
+                <div>
+                  <h2>Modalidades</h2>
+                  <p>Crie categorias simples para organizar o catálogo do aluno.</p>
+                </div>
                 <span>{cmsModalities.length}</span>
               </div>
-              <form className="crud-form" onSubmit={handleCreateCmsModality}>
-                <input name="name" placeholder="Nome da modalidade" required />
-                <input name="description" placeholder="Descrição da modalidade" />
-                <input name="icon" placeholder="Ícone ou emoji" />
-                <input name="imageUrl" type="url" placeholder="URL da imagem" />
-                <input name="sortOrder" type="number" min="0" defaultValue={cmsModalities.length + 1} placeholder="Ordem" />
+              <form className="crud-form cms-form" onSubmit={handleCreateCmsModality}>
+                <label>
+                  Nome
+                  <input name="name" placeholder="Ex.: Musculação iniciante" required />
+                </label>
+                <label className="wide-field">
+                  Descrição curta
+                  <input name="description" placeholder="Resumo para identificar a categoria" />
+                </label>
+                <label>
+                  Ícone
+                  <input name="icon" placeholder="Ex.: força, mobilidade" />
+                </label>
+                <label>
+                  Capa da modalidade
+                  <input name="imageUrl" type="url" placeholder="https://.../capa.jpg" />
+                </label>
+                <label>
+                  Ordem
+                  <input name="sortOrder" type="number" min="0" defaultValue={cmsModalities.length + 1} />
+                </label>
                 <button className="primary-button">
                   <Save size={18} />
                   Salvar modalidade
@@ -1650,7 +1734,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 <div className="data-row cms-data-row" key={item.id}>
                   <span>
                     <strong>{item.name}</strong>
-                    {item.description || item.slug} | ID: {item.id}
+                    {item.description || item.slug}
                   </span>
                   <small>{item.isActive ? "Ativa" : "Inativa"} - ordem {item.sortOrder}</small>
                   <button aria-label="Desativar modalidade" onClick={() => handleDelete(`/admin/cms/modalities/${item.id}`)}>
@@ -1658,70 +1742,131 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   </button>
                 </div>
               ))}
-            </section>
+            </section>}
 
-            <section>
+            {cmsStep === "lessons" && <section className="cms-studio-card">
               <div className="panel-title cms-subtitle">
-                <h2>2. Exercícios/Aulas</h2>
+                <div>
+                  <h2>Aulas e materiais</h2>
+                  <p>Cadastre o que o aluno verá: título, vídeo, áudio, materiais e tags de organização.</p>
+                </div>
                 <span>{cmsExercises.length}</span>
               </div>
-              <form className="crud-form" onSubmit={handleCreateCmsExercise}>
-                <input name="title" placeholder="Título do exercício" required />
-                <input name="videoUrl" type="url" placeholder="URL do vídeo, imagem ou GIF" />
-                <input name="audioUrl" type="url" placeholder="URL do ?udio" />
-                <input name="targetMuscles" placeholder="Musculos, separados por virgula" />
-                <input name="equipmentTags" placeholder="Equipamentos, separados por virgula" />
-                <select name="modalityIds" multiple>
-                  {cmsModalities
-                    .filter((item) => item.isActive)
-                    .map((modality) => (
-                      <option value={modality.id} key={modality.id}>
-                        {modality.name}
-                      </option>
-                    ))}
-                </select>
-                <input name="alternativeIds" placeholder="IDs de alternativas, separados por virgula" />
+              <form className="crud-form cms-form" onSubmit={handleCreateCmsExercise}>
+                <label className="wide-field">
+                  Título da aula
+                  <input name="title" placeholder="Ex.: Agachamento livre" required />
+                </label>
+                <label className="cms-upload-field">
+                  <UploadCloud size={24} />
+                  <strong>Upload de aula</strong>
+                  <small>Vídeo, imagem ou GIF. Se preferir, cole uma URL pública no campo abaixo.</small>
+                  <input name="lessonFile" type="file" accept="video/*,image/*,.gif" aria-label="Selecionar mídia da aula" />
+                </label>
+                <label className="cms-upload-field">
+                  <FileText size={24} />
+                  <strong>Arquivo de apoio</strong>
+                  <small>PDF, planilha, ficha ou guia complementar para anexar ao conteúdo da aula.</small>
+                  <input name="materialFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,image/*" aria-label="Selecionar material de apoio" />
+                </label>
+                <label>
+                  URL do vídeo, imagem ou GIF
+                  <input name="videoUrl" type="url" placeholder="https://.../aula.mp4" />
+                </label>
+                <label>
+                  URL do áudio
+                  <input name="audioUrl" type="url" placeholder="https://.../orientacao.mp3" />
+                </label>
+                <label className="wide-field">
+                  URL do material de apoio
+                  <input name="materialUrl" type="url" placeholder="https://.../ficha.pdf" />
+                </label>
+                <label className="wide-field">
+                  Descrição e instruções da aula
+                  <textarea name="notes" placeholder="Descreva execução, postura, cuidados e sequência lógica do exercício" />
+                </label>
+                <label>
+                  Músculos trabalhados
+                  <input name="targetMuscles" placeholder="Peitoral, tríceps, ombros" />
+                </label>
+                <label>
+                  Equipamentos
+                  <input name="equipmentTags" placeholder="Barra, banco, halteres" />
+                </label>
+                <label className="wide-field">
+                  Modalidades
+                  <select name="modalityIds" multiple>
+                    {cmsModalities
+                      .filter((item) => item.isActive)
+                      .map((modality) => (
+                        <option value={modality.id} key={modality.id}>
+                          {modality.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label className="wide-field">
+                  Alternativas
+                  <input name="alternativeIds" placeholder="IDs de exercícios alternativos, separados por vírgula" />
+                </label>
                 <button className="primary-button">
                   <Save size={18} />
-                  Salvar exercício CMS
+                  Salvar aula
                 </button>
               </form>
               {cmsExercises.slice(0, 8).map((item) => (
                 <div className="data-row cms-data-row" key={item.id}>
                   <span>
                     <strong>{item.title ?? item.name ?? "Exercício"}</strong>
-                    {(item.modalityLinks ?? []).map((link) => link.modality.name).join(", ") || "Sem modalidade"} | ID: {item.id}
+                    {(item.modalityLinks ?? []).map((link) => link.modality.name).join(", ") || "Sem modalidade"}
                   </span>
-                  <small>{item.equipmentTags.join(", ") || "Sem equipamento"}</small>
+                  <small>{item.materialUrl ? "Material anexado" : item.equipmentTags.join(", ") || "Sem equipamento"}</small>
                   <button aria-label="Excluir exercício CMS" onClick={() => handleDelete(`/admin/cms/exercises/${item.id}`)}>
                     <Trash2 size={17} />
                   </button>
                 </div>
               ))}
-            </section>
+            </section>}
 
-            <section>
+            {cmsStep === "blocks" && <section className="cms-studio-card">
               <div className="panel-title cms-subtitle">
-                <h2>3. Treinos/Fichas</h2>
+                <div>
+                  <h2>Ficha de treino</h2>
+                  <p>Combine aulas em um bloco que represente um dia de treino completo.</p>
+                </div>
                 <span>{cmsWorkoutBlocks.length}</span>
               </div>
-              <form className="crud-form" onSubmit={handleCreateCmsWorkoutBlock}>
-                <input name="title" placeholder="Título do bloco" required />
-                <select name="structureType" defaultValue="NORMAL">
-                  <option value="NORMAL">Normal</option>
-                  <option value="BI_SET">Bi-set</option>
-                  <option value="DROP_SET">Drop-set</option>
-                  <option value="REST_PAUSE">Rest-pause</option>
-                </select>
-                <input name="restTime" type="number" min="0" defaultValue="60" placeholder="Descanso em segundos" required />
-                <div className="cms-builder-list">
+              <form className="crud-form cms-form" onSubmit={handleCreateCmsWorkoutBlock}>
+                <label>
+                  Nome do bloco
+                  <input name="title" placeholder="Ex.: Treino A - Peito e tríceps" required />
+                </label>
+                <label>
+                  Estrutura
+                  <select name="structureType" defaultValue="NORMAL">
+                    <option value="NORMAL">Normal</option>
+                    <option value="BI_SET">Bi-set</option>
+                    <option value="DROP_SET">Drop-set</option>
+                    <option value="REST_PAUSE">Rest-pause</option>
+                  </select>
+                </label>
+                <label>
+                  Descanso padrão
+                  <input name="restTime" type="number" min="0" defaultValue="60" placeholder="Segundos" required />
+                </label>
+                <div className="cms-builder-list wide-field">
+                  <div className="cms-builder-heading">
+                    <span>Aula</span>
+                    <span>Séries</span>
+                    <span>Repetições</span>
+                  </div>
                   {Array.from({ length: 6 }).map((_, index) => {
                     const row = index + 1;
 
                     return (
                       <div className="cms-builder-row" key={`block-exercise-${row}`}>
                         <select name={`exerciseId${row}`} required={row === 1} defaultValue="">
-                          <option value="">{row === 1 ? "Selecione o exercício" : "Exercício opcional"}</option>
+                          <option value="">{row === 1 ? "Selecione a primeira aula" : "Aula opcional"}</option>
                           {cmsExercises.map((exercise) => (
                             <option value={exercise.id} key={exercise.id}>
                               {cmsExerciseLabel(exercise)}
@@ -1736,14 +1881,14 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </div>
                 <button className="primary-button">
                   <Save size={18} />
-                  Salvar bloco CMS
+                  Salvar ficha
                 </button>
               </form>
               {cmsWorkoutBlocks.slice(0, 8).map((item) => (
                 <div className="data-row cms-data-row" key={item.id}>
                   <span>
                     <strong>{item.title}</strong>
-                    {item.exercises.map((row) => row.exercise.title ?? row.exercise.name ?? "Exercício").join(", ") || "Sem exercícios"} | ID: {item.id}
+                    {item.exercises.map((row) => row.exercise.title ?? row.exercise.name ?? "Exercício").join(", ") || "Sem exercícios"}
                   </span>
                   <small>{item.structureType} - {item.restTime}s</small>
                   <button aria-label="Excluir bloco CMS" onClick={() => handleDelete(`/admin/cms/workout-blocks/${item.id}`)}>
@@ -1751,31 +1896,46 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   </button>
                 </div>
               ))}
-            </section>
+            </section>}
 
-            <section className="cms-program-section">
+            {cmsStep === "publish" && <section className="cms-program-section cms-studio-card">
               <div className="panel-title cms-subtitle">
-                <h2>4. Programas publicados</h2>
+                <div>
+                  <h2>Publicar programa</h2>
+                  <p>Revise a jornada final, publique e atribua para um aluno ou para todos.</p>
+                </div>
                 <span>{cmsPrograms.length}</span>
               </div>
-              <form className="crud-form" onSubmit={handleCreateCmsProgram}>
-                <input name="title" placeholder="Título do programa" required />
-                <select name="modalityId" required defaultValue="">
-                  <option value="">Selecione a modalidade</option>
-                  {cmsModalities
-                    .filter((item) => item.isActive)
-                    .map((modality) => (
-                      <option value={modality.id} key={modality.id}>
-                        {modality.name}
-                      </option>
-                    ))}
-                </select>
-                <select name="status" defaultValue="DRAFT">
-                  <option value="DRAFT">Salvar como rascunho</option>
-                  <option value="PUBLISHED">Publicar agora</option>
-                </select>
-                <textarea name="description" placeholder="Descrição do programa" required />
-                <div className="cms-builder-list">
+              <form className="crud-form cms-form" onSubmit={handleCreateCmsProgram}>
+                <label>
+                  Título do programa
+                  <input name="title" placeholder="Ex.: Hipertrofia 4 semanas" required />
+                </label>
+                <label>
+                  Modalidade
+                  <select name="modalityId" required defaultValue="">
+                    <option value="">Selecione a modalidade</option>
+                    {cmsModalities
+                      .filter((item) => item.isActive)
+                      .map((modality) => (
+                        <option value={modality.id} key={modality.id}>
+                          {modality.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  Status inicial
+                  <select name="status" defaultValue="DRAFT">
+                    <option value="DRAFT">Salvar como rascunho</option>
+                    <option value="PUBLISHED">Publicar agora</option>
+                  </select>
+                </label>
+                <label className="wide-field">
+                  Descrição para o aluno
+                  <textarea name="description" placeholder="Explique objetivo, frequência e como seguir o treino" required />
+                </label>
+                <div className="cms-builder-list wide-field">
                   {Array.from({ length: 7 }).map((_, index) => {
                     const dayNumber = index + 1;
 
@@ -1783,7 +1943,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                       <div className="cms-builder-row program-day-row" key={`program-day-${dayNumber}`}>
                         <span>Dia {dayNumber}</span>
                         <select name={`workoutBlockId${dayNumber}`} required={dayNumber === 1} defaultValue="">
-                          <option value="">{dayNumber === 1 ? "Selecione o bloco" : "Bloco opcional"}</option>
+                          <option value="">{dayNumber === 1 ? "Selecione a ficha" : "Ficha opcional"}</option>
                           {cmsWorkoutBlocks.map((block) => (
                             <option value={block.id} key={block.id}>
                               {block.title}
@@ -1797,7 +1957,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </div>
                 <button className="primary-button">
                   <Save size={18} />
-                  Salvar programa CMS
+                  Salvar programa
                 </button>
               </form>
               {cmsPrograms.slice(0, 8).map((item) => (
@@ -1852,7 +2012,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   </div>
                 </article>
               ))}
-            </section>
+            </section>}
           </div>
         </article>
       </section>}
@@ -2126,6 +2286,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     | "events"
     | "support"
     | "ai"
+    | "history"
   >("home");
   const [profile, setProfile] = useState<{ name: string; objective?: string; level?: string } | null>(null);
   const [workout, setWorkout] = useState<WorkoutRow | null>(null);
@@ -2423,7 +2584,8 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
       );
       setWorkoutSession(null);
       await loadUserData();
-      setStudentSection("home");
+      setStudentSection("training");
+      setSelectedWorkoutModality(todayWorkout.modality ?? selectedWorkoutModality);
     } catch {
       setError("Não foi possível concluir o treino agora.");
     }
@@ -2529,6 +2691,39 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
   const sheetMembershipStartsAt = workoutSheet?.membershipStartsAt ?? membership?.startsAt ?? null;
   const sheetMembershipEndsAt = workoutSheet?.membershipEndsAt ?? membership?.endsAt ?? null;
   const formatStudentDate = (date?: string | null) => (date ? new Date(date).toLocaleDateString("pt-BR") : "Não informado");
+  const formatWorkoutDuration = (seconds?: number | null) => {
+    if (!seconds) return "Duração não informada";
+    const minutes = Math.floor(seconds / 60);
+    const restSeconds = seconds % 60;
+    return minutes > 0 ? `${minutes}min ${restSeconds}s` : `${restSeconds}s`;
+  };
+  const getWorkoutHistoryMuscles = (dayNumber: number) => {
+    const workoutFromDay = workoutSequence.find((item) => item.dayNumber === dayNumber) ?? workoutSheet;
+    const muscles = workoutFromDay?.block.exercises.flatMap((exercise) => exercise.targetMuscles ?? []) ?? [];
+    return Array.from(new Set(muscles)).join(", ") || "Músculos não registrados";
+  };
+  async function handleShareWorkoutHistory(session: WorkoutConsistencyResponse["sessions"][number]) {
+    const text = `Treino dia ${session.dayNumber} concluído em ${new Date(session.startedAt).toLocaleString("pt-BR")} no App Treino.`;
+
+    if (navigator.share) {
+      await navigator.share({
+        title: "Histórico de treino",
+        text
+      });
+      return;
+    }
+
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+    }
+  }
+  const workoutHistorySessions = useMemo(
+    () =>
+      [...(consistency?.sessions ?? [])].sort(
+        (first, second) => new Date(second.finishedAt ?? second.startedAt).getTime() - new Date(first.finishedAt ?? first.startedAt).getTime()
+      ),
+    [consistency?.sessions]
+  );
   const studentCode = profile?.name ? String(profile.name.length * 193 + 1) : "1931";
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
@@ -2811,7 +3006,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
         </div>
       </section>
 
-      <section className="student-app-content">
+      <>
         {error && <div className="error-box">{error}</div>}
 
         {studentSection === "home" && (
@@ -2931,7 +3126,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                     );
                   })}
                 </div>
-                <button className="student-history-button">
+                <button className="student-history-button" onClick={() => setStudentSection("history")}>
                   <ClipboardList size={22} />
                   Histórico de treinos
                 </button>
@@ -3157,7 +3352,60 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
             </button>
           </section>
         )}
-      </section>
+      </>
+
+        {studentSection === "history" && (
+          <section className="student-workout-history-page" aria-label="Histórico de treinos">
+            <div className="student-workout-history-header">
+              <div className="student-workout-history-icon">
+                <ClipboardList size={30} />
+              </div>
+              <div>
+                <h2>Histórico de treinos</h2>
+                <p>Consulte todas as execuções da sua ficha de treino atual.</p>
+              </div>
+            </div>
+            <div className="student-workout-history-list">
+              {workoutHistorySessions.length > 0 ? (
+                workoutHistorySessions.slice(0, 12).map((session) => (
+                  <article key={session.id}>
+                    <div className="student-history-card-heading">
+                      <div>
+                        <span>Treino</span>
+                        <strong>Treino dia {session.dayNumber}</strong>
+                      </div>
+                      <small>{new Date(session.startedAt).toLocaleString("pt-BR")}</small>
+                    </div>
+                    <div className="student-history-muscles">
+                      <Target size={20} />
+                      <span>{getWorkoutHistoryMuscles(session.dayNumber)}</span>
+                    </div>
+                    <div className="student-history-metrics">
+                      <span><strong>Batimentos (bpm)</strong>Não registrado</span>
+                      <span><strong>Tempo de duração</strong>{formatWorkoutDuration(session.durationSeconds)}</span>
+                      <span><strong>Calorias gastas</strong>Não registrado</span>
+                      <span><strong>Sessão</strong>{session.id.slice(-6).toUpperCase()}</span>
+                    </div>
+                    <button className="student-history-share-button" onClick={() => void handleShareWorkoutHistory(session)}>
+                      <Share2 size={18} />
+                      Compartilhar histórico
+                    </button>
+                  </article>
+                ))
+              ) : (
+                <div className="student-empty-state">
+                  <ClipboardList size={34} />
+                  <strong>Nenhum treino concluído</strong>
+                  <span>Finalize um treino para registrar no histórico.</span>
+                </div>
+              )}
+            </div>
+            <button className="student-history-back-button" onClick={() => setStudentSection("training")}>
+              <ChevronLeft size={20} />
+              Voltar
+            </button>
+          </section>
+        )}
 
       {streakCalendarOpen && (
         <div className="student-streak-modal-backdrop" role="presentation" onClick={() => setStreakCalendarOpen(false)}>
@@ -3231,7 +3479,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
       <nav className="student-bottom-nav" aria-label="Navegacao do aluno">
         <button className={studentSection === "home" ? "active" : ""} onClick={() => setStudentSection("home")}><Home size={22} />Home</button>
         <button className={studentSection === "payments" ? "active" : ""} onClick={() => setStudentSection("payments")}><CreditCard size={22} />Pagamentos</button>
-        <button className={studentSection === "training" || studentSection === "player" ? "active" : ""} onClick={() => setStudentSection("training")}><Dumbbell size={22} />Treino</button>
+        <button className={studentSection === "training" || studentSection === "player" || studentSection === "history" ? "active" : ""} onClick={() => setStudentSection("training")}><Dumbbell size={22} />Treino</button>
         <button className={studentSection === "products" ? "active" : ""} onClick={() => setStudentSection("products")}><Package size={22} />Produtos</button>
         <button className={studentSection === "menu" ? "active" : ""} onClick={() => setStudentSection("menu")}><Menu size={22} />Menu</button>
       </nav>

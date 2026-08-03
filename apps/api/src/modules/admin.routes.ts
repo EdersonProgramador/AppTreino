@@ -1,8 +1,39 @@
 import type { FastifyInstance } from "fastify";
+import { createWriteStream, mkdirSync } from "node:fs";
+import { dirname, extname, resolve } from "node:path";
+import { pipeline } from "node:stream/promises";
+import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { hashPassword, requireRole } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
+
+const uploadsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../uploads");
+const uploadGroups = ["lessons", "materials", "images", "audio"] as const;
+const uploadSchema = z.object({
+  group: z.enum(uploadGroups).default("materials")
+});
+const allowedUploadMimeTypes = new Set([
+  "video/mp4",
+  "video/webm",
+  "video/ogg",
+  "video/quicktime",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/wav",
+  "audio/ogg",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/csv"
+]);
 
 const userSchema = z.object({
   name: z.string().min(2),
@@ -53,6 +84,8 @@ const cmsExerciseSchema = z.object({
   title: z.string().min(2),
   videoUrl: z.string().url().optional().or(z.literal("")),
   audioUrl: z.string().url().optional().or(z.literal("")),
+  materialUrl: z.string().url().optional().or(z.literal("")),
+  notes: z.string().optional(),
   targetMuscles: z.array(z.string().min(1)).default([]),
   equipmentTags: z.array(z.string().min(1)).default([]),
   modalityIds: z.array(z.string().min(1)).default([]),
@@ -242,6 +275,15 @@ function httpError(statusCode: number, message: string) {
   error.statusCode = statusCode;
 
   return error;
+}
+
+function safeFileExtension(filename: string) {
+  return extname(filename).toLowerCase().replace(/[^a-z0-9.]/g, "").slice(0, 12);
+}
+
+function publicUploadUrl(request: { headers: { host?: string }; protocol: string }, relativePath: string) {
+  const host = request.headers.host ?? `localhost:${env.API_PORT}`;
+  return `${request.protocol}://${host}/uploads/${relativePath.replace(/\\/g, "/")}`;
 }
 
 function uniqueValues(values: string[]) {
@@ -552,6 +594,40 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     if (request.url.startsWith("/admin")) {
       await requireRole(app, request, "ADMIN");
     }
+  });
+
+  app.post("/admin/uploads", async (request, reply) => {
+    const { group } = uploadSchema.parse(request.query);
+    const file = await request.file();
+
+    if (!file) {
+      throw httpError(400, "Selecione um arquivo para enviar.");
+    }
+
+    if (!allowedUploadMimeTypes.has(file.mimetype)) {
+      throw httpError(400, "Tipo de arquivo não permitido para o CMS Fitness.");
+    }
+
+    const targetDir = resolve(uploadsDir, group);
+    mkdirSync(targetDir, { recursive: true });
+
+    const extension = safeFileExtension(file.filename);
+    const filename = `${Date.now()}-${randomUUID()}${extension}`;
+    const targetPath = resolve(targetDir, filename);
+
+    await pipeline(file.file, createWriteStream(targetPath));
+
+    const relativePath = `${group}/${filename}`;
+
+    return reply.code(201).send({
+      file: {
+        originalName: file.filename,
+        filename,
+        mimeType: file.mimetype,
+        url: publicUploadUrl(request, relativePath),
+        path: relativePath
+      }
+    });
   });
 
   app.get("/admin/summary", async () => {
@@ -923,6 +999,8 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         title: body.title,
         videoUrl: body.videoUrl || null,
         audioUrl: body.audioUrl || null,
+        materialUrl: body.materialUrl || null,
+        notes: body.notes || null,
         targetMuscles: body.targetMuscles,
         equipmentTags: body.equipmentTags,
         modalityLinks: {
@@ -966,6 +1044,8 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           title: body.title,
           videoUrl: body.videoUrl || null,
           audioUrl: body.audioUrl || null,
+          materialUrl: body.materialUrl || null,
+          notes: body.notes || null,
           targetMuscles: body.targetMuscles,
           equipmentTags: body.equipmentTags,
           modalityLinks: {

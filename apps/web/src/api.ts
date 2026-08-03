@@ -85,3 +85,17 @@ export async function apiDelete<T>(path: string, token?: string | null): Promise
 
   return response.json() as Promise<T>;
 }
+
+export async function apiUpload<T>(path: string, body: FormData, token?: string | null): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body
+  });
+
+  if (!response.ok) {
+    throw new ApiError(response.status, await getErrorMessage(response));
+  }
+
+  return response.json() as Promise<T>;
+}

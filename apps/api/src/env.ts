@@ -10,9 +10,9 @@ for (const envPath of [resolve(process.cwd(), "../../.env"), resolve(process.cwd
 }
 
 const envSchema = z.object({
-  API_PORT: z.coerce.number().default(3333),
+  API_PORT: z.preprocess((value) => value ?? process.env.PORT, z.coerce.number().default(3333)),
   DATABASE_URL: z.string().optional(),
-  WEB_ORIGIN: z.string().url().default("http://localhost:5173"),
+  WEB_ORIGIN: z.string().default("http://localhost:5173"),
   JWT_SECRET: z.string().min(16).default("change-me-in-local-development"),
   GOOGLE_CLIENT_ID: z.string().optional(),
   ASAAS_API_KEY: z.string().optional(),

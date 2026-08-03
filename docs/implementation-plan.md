@@ -1,5 +1,8 @@
 # Plano de Implementacao
 
+Regra Geral: Nunca suma ou reescreva lógica anteriormente configurada.
+Sempre permaneça tudo criado intacto, crie apenas o que foi solicidado.
+
 ## Fase 1
 
 - Subir API com rota de saude.
@@ -427,3 +430,7 @@ Ajuste de publicação no Painel admin
     - FitDance
     - Dança de Salão
     - Run (Roridão)
+
+2 Dentro de cada modalidade criar treino/ficha e Adicionar exercícios/Aula em cada modalide criada.
+
+Sincronize com o banco para para criar os formulários corretos

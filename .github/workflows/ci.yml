@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      DATABASE_URL: mysql://user:password@localhost:3306/app_treino
+      DATABASE_URL: postgresql://user:password@localhost:5432/app_treino?schema=public
       JWT_SECRET: change-me-in-github-actions
       WEB_ORIGIN: http://localhost:5173
 

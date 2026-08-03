@@ -139,6 +139,7 @@ model Exercise {
   title            String?
   videoUrl         String?                @map("video_url")
   audioUrl         String?                @map("audio_url")
+  materialUrl      String?                @map("material_url")
   targetMuscles    String[]               @default([]) @map("target_muscles")
   equipmentTags    String[]               @default([]) @map("equipment_tags")
   alternatives     Exercise[]             @relation("ExerciseAlternatives")
