@@ -80,6 +80,12 @@ declare global {
 }
 
 const assetUrl = (path: string) => `${import.meta.env.BASE_URL}${path}`;
+const mediaUrl = (path?: string | null) => {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+
+  return assetUrl(path.replace(/^\/+/, ""));
+};
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
 function monthLabel(year: number, month: number) {
@@ -400,6 +406,7 @@ interface TodayWorkoutResponse {
     totalDays: number;
     completed?: boolean;
     modality?: string;
+    modalityImageUrl?: string | null;
     description?: string;
     completedWorkouts?: number;
     teacherNames?: string[];
@@ -2675,7 +2682,9 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     () =>
       Array.from(new Set(publishedWorkouts.map((item) => item.modality ?? "Hipertrofia"))).map((modality) => ({
         modality,
-        count: publishedWorkouts.filter((item) => (item.modality ?? "Hipertrofia") === modality).length
+        count: publishedWorkouts.filter((item) => (item.modality ?? "Hipertrofia") === modality).length,
+        imageUrl:
+          publishedWorkouts.find((item) => (item.modality ?? "Hipertrofia") === modality)?.modalityImageUrl ?? null
       })),
     [publishedWorkouts]
   );
@@ -3071,9 +3080,17 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                 <div className="student-modality-list">
                   {publishedModalities.map((item) => (
                     <button className="student-modality-card" key={item.modality} onClick={() => setSelectedWorkoutModality(item.modality)}>
-                      <span><Dumbbell size={26} /></span>
-                      <strong>{item.modality}</strong>
-                      <small>{item.count} ficha(s) publicada(s)</small>
+                      <span className={`student-modality-media ${item.imageUrl ? "with-image" : ""}`}>
+                        {item.imageUrl ? (
+                          <img src={mediaUrl(item.imageUrl)} alt="" aria-hidden="true" />
+                        ) : (
+                          <Dumbbell size={26} />
+                        )}
+                      </span>
+                      <span className="student-modality-copy">
+                        <strong>{item.modality}</strong>
+                        <small>{item.count} ficha(s) publicada(s)</small>
+                      </span>
                     </button>
                   ))}
                 </div>

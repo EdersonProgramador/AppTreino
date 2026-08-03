@@ -445,6 +445,7 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
         dayNumber: currentDay,
         totalDays: assignment.program.days.length,
         modality: modalityName,
+        modalityImageUrl: programDay.program.modality?.imageUrl ?? null,
         description: metadata.description,
         completedWorkouts: completedDaySet.size,
         teacherNames: teachers.map((teacher) => teacher.name),
