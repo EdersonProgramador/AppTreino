@@ -26,6 +26,7 @@ npm run dev:api
 O projeto possui CI em `.github/workflows/ci.yml` para pushes e pull requests na branch `main`.
 O deploy da web para GitHub Pages fica em `.github/workflows/deploy-pages.yml`.
 O deploy da API/backend fica em `.github/workflows/deploy-api.yml`.
+O deploy gratuito da API/backend para Koyeb fica em `.github/workflows/deploy-koyeb.yml`.
 
 Para reproduzir localmente as principais checagens:
 
@@ -76,6 +77,21 @@ Para o CORS da API, `PRODUCTION_WEB_ORIGIN` deve incluir a origem do Pages: `htt
 Se precisar liberar mais de uma origem, separe por virgula, por exemplo `https://edersonprogramador.github.io,http://localhost:5173`.
 
 Se os secrets de produção não estiverem completos, o workflow publica a imagem no GHCR e pula o deploy no servidor.
+
+### Deploy gratuito da API no Koyeb
+
+O workflow `Deploy API to Koyeb` usa o Dockerfile da API e publica o backend em uma Free Instance do Koyeb.
+
+Configure estes secrets no GitHub:
+
+```txt
+KOYEB_API_TOKEN
+PRODUCTION_DATABASE_URL
+PRODUCTION_JWT_SECRET
+```
+
+Use um PostgreSQL externo no `PRODUCTION_DATABASE_URL`, como Supabase ou Neon no plano gratuito.
+Depois que o Koyeb gerar a URL publica da API, configure `VITE_API_URL` no GitHub Pages com essa URL HTTPS.
 
 ## Ambiente
 
