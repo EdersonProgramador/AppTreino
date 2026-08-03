@@ -11,6 +11,7 @@ const checkoutRegisterSchema = z
     email: z.string().trim().email("Informe um e-mail valido.").optional().or(z.literal("")),
     phone: z.string().trim().min(8, "Informe um telefone valido.").optional().or(z.literal("")),
     password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
+    gender: z.enum(["MALE", "FEMALE"]).optional().or(z.literal("")),
     planCode: z.enum(["monthly", "annual"], {
       required_error: "Escolha um plano para continuar."
     }),
@@ -349,7 +350,10 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
             passwordHash: await hashPassword(body.password),
             role: "USER",
             profile: {
-              create: { phone }
+              create: {
+                phone,
+                gender: body.gender || null
+              }
             }
           }
         });

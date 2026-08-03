@@ -55,6 +55,7 @@ model Profile {
   user      User      @relation(fields: [userId], references: [id])
   phone     String?
   document  String?
+  gender    Gender?
   birthDate DateTime? @map("birth_date")
   objective String?
   level     String?
@@ -219,6 +220,7 @@ model Program {
   modality        Modality?           @relation(fields: [modalityId], references: [id], onDelete: SetNull)
   title           String
   description     String
+  targetGender    ProgramTargetGender @default(ALL) @map("target_gender")
   status          ProgramStatus       @default(DRAFT)
   isActive        Boolean             @default(true) @map("is_active")
   publishedAt     DateTime?           @map("published_at")
@@ -434,6 +436,21 @@ enum ProgramStatus {
   ARCHIVED
 
   @@map("program_status")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+
+  @@map("gender")
+}
+
+enum ProgramTargetGender {
+  ALL
+  MALE
+  FEMALE
+
+  @@map("program_target_gender")
 }
 
 enum UserProgramStatus {

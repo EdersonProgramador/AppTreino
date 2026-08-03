@@ -43,6 +43,7 @@ const userSchema = z.object({
   status: z.enum(["ACTIVE", "INACTIVE"]).default("ACTIVE"),
   phone: z.string().optional(),
   document: z.string().optional(),
+  gender: z.enum(["MALE", "FEMALE"]).optional().or(z.literal("")),
   objective: z.string().optional(),
   level: z.string().optional()
 });
@@ -112,6 +113,7 @@ const cmsProgramSchema = z.object({
   title: z.string().min(2),
   description: z.string().min(2),
   modalityId: z.string().min(1),
+  targetGender: z.enum(["ALL", "MALE", "FEMALE"]).default("ALL"),
   status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).default("DRAFT"),
   isActive: z.coerce.boolean().default(true),
   days: z
@@ -424,7 +426,7 @@ async function assignProgramToStudents(programId: string, currentDay = 1) {
   return assignProgramToActiveStudents(programId, currentDay);
 }
 
-async function getActiveStudentIds(userIds?: string[]) {
+async function getActiveStudentIds(userIds?: string[], targetGender: "ALL" | "MALE" | "FEMALE" = "ALL") {
   const students = await prisma.user.findMany({
     where: {
       role: "USER",
@@ -448,14 +450,28 @@ async function getActiveStudentIds(userIds?: string[]) {
       ]
     },
     select: {
-      id: true
+      id: true,
+      profile: {
+        select: {
+          gender: true
+        }
+      }
     }
   });
-  return students.map((student) => student.id);
+
+  return students
+    .filter((student) => targetGender === "ALL" || student.profile?.gender === targetGender)
+    .map((student) => student.id);
 }
 
 async function assignProgramToActiveStudents(programId: string, currentDay = 1, userIds?: string[]) {
-  const activeStudentIds = await getActiveStudentIds(userIds);
+  const program = await prisma.program.findUniqueOrThrow({
+    where: { id: programId },
+    select: {
+      targetGender: true
+    }
+  });
+  const activeStudentIds = await getActiveStudentIds(userIds, program.targetGender);
 
   if (activeStudentIds.length === 0) {
     return [];
@@ -690,6 +706,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           create: {
             phone: body.phone,
             document: body.document,
+            gender: body.gender || null,
             objective: body.objective,
             level: body.level
           }
@@ -707,7 +724,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
     const body = updateUserSchema.parse(request.body);
-    const { password, phone, document, objective, level, ...userData } = body;
+    const { password, phone, document, gender, objective, level, ...userData } = body;
 
     const user = await prisma.user.update({
       where: { id },
@@ -718,8 +735,8 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         passwordHash: password ? await hashPassword(password) : undefined,
         profile: {
           upsert: {
-            create: { phone, document, objective, level },
-            update: { phone, document, objective, level }
+            create: { phone, document, gender: gender || null, objective, level },
+            update: { phone, document, gender: gender || null, objective, level }
           }
         }
       },
@@ -1251,6 +1268,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         modalityId: body.modalityId,
         title: body.title,
         description: buildProgramDescription(body.description, modality.name),
+        targetGender: body.targetGender,
         status: body.status,
         isActive: body.isActive,
         publishedAt: body.status === "PUBLISHED" ? new Date() : null,
@@ -1301,6 +1319,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           modalityId: body.modalityId,
           title: body.title,
           description: buildProgramDescription(body.description, modality.name),
+          targetGender: body.targetGender,
           status: body.status,
           isActive: body.isActive,
           publishedAt: body.status === "PUBLISHED" ? new Date() : null,

@@ -230,6 +230,7 @@ export async function registerUserRoutes(app: FastifyInstance) {
         email: profile.email,
         phone: profile.phone ?? profile.profile?.phone,
         document: profile.profile?.document,
+        gender: profile.profile?.gender,
         objective: profile.profile?.objective,
         level: profile.profile?.level
       }

@@ -176,6 +176,9 @@ interface AdminUser {
   role: "ADMIN" | "USER";
   status: "ACTIVE" | "INACTIVE";
   enrollmentStatus: "PENDING" | "ACTIVE" | "CANCELED";
+  profile?: {
+    gender?: "MALE" | "FEMALE" | null;
+  } | null;
   memberships?: Array<{ id: string; status: MembershipRow["status"] }>;
 }
 
@@ -250,6 +253,7 @@ interface CmsProgramRow {
   description: string;
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   isActive: boolean;
+  targetGender: "ALL" | "MALE" | "FEMALE";
   modality?: CmsModalityRow | null;
   assignedUsers?: Array<{ id: string; user: AdminUser; currentDay: number; status: "ACTIVE" | "COMPLETED" | "CANCELED" }>;
   days: Array<{
@@ -541,6 +545,7 @@ export function App() {
     const name = String(formData.get("name") ?? "").trim();
     const email = String(formData.get("email") ?? "").trim().toLowerCase();
     const phone = String(formData.get("phone") ?? "").trim();
+    const gender = String(formData.get("gender") ?? "").trim();
     const identifier = String(formData.get("identifier") ?? "").trim();
     const password = String(formData.get("password") ?? "");
     const billingType = String(formData.get("billingType") ?? "UNDEFINED");
@@ -562,6 +567,7 @@ export function App() {
             name: name || "Usuário Google",
             email: email || (identifier.includes("@") ? identifier : undefined),
             phone: phone || (!identifier.includes("@") ? identifier : undefined),
+            gender: mode === "register" ? gender || undefined : undefined,
             idToken: idToken || credential || undefined,
             credential: credential || idToken || undefined
           }
@@ -573,8 +579,8 @@ export function App() {
               provider
             }
           : isCheckoutRegister
-            ? { name, email: email || undefined, phone: phone || undefined, password, planCode: selectedPlanCode, billingType }
-            : { name, email: email || undefined, phone: phone || undefined, password, provider };
+            ? { name, email: email || undefined, phone: phone || undefined, gender: gender || undefined, password, planCode: selectedPlanCode, billingType }
+            : { name, email: email || undefined, phone: phone || undefined, gender: gender || undefined, password, provider };
 
     try {
       if (provider === "GOOGLE" && !idToken && !credential) {
@@ -1005,6 +1011,14 @@ function LoginView({
                 Telefone
                 <input name="phone" type="tel" placeholder="+55 11 99999-9999" />
               </label>
+              <label>
+                Sexo
+                <select name="gender" required defaultValue="">
+                  <option value="">Selecione</option>
+                  <option value="MALE">Masculino</option>
+                  <option value="FEMALE">Feminino</option>
+                </select>
+              </label>
             </>
           )}
           <label>
@@ -1162,6 +1176,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           email: String(data.get("email") ?? ""),
           password: String(data.get("password") ?? ""),
           role: String(data.get("role") ?? "USER"),
+          gender: String(data.get("gender") ?? ""),
           objective: String(data.get("objective") ?? ""),
           level: String(data.get("level") ?? "")
         },
@@ -1171,6 +1186,15 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       await loadAdminData();
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar o usuário."));
+    }
+  }
+
+  async function handleUpdateUserGender(userId: string, gender: "MALE" | "FEMALE") {
+    try {
+      await apiPut(`/admin/users/${userId}`, { gender }, token);
+      await loadAdminData();
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o sexo do aluno."));
     }
   }
 
@@ -1327,6 +1351,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           title: String(data.get("title") ?? ""),
           description: String(data.get("description") ?? ""),
           modalityId: String(data.get("modalityId") ?? ""),
+          targetGender: String(data.get("targetGender") ?? "ALL"),
           status: String(data.get("status") ?? "DRAFT"),
           isActive: String(data.get("status") ?? "DRAFT") === "PUBLISHED",
           days: parseCmsProgramDays(data)
@@ -1645,6 +1670,11 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               <option value="USER">Aluno</option>
               <option value="ADMIN">Admin</option>
             </select>
+            <select name="gender" defaultValue="">
+              <option value="">Sexo</option>
+              <option value="MALE">Masculino</option>
+              <option value="FEMALE">Feminino</option>
+            </select>
             <input name="objective" placeholder="Objetivo" />
             <input name="level" placeholder="Nível" />
             <button className="primary-button">
@@ -1659,6 +1689,17 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 {item.email}
               </span>
               <small>{item.role}</small>
+              {item.role === "USER" && (
+                <span className="admin-user-gender-actions">
+                  <small>{item.profile?.gender === "MALE" ? "Masculino" : item.profile?.gender === "FEMALE" ? "Feminino" : "Sem sexo"}</small>
+                  <button type="button" onClick={() => void handleUpdateUserGender(item.id, "MALE")}>
+                    M
+                  </button>
+                  <button type="button" onClick={() => void handleUpdateUserGender(item.id, "FEMALE")}>
+                    F
+                  </button>
+                </span>
+              )}
               <button aria-label="Excluir usuário" onClick={() => handleDelete(`/admin/users/${item.id}`)}>
                 <Trash2 size={17} />
               </button>
@@ -1938,6 +1979,14 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     <option value="PUBLISHED">Publicar agora</option>
                   </select>
                 </label>
+                <label>
+                  Público por sexo
+                  <select name="targetGender" defaultValue="ALL">
+                    <option value="ALL">Todos</option>
+                    <option value="MALE">Masculino</option>
+                    <option value="FEMALE">Feminino</option>
+                  </select>
+                </label>
                 <label className="wide-field">
                   Descrição para o aluno
                   <textarea name="description" placeholder="Explique objetivo, frequência e como seguir o treino" required />
@@ -1974,6 +2023,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     <h3>{item.title}</h3>
                     <p>{parseProgramMetadata(item.description).description}</p>
                     <small>Modalidade: {item.modality?.name ?? parseProgramMetadata(item.description).modality}</small>
+                    <small>Público: {item.targetGender === "MALE" ? "Masculino" : item.targetGender === "FEMALE" ? "Feminino" : "Todos"}</small>
                     <small>{item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.title}`).join(" | ") || "Sem dias cadastrados"}</small>
                   </div>
                   <div className="cms-program-actions">
@@ -2295,7 +2345,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     | "ai"
     | "history"
   >("home");
-  const [profile, setProfile] = useState<{ name: string; objective?: string; level?: string } | null>(null);
+  const [profile, setProfile] = useState<{ name: string; gender?: "MALE" | "FEMALE" | null; objective?: string; level?: string } | null>(null);
   const [workout, setWorkout] = useState<WorkoutRow | null>(null);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkoutResponse["workout"] | null>(null);
   const [publishedWorkouts, setPublishedWorkouts] = useState<TodayWorkoutResponse["workout"][]>([]);
@@ -2330,7 +2380,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
 
     try {
       const [profileResponse, membershipResponse, paymentsResponse, workoutProgramsResponse] = await Promise.all([
-        apiGet<{ profile: { name: string; objective?: string; level?: string } }>("/user/profile", token),
+        apiGet<{ profile: { name: string; gender?: "MALE" | "FEMALE" | null; objective?: string; level?: string } }>("/user/profile", token),
         apiGet<{ membership: StudentMembershipRow | null }>("/user/membership", token),
         apiGet<{ payments: PaymentRow[] }>("/user/payments", token),
         apiGet<StudentWorkoutProgramsResponse>("/student/workout/programs", token).catch(() => ({ workouts: [] }))
@@ -3112,8 +3162,15 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                   </div>
                 </header>
                 <div className="student-training-sheet-meta">
-                  <span>Treino de hoje: <strong>{currentSequenceWorkout?.block.title ?? workoutSheet.block.title}</strong></span>
-                  <span>Treinos realizados: <strong>{sheetCompleted}/{sheetTotal}</strong> <Settings size={22} /></span>
+                  <span>
+                    <small>Treino de hoje</small>
+                    <strong>{currentSequenceWorkout?.block.title ?? workoutSheet.block.title}</strong>
+                  </span>
+                  <span>
+                    <small>Treinos realizados</small>
+                    <strong>{sheetCompleted}/{sheetTotal}</strong>
+                    <Settings size={22} />
+                  </span>
                 </div>
                 <div className="student-progress-track">
                   <span style={{ width: `${sheetProgressPercent}%` }} />

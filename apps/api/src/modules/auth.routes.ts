@@ -48,6 +48,7 @@ const registerSchema = z
     email: z.string().email().optional().or(z.literal("")),
     phone: z.string().min(8).optional().or(z.literal("")),
     password: z.string().min(6).optional(),
+    gender: z.enum(["MALE", "FEMALE"]).optional().or(z.literal("")),
     provider: z.enum(["EMAIL", "GOOGLE"]).default("EMAIL")
   })
   .superRefine((data, ctx) => {
@@ -79,6 +80,7 @@ const googleSchema = z.object({
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().optional().or(z.literal("")),
   name: z.string().optional().or(z.literal("")),
+  gender: z.enum(["MALE", "FEMALE"]).optional().or(z.literal("")),
   idToken: z.string().optional().or(z.literal("")),
   credential: z.string().optional().or(z.literal(""))
 });
@@ -310,7 +312,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
                   objective: "Ganhar massa muscular",
                   level: "Intermediário"
                 }
-            }
+              }
           }
         });
       } catch (error) {
@@ -437,7 +439,10 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           provider,
           role: "USER",
           profile: {
-            create: { phone }
+            create: {
+              phone,
+              gender: body.gender || null
+            }
           }
         }
       });
@@ -546,7 +551,10 @@ export async function registerAuthRoutes(app: FastifyInstance) {
             googleId,
             role: "USER",
             profile: {
-              create: { phone }
+              create: {
+                phone,
+                gender: body.gender || null
+              }
             }
           }
         });

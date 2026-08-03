@@ -142,90 +142,105 @@ async function main() {
     {
       id: "seed-abc-ex-puxador-alto",
       title: "Puxador Alto",
+      videoUrl: "/assets/exercises/abc/Puxador_Alto.png",
       targetMuscles: ["Costas", "Biceps"],
       equipmentTags: ["Puxador", "Cabo"]
     },
     {
       id: "seed-abc-ex-remada-baixa-barra",
       title: "Remada Baixa Barra",
+      videoUrl: "/assets/exercises/abc/Remada_Baixa_Barra.png",
       targetMuscles: ["Costas", "Biceps"],
       equipmentTags: ["Remada", "Barra", "Cabo"]
     },
     {
       id: "seed-abc-ex-barra-fixa-graviton",
       title: "Barra fixa ou Graviton",
+      videoUrl: "/assets/exercises/abc/Barra_Fixa_ou_Graviton.png",
       targetMuscles: ["Costas", "Biceps"],
       equipmentTags: ["Peso Corporal", "Graviton"]
     },
     {
       id: "seed-abc-ex-rosca-direta",
       title: "Rosca Direta (cabo/barra/halter)",
+      videoUrl: "/assets/exercises/abc/Rosca_Direta.png",
       targetMuscles: ["Biceps"],
       equipmentTags: ["Cabo", "Barra", "Halter"]
     },
     {
       id: "seed-abc-ex-panturrilhas",
       title: "Panturrilhas",
+      videoUrl: "/assets/exercises/abc/Panturrilhas.png",
       targetMuscles: ["Panturrilhas"],
       equipmentTags: ["Maquina", "Peso Corporal"]
     },
     {
       id: "seed-abc-ex-agachamento",
       title: "Agachamento (variações)",
+      videoUrl: "/assets/exercises/abc/Agachamento_Variacoes.png",
       targetMuscles: ["Quadriceps", "Gluteos", "Posterior"],
       equipmentTags: ["Barra", "Halter", "Peso Corporal"]
     },
     {
       id: "seed-abc-ex-leg-press",
       title: "Leg Press",
+      videoUrl: "/assets/exercises/abc/Leg_Press.png",
       targetMuscles: ["Quadriceps", "Gluteos", "Posterior"],
       equipmentTags: ["Leg Press"]
     },
     {
       id: "seed-abc-ex-mesa-flexora",
       title: "Mesa Flexora",
+      videoUrl: "/assets/exercises/abc/Mesa_Flexora.png",
       targetMuscles: ["Posterior"],
       equipmentTags: ["Mesa Flexora"]
     },
     {
       id: "seed-abc-ex-cadeira-extensora",
       title: "Cadeira Extensora",
+      videoUrl: "/assets/exercises/abc/Cadeira_Extensora.png",
       targetMuscles: ["Quadriceps"],
       equipmentTags: ["Cadeira Extensora"]
     },
     {
       id: "seed-abc-ex-abdominal-roda",
       title: "Abdominal Roda",
+      videoUrl: "/assets/exercises/abc/Abdominal_Roda.png",
       targetMuscles: ["Abdomen"],
       equipmentTags: ["Roda Abdominal"]
     },
     {
       id: "seed-abc-ex-supino-reto",
       title: "Supino Reto",
+      videoUrl: "/assets/exercises/abc/Supino_Reto.png",
       targetMuscles: ["Peitoral", "Ombro", "Triceps"],
       equipmentTags: ["Barra", "Banco Reto"]
     },
     {
       id: "seed-abc-ex-desenvolvimento-militar",
       title: "Desenvolvimento Militar",
+      videoUrl: "/assets/exercises/abc/Desenvolvimento_Militar.png",
       targetMuscles: ["Ombro", "Triceps"],
       equipmentTags: ["Barra", "Halter"]
     },
     {
       id: "seed-abc-ex-supino-inclinado",
       title: "Supino Inclinado (halt ou barra)",
+      videoUrl: "/assets/exercises/abc/Supino_Inclinado.png",
       targetMuscles: ["Peitoral", "Ombro", "Triceps"],
       equipmentTags: ["Halter", "Barra", "Banco Inclinado"]
     },
     {
       id: "seed-abc-ex-elevacao-lateral",
       title: "Elevação Lateral",
+      videoUrl: "/assets/exercises/abc/Elevacao_Lateral.png",
       targetMuscles: ["Ombro"],
       equipmentTags: ["Halter", "Cabo"]
     },
     {
       id: "seed-abc-ex-triceps-barra-cabo",
       title: "Triceps Barra cabo",
+      videoUrl: "/assets/exercises/abc/Triceps_Barra_Cabo.png",
       targetMuscles: ["Triceps"],
       equipmentTags: ["Cabo", "Barra"]
     }
@@ -238,6 +253,7 @@ async function main() {
         id: exercise.id,
         title: exercise.title,
         name: exercise.title,
+        videoUrl: exercise.videoUrl,
         notes: "Treino iniciante ABC: progredir carga ou repetição toda semana dentro da zona alvo. Fazer 20 min de cardio pós treino em qualquer aparelho.",
         targetMuscles: exercise.targetMuscles,
         equipmentTags: exercise.equipmentTags,
@@ -251,6 +267,7 @@ async function main() {
       update: {
         title: exercise.title,
         name: exercise.title,
+        videoUrl: exercise.videoUrl,
         notes: "Treino iniciante ABC: progredir carga ou repetição toda semana dentro da zona alvo. Fazer 20 min de cardio pós treino em qualquer aparelho.",
         targetMuscles: exercise.targetMuscles,
         equipmentTags: exercise.equipmentTags
@@ -363,6 +380,7 @@ async function main() {
           "Planilha de treino iniciante com divisão ABC em dias alternados. Duração: 6 meses. Progredir carga ou repetição toda semana dentro da zona alvo e fazer 20 min de cardio pós treino em qualquer aparelho.",
         modality: "Musculação"
       }),
+      targetGender: "MALE",
       status: "PUBLISHED",
       isActive: true,
       publishedAt: new Date()
@@ -375,6 +393,7 @@ async function main() {
           "Planilha de treino iniciante com divisão ABC em dias alternados. Duração: 6 meses. Progredir carga ou repetição toda semana dentro da zona alvo e fazer 20 min de cardio pós treino em qualquer aparelho.",
         modality: "Musculação"
       }),
+      targetGender: "MALE",
       status: "PUBLISHED",
       isActive: true,
       publishedAt: new Date()

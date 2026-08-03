@@ -390,6 +390,30 @@ export function WorkoutPlayer({
     onBack();
   }
 
+  function handleHeaderBack() {
+    if (isRunning) {
+      if (panel === "sequence") {
+        setCancelOpen(true);
+        return;
+      }
+
+      setCancelOpen(false);
+      setPanel("sequence");
+      return;
+    }
+
+    onBack();
+  }
+
+  function handleRunnerCancelButton() {
+    if (isRunning) {
+      setCancelOpen(true);
+      return;
+    }
+
+    onBack();
+  }
+
   async function completeWorkout() {
     if (!workoutReadyToComplete || !allCompleted || dayCompleted) return;
 
@@ -438,7 +462,7 @@ export function WorkoutPlayer({
   return (
     <div className="workout-runner">
       <header className="workout-runner-header">
-        <button aria-label="Voltar para treinos" onClick={() => setCancelOpen(true)}>
+        <button aria-label="Voltar para treinos" onClick={handleHeaderBack}>
           <ArrowLeft size={28} />
         </button>
         <div>
@@ -536,15 +560,15 @@ export function WorkoutPlayer({
             <div className="runner-action-grid">
               <button onClick={() => setPanel("execution")}>
                 <FileText size={18} />
-                Execução
+                <span>Execução</span>
               </button>
               <button onClick={() => setPanel("muscles")}>
                 <Target size={18} />
-                Músculos
+                <span>Músculos</span>
               </button>
               <button onClick={() => setPanel("expand")}>
                 <Expand size={18} />
-                Ampliar
+                <span>Ampliar</span>
               </button>
             </div>
             <button className="runner-load-button" onClick={() => setPanel("load")}>
@@ -678,6 +702,10 @@ export function WorkoutPlayer({
               setRestRemaining(0);
               setAdvanceAfterRest(false);
               setPhase("idle");
+              if (isRunning) {
+                setCancelOpen(true);
+                return;
+              }
               onBack();
             }}
             disabled={phase === "rest"}
@@ -688,7 +716,7 @@ export function WorkoutPlayer({
           <button
             className="runner-round-button"
             aria-label="Cancelar treino"
-            onClick={() => setCancelOpen(true)}
+            onClick={handleRunnerCancelButton}
           >
             <X size={24} />
           </button>
