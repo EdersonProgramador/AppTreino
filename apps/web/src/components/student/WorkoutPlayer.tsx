@@ -414,6 +414,12 @@ export function WorkoutPlayer({
     onBack();
   }
 
+  function openExerciseFromSequence(index: number) {
+    setCurrentExerciseIndex(index);
+    setPanel("run");
+    setPhase((current) => (isRunning && current === "idle" ? "active" : current));
+  }
+
   async function completeWorkout() {
     if (!workoutReadyToComplete || !allCompleted || dayCompleted) return;
 
@@ -493,16 +499,20 @@ export function WorkoutPlayer({
                     <div className="runner-media">
                       {mediaUrl ? (
                         isVideoMedia(mediaUrl) ? (
-                          <video src={mediaUrl} muted playsInline />
+                          <video src={mediaUrl} muted playsInline onClick={() => openExerciseFromSequence(index)} />
                         ) : (
-                          <img src={mediaUrl} alt={mediaAlt(exercise)} />
+                          <img src={mediaUrl} alt={mediaAlt(exercise)} onClick={() => openExerciseFromSequence(index)} />
                         )
                       ) : (
-                        <Trophy size={28} />
+                        <button className="runner-media-button" type="button" onClick={() => openExerciseFromSequence(index)} aria-label={`Abrir ${exercise.title}`}>
+                          <Trophy size={28} />
+                        </button>
                       )}
                     </div>
                     <div className="runner-exercise-copy">
-                      <strong>{exercise.title}</strong>
+                      <button type="button" onClick={() => openExerciseFromSequence(index)}>
+                        {exercise.title}
+                      </button>
                       <span>{musclesText}</span>
                       <small>
                         {exercise.sets} série(s) | {exercise.repsRange} | {exercise.restSeconds ?? restTimeDefault}s

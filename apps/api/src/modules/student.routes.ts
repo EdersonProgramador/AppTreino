@@ -329,11 +329,12 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
           userId,
           programId: publishedProgram.id,
           currentDay: dayNumber,
+          totalWorkouts: publishedProgram.totalWorkouts,
+          completedWorkouts: 0,
           status: "ACTIVE"
         },
         update: {
-          status: "ACTIVE",
-          completedAt: null
+          totalWorkouts: publishedProgram.totalWorkouts
         },
         include: {
           program: {
@@ -344,6 +345,30 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
           }
         }
       });
+
+      if (assignment.status === "COMPLETED" && assignment.completedWorkouts >= assignment.totalWorkouts) {
+        return null;
+      }
+
+      if (assignment.status !== "ACTIVE") {
+        assignment = await prisma.userProgram.update({
+          where: {
+            id: assignment.id
+          },
+          data: {
+            status: "ACTIVE",
+            completedAt: null
+          },
+          include: {
+            program: {
+              include: {
+                days: true,
+                modality: true
+              }
+            }
+          }
+        });
+      }
 
       if (!assignment.program.days.some((day) => day.dayNumber === assignment.currentDay)) {
         assignment = await prisma.userProgram.update({
@@ -426,6 +451,7 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
       const completedSessions = await prisma.workoutSession.findMany({
         where: {
           userId,
+          assignmentId: assignment.id,
           programId: assignment.programId,
           status: "COMPLETED"
         },
@@ -433,16 +459,22 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
           dayNumber: true
         }
       });
-      const completedDaySet = new Set(completedSessions.map((session) => session.dayNumber));
+      const completedWorkoutCount = Math.min(
+        Math.max(assignment.completedWorkouts, completedSessions.length),
+        assignment.totalWorkouts
+      );
+      const completedInCurrentCycle = completedWorkoutCount >= assignment.totalWorkouts ? programDays.length : completedWorkoutCount % programDays.length;
       const metadata = parseProgramMetadata(programDay.program.description);
       const modalityName = programDay.program.modality?.name ?? metadata.modality;
-      const sequence = programDays.map((day) => ({
+      const sequence = programDays.map((day, index) => ({
         programId: day.program.id,
         programTitle: day.program.title,
         assignmentId: assignment.id,
         dayNumber: day.dayNumber,
         totalDays: assignment.program.days.length,
-        completed: completedDaySet.has(day.dayNumber),
+        totalWorkouts: assignment.totalWorkouts,
+        completedWorkouts: completedWorkoutCount,
+        completed: index < completedInCurrentCycle,
         block: {
           title: day.workoutBlock.title,
           structureType: day.workoutBlock.structureType,
@@ -459,10 +491,11 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
         assignmentId: assignment.id,
         dayNumber: currentDay,
         totalDays: assignment.program.days.length,
+        totalWorkouts: assignment.totalWorkouts,
         modality: modalityName,
         modalityImageUrl: programDay.program.modality?.imageUrl ?? null,
         description: metadata.description,
-        completedWorkouts: completedDaySet.size,
+        completedWorkouts: completedWorkoutCount,
         teacherNames: teachers.map((teacher) => teacher.name),
         unitName: "Unidade não informada",
         membershipStartsAt: membership ? resolveMembershipStartsAt(membership) : null,
@@ -488,8 +521,156 @@ export async function registerStudentRoutes(app: FastifyInstance) {
     requireDatabase();
     const authUser = await requireActiveEnrollment(app, request);
     const workouts = await getPublishedWorkouts(authUser.id, 1);
+    const [favoritedProgramIds, ratedAssignmentIds] = await Promise.all([
+      prisma.workoutFavorite.findMany({
+        where: {
+          userId: authUser.id
+        },
+        select: {
+          programId: true
+        }
+      }),
+      prisma.rating.findMany({
+        where: {
+          userId: authUser.id,
+          targetType: "WORKOUT"
+        },
+        select: {
+          targetId: true
+        }
+      })
+    ]);
 
-    return { workouts };
+    const favoritedSet = new Set(favoritedProgramIds.map((item) => item.programId));
+    const ratedSet = new Set(ratedAssignmentIds.map((item) => item.targetId));
+    const ratedButNotFavorited = workouts.filter(
+      (workout) =>
+        workout.assignmentId &&
+        ratedSet.has(workout.assignmentId) &&
+        !favoritedSet.has(workout.programId)
+    );
+
+    if (ratedButNotFavorited.length > 0) {
+      await prisma.workoutFavorite.createMany({
+        data: ratedButNotFavorited.map((workout) => ({
+          userId: authUser.id,
+          programId: workout.programId
+        })),
+        skipDuplicates: true
+      });
+      ratedButNotFavorited.forEach((workout) => favoritedSet.add(workout.programId));
+    }
+
+    return {
+      workouts: workouts.map((workout) => ({
+        ...workout,
+        favoritedByMe: favoritedSet.has(workout.programId),
+        ratedByMe: Boolean(workout.assignmentId && ratedSet.has(workout.assignmentId))
+      }))
+    };
+  });
+
+  app.get("/student/workout/favorites", async (request) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    const workouts = await getPublishedWorkouts(authUser.id, 1).catch(() => []);
+    const [favoritedProgramIds, ratedAssignmentIds] = await Promise.all([
+      prisma.workoutFavorite.findMany({
+        where: {
+          userId: authUser.id
+        },
+        select: {
+          programId: true
+        }
+      }),
+      prisma.rating.findMany({
+        where: {
+          userId: authUser.id,
+          targetType: "WORKOUT"
+        },
+        select: {
+          targetId: true
+        }
+      })
+    ]);
+
+    const favoritedSet = new Set(favoritedProgramIds.map((item) => item.programId));
+    const ratedSet = new Set(ratedAssignmentIds.map((item) => item.targetId));
+    const ratedButNotFavorited = workouts.filter(
+      (workout) =>
+        workout.assignmentId &&
+        ratedSet.has(workout.assignmentId) &&
+        !favoritedSet.has(workout.programId)
+    );
+
+    if (ratedButNotFavorited.length > 0) {
+      await prisma.workoutFavorite.createMany({
+        data: ratedButNotFavorited.map((workout) => ({
+          userId: authUser.id,
+          programId: workout.programId
+        })),
+        skipDuplicates: true
+      });
+    }
+
+    const favorites = await prisma.workoutFavorite.findMany({
+      where: {
+        userId: authUser.id
+      },
+      include: {
+        program: {
+          include: {
+            modality: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+
+    return {
+      favorites: favorites.map((favorite) => ({
+        id: favorite.id,
+        createdAt: favorite.createdAt,
+        program: {
+          id: favorite.program.id,
+          title: favorite.program.title,
+          description: favorite.program.description,
+          modality: favorite.program.modality?.name ?? null,
+          modalityImageUrl: favorite.program.modality?.imageUrl ?? null,
+          totalWorkouts: favorite.program.totalWorkouts
+        }
+      }))
+    };
+  });
+
+  app.post("/student/workout/favorites/:programId", async (request, reply) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    const { programId } = z.object({ programId: z.string().min(1) }).parse(request.params);
+    const existing = await prisma.workoutFavorite.findUnique({
+      where: {
+        userId_programId: {
+          userId: authUser.id,
+          programId
+        }
+      }
+    });
+
+    if (existing) {
+      await prisma.workoutFavorite.delete({ where: { id: existing.id } });
+      return { favorited: false };
+    }
+
+    await prisma.workoutFavorite.create({
+      data: {
+        userId: authUser.id,
+        programId
+      }
+    });
+
+    return reply.code(201).send({ favorited: true });
   });
 
   app.get("/student/workout/today", async (request, reply) => {
@@ -673,7 +854,7 @@ export async function registerStudentRoutes(app: FastifyInstance) {
     const endsAt = new Date(Date.UTC(year, month, 1));
     const historyStartsAt = new Date(Date.UTC(year - 1, month - 1, 1));
 
-    const [sessions, attendanceRecords, historySessions, historyAttendanceRecords, completedSessions, userPrograms] = await Promise.all([
+    const [sessions, attendanceRecords, historySessions, historyAttendanceRecords, userPrograms] = await Promise.all([
       prisma.workoutSession.findMany({
         where: {
           userId: authUser.id,
@@ -730,22 +911,6 @@ export async function registerStudentRoutes(app: FastifyInstance) {
           date: "asc"
         }
       }),
-      prisma.workoutSession.findMany({
-        where: {
-          userId: authUser.id,
-          status: "COMPLETED",
-          programId: {
-            not: null
-          },
-          dayNumber: {
-            gt: 0
-          }
-        },
-        select: {
-          programId: true,
-          dayNumber: true
-        }
-      }),
       prisma.userProgram.findMany({
         where: {
           userId: authUser.id,
@@ -782,14 +947,11 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       }
     });
     historyAttendanceRecords.forEach((record) => historyDateSet.add(record.date.toISOString().slice(0, 10)));
-    const activeProgramIds = new Set(userPrograms.map((assignment) => assignment.programId));
-    const completedProgramDaySet = new Set(
-      completedSessions
-        .filter((session) => session.programId && activeProgramIds.has(session.programId))
-        .map((session) => `${session.programId}:${session.dayNumber}`)
+    const totalWorkoutDays = userPrograms.reduce((total, assignment) => total + assignment.totalWorkouts, 0);
+    const completedWorkoutCount = userPrograms.reduce(
+      (total, assignment) => total + Math.min(assignment.completedWorkouts, assignment.totalWorkouts),
+      0
     );
-    const totalWorkoutDays = userPrograms.reduce((total, assignment) => total + assignment.program.days.length, 0);
-    const completedWorkoutCount = Math.min(completedProgramDaySet.size, totalWorkoutDays);
 
     return {
       year,
@@ -887,16 +1049,24 @@ export async function registerStudentRoutes(app: FastifyInstance) {
         })
       : null;
     const completedDayNumber = session?.dayNumber ?? assignment.currentDay;
-    const totalDays = assignment.program.days.length;
-    const isLastDay = completedDayNumber >= totalDays;
+    const programDays = [...assignment.program.days].sort((first, second) => first.dayNumber - second.dayNumber || first.order - second.order);
+    const totalDays = programDays.length;
+    const currentIndex = Math.max(
+      0,
+      programDays.findIndex((day) => day.dayNumber === completedDayNumber)
+    );
+    const nextDayNumber = programDays[(currentIndex + 1) % totalDays]?.dayNumber ?? completedDayNumber;
+    const completedWorkouts = Math.min(assignment.completedWorkouts + 1, assignment.totalWorkouts);
+    const isLastWorkout = completedWorkouts >= assignment.totalWorkouts;
     const updatedAssignment = await prisma.userProgram.update({
       where: {
         id: assignment.id
       },
       data: {
-        currentDay: isLastDay ? completedDayNumber : completedDayNumber + 1,
-        status: isLastDay ? "COMPLETED" : "ACTIVE",
-        completedAt: isLastDay ? new Date() : null
+        currentDay: isLastWorkout ? completedDayNumber : nextDayNumber,
+        completedWorkouts,
+        status: isLastWorkout ? "COMPLETED" : "ACTIVE",
+        completedAt: isLastWorkout ? new Date() : null
       }
     });
 
@@ -941,7 +1111,246 @@ export async function registerStudentRoutes(app: FastifyInstance) {
     return {
       assignment: updatedAssignment,
       session: completedSession,
-      completed: isLastDay
+      completed: isLastWorkout
     };
+  });
+
+  const studentPaymentCardSchema = z.object({
+    brand: z.string().optional(),
+    lastFour: z.string().length(4),
+    holderName: z.string().optional(),
+    isDefault: z.boolean().default(false)
+  });
+
+  const studentRatingSchema = z.object({
+    score: z.number().int().min(1).max(5),
+    comment: z.string().max(500).optional(),
+    targetType: z.string().min(1).default("WORKOUT"),
+    targetId: z.string().optional(),
+    productId: z.string().optional()
+  });
+
+  app.get("/student/payment-cards", async (request) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    const paymentCards = await prisma.paymentCard.findMany({
+      where: { userId: authUser.id },
+      orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }]
+    });
+
+    return { paymentCards };
+  });
+
+  app.post("/student/payment-cards", async (request, reply) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    const body = studentPaymentCardSchema.parse(request.body);
+    if (body.isDefault) {
+      await prisma.paymentCard.updateMany({
+        where: { userId: authUser.id },
+        data: { isDefault: false }
+      });
+    }
+    const paymentCard = await prisma.paymentCard.create({
+      data: { ...body, userId: authUser.id }
+    });
+
+    return reply.code(201).send({ paymentCard });
+  });
+
+  app.delete("/student/payment-cards/:id", async (request) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    await prisma.paymentCard.deleteMany({ where: { id, userId: authUser.id } });
+
+    return { ok: true };
+  });
+
+  app.post("/student/ratings", async (request, reply) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    const body = studentRatingSchema.parse(request.body);
+    const rating = await prisma.rating.create({
+      data: {
+        userId: authUser.id,
+        score: body.score,
+        comment: body.comment,
+        targetType: body.targetType,
+        targetId: body.targetId,
+        productId: body.productId || null
+      }
+    });
+
+    return reply.code(201).send({ rating });
+  });
+
+  const studentPurchaseSchema = z.object({
+    productId: z.string().min(1)
+  });
+
+  app.get("/student/products", async (request) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    const [products, purchasedProductIds, favoritedProductIds, ratedProductIds] = await Promise.all([
+      prisma.product.findMany({
+        where: {
+          isActive: true
+        },
+        include: {
+          _count: {
+            select: { purchases: true, favorites: true, ratings: true }
+          }
+        },
+        orderBy: {
+          createdAt: "desc"
+        }
+      }),
+      prisma.purchase.findMany({
+        where: {
+          userId: authUser.id,
+          status: { in: ["PENDING", "CONFIRMED"] }
+        },
+        select: {
+          productId: true
+        }
+      }),
+      prisma.favorite.findMany({
+        where: {
+          userId: authUser.id
+        },
+        select: {
+          productId: true
+        }
+      }),
+      prisma.rating.findMany({
+        where: {
+          userId: authUser.id,
+          targetType: "PRODUCT",
+          productId: { not: null }
+        },
+        select: {
+          productId: true
+        }
+      })
+    ]);
+
+    return {
+      products: products.map((product) => ({
+        ...product,
+        purchasedByMe: purchasedProductIds.some((item) => item.productId === product.id),
+        favoritedByMe: favoritedProductIds.some((item) => item.productId === product.id),
+        ratedByMe: ratedProductIds.some((item) => item.productId === product.id)
+      }))
+    };
+  });
+
+  app.get("/student/favorites", async (request) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    const favorites = await prisma.favorite.findMany({
+      where: {
+        userId: authUser.id
+      },
+      include: {
+        product: true
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+
+    return { favorites };
+  });
+
+  app.post("/student/favorites/:productId", async (request, reply) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    const { productId } = z.object({ productId: z.string().min(1) }).parse(request.params);
+    const existing = await prisma.favorite.findFirst({
+      where: {
+        userId: authUser.id,
+        productId
+      }
+    });
+
+    if (existing) {
+      await prisma.favorite.delete({ where: { id: existing.id } });
+      return { favorited: false };
+    }
+
+    await prisma.favorite.create({
+      data: {
+        userId: authUser.id,
+        productId
+      }
+    });
+
+    return reply.code(201).send({ favorited: true });
+  });
+
+  app.get("/student/ratings", async (request) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    const ratings = await prisma.rating.findMany({
+      where: {
+        userId: authUser.id,
+        targetType: "PRODUCT",
+        productId: { not: null }
+      },
+      include: {
+        product: true
+      },
+      orderBy: {
+        createdAt: "desc"
+      },
+      take: 50
+    });
+
+    return { ratings };
+  });
+
+  app.post("/student/purchases", async (request, reply) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    const body = studentPurchaseSchema.parse(request.body);
+    const product = await prisma.product.findFirstOrThrow({
+      where: {
+        id: body.productId,
+        isActive: true
+      }
+    });
+    const purchase = await prisma.purchase.create({
+      data: {
+        userId: authUser.id,
+        productId: product.id,
+        amountInCents: product.priceInCents,
+        status: "PENDING"
+      },
+      include: {
+        product: true
+      }
+    });
+
+    return reply.code(201).send({ purchase });
+  });
+
+  app.get("/student/purchases", async (request) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    const purchases = await prisma.purchase.findMany({
+      where: {
+        userId: authUser.id
+      },
+      include: {
+        product: true
+      },
+      orderBy: {
+        createdAt: "desc"
+      },
+      take: 50
+    });
+
+    return { purchases };
   });
 }

@@ -1,6 +1,8 @@
 import {
   Activity,
+  AlertCircle,
   ArrowRight,
+  ArrowUpRight,
   Bell,
   Bot,
   CalendarDays,
@@ -10,6 +12,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   ClipboardList,
+  Clock,
   CreditCard,
   Dumbbell,
   Flame,
@@ -29,6 +32,7 @@ import {
   RefreshCw,
   Ruler,
   Save,
+  Search,
   Settings,
   Share2,
   ShieldCheck,
@@ -38,11 +42,14 @@ import {
   Target,
   Timer,
   Trash2,
+  TrendingUp,
   Trophy,
   UploadCloud,
   UserRound,
-  UsersRound
+  UsersRound,
+  Wallet
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { formatPriceInBRL, initialPlans, type AuthUser } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "./api";
@@ -87,6 +94,64 @@ const mediaUrl = (path?: string | null) => {
   return assetUrl(path.replace(/^\/+/, ""));
 };
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+
+function calculateBodyFatEstimate(input: {
+  gender?: string;
+  heightCm?: number | null;
+  neckCm?: number | null;
+  waistCm?: number | null;
+  hipCm?: number | null;
+  weightKg?: number | null;
+  birthDate?: string;
+}): { value: number; method: "Navy" | "IMC" } | null {
+  const { gender, heightCm, neckCm, waistCm, hipCm } = input;
+  const isMale = gender === "Masculino";
+  const isFemale = gender === "Feminino";
+
+  if (
+    (!isMale && !isFemale) ||
+    !heightCm ||
+    !neckCm ||
+    !waistCm ||
+    heightCm <= 0 ||
+    neckCm <= 0 ||
+    waistCm <= 0
+  ) {
+    return null;
+  }
+
+  const log10 = Math.log10;
+
+  if (isMale) {
+    if (waistCm - neckCm > 0) {
+      const bodyFat =
+        495 / (1.0324 - 0.19077 * log10(waistCm - neckCm) + 0.15456 * log10(heightCm)) - 450;
+      return { value: Math.max(0, Math.min(100, Math.round(bodyFat * 10) / 10)), method: "Navy" };
+    }
+  } else if (hipCm && hipCm > 0 && waistCm + hipCm - neckCm > 0) {
+    const bodyFat =
+      495 / (1.29579 - 0.35004 * log10(waistCm + hipCm - neckCm) + 0.221 * log10(heightCm)) - 450;
+    return { value: Math.max(0, Math.min(100, Math.round(bodyFat * 10) / 10)), method: "Navy" };
+  }
+
+  const { weightKg, birthDate } = input;
+  if (!weightKg || weightKg <= 0) return null;
+
+  const bmi = weightKg / Math.pow(heightCm / 100, 2);
+  let age = 0;
+  if (birthDate) {
+    const born = new Date(`${birthDate}T00:00:00`);
+    if (!Number.isNaN(born.getTime())) {
+      const today = new Date();
+      age = today.getFullYear() - born.getFullYear();
+      const monthDiff = today.getMonth() - born.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < born.getDate())) age -= 1;
+    }
+  }
+  const bodyFat = 1.2 * bmi + 0.23 * age - 10.8 * (isMale ? 1 : 0) - 5.4;
+
+  return { value: Math.max(0, Math.min(100, Math.round(bodyFat * 10) / 10)), method: "IMC" };
+}
 
 function monthLabel(year: number, month: number) {
   return new Date(year, month - 1, 1).toLocaleDateString("pt-BR", {
@@ -173,13 +238,19 @@ interface AdminUser {
   id: string;
   name: string;
   email: string;
+  phone?: string | null;
   role: "ADMIN" | "USER";
   status: "ACTIVE" | "INACTIVE";
   enrollmentStatus: "PENDING" | "ACTIVE" | "CANCELED";
+  createdAt?: string | null;
   profile?: {
     gender?: "MALE" | "FEMALE" | null;
+    phone?: string | null;
+    document?: string | null;
+    objective?: string | null;
+    level?: string | null;
   } | null;
-  memberships?: Array<{ id: string; status: MembershipRow["status"] }>;
+  memberships?: MembershipRow[];
 }
 
 interface PlanRow {
@@ -254,8 +325,16 @@ interface CmsProgramRow {
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   isActive: boolean;
   targetGender: "ALL" | "MALE" | "FEMALE";
+  totalWorkouts: number;
   modality?: CmsModalityRow | null;
-  assignedUsers?: Array<{ id: string; user: AdminUser; currentDay: number; status: "ACTIVE" | "COMPLETED" | "CANCELED" }>;
+  assignedUsers?: Array<{
+    id: string;
+    user: AdminUser;
+    currentDay: number;
+    totalWorkouts: number;
+    completedWorkouts: number;
+    status: "ACTIVE" | "COMPLETED" | "CANCELED";
+  }>;
   days: Array<{
     id: string;
     dayNumber: number;
@@ -301,6 +380,17 @@ interface StudentMembershipRow {
   plan: PlanRow;
 }
 
+interface StudentProfile {
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  document?: string | null;
+  gender?: "MALE" | "FEMALE" | null;
+  birthDate?: string | null;
+  objective?: string | null;
+  level?: string | null;
+}
+
 interface PaymentRow {
   id: string;
   membershipId: string;
@@ -309,6 +399,7 @@ interface PaymentRow {
   dueDate: string;
   paidAt?: string | null;
   paymentUrl?: string | null;
+  membership?: MembershipRow;
 }
 
 interface PhysicalAssessmentRow {
@@ -322,7 +413,48 @@ interface PhysicalAssessmentRow {
   chestCm?: number | null;
   hipCm?: number | null;
   notes?: string | null;
+  details?: PhysicalAssessmentForm | null;
   userá: AdminUser;
+}
+
+interface PhysicalAssessmentForm {
+  formulario_avaliacao_fisica: {
+    dados_pessoais_e_objetivos: {
+      nome_completo: string;
+      data_nascimento: string;
+      genero_biologico: { opcoes: string[]; resposta: string };
+      objetivo_principal: { opcoes: string[]; resposta: string };
+      nivel_atividade_atual: { opcoes: string[]; resposta: string };
+    };
+    historico_de_saude_anamnese: {
+      possui_lesao: { descricao: string; resposta: string };
+      medicamento_continuo: { descricao: string; resposta: string };
+      restricao_medica_cardiaca: { descricao: string; resposta: string };
+    };
+    composicao_corporal_basica: {
+      instrucao: string;
+      peso_atual_kg: number | null;
+      altura_cm: number | null;
+    };
+    perimetros_corporais_cm: {
+      instrucao: string;
+      pescoço: { detalhe: string; valor: number | null };
+      torax: { detalhe: string; valor: number | null };
+      cintura: { detalhe: string; valor: number | null };
+      abdomen: { detalhe: string; valor: number | null };
+      quadril: { detalhe: string; valor: number | null };
+      braco_direito_relaxado: { detalhe: string; valor: number | null };
+      braco_esquerdo_relaxado: { detalhe: string; valor: number | null };
+      coxa_direita: { detalhe: string; valor: number | null };
+      coxa_esquerda: { detalhe: string; valor: number | null };
+      panturrilha_direita: { detalhe: string; valor: number | null };
+      panturrilha_esquerda: { detalhe: string; valor: number | null };
+    };
+    fotos_analise_visual: {
+      instrucao: string;
+      arquivos: { foto_frente: string; foto_costas: string; foto_perfil: string };
+    };
+  };
 }
 
 interface EventRow {
@@ -386,6 +518,127 @@ interface AiWorkoutPlanRow {
   userá: AdminUser;
 }
 
+interface ProductRow {
+  id: string;
+  name: string;
+  description?: string | null;
+  priceInCents: number;
+  imageUrl?: string | null;
+  category?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { purchases: number; favorites: number; ratings: number };
+  purchasedByMe?: boolean;
+  favoritedByMe?: boolean;
+  ratedByMe?: boolean;
+}
+
+type PurchaseStatus = "PENDING" | "CONFIRMED" | "CANCELED" | "REFUNDED";
+
+interface PurchaseRow {
+  id: string;
+  userId: string;
+  productId: string;
+  amountInCents: number;
+  status: PurchaseStatus;
+  paymentMethod?: string | null;
+  createdAt: string;
+  paidAt?: string | null;
+  user: AdminUser;
+  product: ProductRow;
+}
+
+interface PaymentCardRow {
+  id: string;
+  userId: string;
+  brand?: string | null;
+  lastFour: string;
+  holderName?: string | null;
+  isDefault: boolean;
+  createdAt: string;
+  user: AdminUser;
+}
+
+interface FavoriteRow {
+  id: string;
+  userId: string;
+  productId: string;
+  createdAt: string;
+  user: AdminUser;
+  product: ProductRow;
+}
+
+interface RatingRow {
+  id: string;
+  userId: string;
+  productId?: string | null;
+  targetType: string;
+  targetId?: string | null;
+  score: number;
+  comment?: string | null;
+  createdAt: string;
+  user: AdminUser;
+  product?: ProductRow | null;
+}
+
+interface ContactMessageRow {
+  id: string;
+  name: string;
+  email: string;
+  subject?: string | null;
+  message: string;
+  status: "OPEN" | "RESOLVED" | "CLOSED";
+  createdAt: string;
+  repliedAt?: string | null;
+}
+
+interface StudentFavoriteRow {
+  id: string;
+  createdAt: string;
+  program: {
+    id: string;
+    title: string;
+    description: string;
+    modality: string | null;
+    modalityImageUrl: string | null;
+    totalWorkouts: number;
+  };
+}
+
+interface AdminStudentOverview {
+  student: AdminUser;
+  activeMembership: MembershipRow | null;
+  payments: PaymentRow[];
+  assessments: PhysicalAssessmentRow[];
+  attendance: Array<{ id: string; date: string }>;
+  workoutSessions: Array<{
+    id: string;
+    dayNumber: number;
+    status: "IN_PROGRESS" | "COMPLETED" | "CANCELED";
+    startedAt: string;
+    finishedAt?: string | null;
+    durationSeconds?: number | null;
+  }>;
+  programAssignments: Array<{
+    id: string;
+    status: "ACTIVE" | "COMPLETED" | "CANCELED";
+    currentDay: number;
+    totalWorkouts: number;
+    completedWorkouts: number;
+    program: CmsProgramRow;
+  }>;
+  eventRegistrations: Array<{ id: string; event: EventRow }>;
+  tickets: SupportTicketRow[];
+  aiPlans: AiWorkoutPlanRow[];
+  summary: {
+    attendanceThisMonth: number;
+    completedWorkoutSessions: number;
+    pendingPayments: number;
+    openTickets: number;
+  };
+}
+
 interface CheckoutSessionResponse {
   membership: StudentMembershipRow;
   payment: PaymentRow | null;
@@ -408,6 +661,7 @@ interface TodayWorkoutResponse {
     assignmentId: string;
     dayNumber: number;
     totalDays: number;
+    totalWorkouts: number;
     completed?: boolean;
     modality?: string;
     modalityImageUrl?: string | null;
@@ -417,12 +671,16 @@ interface TodayWorkoutResponse {
     unitName?: string;
     membershipStartsAt?: string | null;
     membershipEndsAt?: string | null;
+    favoritedByMe?: boolean;
+    ratedByMe?: boolean;
     sequence?: Array<{
       programId: string;
       programTitle: string;
       assignmentId: string;
       dayNumber: number;
       totalDays: number;
+      totalWorkouts: number;
+      completedWorkouts?: number;
       completed?: boolean;
       block: {
         title: string;
@@ -1068,9 +1326,641 @@ function LoginView({
   );
 }
 
+type AdminResource =
+  | "summary"
+  | "users"
+  | "modalities"
+  | "exercises"
+  | "workoutBlocks"
+  | "programs"
+  | "plans"
+  | "memberships"
+  | "payments"
+  | "assessments"
+  | "events"
+  | "tickets"
+  | "aiPlans"
+  | "products"
+  | "purchases"
+  | "paymentCards"
+  | "favorites"
+  | "ratings"
+  | "contactMessages"
+  | "settings";
+
+const ALL_ADMIN_RESOURCES: AdminResource[] = [
+  "summary",
+  "users",
+  "modalities",
+  "exercises",
+  "workoutBlocks",
+  "programs",
+  "plans",
+  "memberships",
+  "payments",
+  "assessments",
+  "events",
+  "tickets",
+  "aiPlans",
+  "products",
+  "purchases",
+  "paymentCards",
+  "favorites",
+  "ratings",
+  "contactMessages",
+  "settings"
+];
+
+function AdminDashboardOverview({
+  stats,
+  payments,
+  events,
+  tickets,
+  users,
+  memberships,
+  products,
+  purchases,
+  contactMessages,
+  favorites,
+  ratings,
+  systemSettings,
+  lastUpdatedAt,
+  loading,
+  onRefresh,
+  onNavigate
+}: {
+  stats: Array<{ icon: LucideIcon; label: string; value: string; trend: string }>;
+  payments: PaymentRow[];
+  events: EventRow[];
+  tickets: SupportTicketRow[];
+  users: AdminUser[];
+  memberships: MembershipRow[];
+  products: ProductRow[];
+  purchases: PurchaseRow[];
+  contactMessages: ContactMessageRow[];
+  favorites: FavoriteRow[];
+  ratings: RatingRow[];
+  systemSettings: Record<string, string>;
+  lastUpdatedAt: Date | null;
+  loading: boolean;
+  onRefresh: () => void;
+  onNavigate: (
+    section:
+      | "overview"
+      | "training"
+      | "users"
+      | "finance"
+      | "programs"
+      | "reports"
+      | "settings"
+      | "products"
+      | "purchases"
+      | "qr"
+      | "cards"
+      | "contact"
+      | "favorites"
+      | "ratings"
+  ) => void;
+}) {
+  const now = useMemo(() => new Date(), [lastUpdatedAt]);
+  const currentMonthKey = useMemo(() => `${now.getFullYear()}-${now.getMonth()}`, [now]);
+
+  const revenueBuckets = useMemo(() => {
+    const buckets: Array<{ key: string; label: string; total: number }> = [];
+
+    for (let offset = 5; offset >= 0; offset -= 1) {
+      const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      buckets.push({
+        key: `${date.getFullYear()}-${date.getMonth()}`,
+        label: date.toLocaleDateString("pt-BR", { month: "short" }),
+        total: 0
+      });
+    }
+
+    for (const payment of payments) {
+      if (payment.status !== "CONFIRMED") continue;
+      const date = new Date(payment.paidAt ?? payment.dueDate);
+      const key = `${date.getFullYear()}-${date.getMonth()}`;
+      const bucket = buckets.find((item) => item.key === key);
+      if (bucket) bucket.total += payment.amountInCents;
+    }
+
+    return buckets;
+  }, [now, payments]);
+
+  const maxRevenue = useMemo(() => Math.max(1, ...revenueBuckets.map((bucket) => bucket.total)), [revenueBuckets]);
+  const totalRevenue = useMemo(() => revenueBuckets.reduce((sum, bucket) => sum + bucket.total, 0), [revenueBuckets]);
+  const monthRevenue = revenueBuckets[revenueBuckets.length - 1]?.total ?? 0;
+
+  const newStudentsThisMonth = useMemo(
+    () =>
+      users.filter((user) => {
+        if (user.role !== "USER" || !user.createdAt) return false;
+        const date = new Date(user.createdAt);
+        return `${date.getFullYear()}-${date.getMonth()}` === currentMonthKey;
+      }).length,
+    [currentMonthKey, users]
+  );
+
+  const activeMembershipCount = useMemo(
+    () => memberships.filter((item) => item.status === "ACTIVE").length,
+    [memberships]
+  );
+
+  const pendingPayments = useMemo(
+    () =>
+      payments
+        .filter((payment) => payment.status === "PENDING" || payment.status === "OVERDUE")
+        .sort((first, second) => new Date(first.dueDate).getTime() - new Date(second.dueDate).getTime())
+        .slice(0, 5),
+    [payments]
+  );
+
+  const openTickets = useMemo(
+    () =>
+      tickets
+        .filter((ticket) => ticket.status === "OPEN" || ticket.status === "IN_PROGRESS")
+        .slice(0, 5),
+    [tickets]
+  );
+
+  const upcomingEvents = useMemo(
+    () =>
+      events
+        .filter(
+          (event) => event.status === "SCHEDULED" && new Date(event.startsAt).getTime() >= now.getTime()
+        )
+        .sort((first, second) => new Date(first.startsAt).getTime() - new Date(second.startsAt).getTime())
+        .slice(0, 5),
+    [events, now]
+  );
+
+  const latestStudents = useMemo(
+    () =>
+      users
+        .filter((user) => user.role === "USER")
+        .sort(
+          (first, second) =>
+            new Date(second.createdAt ?? 0).getTime() - new Date(first.createdAt ?? 0).getTime()
+        )
+        .slice(0, 5),
+    [users]
+  );
+
+  const productsRevenueThisMonth = useMemo(
+    () =>
+      purchases
+        .filter((purchase) => {
+          const date = new Date(purchase.paidAt ?? purchase.createdAt);
+          return purchase.status === "CONFIRMED" && `${date.getFullYear()}-${date.getMonth()}` === currentMonthKey;
+        })
+        .reduce((sum, purchase) => sum + purchase.amountInCents, 0),
+    [currentMonthKey, purchases]
+  );
+
+  const purchasesThisMonth = useMemo(
+    () =>
+      purchases.filter((purchase) => {
+        const date = new Date(purchase.createdAt);
+        return `${date.getFullYear()}-${date.getMonth()}` === currentMonthKey;
+      }).length,
+    [currentMonthKey, purchases]
+  );
+
+  const topProducts = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; count: number; revenue: number }>();
+    for (const purchase of purchases) {
+      const entry = map.get(purchase.productId) ?? {
+        id: purchase.productId,
+        name: purchase.product.name,
+        count: 0,
+        revenue: 0
+      };
+      entry.count += 1;
+      if (purchase.status === "CONFIRMED") entry.revenue += purchase.amountInCents;
+      map.set(purchase.productId, entry);
+    }
+    return [...map.values()].sort((first, second) => second.count - first.count).slice(0, 3);
+  }, [purchases]);
+
+  const averageRating = useMemo(
+    () =>
+      ratings.length > 0
+        ? Math.round((ratings.reduce((sum, rating) => sum + rating.score, 0) / ratings.length) * 10) / 10
+        : null,
+    [ratings]
+  );
+
+  const openContactMessages = useMemo(
+    () => contactMessages.filter((message) => message.status === "OPEN").slice(0, 5),
+    [contactMessages]
+  );
+
+  const expiringMemberships = useMemo(() => {
+    const inSevenDays = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    return memberships
+      .filter((membership) => {
+        if (membership.status !== "ACTIVE" || !membership.endsAt) return false;
+        const endsAt = new Date(membership.endsAt);
+        return endsAt.getTime() <= inSevenDays.getTime() && endsAt.getTime() >= now.getTime();
+      })
+      .sort(
+        (first, second) =>
+          new Date(first.endsAt ?? 0).getTime() - new Date(second.endsAt ?? 0).getTime()
+      )
+      .slice(0, 5);
+  }, [memberships, now]);
+
+  const commercialEnabled =
+    systemSettings["module_products"] !== "false" ||
+    systemSettings["module_purchases"] !== "false" ||
+    systemSettings["module_favorites"] !== "false" ||
+    systemSettings["module_ratings"] !== "false";
+
+  const contactEnabled = systemSettings["module_contact"] !== "false";
+
+
+  const formatUpdatedAt = lastUpdatedAt
+    ? lastUpdatedAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : "nunca";
+
+  return (
+    <section className="admin-dashboard">
+      <div className="admin-sync-bar">
+        <span className={loading ? "admin-sync-indicator syncing" : "admin-sync-indicator"} aria-hidden="true">
+          <RefreshCw size={15} className={loading ? "spin" : ""} />
+        </span>
+        <span className="admin-sync-label">
+          {loading
+            ? "Sincronizando dados..."
+            : `Atualizado às ${formatUpdatedAt} · sincronização automática a cada 1 minuto`}
+        </span>
+        <button className="outline-button compact-button" type="button" onClick={onRefresh} disabled={loading}>
+          {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
+          Atualizar
+        </button>
+      </div>
+
+      <div className="stats-grid">
+        {stats.map((stat) => (
+          <article className="stat-card" key={stat.label}>
+            <stat.icon size={22} />
+            <span>{stat.label}</span>
+            <strong>{stat.value}</strong>
+            <small>{stat.trend}</small>
+          </article>
+        ))}
+      </div>
+
+      <section className="admin-dashboard-grid">
+        <article className="table-panel dash-panel dash-panel-wide dash-revenue-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Receita confirmada</h2>
+              <p>Valor dos pagamentos confirmados nos últimos 6 meses.</p>
+            </div>
+            <span>{formatPriceInBRL(totalRevenue)}</span>
+          </div>
+          <div className="dash-bar-chart">
+            {revenueBuckets.map((bucket) => (
+              <div className="dash-bar-column" key={bucket.key}>
+                <div className="dash-bar-track">
+                  <div
+                    className="dash-bar-fill"
+                    style={{ height: `${Math.round((bucket.total / maxRevenue) * 100)}%` }}
+                  />
+                </div>
+                <span>{bucket.label}</span>
+                <strong>{formatPriceInBRL(bucket.total)}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="dash-metric-strip">
+            <span>
+              <Wallet size={17} />
+              <strong>{formatPriceInBRL(monthRevenue)}</strong>
+              <small>no mês atual</small>
+            </span>
+            <span>
+              <TrendingUp size={17} />
+              <strong>{newStudentsThisMonth}</strong>
+              <small>novos alunos no mês</small>
+            </span>
+            <span>
+              <UsersRound size={17} />
+              <strong>{activeMembershipCount}</strong>
+              <small>matrículas ativas</small>
+            </span>
+          </div>
+        </article>
+
+        <article className="table-panel dash-panel dash-quick-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Ações rápidas</h2>
+              <p>Atalhos para as áreas operacionais do painel.</p>
+            </div>
+          </div>
+          <div className="dash-quick-actions">
+            <button type="button" onClick={() => onNavigate("finance")}>
+              <CircleDollarSign size={18} />
+              <span>
+                <strong>Financeiro</strong>
+                <small>Planos, matrículas e pagamentos</small>
+              </span>
+              <ArrowUpRight size={16} />
+            </button>
+            <button type="button" onClick={() => onNavigate("training")}>
+              <Dumbbell size={18} />
+              <span>
+                <strong>Treinos e Aulas CMS</strong>
+                <small>Monte fichas e publique aulas</small>
+              </span>
+              <ArrowUpRight size={16} />
+            </button>
+            <button type="button" onClick={() => onNavigate("programs")}>
+              <Play size={18} />
+              <span>
+                <strong>Publicar treinos</strong>
+                <small>Publique fichas e atribua a alunos</small>
+              </span>
+              <ArrowUpRight size={16} />
+            </button>
+            <button type="button" onClick={() => onNavigate("reports")}>
+              <LineChart size={18} />
+              <span>
+                <strong>Relatórios</strong>
+                <small>Avaliações, eventos e atendimentos</small>
+              </span>
+              <ArrowUpRight size={16} />
+            </button>
+          </div>
+        </article>
+
+        {commercialEnabled && (
+          <article className="table-panel dash-panel dash-panel-wide">
+            <div className="panel-title">
+              <div>
+                <h2>Comercial</h2>
+                <p>Receita de produtos, vendas e avaliações dos módulos.</p>
+              </div>
+              <span>{purchases.length} venda(s)</span>
+            </div>
+            <div className="dash-metric-strip">
+              <span>
+                <ShoppingCart size={17} />
+                <strong>{formatPriceInBRL(productsRevenueThisMonth)}</strong>
+                <small>receita de produtos no mês</small>
+              </span>
+              <span>
+                <Package size={17} />
+                <strong>{purchasesThisMonth}</strong>
+                <small>compras no mês</small>
+              </span>
+              <span>
+                <Star size={17} />
+                <strong>{averageRating !== null ? String(averageRating).replace(".", ",") : "—"}</strong>
+                <small>{ratings.length} avaliação(ões)</small>
+              </span>
+            </div>
+            {topProducts.length > 0 ? (
+              topProducts.map((product) => (
+                <div className="data-row" key={product.id}>
+                  <span>
+                    <strong>{product.name}</strong>
+                    {product.count} venda(s) · {formatPriceInBRL(product.revenue)}
+                  </span>
+                  <small className="dash-badge">{product.revenue > 0 ? formatPriceInBRL(product.revenue) : "Sem receita"}</small>
+                </div>
+              ))
+            ) : (
+              <div className="dash-empty">
+                <ShoppingCart size={18} />
+                Nenhuma compra registrada ainda.
+              </div>
+            )}
+            <div className="data-row">
+              <span>
+                <strong>Favoritos</strong>
+                {favorites.length} item(ns) favoritados pelos alunos
+              </span>
+              <Star size={17} />
+            </div>
+            <button className="dash-link-button" type="button" onClick={() => onNavigate("products")}>
+              Gerenciar catálogo
+              <ArrowRight size={15} />
+            </button>
+          </article>
+        )}
+
+        <article className="table-panel dash-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Pagamentos pendentes</h2>
+              <p>Priorize cobranças em aberto ou vencidas.</p>
+            </div>
+            <span>{pendingPayments.length}</span>
+          </div>
+          {pendingPayments.length > 0 ? (
+            pendingPayments.map((payment) => (
+              <div className="data-row" key={payment.id}>
+                <span>
+                  <strong>{payment.membership?.user?.name ?? "Aluno"}</strong>
+                  {formatPriceInBRL(payment.amountInCents)} · vence{" "}
+                  {new Date(payment.dueDate).toLocaleDateString("pt-BR")}
+                </span>
+                <small className={payment.status === "OVERDUE" ? "dash-badge danger" : "dash-badge"}>
+                  {payment.status === "OVERDUE" ? "Vencido" : "Pendente"}
+                </small>
+              </div>
+            ))
+          ) : (
+            <div className="dash-empty">
+              <Check size={18} />
+              Nenhuma cobrança em aberto.
+            </div>
+          )}
+          <button className="dash-link-button" type="button" onClick={() => onNavigate("finance")}>
+            Ver todas as cobranças
+            <ArrowRight size={15} />
+          </button>
+        </article>
+
+        <article className="table-panel dash-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Matrículas a vencer</h2>
+              <p>Matrículas ativas que expiram nos próximos 7 dias.</p>
+            </div>
+            <span>{expiringMemberships.length}</span>
+          </div>
+          {expiringMemberships.length > 0 ? (
+            expiringMemberships.map((membership) => (
+              <div className="data-row" key={membership.id}>
+                <span>
+                  <strong>{membership.user?.name ?? "Aluno"}</strong>
+                  {membership.plan?.name ?? "Plano"} · expira em{" "}
+                  {membership.endsAt ? new Date(membership.endsAt).toLocaleDateString("pt-BR") : "—"}
+                </span>
+                <small className="dash-badge danger">Atenção</small>
+              </div>
+            ))
+          ) : (
+            <div className="dash-empty">
+              <ShieldCheck size={18} />
+              Nenhuma matrícula vence nos próximos 7 dias.
+            </div>
+          )}
+          <button className="dash-link-button" type="button" onClick={() => onNavigate("finance")}>
+            Gerenciar matrículas
+            <ArrowRight size={15} />
+          </button>
+        </article>
+
+        <article className="table-panel dash-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Atendimentos abertos</h2>
+              <p>Chamados aguardando ação do suporte.</p>
+            </div>
+            <span>{openTickets.length}</span>
+          </div>
+          {openTickets.length > 0 ? (
+            openTickets.map((ticket) => (
+              <div className="data-row ticket-row" key={ticket.id}>
+                <span>
+                  <strong>{ticket.subject}</strong>
+                  {ticket.userá?.name ?? "Aluno"} · {ticket.category}
+                </span>
+                <small className={ticket.priority === "HIGH" ? "dash-badge danger" : "dash-badge"}>
+                  {ticket.priority === "HIGH" ? "Prioridade alta" : ticket.priority.toLowerCase()}
+                </small>
+              </div>
+            ))
+          ) : (
+            <div className="dash-empty">
+              <Check size={18} />
+              Nenhum atendimento aberto.
+            </div>
+          )}
+          <button className="dash-link-button" type="button" onClick={() => onNavigate("reports")}>
+            Ver atendimentos
+            <ArrowRight size={15} />
+          </button>
+        </article>
+
+        {contactEnabled && (
+          <article className="table-panel dash-panel">
+            <div className="panel-title">
+              <div>
+                <h2>Mensagens de contato</h2>
+                <p>Dúvidas e solicitações ainda não respondidas.</p>
+              </div>
+              <span>{openContactMessages.length}</span>
+            </div>
+            {openContactMessages.length > 0 ? (
+              openContactMessages.map((message) => (
+                <div className="data-row" key={message.id}>
+                  <span>
+                    <strong>{message.subject ?? message.name}</strong>
+                    {message.name} · {message.email}
+                  </span>
+                  <small className="dash-badge">Aberta</small>
+                </div>
+              ))
+            ) : (
+              <div className="dash-empty">
+                <MessageCircle size={18} />
+                Nenhuma mensagem em aberto.
+              </div>
+            )}
+            <button className="dash-link-button" type="button" onClick={() => onNavigate("contact")}>
+              Abrir caixa de entrada
+              <ArrowRight size={15} />
+            </button>
+          </article>
+        )}
+
+        <article className="table-panel dash-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Próximos eventos</h2>
+              <p>Agenda de eventos ainda abertos para inscrição.</p>
+            </div>
+            <span>{upcomingEvents.length}</span>
+          </div>
+          {upcomingEvents.length > 0 ? (
+            upcomingEvents.map((event) => (
+              <div className="data-row" key={event.id}>
+                <span>
+                  <strong>{event.title}</strong>
+                  {new Date(event.startsAt).toLocaleString("pt-BR")} ·{" "}
+                  {event.registrationCount ?? event.registrations?.length ?? 0}/{event.capacity ?? "sem limite"}
+                </span>
+              </div>
+            ))
+          ) : (
+            <div className="dash-empty">
+              <CalendarDays size={18} />
+              Nenhum evento agendado.
+            </div>
+          )}
+          <button className="dash-link-button" type="button" onClick={() => onNavigate("reports")}>
+            Gerenciar eventos
+            <ArrowRight size={15} />
+          </button>
+        </article>
+
+        <article className="table-panel dash-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Últimos alunos</h2>
+              <p>Cadastros mais recentes no painel.</p>
+            </div>
+            <span>{latestStudents.length}</span>
+          </div>
+          {latestStudents.length > 0 ? (
+            latestStudents.map((student) => (
+              <div className="data-row" key={student.id}>
+                <span>
+                  <strong>{student.name}</strong>
+                  {student.email}
+                </span>
+                <small>{student.createdAt ? new Date(student.createdAt).toLocaleDateString("pt-BR") : "—"}</small>
+              </div>
+            ))
+          ) : (
+            <div className="dash-empty">
+              <UsersRound size={18} />
+              Nenhum aluno cadastrado ainda.
+            </div>
+          )}
+          <button className="dash-link-button" type="button" onClick={() => onNavigate("users")}>
+            Gerenciar usuários
+            <ArrowRight size={15} />
+          </button>
+        </article>
+      </section>
+    </section>
+  );
+}
+
 function AdminView({ token, onLogout }: { token: string | null; onLogout: () => void }) {
   const [adminSection, setAdminSection] = useState<
-    "overview" | "users" | "training" | "plans" | "memberships" | "payments" | "operations"
+    | "overview"
+    | "training"
+    | "users"
+    | "finance"
+    | "programs"
+    | "reports"
+    | "settings"
+    | "products"
+    | "purchases"
+    | "qr"
+    | "cards"
+    | "contact"
+    | "favorites"
+    | "ratings"
   >("overview");
   const [summary, setSummary] = useState({
     users: 0,
@@ -1090,8 +1980,26 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const [events, setEvents] = useState<EventRow[]>([]);
   const [tickets, setTickets] = useState<SupportTicketRow[]>([]);
   const [aiPlans, setAiPlans] = useState<AiWorkoutPlanRow[]>([]);
+  const [products, setProducts] = useState<ProductRow[]>([]);
+  const [purchases, setPurchases] = useState<PurchaseRow[]>([]);
+  const [paymentCards, setPaymentCards] = useState<PaymentCardRow[]>([]);
+  const [favorites, setFavorites] = useState<FavoriteRow[]>([]);
+  const [ratings, setRatings] = useState<RatingRow[]>([]);
+  const [contactMessages, setContactMessages] = useState<ContactMessageRow[]>([]);
+  const [systemSettings, setSystemSettings] = useState<Record<string, string>>({});
+  const [selectedAdminStudentId, setSelectedAdminStudentId] = useState<string | null>(null);
+  const [selectedAdminStudent, setSelectedAdminStudent] = useState<AdminStudentOverview | null>(null);
+  const [studentOverviewLoading, setStudentOverviewLoading] = useState(false);
+  const [managedUserSearch, setManagedUserSearch] = useState("");
+  const [userSearch, setUserSearch] = useState("");
+  const [userRoleFilter, setUserRoleFilter] = useState<"ALL" | AdminUser["role"]>("ALL");
+  const [userStatusFilter, setUserStatusFilter] = useState<"ALL" | AdminUser["status"]>("ALL");
+  const [usersPage, setUsersPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [cmsStep, setCmsStep] = useState<"modalities" | "lessons" | "blocks" | "publish">("lessons");
 
   function getApiErrorMessage(error: unknown, fallback: string) {
@@ -1103,55 +2011,125 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     return stringValue ? Number(stringValue) : undefined;
   }
 
-  async function loadAdminData() {
+  async function fetchAdminResource(resource: AdminResource) {
+    switch (resource) {
+      case "summary": {
+        const response = await apiGet<typeof summary>("/admin/summary", token);
+        setSummary(response);
+        break;
+      }
+      case "users": {
+        const response = await apiGet<{ users: AdminUser[] }>("/admin/users", token);
+        setUsers(response.users);
+        break;
+      }
+      case "modalities": {
+        const response = await apiGet<{ modalities: CmsModalityRow[] }>("/admin/cms/modalities", token);
+        setCmsModalities(response.modalities);
+        break;
+      }
+      case "exercises": {
+        const response = await apiGet<{ exercises: CmsExerciseRow[] }>("/admin/cms/exercises", token);
+        setCmsExercises(response.exercises);
+        break;
+      }
+      case "workoutBlocks": {
+        const response = await apiGet<{ workoutBlocks: CmsWorkoutBlockRow[] }>("/admin/cms/workout-blocks", token);
+        setCmsWorkoutBlocks(response.workoutBlocks);
+        break;
+      }
+      case "programs": {
+        const response = await apiGet<{ programs: CmsProgramRow[] }>("/admin/cms/programs", token);
+        setCmsPrograms(response.programs);
+        break;
+      }
+      case "plans": {
+        const response = await apiGet<{ plans: PlanRow[] }>("/admin/plans", token);
+        setPlans(response.plans);
+        break;
+      }
+      case "memberships": {
+        const response = await apiGet<{ memberships: MembershipRow[] }>("/admin/memberships", token);
+        setMemberships(response.memberships);
+        break;
+      }
+      case "payments": {
+        const response = await apiGet<{ payments: PaymentRow[] }>("/admin/payments", token);
+        setPayments(response.payments);
+        break;
+      }
+      case "assessments": {
+        const response = await apiGet<{ assessments: PhysicalAssessmentRow[] }>("/admin/physical-assessments", token);
+        setAssessments(response.assessments);
+        break;
+      }
+      case "events": {
+        const response = await apiGet<{ events: EventRow[] }>("/admin/events", token);
+        setEvents(response.events);
+        break;
+      }
+      case "tickets": {
+        const response = await apiGet<{ tickets: SupportTicketRow[] }>("/admin/support-tickets", token);
+        setTickets(response.tickets);
+        break;
+      }
+      case "aiPlans": {
+        const response = await apiGet<{ plans: AiWorkoutPlanRow[] }>("/admin/ai-workout-plans", token);
+        setAiPlans(response.plans);
+        break;
+      }
+      case "products": {
+        const response = await apiGet<{ products: ProductRow[] }>("/admin/products", token);
+        setProducts(response.products);
+        break;
+      }
+      case "purchases": {
+        const response = await apiGet<{ purchases: PurchaseRow[] }>("/admin/purchases", token);
+        setPurchases(response.purchases);
+        break;
+      }
+      case "paymentCards": {
+        const response = await apiGet<{ paymentCards: PaymentCardRow[] }>("/admin/payment-cards", token);
+        setPaymentCards(response.paymentCards);
+        break;
+      }
+      case "favorites": {
+        const response = await apiGet<{ favorites: FavoriteRow[] }>("/admin/favorites", token);
+        setFavorites(response.favorites);
+        break;
+      }
+      case "ratings": {
+        const response = await apiGet<{ ratings: RatingRow[] }>("/admin/ratings", token);
+        setRatings(response.ratings);
+        break;
+      }
+      case "contactMessages": {
+        const response = await apiGet<{ contactMessages: ContactMessageRow[] }>("/admin/contact-messages", token);
+        setContactMessages(response.contactMessages);
+        break;
+      }
+      case "settings": {
+        const response = await apiGet<{ settings: Record<string, string> }>("/admin/settings", token);
+        setSystemSettings(response.settings);
+        break;
+      }
+    }
+  }
+
+  async function loadAdminData(resources?: AdminResource[]) {
     if (!token) return;
-    setLoading(true);
+
+    const requested = resources && resources.length > 0 ? resources : ALL_ADMIN_RESOURCES;
+    const lightweight = requested.length === 1 && requested[0] === "summary";
+
     setFeedback(null);
+    if (!lightweight) {
+      setLoading(true);
+    }
 
     try {
-      const [
-        summaryResponse,
-        usersResponse,
-        cmsModalitiesResponse,
-        cmsExercisesResponse,
-        cmsWorkoutBlocksResponse,
-        cmsProgramsResponse,
-        plansResponse,
-        membershipsResponse,
-        paymentsResponse,
-        assessmentsResponse,
-        eventsResponse,
-        ticketsResponse,
-        aiPlansResponse
-      ] = await Promise.all([
-          apiGet<typeof summary>("/admin/summary", token),
-          apiGet<{ users: AdminUser[] }>("/admin/users", token),
-          apiGet<{ modalities: CmsModalityRow[] }>("/admin/cms/modalities", token),
-          apiGet<{ exercises: CmsExerciseRow[] }>("/admin/cms/exercises", token),
-          apiGet<{ workoutBlocks: CmsWorkoutBlockRow[] }>("/admin/cms/workout-blocks", token),
-          apiGet<{ programs: CmsProgramRow[] }>("/admin/cms/programs", token),
-          apiGet<{ plans: PlanRow[] }>("/admin/plans", token),
-          apiGet<{ memberships: MembershipRow[] }>("/admin/memberships", token),
-          apiGet<{ payments: PaymentRow[] }>("/admin/payments", token),
-          apiGet<{ assessments: PhysicalAssessmentRow[] }>("/admin/physical-assessments", token),
-          apiGet<{ events: EventRow[] }>("/admin/events", token),
-          apiGet<{ tickets: SupportTicketRow[] }>("/admin/support-tickets", token),
-          apiGet<{ plans: AiWorkoutPlanRow[] }>("/admin/ai-workout-plans", token)
-        ]);
-
-      setSummary(summaryResponse);
-      setUsers(usersResponse.users);
-      setCmsModalities(cmsModalitiesResponse.modalities);
-      setCmsExercises(cmsExercisesResponse.exercises);
-      setCmsWorkoutBlocks(cmsWorkoutBlocksResponse.workoutBlocks);
-      setCmsPrograms(cmsProgramsResponse.programs);
-      setPlans(plansResponse.plans);
-      setMemberships(membershipsResponse.memberships);
-      setPayments(paymentsResponse.payments);
-      setAssessments(assessmentsResponse.assessments);
-      setEvents(eventsResponse.events);
-      setTickets(ticketsResponse.tickets);
-      setAiPlans(aiPlansResponse.plans);
+      await Promise.all(requested.map((resource) => fetchAdminResource(resource)));
+      setLastUpdatedAt(new Date());
     } catch {
       setFeedback("Não foi possível carregar dados administrativos. Verifique API, banco e permissão.");
     } finally {
@@ -1159,9 +2137,84 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     }
   }
 
+  function resourcesForDeletePath(path: string): AdminResource[] {
+    if (path.startsWith("/admin/users/")) return ["users", "summary"];
+    if (path.startsWith("/admin/cms/modalities/")) return ["modalities"];
+    if (path.startsWith("/admin/cms/exercises/")) return ["exercises", "workoutBlocks"];
+    if (path.startsWith("/admin/cms/workout-blocks/")) return ["workoutBlocks", "programs"];
+    if (path.startsWith("/admin/cms/programs/")) return ["programs"];
+    if (path.startsWith("/admin/plans/")) return ["plans", "memberships", "payments"];
+    if (path.startsWith("/admin/memberships/")) return ["memberships", "users", "summary"];
+    if (path.startsWith("/admin/payments/")) return ["payments", "memberships", "summary"];
+    if (path.startsWith("/admin/physical-assessments/")) return ["assessments"];
+    if (path.startsWith("/admin/events/")) return ["events"];
+    if (path.startsWith("/admin/support-tickets/")) return ["tickets"];
+    if (path.startsWith("/admin/ai-workout-plans/")) return ["aiPlans"];
+    if (path.startsWith("/admin/products/")) return ["products", "purchases", "favorites", "ratings"];
+    if (path.startsWith("/admin/purchases/")) return ["purchases"];
+    if (path.startsWith("/admin/payment-cards/")) return ["paymentCards"];
+    if (path.startsWith("/admin/favorites/")) return ["favorites", "products"];
+    if (path.startsWith("/admin/ratings/")) return ["ratings", "products"];
+    if (path.startsWith("/admin/contact-messages/")) return ["contactMessages"];
+    return ALL_ADMIN_RESOURCES;
+  }
+
+  async function applyAdminChange(resources: AdminResource[], successMessage = "Alteração aplicada com sucesso.") {
+    await loadAdminData(resources);
+    setSuccess(successMessage);
+  }
+
   useEffect(() => {
     void loadAdminData();
   }, [token]);
+
+  useEffect(() => {
+    if (!success) return;
+
+    const timeout = window.setTimeout(() => setSuccess(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [success]);
+
+  useEffect(() => {
+    if (adminSection !== "overview") return;
+
+    const interval = window.setInterval(() => {
+      void loadAdminData(["summary"]);
+    }, 60000);
+
+    return () => window.clearInterval(interval);
+  }, [adminSection, token]);
+
+  async function loadAdminStudentOverview(studentId = selectedAdminStudentId) {
+    if (!token || !studentId) return;
+
+    setStudentOverviewLoading(true);
+    try {
+      const response = await apiGet<AdminStudentOverview>(`/admin/students/${studentId}/overview`, token);
+      setSelectedAdminStudent(response);
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível carregar a visão completa do aluno."));
+    } finally {
+      setStudentOverviewLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedAdminStudentId) {
+      setSelectedAdminStudent(null);
+      return;
+    }
+
+    void loadAdminStudentOverview(selectedAdminStudentId);
+  }, [selectedAdminStudentId, token]);
+
+  useEffect(() => {
+    setUsersPage(1);
+  }, [userRoleFilter, userSearch, userStatusFilter]);
+
+  async function refreshAdminStudentOverview(resources: AdminResource[] = ["users", "summary"]) {
+    await Promise.all([loadAdminData(resources), loadAdminStudentOverview()]);
+  }
 
   async function handleCreateUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1183,18 +2236,44 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         token
       );
       form.reset();
-      await loadAdminData();
+      await applyAdminChange(["users", "summary"], "Usuário cadastrado com sucesso.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar o usuário."));
     }
   }
 
-  async function handleUpdateUserGender(userId: string, gender: "MALE" | "FEMALE") {
+  async function handleUpdateUserStatus(userId: string, status: AdminUser["status"]) {
     try {
-      await apiPut(`/admin/users/${userId}`, { gender }, token);
-      await loadAdminData();
+      await apiPut(`/admin/users/${userId}`, { status }, token);
+      await refreshAdminStudentOverview();
     } catch (error) {
-      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o sexo do aluno."));
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o status do usuário."));
+    }
+  }
+
+  async function handleUpdateAdminStudentProfile(event: FormEvent<HTMLFormElement>, studentId: string) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+
+    try {
+      await apiPut(
+        `/admin/users/${studentId}`,
+        {
+          name: String(data.get("name") ?? ""),
+          email: String(data.get("email") ?? ""),
+          phone: String(data.get("phone") ?? ""),
+          document: String(data.get("document") ?? ""),
+          gender: String(data.get("gender") ?? ""),
+          objective: String(data.get("objective") ?? ""),
+          level: String(data.get("level") ?? ""),
+          status: String(data.get("status") ?? "ACTIVE")
+        },
+        token
+      );
+      await refreshAdminStudentOverview();
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o perfil do aluno."));
     }
   }
 
@@ -1241,7 +2320,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         token
       );
       form.reset();
-      await loadAdminData();
+      await applyAdminChange(["modalities"], "Modalidade cadastrada com sucesso.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar a modalidade."));
     }
@@ -1310,7 +2389,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         token
       );
       form.reset();
-      await loadAdminData();
+      await applyAdminChange(["exercises", "workoutBlocks"], "Aula cadastrada com sucesso.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar o exercício CMS."));
     }
@@ -1333,7 +2412,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         token
       );
       form.reset();
-      await loadAdminData();
+      await applyAdminChange(["workoutBlocks", "programs"], "Ficha cadastrada com sucesso.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar o bloco CMS."));
     }
@@ -1352,6 +2431,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           description: String(data.get("description") ?? ""),
           modalityId: String(data.get("modalityId") ?? ""),
           targetGender: String(data.get("targetGender") ?? "ALL"),
+          totalWorkouts: Number(data.get("totalWorkouts") ?? 30),
           status: String(data.get("status") ?? "DRAFT"),
           isActive: String(data.get("status") ?? "DRAFT") === "PUBLISHED",
           days: parseCmsProgramDays(data)
@@ -1359,7 +2439,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         token
       );
       form.reset();
-      await loadAdminData();
+      await applyAdminChange(["programs"], "Programa cadastrado com sucesso.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar o programa CMS."));
     }
@@ -1368,7 +2448,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   async function handlePublishCmsProgram(programId: string) {
     try {
       await apiPost(`/admin/cms/programs/${programId}/publish`, {}, token);
-      await loadAdminData();
+      await applyAdminChange(["programs"], "Programa publicado para os alunos.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível publicar o programa CMS."));
     }
@@ -1377,13 +2457,63 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   async function handleArchiveCmsProgram(programId: string) {
     try {
       await apiPost(`/admin/cms/programs/${programId}/archive`, {}, token);
-      await loadAdminData();
+      await applyAdminChange(["programs"], "Programa arquivado.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível arquivar o programa CMS."));
     }
   }
 
-  async function handleAssignCmsProgram(programId: string, userIds?: string[], currentDay = 1) {
+  async function handleUpdateCmsModalityStatus(modalityId: string, isActive: boolean) {
+    try {
+      await apiPut(`/admin/cms/modalities/${modalityId}`, { isActive }, token);
+      await applyAdminChange(["modalities"]);
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar a modalidade."));
+    }
+  }
+
+  async function handleRenameCmsExercise(exercise: CmsExerciseRow) {
+    const currentTitle = exercise.title ?? exercise.name ?? "";
+    const title = window.prompt("Título da aula", currentTitle)?.trim();
+
+    if (!title || title === currentTitle) return;
+
+    try {
+      await apiPut(`/admin/cms/exercises/${exercise.id}`, { title }, token);
+      await applyAdminChange(["exercises"], "Aula atualizada.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível editar a aula."));
+    }
+  }
+
+  async function handleUpdateCmsWorkoutBlockRest(workoutBlockId: string, restTime: number) {
+    try {
+      await apiPut(`/admin/cms/workout-blocks/${workoutBlockId}`, { restTime }, token);
+      await applyAdminChange(["workoutBlocks"], "Ficha atualizada.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar a ficha."));
+    }
+  }
+
+  async function handleUpdateCmsProgramGender(programId: string, targetGender: CmsProgramRow["targetGender"]) {
+    try {
+      await apiPut(`/admin/cms/programs/${programId}`, { targetGender }, token);
+      await applyAdminChange(["programs"]);
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o público do programa."));
+    }
+  }
+
+  async function handleUpdateCmsProgramTotalWorkouts(programId: string, totalWorkouts: number) {
+    try {
+      await apiPut(`/admin/cms/programs/${programId}`, { totalWorkouts }, token);
+      await applyAdminChange(["programs"]);
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar a meta de treinos."));
+    }
+  }
+
+  async function handleAssignCmsProgram(programId: string, userIds?: string[], currentDay = 1, totalWorkouts = 30) {
     const targetUserIds = userIds?.length ? userIds : activeStudents.map((item) => item.id);
 
     if (targetUserIds.length === 0) {
@@ -1392,8 +2522,8 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     }
 
     try {
-      await apiPost(`/admin/cms/programs/${programId}/assign`, { userIds: targetUserIds, currentDay }, token);
-      await loadAdminData();
+      await apiPost(`/admin/cms/programs/${programId}/assign`, { userIds: targetUserIds, currentDay, totalWorkouts }, token);
+      await applyAdminChange(["programs"], "Programa atribuído aos alunos.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível atribuir o programa aos alunos."));
     }
@@ -1405,8 +2535,9 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     const data = new FormData(form);
     const userId = String(data.get("userId") ?? "");
     const currentDay = Number(data.get("currentDay") ?? 1);
+    const totalWorkouts = Number(data.get("totalWorkouts") ?? 30);
 
-    await handleAssignCmsProgram(programId, userId ? [userId] : undefined, currentDay);
+    await handleAssignCmsProgram(programId, userId ? [userId] : undefined, currentDay, totalWorkouts);
   }
 
   async function handleCreatePlan(event: FormEvent<HTMLFormElement>) {
@@ -1426,9 +2557,18 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         token
       );
       form.reset();
-      await loadAdminData();
+      await applyAdminChange(["plans"], "Plano cadastrado com sucesso.");
     } catch {
       setFeedback("Não foi possível cadastrar o plano.");
+    }
+  }
+
+  async function handleUpdatePlanBilling(planId: string, billingCycle: PlanRow["billingCycle"]) {
+    try {
+      await apiPut(`/admin/plans/${planId}`, { billingCycle }, token);
+      await applyAdminChange(["plans"]);
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o plano."));
     }
   }
 
@@ -1449,9 +2589,18 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         token
       );
       form.reset();
-      await loadAdminData();
+      await applyAdminChange(["memberships", "users", "summary"], "Matrícula criada com sucesso.");
     } catch {
       setFeedback("Não foi possível criar a matrícula.");
+    }
+  }
+
+  async function handleUpdateMembershipStatus(membershipId: string, status: MembershipRow["status"]) {
+    try {
+      await apiPut(`/admin/memberships/${membershipId}`, { status }, token);
+      await refreshAdminStudentOverview(["memberships", "users", "summary"]);
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar a matrícula."));
     }
   }
 
@@ -1472,9 +2621,22 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         token
       );
       form.reset();
-      await loadAdminData();
+      await applyAdminChange(["payments", "memberships", "summary"], "Pagamento gerado com sucesso.");
     } catch {
       setFeedback("Não foi possível gerar o pagamento.");
+    }
+  }
+
+  async function handleUpdatePaymentStatus(paymentId: string, status: PaymentRow["status"]) {
+    try {
+      await apiPut(
+        `/admin/payments/${paymentId}`,
+        { status, paidAt: status === "CONFIRMED" ? new Date().toISOString() : null },
+        token
+      );
+      await refreshAdminStudentOverview(["payments", "memberships", "summary"]);
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o pagamento."));
     }
   }
 
@@ -1500,7 +2662,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         token
       );
       form.reset();
-      await loadAdminData();
+      await applyAdminChange(["assessments"], "Avaliação física registrada.");
     } catch {
       setFeedback("Não foi possível registrar a avaliação física.");
     }
@@ -1524,16 +2686,25 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         token
       );
       form.reset();
-      await loadAdminData();
+      await applyAdminChange(["events"], "Evento criado com sucesso.");
     } catch {
       setFeedback("Não foi possível criar o evento.");
+    }
+  }
+
+  async function handleUpdateEventStatus(eventId: string, status: EventRow["status"]) {
+    try {
+      await apiPut(`/admin/events/${eventId}`, { status }, token);
+      await applyAdminChange(["events"]);
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o evento."));
     }
   }
 
   async function handleUpdateTicket(ticketId: string, status: SupportTicketRow["status"]) {
     try {
       await apiPut(`/admin/support-tickets/${ticketId}`, { status }, token);
-      await loadAdminData();
+      await refreshAdminStudentOverview(["tickets"]);
     } catch {
       setFeedback("Não foi possível atualizar o atendimento.");
     }
@@ -1542,21 +2713,171 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   async function handleDelete(path: string) {
     try {
       await apiDelete(path, token);
-      await loadAdminData();
+      await applyAdminChange(resourcesForDeletePath(path), "Registro excluído com sucesso.");
     } catch {
       setFeedback("Não foi possível excluir o registro.");
     }
   }
+
+  async function handleCreateProduct(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+
+    try {
+      await apiPost(
+        "/admin/products",
+        {
+          name: String(data.get("name") ?? ""),
+          description: String(data.get("description") ?? "") || undefined,
+          category: String(data.get("category") ?? "") || undefined,
+          priceInCents: Math.round(Number(data.get("price") ?? 0) * 100),
+          isActive: true
+        },
+        token
+      );
+      form.reset();
+      await applyAdminChange(["products"], "Produto cadastrado com sucesso.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar o produto."));
+    }
+  }
+
+  async function handleUpdateProductStatus(productId: string, isActive: boolean) {
+    try {
+      await apiPut(`/admin/products/${productId}`, { isActive }, token);
+      await applyAdminChange(["products"]);
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o produto."));
+    }
+  }
+
+  async function handleCreatePurchase(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const userId = String(data.get("userId") ?? "");
+    const productId = String(data.get("productId") ?? "");
+    const product = products.find((item) => item.id === productId);
+
+    if (!userId || !product) {
+      setFeedback("Selecione o aluno e o produto.");
+      return;
+    }
+
+    try {
+      await apiPost(
+        "/admin/purchases",
+        {
+          userId,
+          productId,
+          amountInCents: Number(data.get("amountInCents") ?? product.priceInCents) || product.priceInCents,
+          status: "CONFIRMED",
+          paymentMethod: String(data.get("paymentMethod") ?? "") || undefined
+        },
+        token
+      );
+      form.reset();
+      await applyAdminChange(["purchases", "products"], "Compra registrada com sucesso.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível registrar a compra."));
+    }
+  }
+
+  async function handleUpdatePurchaseStatus(purchaseId: string, status: PurchaseStatus) {
+    try {
+      await apiPut(`/admin/purchases/${purchaseId}`, { status }, token);
+      await applyAdminChange(["purchases"]);
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar a compra."));
+    }
+  }
+
+  async function handleCreatePaymentCard(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+
+    try {
+      await apiPost(
+        "/admin/payment-cards",
+        {
+          userId: String(data.get("userId") ?? ""),
+          brand: String(data.get("brand") ?? "") || undefined,
+          lastFour: String(data.get("lastFour") ?? ""),
+          holderName: String(data.get("holderName") ?? "") || undefined,
+          isDefault: data.get("isDefault") === "on"
+        },
+        token
+      );
+      form.reset();
+      await applyAdminChange(["paymentCards"], "Cartão cadastrado com sucesso.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar o cartão."));
+    }
+  }
+
+  async function handleUpdateContactMessageStatus(messageId: string, status: ContactMessageRow["status"]) {
+    try {
+      await apiPut(`/admin/contact-messages/${messageId}`, { status }, token);
+      await applyAdminChange(["contactMessages"]);
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar a mensagem."));
+    }
+  }
+
+  async function handleSaveSettings(next: Record<string, string>) {
+    try {
+      await apiPut("/admin/settings", next, token);
+      await applyAdminChange(["settings"], "Configurações salvas com sucesso.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível salvar as configurações."));
+    }
+  }
+
+  function toggleSystemSetting(key: string) {
+    const current = systemSettings[key] === "true";
+    void handleSaveSettings({ ...systemSettings, [key]: current ? "false" : "true" });
+  }
+
+  function setSystemSettingValue(key: string, value: string) {
+    setSystemSettings((previous) => ({ ...previous, [key]: value }));
+  }
+
+  const moduleSettingRows = [
+    { key: "module_products", label: "Produtos", description: "Catálogo de produtos e vendas." },
+    { key: "module_purchases", label: "Compras", description: "Registro de compras e pagamentos." },
+    { key: "module_qr", label: "QR Code", description: "Check-in por QR Code na academia." },
+    { key: "module_cards", label: "Meus Cartões", description: "Cartões salvos para cobranças." },
+    { key: "module_contact", label: "Contato", description: "Mensagens recebidas dos visitantes." },
+    { key: "module_favorites", label: "Favoritos", description: "Favoritos dos alunos." },
+    { key: "module_ratings", label: "Avaliar", description: "Avaliações de produtos e treinos." }
+  ];
+
+  const nowForStats = new Date();
+  const currentMonthForStats = `${nowForStats.getFullYear()}-${nowForStats.getMonth()}`;
+  const revenueThisMonth = payments
+    .filter((payment) => {
+      if (payment.status !== "CONFIRMED") return false;
+      const date = new Date(payment.paidAt ?? payment.dueDate);
+      return `${date.getFullYear()}-${date.getMonth()}` === currentMonthForStats;
+    })
+    .reduce((sum, payment) => sum + payment.amountInCents, 0);
+  const purchasesThisMonth = purchases.filter((purchase) => {
+    const date = new Date(purchase.createdAt);
+    return `${date.getFullYear()}-${date.getMonth()}` === currentMonthForStats;
+  }).length;
+  const averageRating = ratings.length > 0 ? ratings.reduce((sum, rating) => sum + rating.score, 0) / ratings.length : null;
 
   const stats = [
     { icon: UsersRound, label: "Usuários", value: String(summary.users), trend: "Total" },
     { icon: ShieldCheck, label: "Matrículas ativas", value: String(summary.activeMemberships), trend: "Ativas" },
     { icon: CreditCard, label: "Pagamentos pendentes", value: String(summary.pendingPayments), trend: "Abertos" },
     { icon: Activity, label: "Acessos hoje", value: String(summary.todayAttendance), trend: "Hoje" },
-    { icon: Ruler, label: "Avaliações", value: String(assessments.length), trend: "Físicas" },
-    { icon: CalendarPlus, label: "Eventos", value: String(events.length), trend: "Agenda" },
-    { icon: Headphones, label: "Atendimentos", value: String(tickets.length), trend: "Suporte" },
-    { icon: Bot, label: "Planos IA", value: String(aiPlans.length), trend: "Gerados" }
+    { icon: Wallet, label: "Receita no mês", value: formatPriceInBRL(revenueThisMonth), trend: "Confirmada" },
+    { icon: Package, label: "Produtos", value: String(products.length), trend: "Catálogo" },
+    { icon: ShoppingCart, label: "Compras no mês", value: String(purchasesThisMonth), trend: "Vendas" },
+    { icon: Star, label: "Avaliação média", value: averageRating !== null ? String(Math.round(averageRating * 10) / 10).replace(".", ",") : "—", trend: `${ratings.length} voto(s)` }
   ];
   const activeStudents = users.filter(
     (item) =>
@@ -1564,103 +2885,241 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       item.status === "ACTIVE" &&
       (item.enrollmentStatus === "ACTIVE" || item.memberships?.some((membership) => membership.status === "ACTIVE"))
   );
+  const usersPageSize = 12;
+  const filteredAdminUsers = useMemo(() => {
+    const normalizedSearch = userSearch.trim().toLowerCase();
+
+    return users.filter((item) => {
+      const matchesSearch =
+        !normalizedSearch ||
+        item.name.toLowerCase().includes(normalizedSearch) ||
+        item.email.toLowerCase().includes(normalizedSearch) ||
+        item.profile?.document?.toLowerCase().includes(normalizedSearch) ||
+        item.phone?.toLowerCase().includes(normalizedSearch) ||
+        item.profile?.phone?.toLowerCase().includes(normalizedSearch);
+      const matchesRole = userRoleFilter === "ALL" || item.role === userRoleFilter;
+      const matchesStatus = userStatusFilter === "ALL" || item.status === userStatusFilter;
+
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+  }, [userRoleFilter, userSearch, userStatusFilter, users]);
+  const managerUserOptions = useMemo(() => {
+    const normalizedSearch = managedUserSearch.trim().toLowerCase();
+
+    return users
+      .filter((item) => item.role === "USER")
+      .filter((item) => {
+        if (!normalizedSearch) return true;
+
+        return (
+          item.name.toLowerCase().includes(normalizedSearch) ||
+          item.email.toLowerCase().includes(normalizedSearch) ||
+          item.profile?.document?.toLowerCase().includes(normalizedSearch) ||
+          item.phone?.toLowerCase().includes(normalizedSearch) ||
+          item.profile?.phone?.toLowerCase().includes(normalizedSearch)
+        );
+      });
+  }, [managedUserSearch, users]);
+  const usersTotalPages = Math.max(1, Math.ceil(filteredAdminUsers.length / usersPageSize));
+  const currentUsersPage = Math.min(usersPage, usersTotalPages);
+  const visibleAdminUsers = filteredAdminUsers.slice((currentUsersPage - 1) * usersPageSize, currentUsersPage * usersPageSize);
   const cmsPublishedCount = cmsPrograms.filter((item) => item.status === "PUBLISHED").length;
   const cmsAssignmentCount = cmsPrograms.reduce((total, item) => total + (item.assignedUsers?.length ?? 0), 0);
   const cmsStepCards = [
     {
       id: "modalities" as const,
       icon: Dumbbell,
-      title: "Modalidades",
-      text: "Organize categorias antes de cadastrar aulas.",
+      title: "Localidades",
+      text: "Gerencie academias, unidades ou clubes.",
       metric: `${cmsModalities.filter((item) => item.isActive).length} ativa(s)`
     },
     {
       id: "lessons" as const,
       icon: UploadCloud,
       title: "Aulas e materiais",
-      text: "Cadastre exercícios com video, audio e arquivos de apoio.",
-      metric: `${cmsExercises.length} item(ns)`
+      text: "Crie aulas, videos e materiais de apoio.",
+      metric: `${cmsExercises.length} ativo(s)`
     },
     {
       id: "blocks" as const,
       icon: ClipboardList,
-      title: "Ficha de treino",
-      text: "Monte sequencias com series, repeticoes e descanso.",
-      metric: `${cmsWorkoutBlocks.length} bloco(s)`
+      title: "Fichas de treino",
+      text: "Monte fichas com series, repeticoes e descanso.",
+      metric: `${cmsWorkoutBlocks.length} ativo(s)`
     },
     {
       id: "publish" as const,
       icon: Check,
-      title: "Publicar",
-      text: "Revise, publique e atribua para alunos.",
+      title: "Publicações",
+      text: "Publique conteúdo para alunos.",
       metric: `${cmsPublishedCount} publicado(s)`
     }
   ];
 
   return (
-    <main className="workspace-shell">
+    <main className={sidebarCollapsed ? "workspace-shell admin-workspace-shell sidebar-collapsed" : "workspace-shell admin-workspace-shell"}>
       <aside className="workspace-sidebar" aria-label="Menu administrativo">
+        <button
+          type="button"
+          className="sidebar-toggle"
+          aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+          title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+          onClick={() => setSidebarCollapsed((value) => !value)}
+        >
+          {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+        </button>
         <div className="workspace-sidebar-brand">
           <img src={assetUrl("assets/app-treino-mark.svg")} alt="" aria-hidden="true" />
           <div>
-            <strong>Admin</strong>
-            <span>App Treino</span>
+            <strong>App Treino</strong>
+            <span>Admin</span>
           </div>
         </div>
         <nav className="workspace-nav">
+          <span className="admin-nav-group-label">Principal</span>
           <button className={adminSection === "overview" ? "active" : ""} onClick={() => setAdminSection("overview")}>
-            <Activity size={18} />Visao geral
+            <Home size={18} />
+            <span className="sidebar-label">Dashboard</span>
           </button>
-          <button className={adminSection === "users" ? "active" : ""} onClick={() => setAdminSection("users")}>
-            <UsersRound size={18} />Usuários
+          <button className={adminSection === "reports" ? "active" : ""} onClick={() => setAdminSection("reports")}>
+            <LineChart size={18} />
+            <span className="sidebar-label">Relatórios</span>
           </button>
-          <button className={adminSection === "training" ? "active" : ""} onClick={() => setAdminSection("training")}>
-            <Dumbbell size={18} />Treinos e CMS
+
+          <span className="admin-nav-group-label">Conteúdo e membros</span>
+          <button
+            className={adminSection === "training" ? "active" : ""}
+            onClick={() => {
+              setAdminSection("training");
+              setCmsStep("lessons");
+            }}
+          >
+            <Dumbbell size={18} />
+            <span className="sidebar-label">Treinos e Aulas CMS</span>
           </button>
-          <button className={adminSection === "plans" ? "active" : ""} onClick={() => setAdminSection("plans")}>
-            <CircleDollarSign size={18} />Planos
+          <button
+            className={adminSection === "users" ? "active" : ""}
+            onClick={() => setAdminSection("users")}
+          >
+            <UsersRound size={18} />
+            <span className="sidebar-label">Dados do usuário</span>
           </button>
-          <button className={adminSection === "memberships" ? "active" : ""} onClick={() => setAdminSection("memberships")}>
-            <ShieldCheck size={18} />Matrículas
+          <button className={adminSection === "finance" ? "active" : ""} onClick={() => setAdminSection("finance")}>
+            <CircleDollarSign size={18} />
+            <span className="sidebar-label">Financeiro</span>
           </button>
-          <button className={adminSection === "payments" ? "active" : ""} onClick={() => setAdminSection("payments")}>
-            <CreditCard size={18} />Pagamentos
+
+          <span className="admin-nav-group-label">Comercial</span>
+          <button className={adminSection === "products" ? "active" : ""} onClick={() => setAdminSection("products")}>
+            <Package size={18} />
+            <span className="sidebar-label">Produtos</span>
           </button>
-          <button className={adminSection === "operations" ? "active" : ""} onClick={() => setAdminSection("operations")}>
-            <ClipboardList size={18} />Operação
+          <button className={adminSection === "purchases" ? "active" : ""} onClick={() => setAdminSection("purchases")}>
+            <ShoppingCart size={18} />
+            <span className="sidebar-label">Compras</span>
+          </button>
+          <button className={adminSection === "qr" ? "active" : ""} onClick={() => setAdminSection("qr")}>
+            <QrCode size={18} />
+            <span className="sidebar-label">QR Code</span>
+          </button>
+          <button className={adminSection === "cards" ? "active" : ""} onClick={() => setAdminSection("cards")}>
+            <CreditCard size={18} />
+            <span className="sidebar-label">Meus Cartões</span>
+          </button>
+
+          <span className="admin-nav-group-label">Relacionamento</span>
+          <button className={adminSection === "contact" ? "active" : ""} onClick={() => setAdminSection("contact")}>
+            <MessageCircle size={18} />
+            <span className="sidebar-label">Contato</span>
+          </button>
+          <button className={adminSection === "favorites" ? "active" : ""} onClick={() => setAdminSection("favorites")}>
+            <Star size={18} />
+            <span className="sidebar-label">Favoritos</span>
+          </button>
+          <button className={adminSection === "ratings" ? "active" : ""} onClick={() => setAdminSection("ratings")}>
+            <Sparkles size={18} />
+            <span className="sidebar-label">Avaliar</span>
+          </button>
+
+          <span className="admin-nav-group-label">Sistema</span>
+          <button className={adminSection === "settings" ? "active" : ""} onClick={() => setAdminSection("settings")}>
+            <Settings size={18} />
+            <span className="sidebar-label">Configurações</span>
           </button>
         </nav>
         <button className="workspace-logout" onClick={onLogout}>
           <LogOut size={18} />
-          Sair
+          <span className="sidebar-label">Sair</span>
         </button>
+        <div className="workspace-sidebar-user">
+          <span>
+            <UserRound size={18} />
+          </span>
+          <div className="sidebar-user-info">
+            <strong>Admin</strong>
+            <small>Administrador</small>
+          </div>
+        </div>
       </aside>
-      <section className="workspace-content">
+      <section className="workspace-content admin-workspace-content">
       <section className="dashboard-heading" id="admin-overview">
-        <span className="eyebrow">Painel administrativo</span>
-        <h1>Operação do App Treino</h1>
-        <button className="outline-button compact-button" onClick={loadAdminData} disabled={loading}>
-          {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
-          Atualizar
-        </button>
+        <div>
+          <span className="eyebrow">Painel administrativo</span>
+          <h1>Operação do App Treino</h1>
+        </div>
+        <div className="dashboard-actions">
+          <button className="outline-button compact-button" onClick={() => void loadAdminData()} disabled={loading}>
+            {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
+            Atualizar
+          </button>
+          <button
+            className="primary-button compact-button admin-publish-shortcut"
+            onClick={() => {
+              setAdminSection("training");
+              setCmsStep("publish");
+            }}
+            type="button"
+          >
+            <UploadCloud size={18} />
+            Publicar para alunos
+          </button>
+        </div>
       </section>
+      {success && <div className="success-box">{success}</div>}
       {feedback && <div className="error-box">{feedback}</div>}
-      {adminSection === "overview" && <div className="stats-grid">
-        {stats.map((stat) => (
-          <article className="stat-card" key={stat.label}>
-            <stat.icon size={22} />
-            <span>{stat.label}</span>
-            <strong>{stat.value}</strong>
-            <small>{stat.trend}</small>
-          </article>
-        ))}
-      </div>}
+      {adminSection === "overview" && (
+        <AdminDashboardOverview
+          stats={stats}
+          payments={payments}
+          events={events}
+          tickets={tickets}
+          users={users}
+          memberships={memberships}
+          products={products}
+          purchases={purchases}
+          contactMessages={contactMessages}
+          favorites={favorites}
+          ratings={ratings}
+          systemSettings={systemSettings}
+          lastUpdatedAt={lastUpdatedAt}
+          loading={loading}
+          onRefresh={() => void loadAdminData()}
+          onNavigate={(section) => {
+            setAdminSection(section);
+            if (section === "training") setCmsStep("lessons");
+            if (section === "programs") setCmsStep("publish");
+          }}
+        />
+      )}
 
       {adminSection === "users" && <section className="admin-grid">
-        <article className="table-panel" id="admin-users">
+        <article className="table-panel wide-panel" id="admin-users">
           <div className="panel-title">
-            <h2>Usuários</h2>
-            <span>{users.length}</span>
+            <div>
+              <h2>Usuários</h2>
+              <p>Cadastro e gestão de alunos e administradores da academia.</p>
+            </div>
+            <span>{filteredAdminUsers.length}/{users.length}</span>
           </div>
           <form className="crud-form" onSubmit={handleCreateUser}>
             <input name="name" placeholder="Nome" required />
@@ -1682,33 +3141,370 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               Salvar usuário
             </button>
           </form>
-          {users.slice(0, 8).map((item) => (
-            <div className="data-row" key={item.id}>
-              <span>
-                <strong>{item.name}</strong>
-                {item.email}
-              </span>
-              <small>{item.role}</small>
-              {item.role === "USER" && (
-                <span className="admin-user-gender-actions">
-                  <small>{item.profile?.gender === "MALE" ? "Masculino" : item.profile?.gender === "FEMALE" ? "Feminino" : "Sem sexo"}</small>
-                  <button type="button" onClick={() => void handleUpdateUserGender(item.id, "MALE")}>
-                    M
-                  </button>
-                  <button type="button" onClick={() => void handleUpdateUserGender(item.id, "FEMALE")}>
-                    F
-                  </button>
-                </span>
-              )}
-              <button aria-label="Excluir usuário" onClick={() => handleDelete(`/admin/users/${item.id}`)}>
-                <Trash2 size={17} />
+          <div className="admin-users-toolbar">
+            <label>
+              Filtrar usuário
+              <input
+                value={userSearch}
+                onChange={(event) => setUserSearch(event.target.value)}
+                placeholder="Nome, e-mail, telefone ou documento"
+              />
+            </label>
+            <label>
+              Perfil
+              <select value={userRoleFilter} onChange={(event) => setUserRoleFilter(event.target.value as "ALL" | AdminUser["role"])}>
+                <option value="ALL">Todos</option>
+                <option value="USER">Alunos</option>
+                <option value="ADMIN">Admins</option>
+              </select>
+            </label>
+            <label>
+              Status
+              <select value={userStatusFilter} onChange={(event) => setUserStatusFilter(event.target.value as "ALL" | AdminUser["status"])}>
+                <option value="ALL">Todos</option>
+                <option value="ACTIVE">Ativos</option>
+                <option value="INACTIVE">Inativos</option>
+              </select>
+            </label>
+          </div>
+          <div className="admin-users-table-wrap">
+            <table className="admin-users-table">
+              <thead>
+                <tr>
+                  <th>Usuário</th>
+                  <th>Perfil</th>
+                  <th>Status</th>
+                  <th>Matrícula</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleAdminUsers.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <span>
+                        <strong>{item.name}</strong>
+                        <small>{item.email}</small>
+                      </span>
+                    </td>
+                    <td>{item.role === "USER" ? "Aluno" : "Admin"}</td>
+                    <td>
+                      <select
+                        aria-label="Status do usuário"
+                        value={item.status}
+                        onChange={(event) => handleUpdateUserStatus(item.id, event.target.value as AdminUser["status"])}
+                      >
+                        <option value="ACTIVE">Ativo</option>
+                        <option value="INACTIVE">Inativo</option>
+                      </select>
+                    </td>
+                    <td>
+                      <small>{item.enrollmentStatus}</small>
+                    </td>
+                    <td>
+                      <div className="admin-users-actions">
+                        {item.role === "USER" && (
+                          <button type="button" onClick={() => setSelectedAdminStudentId(item.id)}>
+                            Gerenciar
+                          </button>
+                        )}
+                        <button aria-label="Excluir usuário" onClick={() => handleDelete(`/admin/users/${item.id}`)}>
+                          <Trash2 size={17} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {visibleAdminUsers.length === 0 && (
+                  <tr>
+                    <td colSpan={5}>Nenhum usuário encontrado para os filtros selecionados.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="admin-users-pagination">
+            <span>
+              Página {currentUsersPage} de {usersTotalPages} • {filteredAdminUsers.length} registro(s)
+            </span>
+            <div>
+              <button type="button" onClick={() => setUsersPage((page) => Math.max(1, page - 1))} disabled={currentUsersPage <= 1}>
+                <ChevronLeft size={17} />
+                Anterior
+              </button>
+              <button type="button" onClick={() => setUsersPage((page) => Math.min(usersTotalPages, page + 1))} disabled={currentUsersPage >= usersTotalPages}>
+                Próxima
+                <ChevronRight size={17} />
               </button>
             </div>
-          ))}
+          </div>
         </article>
+
+        <article className="table-panel wide-panel admin-student-control-panel" id="admin-user-manager">
+            <div className="panel-title">
+              <div>
+                <h2>Ficha do usuário</h2>
+                <p>Filtre um aluno e edite as informações completas sincronizadas com o painel do aluno.</p>
+              </div>
+              <span>{studentOverviewLoading ? "Carregando" : selectedAdminStudent?.student.name ?? "Selecione um usuário"}</span>
+            </div>
+            <div className="admin-student-toolbar">
+              <label className="admin-student-filter">
+                Filtrar usuário
+                <input
+                  value={managedUserSearch}
+                  onChange={(event) => setManagedUserSearch(event.target.value)}
+                  placeholder="Nome, e-mail, telefone ou documento"
+                />
+              </label>
+              <select
+                aria-label="Selecionar aluno"
+                value={selectedAdminStudentId ?? ""}
+                onChange={(event) => setSelectedAdminStudentId(event.target.value)}
+              >
+                <option value="">Selecione um usuário</option>
+                {managerUserOptions.map((item) => (
+                  <option value={item.id} key={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+              {selectedAdminStudentId && (
+                <button className="outline-button compact-button" type="button" onClick={() => setSelectedAdminStudentId(null)}>
+                  <ChevronLeft size={18} />
+                  Limpar seleção
+                </button>
+              )}
+            </div>
+            {selectedAdminStudent ? (
+              <>
+            <div className="admin-student-summary-grid">
+              <span><UserRound size={18} /><strong>{selectedAdminStudent.student.status}</strong><small>Perfil</small></span>
+              <span><Dumbbell size={18} /><strong>{selectedAdminStudent.summary.completedWorkoutSessions}</strong><small>Treinos concluídos</small></span>
+              <span><CalendarDays size={18} /><strong>{selectedAdminStudent.summary.attendanceThisMonth}</strong><small>Frequência no mês</small></span>
+              <span><CreditCard size={18} /><strong>{selectedAdminStudent.summary.pendingPayments}</strong><small>Pagamentos pendentes</small></span>
+              <span><Headphones size={18} /><strong>{selectedAdminStudent.summary.openTickets}</strong><small>Atendimentos abertos</small></span>
+            </div>
+
+            <section className="admin-student-section-grid">
+              <article className="admin-student-module">
+                <div className="admin-student-module-title">
+                  <UserRound size={18} />
+                  <strong>Perfil</strong>
+                </div>
+                <form className="crud-form admin-student-profile-form" onSubmit={(event) => handleUpdateAdminStudentProfile(event, selectedAdminStudent.student.id)}>
+                  <input name="name" defaultValue={selectedAdminStudent.student.name} placeholder="Nome" required />
+                  <input name="email" type="email" defaultValue={selectedAdminStudent.student.email ?? ""} placeholder="E-mail" required />
+                  <input name="phone" defaultValue={selectedAdminStudent.student.phone ?? selectedAdminStudent.student.profile?.phone ?? ""} placeholder="Telefone" />
+                  <input name="document" defaultValue={selectedAdminStudent.student.profile?.document ?? ""} placeholder="Documento" />
+                  <select name="gender" defaultValue={selectedAdminStudent.student.profile?.gender ?? ""}>
+                    <option value="">Sexo</option>
+                    <option value="MALE">Masculino</option>
+                    <option value="FEMALE">Feminino</option>
+                  </select>
+                  <select name="status" defaultValue={selectedAdminStudent.student.status}>
+                    <option value="ACTIVE">Ativo</option>
+                    <option value="INACTIVE">Inativo</option>
+                  </select>
+                  <input name="objective" defaultValue={selectedAdminStudent.student.profile?.objective ?? ""} placeholder="Objetivo" />
+                  <input name="level" defaultValue={selectedAdminStudent.student.profile?.level ?? ""} placeholder="Nível" />
+                  <button className="primary-button">
+                    <Save size={18} />
+                    Salvar perfil
+                  </button>
+                </form>
+              </article>
+
+              <article className="admin-student-module">
+                <div className="admin-student-module-title">
+                  <Dumbbell size={18} />
+                  <strong>Treino</strong>
+                </div>
+                {selectedAdminStudent.programAssignments.length > 0 ? (
+                  selectedAdminStudent.programAssignments.slice(0, 4).map((assignment) => (
+                    <div className="data-row" key={assignment.id}>
+                      <span>
+                        <strong>{assignment.program.title}</strong>
+                        {assignment.completedWorkouts}/{assignment.totalWorkouts} treino(s) - dia {assignment.currentDay}
+                      </span>
+                      <small>{assignment.status}</small>
+                    </div>
+                  ))
+                ) : (
+                  <p>Nenhum programa atribuído.</p>
+                )}
+              </article>
+
+              <article className="admin-student-module">
+                <div className="admin-student-module-title">
+                  <ShieldCheck size={18} />
+                  <strong>Matrículas</strong>
+                </div>
+                {selectedAdminStudent.student.memberships?.slice(0, 4).map((membership) => (
+                  <div className="data-row" key={membership.id}>
+                    <span>
+                      <strong>{membership.plan?.name ?? "Plano"}</strong>
+                      Status da assinatura
+                    </span>
+                    <select
+                      aria-label="Status da matrícula do aluno"
+                      value={membership.status}
+                      onChange={(event) => void handleUpdateMembershipStatus(membership.id, event.target.value as MembershipRow["status"])}
+                    >
+                      <option value="PENDING">Pendente</option>
+                      <option value="ACTIVE">Ativa</option>
+                      <option value="OVERDUE">Atrasada</option>
+                      <option value="CANCELED">Cancelada</option>
+                    </select>
+                  </div>
+                )) ?? <p>Nenhuma matrícula.</p>}
+              </article>
+
+              <article className="admin-student-module">
+                <div className="admin-student-module-title">
+                  <CreditCard size={18} />
+                  <strong>Pagamentos</strong>
+                </div>
+                {selectedAdminStudent.payments.slice(0, 5).map((payment) => (
+                  <div className="data-row" key={payment.id}>
+                    <span>
+                      <strong>{formatPriceInBRL(payment.amountInCents)}</strong>
+                      {new Date(payment.dueDate).toLocaleDateString("pt-BR")}
+                    </span>
+                    <select
+                      aria-label="Status do pagamento do aluno"
+                      value={payment.status}
+                      onChange={(event) => void handleUpdatePaymentStatus(payment.id, event.target.value as PaymentRow["status"])}
+                    >
+                      <option value="PENDING">Pendente</option>
+                      <option value="CONFIRMED">Confirmado</option>
+                      <option value="OVERDUE">Atrasado</option>
+                      <option value="REFUNDED">Reembolsado</option>
+                      <option value="CANCELED">Cancelado</option>
+                    </select>
+                  </div>
+                ))}
+              </article>
+
+              <article className="admin-student-module">
+                <div className="admin-student-module-title">
+                  <Ruler size={18} />
+                  <strong>Avaliações</strong>
+                </div>
+                {selectedAdminStudent.assessments.slice(0, 4).map((assessment) => (
+                  <div className="data-row" key={assessment.id}>
+                    <span>
+                      <strong>{new Date(assessment.assessedAt).toLocaleDateString("pt-BR")}</strong>
+                      {assessment.weightKg ?? "-"}kg - {assessment.bodyFatPct ?? "-"}% gordura
+                    </span>
+                  </div>
+                ))}
+              </article>
+
+              <article className="admin-student-module">
+                <div className="admin-student-module-title">
+                  <CalendarDays size={18} />
+                  <strong>Frequência</strong>
+                </div>
+                {selectedAdminStudent.workoutSessions.slice(0, 5).map((session) => (
+                  <div className="data-row" key={session.id}>
+                    <span>
+                      <strong>Treino dia {session.dayNumber}</strong>
+                      {new Date(session.startedAt).toLocaleString("pt-BR")}
+                    </span>
+                    <small>{session.status}</small>
+                  </div>
+                ))}
+              </article>
+
+              <article className="admin-student-module">
+                <div className="admin-student-module-title">
+                  <CalendarPlus size={18} />
+                  <strong>Eventos</strong>
+                </div>
+                {selectedAdminStudent.eventRegistrations.slice(0, 4).map((registration) => (
+                  <div className="data-row" key={registration.id}>
+                    <span>
+                      <strong>{registration.event.title}</strong>
+                      {new Date(registration.event.startsAt).toLocaleString("pt-BR")}
+                    </span>
+                  </div>
+                ))}
+              </article>
+
+              <article className="admin-student-module">
+                <div className="admin-student-module-title">
+                  <Headphones size={18} />
+                  <strong>Atendimento</strong>
+                </div>
+                {selectedAdminStudent.tickets.slice(0, 5).map((ticket) => (
+                  <div className="data-row ticket-row" key={ticket.id}>
+                    <span>
+                      <strong>{ticket.subject}</strong>
+                      {ticket.category}
+                    </span>
+                    <select
+                      aria-label="Status do atendimento do aluno"
+                      value={ticket.status}
+                      onChange={(event) => void handleUpdateTicket(ticket.id, event.target.value as SupportTicketRow["status"])}
+                    >
+                      <option value="OPEN">Aberto</option>
+                      <option value="IN_PROGRESS">Em andamento</option>
+                      <option value="RESOLVED">Resolvido</option>
+                      <option value="CLOSED">Fechado</option>
+                    </select>
+                  </div>
+                ))}
+              </article>
+            </section>
+
+            <section className="admin-student-placeholder-grid">
+              {[
+                { icon: Package, title: "Produtos", text: "Catálogo ainda não possui entidade própria no banco." },
+                { icon: ShoppingCart, title: "Compras", text: "Depende do CRUD de pedidos/produtos." },
+                { icon: QrCode, title: "QR Code", text: `Código do aluno: ${selectedAdminStudent.student.id.slice(-8).toUpperCase()}` },
+                { icon: CreditCard, title: "Meus Cartões", text: "Cartões não são armazenados localmente; ficam no gateway." },
+                { icon: Settings, title: "Configurações", text: "Status, sexo, objetivo, nível e assinatura já editáveis acima." },
+                { icon: MessageCircle, title: "Contato", text: selectedAdminStudent.student.phone ?? selectedAdminStudent.student.email },
+                { icon: Star, title: "Favoritos", text: "Ainda sem tabela de favoritos vinculada ao aluno." },
+                { icon: Trophy, title: "Avaliar", text: "Avaliações físicas estão integradas; nota/review ainda não existe." }
+              ].map((item) => (
+                <div className="settings-card" key={item.title}>
+                  <item.icon size={20} />
+                  <span>
+                    <strong>{item.title}</strong>
+                    {item.text}
+                  </span>
+                </div>
+              ))}
+            </section>
+              </>
+            ) : (
+              <div className="admin-student-picker-grid">
+                {managerUserOptions.slice(0, 12).map((item) => (
+                  <button type="button" key={item.id} onClick={() => setSelectedAdminStudentId(item.id)}>
+                    <UserRound size={18} />
+                    <span>
+                      <strong>{item.name}</strong>
+                      <small>{item.email}</small>
+                    </span>
+                  </button>
+                ))}
+                {managerUserOptions.length === 0 && (
+                  <div className="settings-card">
+                    <Search size={20} />
+                    <span>
+                      <strong>Nenhum usuário encontrado</strong>
+                      Ajuste o filtro para localizar o aluno que deseja gerenciar.
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </article>
       </section>}
 
-      {adminSection === "training" && <section className="admin-grid">
+      {(adminSection === "training" || adminSection === "programs") && <section className="admin-grid">
         <article className="table-panel wide-panel cms-panel" id="admin-cms">
           <div className="panel-title">
             <h2>CMS Fitness</h2>
@@ -1716,16 +3512,17 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           </div>
           <div className="cms-hero">
             <div>
-              <span className="eyebrow">Bancada de publicação</span>
+              <span className="eyebrow">CMS Fitness</span>
               <h3>Crie uma aula, monte a ficha e publique para alunos sem procurar campos escondidos.</h3>
               <p>
                 O fluxo agora está separado por etapas: modalidades, aulas com materiais, fichas de treino e publicação.
               </p>
             </div>
             <div className="cms-hero-metrics">
-              <span><strong>{cmsExercises.length}</strong>Aulas</span>
-              <span><strong>{cmsWorkoutBlocks.length}</strong>Fichas</span>
-              <span><strong>{cmsAssignmentCount}</strong>Alunos</span>
+              <span><UploadCloud size={18} /><strong>{cmsExercises.length}</strong><small>Aulas</small></span>
+              <span><UsersRound size={18} /><strong>{cmsModalities.length}</strong><small>Turmas</small></span>
+              <span><Play size={18} /><strong>{cmsWorkoutBlocks.length}</strong><small>Fichas</small></span>
+              <span><UserRound size={18} /><strong>{activeStudents.length}</strong><small>Alunos ativos</small></span>
             </div>
           </div>
           <div className="cms-workflow">
@@ -1784,7 +3581,15 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     <strong>{item.name}</strong>
                     {item.description || item.slug}
                   </span>
-                  <small>{item.isActive ? "Ativa" : "Inativa"} - ordem {item.sortOrder}</small>
+                  <select
+                    aria-label="Status da modalidade"
+                    value={item.isActive ? "ACTIVE" : "INACTIVE"}
+                    onChange={(event) => handleUpdateCmsModalityStatus(item.id, event.target.value === "ACTIVE")}
+                  >
+                    <option value="ACTIVE">Ativa</option>
+                    <option value="INACTIVE">Inativa</option>
+                  </select>
+                  <small>ordem {item.sortOrder}</small>
                   <button aria-label="Desativar modalidade" onClick={() => handleDelete(`/admin/cms/modalities/${item.id}`)}>
                     <Trash2 size={17} />
                   </button>
@@ -1869,6 +3674,9 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     {(item.modalityLinks ?? []).map((link) => link.modality.name).join(", ") || "Sem modalidade"}
                   </span>
                   <small>{item.materialUrl ? "Material anexado" : item.equipmentTags.join(", ") || "Sem equipamento"}</small>
+                  <button aria-label="Editar aula CMS" onClick={() => void handleRenameCmsExercise(item)}>
+                    <Settings size={17} />
+                  </button>
                   <button aria-label="Excluir exercício CMS" onClick={() => handleDelete(`/admin/cms/exercises/${item.id}`)}>
                     <Trash2 size={17} />
                   </button>
@@ -1938,7 +3746,17 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     <strong>{item.title}</strong>
                     {item.exercises.map((row) => row.exercise.title ?? row.exercise.name ?? "Exercício").join(", ") || "Sem exercícios"}
                   </span>
-                  <small>{item.structureType} - {item.restTime}s</small>
+                  <select
+                    aria-label="Descanso da ficha"
+                    value={item.restTime}
+                    onChange={(event) => handleUpdateCmsWorkoutBlockRest(item.id, Number(event.target.value))}
+                  >
+                    <option value="45">45s</option>
+                    <option value="60">60s</option>
+                    <option value="90">90s</option>
+                    <option value="120">120s</option>
+                  </select>
+                  <small>{item.structureType}</small>
                   <button aria-label="Excluir bloco CMS" onClick={() => handleDelete(`/admin/cms/workout-blocks/${item.id}`)}>
                     <Trash2 size={17} />
                   </button>
@@ -1987,6 +3805,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     <option value="FEMALE">Feminino</option>
                   </select>
                 </label>
+                <label>
+                  Quantidade de treinos na sequência
+                  <input name="totalWorkouts" type="number" min="1" defaultValue="30" required />
+                </label>
                 <label className="wide-field">
                   Descrição para o aluno
                   <textarea name="description" placeholder="Explique objetivo, frequência e como seguir o treino" required />
@@ -2024,9 +3846,30 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     <p>{parseProgramMetadata(item.description).description}</p>
                     <small>Modalidade: {item.modality?.name ?? parseProgramMetadata(item.description).modality}</small>
                     <small>Público: {item.targetGender === "MALE" ? "Masculino" : item.targetGender === "FEMALE" ? "Feminino" : "Todos"}</small>
+                    <small>Meta: {item.totalWorkouts} treino(s) em sequência</small>
                     <small>{item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.title}`).join(" | ") || "Sem dias cadastrados"}</small>
                   </div>
                   <div className="cms-program-actions">
+                    <select
+                      aria-label="Público do programa"
+                      value={item.targetGender}
+                      onChange={(event) => handleUpdateCmsProgramGender(item.id, event.target.value as CmsProgramRow["targetGender"])}
+                    >
+                      <option value="ALL">Todos</option>
+                      <option value="MALE">Masculino</option>
+                      <option value="FEMALE">Feminino</option>
+                    </select>
+                    <select
+                      aria-label="Meta de treinos do programa"
+                      value={item.totalWorkouts}
+                      onChange={(event) => handleUpdateCmsProgramTotalWorkouts(item.id, Number(event.target.value))}
+                    >
+                      <option value="12">12 treinos</option>
+                      <option value="18">18 treinos</option>
+                      <option value="24">24 treinos</option>
+                      <option value="30">30 treinos</option>
+                      <option value="36">36 treinos</option>
+                    </select>
                     <button className="outline-button" onClick={() => handlePublishCmsProgram(item.id)} disabled={item.status === "PUBLISHED"}>
                       <Check size={17} />
                       Publicar
@@ -2050,6 +3893,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                         ))}
                     </select>
                     <input name="currentDay" type="number" min="1" defaultValue="1" disabled={item.status !== "PUBLISHED"} />
+                    <input name="totalWorkouts" type="number" min="1" defaultValue={item.totalWorkouts ?? 30} disabled={item.status !== "PUBLISHED"} aria-label="Meta de treinos da atribuição" />
                     <button className="primary-button" disabled={item.status !== "PUBLISHED"}>
                       <UsersRound size={17} />
                       Atribuir
@@ -2060,7 +3904,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     {(item.assignedUsers ?? []).length > 0 ? (
                       item.assignedUsers?.slice(0, 8).map((assignment) => (
                         <span key={assignment.id}>
-                          {assignment.user.name} • dia {assignment.currentDay} • {assignment.status}
+                          {assignment.user.name} • {assignment.completedWorkouts}/{assignment.totalWorkouts} treino(s) • dia {assignment.currentDay} • {assignment.status}
                         </span>
                       ))
                     ) : (
@@ -2074,7 +3918,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         </article>
       </section>}
 
-      {adminSection === "plans" && <section className="admin-grid single-section-grid">
+      {adminSection === "finance" && <section className="admin-grid finance-admin-grid">
         <article className="table-panel" id="admin-plans">
           <div className="panel-title">
             <h2>Planos</h2>
@@ -2100,15 +3944,21 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 {item.code}
               </span>
               <small>{formatPriceInBRL(item.priceInCents)}</small>
+              <select
+                aria-label="Ciclo do plano"
+                value={item.billingCycle}
+                onChange={(event) => handleUpdatePlanBilling(item.id, event.target.value as PlanRow["billingCycle"])}
+              >
+                <option value="MONTHLY">Mensal</option>
+                <option value="YEARLY">Anual</option>
+              </select>
               <button aria-label="Excluir plano" onClick={() => handleDelete(`/admin/plans/${item.id}`)}>
                 <Trash2 size={17} />
               </button>
             </div>
           ))}
         </article>
-      </section>}
 
-      {adminSection === "memberships" && <section className="admin-grid single-section-grid">
         <article className="table-panel" id="admin-memberships">
           <div className="panel-title">
             <h2>Matrículas</h2>
@@ -2151,16 +4001,23 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 <strong>{item.user.name}</strong>
                 {item.plan.name}
               </span>
-              <small>{item.status}</small>
+              <select
+                aria-label="Status da matrícula"
+                value={item.status}
+                onChange={(event) => handleUpdateMembershipStatus(item.id, event.target.value as MembershipRow["status"])}
+              >
+                <option value="PENDING">Pendente</option>
+                <option value="ACTIVE">Ativa</option>
+                <option value="OVERDUE">Atrasada</option>
+                <option value="CANCELED">Cancelada</option>
+              </select>
               <button aria-label="Excluir matrícula" onClick={() => handleDelete(`/admin/memberships/${item.id}`)}>
                 <Trash2 size={17} />
               </button>
             </div>
           ))}
         </article>
-      </section>}
 
-      {adminSection === "payments" && <section className="admin-grid single-section-grid">
         <article className="table-panel wide-panel" id="admin-payments">
           <div className="panel-title">
             <h2>Pagamentos</h2>
@@ -2194,18 +4051,31 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 <strong>{formatPriceInBRL(item.amountInCents)}</strong>
                 Vence em {new Date(item.dueDate).toLocaleDateString("pt-BR")}
               </span>
-              <small>{item.status}</small>
+              <select
+                aria-label="Status do pagamento"
+                value={item.status}
+                onChange={(event) => handleUpdatePaymentStatus(item.id, event.target.value as PaymentRow["status"])}
+              >
+                <option value="PENDING">Pendente</option>
+                <option value="CONFIRMED">Confirmado</option>
+                <option value="OVERDUE">Atrasado</option>
+                <option value="REFUNDED">Reembolsado</option>
+                <option value="CANCELED">Cancelado</option>
+              </select>
               {item.paymentUrl && (
                 <a href={item.paymentUrl} target="_blank" rel="noreferrer">
                   Abrir
                 </a>
               )}
+              <button aria-label="Excluir pagamento" onClick={() => handleDelete(`/admin/payments/${item.id}`)}>
+                <Trash2 size={17} />
+              </button>
             </div>
           ))}
         </article>
       </section>}
 
-      {adminSection === "operations" && <section className="admin-grid phase-three-grid" id="admin-operations">
+      {adminSection === "reports" && <section className="admin-grid phase-three-grid" id="admin-operations">
         <article className="table-panel">
           <div className="panel-title">
             <h2>Avaliações físicas</h2>
@@ -2271,6 +4141,15 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 <strong>{item.title}</strong>
                 {new Date(item.startsAt).toLocaleString("pt-BR")} - {item.location ?? "Sem local"}
               </span>
+              <select
+                aria-label="Status do evento"
+                value={item.status}
+                onChange={(event) => handleUpdateEventStatus(item.id, event.target.value as EventRow["status"])}
+              >
+                <option value="SCHEDULED">Agendado</option>
+                <option value="CANCELED">Cancelado</option>
+                <option value="FINISHED">Finalizado</option>
+              </select>
               <small>{item.registrations?.length ?? 0}/{item.capacity ?? "sem limite"}</small>
               <button aria-label="Excluir evento" onClick={() => handleDelete(`/admin/events/${item.id}`)}>
                 <Trash2 size={17} />
@@ -2301,6 +4180,9 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 <option value="CLOSED">Fechado</option>
               </select>
               <small>{item.priority}</small>
+              <button aria-label="Excluir atendimento" onClick={() => handleDelete(`/admin/support-tickets/${item.id}`)}>
+                <Trash2 size={17} />
+              </button>
             </div>
           ))}
         </article>
@@ -2318,8 +4200,451 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               </span>
               <small>{item.daysPerWeek}x/sem</small>
               <Bot size={18} />
+              <button aria-label="Excluir plano IA" onClick={() => handleDelete(`/admin/ai-workout-plans/${item.id}`)}>
+                <Trash2 size={17} />
+              </button>
             </div>
           ))}
+        </article>
+      </section>}
+
+      {adminSection === "products" && <section className="admin-grid phase-three-grid" id="admin-products">
+        <article className="table-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Catálogo de produtos</h2>
+              <p>Configure itens disponíveis para venda (planos, consultorias, suplementos).</p>
+            </div>
+            <span>{products.length}</span>
+          </div>
+          <form className="crud-form" onSubmit={handleCreateProduct}>
+            <input name="name" placeholder="Nome do produto" required />
+            <input name="category" placeholder="Categoria" />
+            <input name="price" type="number" step="0.01" min="0" placeholder="Preço (R$)" required />
+            <input name="description" placeholder="Descrição curta" />
+            <button className="primary-button">
+              <Save size={18} />
+              Cadastrar produto
+            </button>
+          </form>
+          {products.length > 0 ? (
+            products.map((product) => (
+              <div className="data-row" key={product.id}>
+                <span>
+                  <strong>{product.name}</strong>
+                  {product.category ?? "Sem categoria"} · {formatPriceInBRL(product.priceInCents)} · {product._count?.purchases ?? 0} venda(s)
+                </span>
+                <select
+                  aria-label="Status do produto"
+                  value={product.isActive ? "true" : "false"}
+                  onChange={(event) => void handleUpdateProductStatus(product.id, event.target.value === "true")}
+                >
+                  <option value="true">Ativo</option>
+                  <option value="false">Inativo</option>
+                </select>
+                <button aria-label="Excluir produto" onClick={() => handleDelete(`/admin/products/${product.id}`)}>
+                  <Trash2 size={17} />
+                </button>
+              </div>
+            ))
+          ) : (
+            <div className="dash-empty">
+              <Package size={18} />
+              Nenhum produto cadastrado ainda.
+            </div>
+          )}
+        </article>
+      </section>}
+
+      {adminSection === "purchases" && <section className="admin-grid phase-three-grid" id="admin-purchases">
+        <article className="table-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Registrar compra</h2>
+              <p>Associe um produto a um aluno de forma manual.</p>
+            </div>
+            <span>Manual</span>
+          </div>
+          <form className="crud-form" onSubmit={handleCreatePurchase}>
+            <select name="userId" required>
+              <option value="">Aluno</option>
+              {users.filter((item) => item.role === "USER").map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+            <select name="productId" required>
+              <option value="">Produto</option>
+              {products.filter((item) => item.isActive).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} · {formatPriceInBRL(item.priceInCents)}
+                </option>
+              ))}
+            </select>
+            <select name="paymentMethod" defaultValue="PIX">
+              <option value="PIX">PIX</option>
+              <option value="CARD">Cartão</option>
+              <option value="BOLETO">Boleto</option>
+            </select>
+            <button className="primary-button">
+              <Save size={18} />
+              Registrar compra
+            </button>
+          </form>
+        </article>
+        <article className="table-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Compras</h2>
+              <p>Histórico de compras e status de pagamento.</p>
+            </div>
+            <span>{purchases.length}</span>
+          </div>
+          {purchases.length > 0 ? (
+            purchases.slice(0, 30).map((purchase) => (
+              <div className="data-row" key={purchase.id}>
+                <span>
+                  <strong>{purchase.product.name}</strong>
+                  {purchase.user.name} · {formatPriceInBRL(purchase.amountInCents)} ·{" "}
+                  {new Date(purchase.createdAt).toLocaleDateString("pt-BR")}
+                </span>
+                <select
+                  aria-label="Status da compra"
+                  value={purchase.status}
+                  onChange={(event) =>
+                    void handleUpdatePurchaseStatus(purchase.id, event.target.value as PurchaseStatus)
+                  }
+                >
+                  <option value="PENDING">Pendente</option>
+                  <option value="CONFIRMED">Confirmada</option>
+                  <option value="CANCELED">Cancelada</option>
+                  <option value="REFUNDED">Reembolsada</option>
+                </select>
+                <button aria-label="Excluir compra" onClick={() => handleDelete(`/admin/purchases/${purchase.id}`)}>
+                  <Trash2 size={17} />
+                </button>
+              </div>
+            ))
+          ) : (
+            <div className="dash-empty">
+              <ShoppingCart size={18} />
+              Nenhuma compra registrada.
+            </div>
+          )}
+        </article>
+      </section>}
+
+      {adminSection === "qr" && <section className="admin-grid phase-three-grid" id="admin-qr">
+        <article className="table-panel">
+          <div className="panel-title">
+            <div>
+              <h2>QR Code de check-in</h2>
+              <p>Configure o QR exibido para os alunos validarem presença na academia.</p>
+            </div>
+            <span>Check-in</span>
+          </div>
+          <label className="admin-field-label">
+            URL de check-in
+            <input
+              type="url"
+              value={systemSettings["qr_checkin_url"] ?? "http://localhost:5173/checkin"}
+              onChange={(event) => setSystemSettingValue("qr_checkin_url", event.target.value)}
+              placeholder="https://..."
+            />
+          </label>
+          <div className="data-row">
+            <span>
+              <strong>Check-in por QR habilitado</strong>
+              Alunos escaneiam o QR para registrar a presença.
+            </span>
+            <select
+              aria-label="Habilitar QR Code"
+              value={systemSettings["qr_checkin_enabled"] ?? "true"}
+              onChange={(event) => setSystemSettingValue("qr_checkin_enabled", event.target.value)}
+            >
+              <option value="true">Ativo</option>
+              <option value="false">Inativo</option>
+            </select>
+          </div>
+          <button
+            className="primary-button compact-button"
+            onClick={() =>
+              void handleSaveSettings({
+                ...systemSettings,
+                qr_checkin_url: systemSettings["qr_checkin_url"] || "http://localhost:5173/checkin",
+                qr_checkin_enabled: systemSettings["qr_checkin_enabled"] || "true"
+              })
+            }
+          >
+            <Save size={18} />
+            Salvar configuração
+          </button>
+        </article>
+        <article className="table-panel dash-qr-preview-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Pré-visualização</h2>
+              <p>QR gerado a partir da URL configurada.</p>
+            </div>
+          </div>
+          <div className="dash-qr-box">
+            {systemSettings["qr_checkin_enabled"] !== "false" ? (
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+                  systemSettings["qr_checkin_url"] ?? "http://localhost:5173/checkin"
+                )}`}
+                alt="QR Code de check-in"
+              />
+            ) : (
+              <div className="dash-empty">
+                <QrCode size={18} />
+                QR Code desativado.
+              </div>
+            )}
+          </div>
+        </article>
+      </section>}
+
+      {adminSection === "cards" && <section className="admin-grid phase-three-grid" id="admin-cards">
+        <article className="table-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Cartões dos alunos</h2>
+              <p>Cartões salvos para pagamentos recorrentes.</p>
+            </div>
+            <span>{paymentCards.length}</span>
+          </div>
+          <form className="crud-form" onSubmit={handleCreatePaymentCard}>
+            <select name="userId" required>
+              <option value="">Aluno</option>
+              {users.filter((item) => item.role === "USER").map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+            <input name="brand" placeholder="Bandeira" />
+            <input name="lastFour" placeholder="Últimos 4 dígitos" maxLength={4} pattern="[0-9]{4}" required />
+            <input name="holderName" placeholder="Nome no cartão" />
+            <label className="admin-checkbox">
+              <input name="isDefault" type="checkbox" />
+              Cartão principal
+            </label>
+            <button className="primary-button">
+              <Save size={18} />
+              Adicionar cartão
+            </button>
+          </form>
+          {paymentCards.length > 0 ? (
+            paymentCards.map((card) => (
+              <div className="data-row" key={card.id}>
+                <span>
+                  <strong>{card.holderName ?? card.user.name}</strong>
+                  {card.brand ?? "Cartão"} •••• {card.lastFour} · {card.user.name}
+                </span>
+                <small className="dash-badge">{card.isDefault ? "Principal" : "Adicional"}</small>
+                <button aria-label="Excluir cartão" onClick={() => handleDelete(`/admin/payment-cards/${card.id}`)}>
+                  <Trash2 size={17} />
+                </button>
+              </div>
+            ))
+          ) : (
+            <div className="dash-empty">
+              <CreditCard size={18} />
+              Nenhum cartão salvo.
+            </div>
+          )}
+        </article>
+      </section>}
+
+      {adminSection === "contact" && <section className="admin-grid phase-three-grid" id="admin-contact">
+        <article className="table-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Mensagens de contato</h2>
+              <p>Dúvidas e solicitações enviadas pelos visitantes.</p>
+            </div>
+            <span>{contactMessages.filter((item) => item.status === "OPEN").length} abertas</span>
+          </div>
+          {contactMessages.length > 0 ? (
+            contactMessages.slice(0, 30).map((message) => (
+              <div className="data-row" key={message.id}>
+                <span>
+                  <strong>{message.subject ?? message.name}</strong>
+                  {message.name} · {message.email}
+                  <small>{message.message}</small>
+                </span>
+                <select
+                  aria-label="Status da mensagem"
+                  value={message.status}
+                  onChange={(event) =>
+                    void handleUpdateContactMessageStatus(message.id, event.target.value as ContactMessageRow["status"])
+                  }
+                >
+                  <option value="OPEN">Aberta</option>
+                  <option value="RESOLVED">Resolvida</option>
+                  <option value="CLOSED">Encerrada</option>
+                </select>
+                <button
+                  aria-label="Excluir mensagem"
+                  onClick={() => handleDelete(`/admin/contact-messages/${message.id}`)}
+                >
+                  <Trash2 size={17} />
+                </button>
+              </div>
+            ))
+          ) : (
+            <div className="dash-empty">
+              <MessageCircle size={18} />
+              Nenhuma mensagem recebida.
+            </div>
+          )}
+        </article>
+      </section>}
+
+      {adminSection === "favorites" && <section className="admin-grid phase-three-grid" id="admin-favorites">
+        <article className="table-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Favoritos dos alunos</h2>
+              <p>Produtos e conteúdos marcados como favoritos.</p>
+            </div>
+            <span>{favorites.length}</span>
+          </div>
+          {favorites.length > 0 ? (
+            favorites.slice(0, 30).map((favorite) => (
+              <div className="data-row" key={favorite.id}>
+                <span>
+                  <strong>{favorite.product.name}</strong>
+                  {favorite.user.name} · favoritou em {new Date(favorite.createdAt).toLocaleDateString("pt-BR")}
+                </span>
+                <Star size={18} />
+                <button aria-label="Remover favorito" onClick={() => handleDelete(`/admin/favorites/${favorite.id}`)}>
+                  <Trash2 size={17} />
+                </button>
+              </div>
+            ))
+          ) : (
+            <div className="dash-empty">
+              <Star size={18} />
+              Nenhum favorito registrado.
+            </div>
+          )}
+        </article>
+      </section>}
+
+      {adminSection === "ratings" && <section className="admin-grid phase-three-grid" id="admin-ratings">
+        <article className="table-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Avaliações</h2>
+              <p>Notas e comentários dos alunos sobre produtos e treinos.</p>
+            </div>
+            <span>{ratings.length}</span>
+          </div>
+          {ratings.length > 0 ? (
+            ratings.slice(0, 30).map((rating) => (
+              <div className="data-row" key={rating.id}>
+                <span>
+                  <strong>{rating.product?.name ?? rating.targetType}</strong>
+                  {rating.user.name} · {new Date(rating.createdAt).toLocaleDateString("pt-BR")}
+                  <small>{rating.comment}</small>
+                </span>
+                <small className="dash-badge">{rating.score}/5</small>
+                <button aria-label="Excluir avaliação" onClick={() => handleDelete(`/admin/ratings/${rating.id}`)}>
+                  <Trash2 size={17} />
+                </button>
+              </div>
+            ))
+          ) : (
+            <div className="dash-empty">
+              <Sparkles size={18} />
+              Nenhuma avaliação recebida.
+            </div>
+          )}
+        </article>
+      </section>}
+
+      {adminSection === "settings" && <section className="admin-grid phase-three-grid" id="admin-settings">
+        <article className="table-panel">
+          <div className="panel-title">
+            <h2>Configurações do sistema</h2>
+            <span>Operacional</span>
+          </div>
+          <div className="settings-grid">
+            <div className="settings-card">
+              <Settings size={20} />
+              <span>
+                <strong>Publicação automática</strong>
+                Programas publicados continuam disponíveis para alunos ativos e pagos.
+              </span>
+            </div>
+            <div className="settings-card">
+              <ShieldCheck size={20} />
+              <span>
+                <strong>Assinaturas</strong>
+                Matrículas ativas liberam o fluxo do aluno.
+              </span>
+            </div>
+            <div className="settings-card">
+              <UsersRound size={20} />
+              <span>
+                <strong>Segmentação por sexo</strong>
+                Treinos masculinos e femininos respeitam o cadastro do aluno.
+              </span>
+            </div>
+          </div>
+        </article>
+        <article className="table-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Módulos do sistema</h2>
+              <p>Ative ou desative cada módulo para preparar sua evolução.</p>
+            </div>
+            <span>
+              {moduleSettingRows.filter((item) => systemSettings[item.key] !== "false").length} ativos
+            </span>
+          </div>
+          {moduleSettingRows.map((module) => (
+            <div className="data-row" key={module.key}>
+              <span>
+                <strong>{module.label}</strong>
+                {module.description}
+              </span>
+              <select
+                aria-label={`Módulo ${module.label}`}
+                value={systemSettings[module.key] ?? "true"}
+                onChange={(event) => setSystemSettingValue(module.key, event.target.value)}
+              >
+                <option value="true">Ativo</option>
+                <option value="false">Inativo</option>
+              </select>
+            </div>
+          ))}
+          <button
+            className="primary-button compact-button"
+            onClick={() => void handleSaveSettings(systemSettings)}
+          >
+            <Save size={18} />
+            Salvar configurações dos módulos
+          </button>
+        </article>
+        <article className="table-panel">
+          <div className="panel-title">
+            <h2>Manutenção</h2>
+            <span>Dados</span>
+          </div>
+          <div className="data-row">
+            <span>
+              <strong>Atualizar dados administrativos</strong>
+              Recarrega usuários, financeiro, CMS e relatórios.
+            </span>
+            <button className="outline-button compact-button" onClick={() => void loadAdminData()} disabled={loading}>
+              {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
+              Atualizar
+            </button>
+          </div>
         </article>
       </section>}
 
@@ -2344,8 +4669,13 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     | "support"
     | "ai"
     | "history"
+    | "profile"
+    | "membership"
+    | "purchases"
+    | "favorites"
+    | "ratings"
   >("home");
-  const [profile, setProfile] = useState<{ name: string; gender?: "MALE" | "FEMALE" | null; objective?: string; level?: string } | null>(null);
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [workout, setWorkout] = useState<WorkoutRow | null>(null);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkoutResponse["workout"] | null>(null);
   const [publishedWorkouts, setPublishedWorkouts] = useState<TodayWorkoutResponse["workout"][]>([]);
@@ -2361,6 +4691,10 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [aiPlans, setAiPlans] = useState<AiWorkoutPlanRow[]>([]);
+  const [publicConfig, setPublicConfig] = useState<Record<string, string>>({});
+  const [showStudentQr, setShowStudentQr] = useState(false);
+  const [studentPaymentCards, setStudentPaymentCards] = useState<PaymentCardRow[]>([]);
+  const [showAddCardForm, setShowAddCardForm] = useState(false);
   const [checkoutPayment, setCheckoutPayment] = useState<PaymentRow | null>(null);
   const [checkoutStep, setCheckoutStep] = useState<"plans" | "checkout" | "thanks">("plans");
   const [checkoutLoading, setCheckoutLoading] = useState<PlanCode | "sandbox" | null>(null);
@@ -2373,14 +4707,33 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     planCode: "monthly",
     billingType: "UNDEFINED"
   });
+  const [assessmentForm, setAssessmentForm] = useState<PhysicalAssessmentForm | null>(null);
+  const [submittingAssessment, setSubmittingAssessment] = useState(false);
+  const [assessmentPhotoPreviews, setAssessmentPhotoPreviews] = useState<Record<string, string>>({});
+  const [studentProducts, setStudentProducts] = useState<ProductRow[]>([]);
+  const [studentPurchases, setStudentPurchases] = useState<PurchaseRow[]>([]);
+  const [purchasingProductId, setPurchasingProductId] = useState<string | null>(null);
+  const [purchaseConfirmId, setPurchaseConfirmId] = useState<string | null>(null);
+  const purchaseConfirmTimer = useRef<number | null>(null);
+  const [studentWorkoutFavorites, setStudentWorkoutFavorites] = useState<StudentFavoriteRow[]>([]);
+  const [ratingDraft, setRatingDraft] = useState<Record<string, { score: number; comment: string }>>({});
+  const [submittingRatingId, setSubmittingRatingId] = useState<string | null>(null);
+  const [favoritingProgramId, setFavoritingProgramId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!success) return;
+    const timer = window.setTimeout(() => setSuccess(null), 2000);
+    return () => window.clearTimeout(timer);
+  }, [success]);
 
   async function loadUserData() {
     if (!token) return;
 
     try {
       const [profileResponse, membershipResponse, paymentsResponse, workoutProgramsResponse] = await Promise.all([
-        apiGet<{ profile: { name: string; gender?: "MALE" | "FEMALE" | null; objective?: string; level?: string } }>("/user/profile", token),
+        apiGet<{ profile: StudentProfile }>("/user/profile", token),
         apiGet<{ membership: StudentMembershipRow | null }>("/user/membership", token),
         apiGet<{ payments: PaymentRow[] }>("/user/payments", token),
         apiGet<StudentWorkoutProgramsResponse>("/student/workout/programs", token).catch(() => ({ workouts: [] }))
@@ -2425,7 +4778,10 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
         ticketsResponse,
         notificationsResponse,
         aiPlansResponse,
-        consistencyResponse
+        consistencyResponse,
+        productsResponse,
+        purchasesResponse,
+        workoutFavoritesResponse
       ] = await Promise.all([
         apiGet<{ workout: WorkoutRow | null }>("/user/workout", token),
         apiGet<{ records: Array<{ id: string; date: string }> }>("/user/attendance", token),
@@ -2434,7 +4790,10 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
         apiGet<{ tickets: SupportTicketRow[] }>("/user/support-tickets", token),
         apiGet<{ notifications: NotificationRow[] }>("/user/notifications", token),
         apiGet<{ plans: AiWorkoutPlanRow[] }>("/user/ai-workout-plans", token),
-        apiGet<WorkoutConsistencyResponse>("/student/workout/consistency", token).catch(() => null)
+        apiGet<WorkoutConsistencyResponse>("/student/workout/consistency", token).catch(() => null),
+        apiGet<{ products: ProductRow[] }>("/student/products", token),
+        apiGet<{ purchases: PurchaseRow[] }>("/student/purchases", token),
+        apiGet<{ favorites: StudentFavoriteRow[] }>("/student/workout/favorites", token)
       ]);
 
       setWorkout(workoutResponse.workout);
@@ -2445,6 +4804,9 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
       setNotifications(notificationsResponse.notifications);
       setAiPlans(aiPlansResponse.plans);
       setConsistency(consistencyResponse);
+      setStudentProducts(productsResponse.products);
+      setStudentPurchases(purchasesResponse.purchases);
+      setStudentWorkoutFavorites(workoutFavoritesResponse.favorites);
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;
       setError(message ?? "Não foi possível carregar sua área. Verifique API e banco.");
@@ -2453,6 +4815,10 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
 
   useEffect(() => {
     void loadUserData();
+    apiGet<{ config: Record<string, string> }>("/public/config")
+      .then((response) => setPublicConfig(response.config))
+      .catch(() => {});
+    loadStudentCards();
   }, [token]);
 
   useEffect(() => {
@@ -2668,6 +5034,91 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     }
   }
 
+  async function loadStudentCards() {
+    if (!token) return;
+    try {
+      const response = await apiGet<{ paymentCards: PaymentCardRow[] }>("/student/payment-cards", token);
+      setStudentPaymentCards(response.paymentCards);
+    } catch {
+      setStudentPaymentCards([]);
+    }
+  }
+
+  async function handleAddStudentCard(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token) return;
+    const form = event.currentTarget;
+    const data = new FormData(form);
+
+    try {
+      await apiPost(
+        "/student/payment-cards",
+        {
+          brand: String(data.get("brand") ?? "") || undefined,
+          lastFour: String(data.get("lastFour") ?? ""),
+          holderName: String(data.get("holderName") ?? "") || undefined,
+          isDefault: data.get("isDefault") === "on"
+        },
+        token
+      );
+      form.reset();
+      await loadStudentCards();
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : null;
+      setError(message ?? "Não foi possível adicionar o cartão.");
+    }
+  }
+
+  async function handleDeleteStudentCard(cardId: string) {
+    if (!token) return;
+    try {
+      await apiDelete(`/student/payment-cards/${cardId}`, token);
+      await loadStudentCards();
+    } catch {
+      setError("Não foi possível remover o cartão.");
+    }
+  }
+
+  async function handleUpdateStudentProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token) return;
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const name = String(data.get("name") ?? "").trim();
+    const phone = String(data.get("phone") ?? "").trim();
+    const document = String(data.get("document") ?? "").trim();
+    const gender = String(data.get("gender") ?? "");
+    const birthDate = String(data.get("birthDate") ?? "").trim();
+    const objective = String(data.get("objective") ?? "").trim();
+    const level = String(data.get("level") ?? "").trim();
+
+    if (!name) {
+      setError("Informe seu nome.");
+      return;
+    }
+
+    try {
+      const response = await apiPut<{ profile: StudentProfile }>(
+        "/user/profile",
+        {
+          name,
+          phone: phone || undefined,
+          document: document || undefined,
+          gender: gender === "MALE" || gender === "FEMALE" ? gender : null,
+          birthDate: birthDate ? `${birthDate}T12:00:00.000Z` : undefined,
+          objective: objective || undefined,
+          level: level || undefined
+        },
+        token
+      );
+      setProfile(response.profile);
+      setSuccess("Dados cadastrais atualizados com sucesso.");
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : null;
+      setError(message ?? "Não foi possível salvar seus dados.");
+    }
+  }
+
   async function handleExerciseProgressChange(input: {
     sessionId?: string | null;
     exerciseId: string;
@@ -2686,9 +5137,280 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     );
   }
 
+  function createEmptyAssessmentForm(): PhysicalAssessmentForm {
+    return {
+      formulario_avaliacao_fisica: {
+        dados_pessoais_e_objetivos: {
+          nome_completo: profile?.name ?? "",
+          data_nascimento: profile?.birthDate ?? "",
+          genero_biologico: {
+            opcoes: ["Masculino", "Feminino"],
+            resposta: profile?.gender === "MALE" ? "Masculino" : profile?.gender === "FEMALE" ? "Feminino" : ""
+          },
+          objetivo_principal: {
+            opcoes: ["Emagrecimento", "Hipertrofia", "Condicionamento/Saúde"],
+            resposta: ""
+          },
+          nivel_atividade_atual: {
+            opcoes: ["Sedentário", "Leve", "Moderado", "Intenso"],
+            resposta: ""
+          }
+        },
+        historico_de_saude_anamnese: {
+          possui_lesao: { descricao: "Joelho, coluna, ombro, etc.", resposta: "" },
+          medicamento_continuo: { descricao: "Se sim, qual?", resposta: "" },
+          restricao_medica_cardiaca: { descricao: "Se sim, qual?", resposta: "" }
+        },
+        composicao_corporal_basica: {
+          instrucao: "Aferir preferencialmente em jejum, pela manhã",
+          peso_atual_kg: null,
+          altura_cm: null
+        },
+        perimetros_corporais_cm: {
+          instrucao: "Use uma fita métrica, sem apertar a pele e sem prender a respiração",
+          pescoço: { detalhe: "Abaixo do pomo de Adão", valor: null },
+          torax: { detalhe: "Na linha dos mamilos", valor: null },
+          cintura: { detalhe: "Na parte mais estreita do tronco", valor: null },
+          abdomen: { detalhe: "Exatamente sobre a linha do umbigo", valor: null },
+          quadril: { detalhe: "Na maior parte dos glúteos", valor: null },
+          braco_direito_relaxado: { detalhe: "Linha média do bíceps", valor: null },
+          braco_esquerdo_relaxado: { detalhe: "Linha média do bíceps", valor: null },
+          coxa_direita: { detalhe: "Na região média da coxa", valor: null },
+          coxa_esquerda: { detalhe: "Na região média da coxa", valor: null },
+          panturrilha_direita: { detalhe: "Na maior porção do músculo", valor: null },
+          panturrilha_esquerda: { detalhe: "Na maior porção do músculo", valor: null }
+        },
+        fotos_analise_visual: {
+          instrucao: "Anexar fotos com roupas leves, postura relaxada e câmera na altura da cintura",
+          arquivos: { foto_frente: "", foto_costas: "", foto_perfil: "" }
+        }
+      }
+    };
+  }
+
+  function updateAssessmentForm(mutate: (draft: PhysicalAssessmentForm) => void) {
+    setAssessmentForm((current) => {
+      const draft = current ? structuredClone(current) : createEmptyAssessmentForm();
+      mutate(draft);
+      return draft;
+    });
+  }
+
+  function handleAssessmentPhotoSelect(key: "foto_frente" | "foto_costas" | "foto_perfil", file: File | undefined) {
+    updateAssessmentForm((draft) => {
+      draft.formulario_avaliacao_fisica.fotos_analise_visual.arquivos[key] = file?.name ?? "";
+    });
+    setAssessmentPhotoPreviews((current) => {
+      if (current[key]) {
+        URL.revokeObjectURL(current[key]);
+      }
+      if (!file) {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      }
+      return { ...current, [key]: URL.createObjectURL(file) };
+    });
+  }
+
+  function clearAssessmentForm() {
+    setAssessmentForm(null);
+    setAssessmentPhotoPreviews((current) => {
+      Object.values(current).forEach((url) => URL.revokeObjectURL(url));
+      return {};
+    });
+  }
+
+  const perimeterKeys = [
+    "pescoço",
+    "torax",
+    "cintura",
+    "abdomen",
+    "quadril",
+    "braco_direito_relaxado",
+    "braco_esquerdo_relaxado",
+    "coxa_direita",
+    "coxa_esquerda",
+    "panturrilha_direita",
+    "panturrilha_esquerda"
+  ] as const;
+
+  async function handleSubmitPhysicalAssessment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!assessmentForm) return;
+    setSubmittingAssessment(true);
+    setError(null);
+    try {
+      const response = await apiPost<{ assessment: PhysicalAssessmentRow }>(
+        "/user/physical-assessments",
+        assessmentForm,
+        token
+      );
+      setAssessments([response.assessment, ...assessments.filter((item) => item.id !== response.assessment.id)]);
+      clearAssessmentForm();
+      setSuccess("Avaliação física salva com sucesso.");
+    } catch (submitError) {
+      setError(
+        submitError instanceof ApiError ? submitError.message : "Não foi possível salvar a avaliação física."
+      );
+    } finally {
+      setSubmittingAssessment(false);
+    }
+  }
+
+  async function handleBuyProduct(productId: string) {
+    setPurchasingProductId(productId);
+    setError(null);
+    try {
+      const response = await apiPost<{ purchase: PurchaseRow }>("/student/purchases", { productId }, token);
+      setStudentPurchases([response.purchase, ...studentPurchases]);
+      setStudentProducts((current) =>
+        current.map((item) => (item.id === productId ? { ...item, purchasedByMe: true } : item))
+      );
+      setPurchaseConfirmId(productId);
+      if (purchaseConfirmTimer.current) {
+        window.clearTimeout(purchaseConfirmTimer.current);
+      }
+      purchaseConfirmTimer.current = window.setTimeout(() => {
+        setPurchaseConfirmId(null);
+        purchaseConfirmTimer.current = null;
+      }, 2000);
+    } catch (buyError) {
+      setError(buyError instanceof ApiError ? buyError.message : "Não foi possível registrar a compra.");
+    } finally {
+      setPurchasingProductId(null);
+    }
+  }
+
+  async function handleToggleWorkoutFavorite(programId: string) {
+    setFavoritingProgramId(programId);
+    setError(null);
+    try {
+      const response = await apiPost<{ favorited: boolean }>(`/student/workout/favorites/${programId}`, {}, token);
+      const favorited = response.favorited;
+      setPublishedWorkouts((current) =>
+        current.map((item) => (item.programId === programId ? { ...item, favoritedByMe: favorited } : item))
+      );
+      if (favorited) {
+        const program = publishedWorkouts.find((item) => item.programId === programId);
+        if (program) {
+          setStudentWorkoutFavorites([
+            {
+              id: `fav-${programId}`,
+              createdAt: new Date().toISOString(),
+              program: {
+                id: program.programId,
+                title: program.programTitle,
+                description: program.description ?? "",
+                modality: program.modality ?? null,
+                modalityImageUrl: program.modalityImageUrl ?? null,
+                totalWorkouts: program.totalWorkouts ?? program.totalDays
+              }
+            },
+            ...studentWorkoutFavorites
+          ]);
+        }
+      } else {
+        setStudentWorkoutFavorites((current) => current.filter((item) => item.program.id !== programId));
+      }
+    } catch (favoriteError) {
+      setError(favoriteError instanceof ApiError ? favoriteError.message : "Não foi possível atualizar o favorito.");
+    } finally {
+      setFavoritingProgramId(null);
+    }
+  }
+
+  async function handleSubmitWorkoutProgramRating(
+    programId: string,
+    assignmentId: string,
+    scoreOverride?: number,
+    commentOverride?: string
+  ) {
+    const draft = ratingDraft[programId];
+    const finalScore = scoreOverride ?? draft?.score;
+    const finalComment = (commentOverride ?? draft?.comment)?.trim() || undefined;
+    if (!finalScore || finalScore < 1) return;
+    setSubmittingRatingId(programId);
+    setError(null);
+    try {
+      await apiPost(
+        "/student/ratings",
+        {
+          score: finalScore,
+          comment: finalComment,
+          targetType: "WORKOUT",
+          targetId: assignmentId
+        },
+        token
+      );
+      const program = publishedWorkouts.find((item) => item.programId === programId);
+      const alreadyFavorited = program?.favoritedByMe ?? false;
+      let favoritedNow = false;
+      if (!alreadyFavorited) {
+        try {
+          const favoriteResponse = await apiPost<{ favorited: boolean }>(
+            `/student/workout/favorites/${programId}`,
+            {},
+            token
+          );
+          favoritedNow = favoriteResponse.favorited;
+        } catch {
+          favoritedNow = false;
+        }
+      }
+      setPublishedWorkouts((current) =>
+        current.map((item) =>
+          item.programId === programId
+            ? { ...item, ratedByMe: true, favoritedByMe: item.favoritedByMe || favoritedNow }
+            : item
+        )
+      );
+      if (favoritedNow && program) {
+        setStudentWorkoutFavorites((current) => [
+          {
+            id: `fav-${programId}`,
+            createdAt: new Date().toISOString(),
+            program: {
+              id: program.programId,
+              title: program.programTitle,
+              description: program.description ?? "",
+              modality: program.modality ?? null,
+              modalityImageUrl: program.modalityImageUrl ?? null,
+              totalWorkouts: program.totalWorkouts ?? program.totalDays
+            }
+          },
+          ...current
+        ]);
+      }
+      setRatingDraft((current) => {
+        const next = { ...current };
+        delete next[programId];
+        return next;
+      });
+      setSuccess("Avaliação enviada.");
+    } catch (ratingError) {
+      setError(ratingError instanceof ApiError ? ratingError.message : "Não foi possível enviar a avaliação.");
+    } finally {
+      setSubmittingRatingId(null);
+    }
+  }
+
   const firstDay = workout?.days[0];
   const pendingPayment = payments.find((item) => item.status === "PENDING");
   const latestAssessment = assessments[0];
+  const latestAssessmentForm = latestAssessment?.details?.formulario_avaliacao_fisica ?? null;
+  const computedBodyFat = latestAssessmentForm
+    ? calculateBodyFatEstimate({
+        gender: latestAssessmentForm.dados_pessoais_e_objetivos.genero_biologico.resposta,
+        heightCm: latestAssessmentForm.composicao_corporal_basica.altura_cm,
+        neckCm: latestAssessmentForm.perimetros_corporais_cm.pescoço.valor,
+        waistCm: latestAssessmentForm.perimetros_corporais_cm.cintura.valor,
+        hipCm: latestAssessmentForm.perimetros_corporais_cm.quadril.valor,
+        weightKg: latestAssessmentForm.composicao_corporal_basica.peso_atual_kg,
+        birthDate: latestAssessmentForm.dados_pessoais_e_objetivos.data_nascimento
+      })
+    : null;
+  const computedBodyFatPct = computedBodyFat?.value ?? null;
   const latestAiPlan = aiPlans[0];
   const hasActiveMembership = membership?.status === "ACTIVE";
   const hasStudentAreaAccess = hasActiveMembership;
@@ -2725,7 +5447,8 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     new Set(cmsExercisesToday.flatMap((exercise) => exercise.targetMuscles ?? []))
   );
   const totalWorkoutDaysFromPrograms = publishedWorkouts.reduce((total, item) => total + item.totalDays, 0);
-  const totalWorkoutDays = consistency?.totalWorkoutDays ?? totalWorkoutDaysFromPrograms;
+  const totalWorkoutGoalFromPrograms = publishedWorkouts.reduce((total, item) => total + (item.totalWorkouts ?? item.totalDays), 0);
+  const totalWorkoutDays = consistency?.totalWorkoutDays ?? totalWorkoutGoalFromPrograms ?? totalWorkoutDaysFromPrograms;
   const workoutsCompleted = Math.min(consistency?.completedWorkoutCount ?? 0, totalWorkoutDays);
   const workoutProgressPercent = Math.min(100, Math.round((workoutsCompleted / Math.max(totalWorkoutDays, 1)) * 100));
   const publishedModalities = useMemo(
@@ -2743,8 +5466,8 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     : [];
   const workoutSheet = modalityWorkouts[0] ?? (selectedWorkoutModality && todayWorkout?.modality === selectedWorkoutModality ? todayWorkout : null);
   const workoutSequence = workoutSheet?.sequence?.length ? workoutSheet.sequence : publishedWorkouts;
-  const sheetCompleted = Math.min(workoutSheet?.completedWorkouts ?? workoutsCompleted, workoutSheet?.totalDays ?? totalWorkoutDays);
-  const sheetTotal = workoutSheet?.totalDays ?? totalWorkoutDays;
+  const sheetCompleted = Math.min(workoutSheet?.completedWorkouts ?? workoutsCompleted, workoutSheet?.totalWorkouts ?? workoutSheet?.totalDays ?? totalWorkoutDays);
+  const sheetTotal = workoutSheet?.totalWorkouts ?? workoutSheet?.totalDays ?? totalWorkoutDays;
   const sheetProgressPercent = Math.min(100, Math.round((sheetCompleted / Math.max(sheetTotal, 1)) * 100));
   const currentSequenceWorkout = workoutSequence.find((item) => item.dayNumber === workoutSheet?.dayNumber) ?? workoutSequence[0];
   const sheetMembershipStartsAt = workoutSheet?.membershipStartsAt ?? membership?.startsAt ?? null;
@@ -2831,6 +5554,16 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     return streak;
   }, [streakDateSet]);
 
+  const attendanceMonthPrefix = `${currentYear}-${String(currentCalendarMonth).padStart(2, "0")}-`;
+  const attendanceThisMonth = attendance.filter((record) => record.date.startsWith(attendanceMonthPrefix)).length;
+  const recentAccesses = useMemo(
+    () =>
+      [...attendance]
+        .sort((first, second) => new Date(second.date).getTime() - new Date(first.date).getTime())
+        .slice(0, 8),
+    [attendance]
+  );
+
   if (!hasStudentAreaAccess) {
     return (
       <main className="workspace-shell">
@@ -2861,6 +5594,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
           <h1>{profile?.name ?? "Comece a treinar"}</h1>
         </section>
         {error && <div className="error-box">{error}</div>}
+        {success && <div className="success-box">{success}</div>}
         {(studentSection === "subscription" || !["subscription", "locked"].includes(studentSection)) && <section className="subscription-flow">
           <div className="flow-steps" aria-label="Fluxo de assinatura">
             {["Login", "Assinatura", "Checkout", "Obrigado", "Acesso liberado"].map((step, index) => (
@@ -3067,6 +5801,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
 
       <>
         {error && <div className="error-box">{error}</div>}
+        {success && <div className="success-box">{success}</div>}
 
         {studentSection === "home" && (
           <>
@@ -3091,22 +5826,58 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                 ))}
                 {cmsExercisesToday.length > 3 && <li>+{cmsExercisesToday.length - 3} exercícios</li>}
               </ol>
-              <button className="student-green-button" onClick={() => setStudentSection("training")}>
-                Abrir treino
-              </button>
+              <div className="student-hero-actions">
+                <button className="student-green-button" onClick={() => setStudentSection("training")}>
+                  Abrir treino
+                </button>
+                {publicConfig["module_qr"] !== "false" && publicConfig["qr_checkin_enabled"] !== "false" && (
+                  <button
+                    className="student-outline-button"
+                    onClick={() => setShowStudentQr((value) => !value)}
+                  >
+                    <QrCode size={18} />
+                    {showStudentQr ? "Fechar QR" : "QR de check-in"}
+                  </button>
+                )}
+              </div>
+              {showStudentQr && (
+                <div className="student-qr-panel">
+                  <div className="dash-qr-box">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+                        publicConfig["qr_checkin_url"] || "http://localhost:5173/checkin"
+                      )}`}
+                      alt="QR Code de check-in"
+                    />
+                  </div>
+                  <span>Mostre este código na recepção para registrar sua presença.</span>
+                </div>
+              )}
             </section>
 
             <h2 className="student-section-title">Funcionalidades</h2>
             <section className="student-feature-grid">
               {[
-                { icon: UserRound, title: "Perfil", text: "Dados cadastrais", section: "menu" as const },
+                { icon: UserRound, title: "Perfil", text: "Dados cadastrais", section: "profile" as const },
                 { icon: Dumbbell, title: "Treino", text: "Ficha de exercícios", section: "training" as const },
-                { icon: ShieldCheck, title: "Matrículas", text: "Visualize seus planos", section: "payments" as const },
+                { icon: ShieldCheck, title: "Matrículas", text: "Seu plano e vigência", section: "membership" as const },
                 { icon: CreditCard, title: "Pagamentos", text: "Central de cobrancas", section: "payments" as const },
                 { icon: Ruler, title: "Avaliações", text: "Veja sua evolução", section: "assessments" as const },
                 { icon: CalendarDays, title: "Frequência", text: "Consulte seus acessos", section: "status" as const },
                 { icon: CalendarPlus, title: "Eventos", text: "Veja os eventos", section: "events" as const },
-                { icon: Headphones, title: "Atendimento", text: "Histórico de conversas", section: "support" as const }
+                { icon: Headphones, title: "Atendimento", text: "Histórico de conversas", section: "support" as const },
+                ...(publicConfig["module_products"] !== "false"
+                  ? [{ icon: Package, title: "Produtos", text: "Vitrine online", section: "products" as const }]
+                  : []),
+                ...(publicConfig["module_purchases"] !== "false"
+                  ? [{ icon: ShoppingCart, title: "Compras", text: "Seu histórico de compras", section: "purchases" as const }]
+                  : []),
+                ...(publicConfig["module_favorites"] !== "false"
+                  ? [{ icon: Star, title: "Favoritos", text: "Treinos que você favoritou", section: "favorites" as const }]
+                  : []),
+                ...(publicConfig["module_ratings"] !== "false"
+                  ? [{ icon: Trophy, title: "Avaliar", text: "Dê sua nota aos treinos", section: "ratings" as const }]
+                  : [])
               ].map((item) => (
                 <button className="student-feature-card" key={item.title} onClick={() => setStudentSection(item.section)}>
                   <span><item.icon size={25} /></span>
@@ -3157,6 +5928,43 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                   <span>Ficha de treino</span>
                   <h1>{workoutSheet.programTitle}</h1>
                   <p>{workoutSheet.modality ?? "Hipertrofia"}</p>
+                  {workoutSheet.favoritedByMe ? (
+                    <span className="student-favorite-badge">
+                      <Star size={15} fill="currentColor" />
+                      Favoritado
+                    </span>
+                  ) : (
+                    <div className="student-header-rating">
+                      <span>Avaliar treino</span>
+                      <div className="student-rating-stars">
+                        {[1, 2, 3, 4, 5].map((score) => (
+                          <button
+                            key={score}
+                            type="button"
+                            aria-label={`${score} estrelas`}
+                            className={ratingDraft[workoutSheet.programId] && score <= (ratingDraft[workoutSheet.programId]?.score ?? 0) ? "active" : ""}
+                            disabled={submittingRatingId === workoutSheet.programId}
+                            onClick={() =>
+                              void handleSubmitWorkoutProgramRating(
+                                workoutSheet.programId,
+                                workoutSheet.assignmentId,
+                                score
+                              )
+                            }
+                          >
+                            <Star
+                              size={22}
+                              fill={
+                                ratingDraft[workoutSheet.programId] && score <= (ratingDraft[workoutSheet.programId]?.score ?? 0)
+                                  ? "currentColor"
+                                  : "none"
+                              }
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="student-training-sheet-icon">
                     <Dumbbell size={58} />
                   </div>
@@ -3252,20 +6060,46 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
           </section>
         )}
 
+        {studentSection === "membership" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Matrículas</span>
+              <h1>Seu plano e vigência</h1>
+              <p>{membership ? `Plano ${membership.plan.name}` : "Nenhuma matrícula ativa"}</p>
+            </div>
+            {membership ? (
+              <>
+                <article className="student-info-card">
+                  <ShieldCheck size={22} />
+                  <div>
+                    <strong>{membership.plan.name}</strong>
+                    <span>Status: {membership.status}</span>
+                  </div>
+                </article>
+                <div className="student-metric-grid">
+                  <span><strong>{formatPriceInBRL(membership.plan.priceInCents)}</strong>{membership.plan.billingCycle === "YEARLY" ? "/ano" : "/mês"}</span>
+                  <span><strong>Início</strong>{new Date(membership.startsAt).toLocaleDateString("pt-BR")}</span>
+                  <span><strong>Vigência</strong>{membership.endsAt ? `até ${new Date(membership.endsAt).toLocaleDateString("pt-BR")}` : "sem término"}</span>
+                  <span><strong>{membership.plan.billingCycle === "YEARLY" ? "Anual" : "Mensal"}</strong>cobrança</span>
+                </div>
+              </>
+            ) : (
+              <article className="student-empty-state">
+                <ShieldCheck size={34} />
+                <strong>Nenhuma matrícula ativa</strong>
+                <span>Matrículas ativas liberam o fluxo do aluno.</span>
+              </article>
+            )}
+          </section>
+        )}
+
         {studentSection === "payments" && (
           <section className="student-sheet">
             <div className="student-sheet-heading">
               <span>Financeiro</span>
-              <h1>Pagamentos e matrícula</h1>
-              <p>{membership ? `Plano ${membership.plan.name}` : "Nenhum plano ativo"}</p>
+              <h1>Pagamentos</h1>
+              <p>{payments.length > 0 ? `${payments.length} cobrança(s)` : "Nenhuma cobrança registrada"}</p>
             </div>
-            <article className="student-info-card">
-              <ShieldCheck size={22} />
-              <div>
-                <strong>Status da matrícula</strong>
-                <span>{membership?.status ?? "Sem matrícula"}</span>
-              </div>
-            </article>
             {payments.slice(0, 6).map((payment) => (
               <article className="student-info-card" key={payment.id}>
                 <CreditCard size={22} />
@@ -3276,6 +6110,60 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                 {payment.paymentUrl && <a href={payment.paymentUrl} target="_blank" rel="noreferrer">Abrir</a>}
               </article>
             ))}
+            {publicConfig["module_cards"] !== "false" && (
+              <>
+                <div className="student-section-title-row">
+                  <h2 className="student-section-title">Meus Cartões</h2>
+                  <button
+                    className="student-outline-button"
+                    onClick={() => setShowAddCardForm((value) => !value)}
+                  >
+                    {showAddCardForm ? "Fechar" : "Adicionar cartão"}
+                  </button>
+                </div>
+                {showAddCardForm && (
+                  <form className="student-info-card student-card-form" onSubmit={handleAddStudentCard}>
+                    <input name="brand" placeholder="Bandeira" />
+                    <input name="lastFour" placeholder="Últimos 4 dígitos" maxLength={4} pattern="[0-9]{4}" required />
+                    <input name="holderName" placeholder="Nome no cartão" />
+                    <label className="admin-checkbox">
+                      <input name="isDefault" type="checkbox" />
+                      Cartão principal
+                    </label>
+                    <button className="student-green-button" type="submit">
+                      Salvar cartão
+                    </button>
+                  </form>
+                )}
+                {studentPaymentCards.length > 0 ? (
+                  studentPaymentCards.map((card) => (
+                    <article className="student-info-card" key={card.id}>
+                      <CreditCard size={22} />
+                      <div>
+                        <strong>{card.holderName ?? "Cartão"} •••• {card.lastFour}</strong>
+                        <span>
+                          {card.brand ?? "Cartão"}
+                          {card.isDefault ? " · principal" : ""}
+                        </span>
+                      </div>
+                      <button
+                        className="student-delete-button"
+                        aria-label="Remover cartão"
+                        onClick={() => void handleDeleteStudentCard(card.id)}
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    </article>
+                  ))
+                ) : (
+                  <article className="student-empty-state">
+                    <CreditCard size={28} />
+                    <strong>Nenhum cartão salvo</strong>
+                    <span>Adicione um cartão para pagamentos recorrentes.</span>
+                  </article>
+                )}
+              </>
+            )}
           </section>
         )}
 
@@ -3284,16 +6172,201 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
             <div className="student-sheet-heading">
               <span>Produtos</span>
               <h1>Vitrine online</h1>
-              <p>Produtos e compras seráo conectados ao catálogo do App Treino.</p>
+              <p>{studentProducts.length} produto(s) disponíveis</p>
             </div>
-            <article className="student-empty-state">
-              <Package size={34} />
-              <strong>Nenhum produto cadastrado</strong>
-              <span>Use está área para uma futura lojá fitness.</span>
-            </article>
+            {purchaseConfirmId && (
+              <div className="student-toast-confirm" role="status">
+                <Check size={18} />
+                Compra registrada
+              </div>
+            )}
+            {studentProducts.length > 0 ? (
+              <div className="student-products-grid">
+                {studentProducts.map((product) => (
+                  <article className="student-product-card" key={product.id}>
+                    {product.imageUrl ? (
+                      <img src={mediaUrl(product.imageUrl)} alt={product.name} />
+                    ) : (
+                      <div className="student-product-fallback">
+                        <Package size={30} />
+                      </div>
+                    )}
+                    <div className="student-product-body">
+                      {product.category && <small>{product.category}</small>}
+                      <strong>{product.name}</strong>
+                      {product.description && <span>{product.description}</span>}
+                      <strong className="student-product-price">{formatPriceInBRL(product.priceInCents)}</strong>
+                      <button
+                        className="student-green-button"
+                        type="button"
+                        disabled={Boolean(product.purchasedByMe) || purchasingProductId === product.id}
+                        onClick={() => void handleBuyProduct(product.id)}
+                      >
+                        {product.purchasedByMe
+                          ? "Já solicitado"
+                          : purchasingProductId === product.id
+                            ? "Registrando..."
+                            : "Comprar"}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <article className="student-empty-state">
+                <Package size={34} />
+                <strong>Nenhum produto cadastrado</strong>
+                <span>A vitrine será preenchida quando a academia cadastrar produtos.</span>
+              </article>
+            )}
           </section>
         )}
 
+        {studentSection === "purchases" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Compras</span>
+              <h1>Meu histórico de compras</h1>
+              <p>{studentPurchases.length} compra(s) registrada(s)</p>
+            </div>
+            {studentPurchases.length > 0 ? (
+              studentPurchases.map((purchase) => (
+                <article className="student-info-card" key={purchase.id}>
+                  <ShoppingCart size={22} />
+                  <div>
+                    <strong>{purchase.product.name}</strong>
+                    <span>
+                      {formatPriceInBRL(purchase.amountInCents)} • {purchase.status}
+                    </span>
+                    <span>{new Date(purchase.createdAt).toLocaleDateString("pt-BR")}</span>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <article className="student-empty-state">
+                <ShoppingCart size={34} />
+                <strong>Nenhuma compra ainda</strong>
+                <span>Os produtos que você comprar aparecerão aqui.</span>
+              </article>
+            )}
+          </section>
+        )}
+
+        {studentSection === "favorites" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Favoritos</span>
+              <h1>Treinos favoritos</h1>
+              <p>{studentWorkoutFavorites.length} favorito(s)</p>
+            </div>
+            {studentWorkoutFavorites.length > 0 ? (
+              <div className="student-favorites-grid">
+                {studentWorkoutFavorites.map((favorite) => (
+                  <article className="student-favorite-card" key={favorite.id}>
+                    <span className="student-favorite-media">
+                      {favorite.program.modalityImageUrl ? (
+                        <img src={mediaUrl(favorite.program.modalityImageUrl)} alt="" aria-hidden="true" />
+                      ) : (
+                        <Dumbbell size={24} />
+                      )}
+                    </span>
+                    <strong>{favorite.program.title}</strong>
+                    <span className="student-favorite-meta">
+                      {favorite.program.modality ?? "Hipertrofia"} • {favorite.program.totalWorkouts} treinos
+                    </span>
+                    <button
+                      className="student-delete-button"
+                      type="button"
+                      disabled={favoritingProgramId === favorite.program.id}
+                      onClick={() => void handleToggleWorkoutFavorite(favorite.program.id)}
+                    >
+                      {favoritingProgramId === favorite.program.id ? "Removendo..." : <><Trash2 size={17} /> Remover</>}
+                    </button>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <article className="student-empty-state">
+                <Star size={34} />
+                <strong>Nenhum favorito ainda</strong>
+                <span>Toque em "Favoritar treino" na sua ficha para guardá-lo aqui.</span>
+              </article>
+            )}
+          </section>
+        )}
+
+        {studentSection === "ratings" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Avaliar</span>
+              <h1>Avalie seus treinos</h1>
+              <p>{publishedWorkouts.length} treino(s) disponíveis</p>
+            </div>
+            {publishedWorkouts.length > 0 ? (
+              publishedWorkouts.map((programWorkout) => {
+                const draft = ratingDraft[programWorkout.programId];
+                const alreadyRated = programWorkout.ratedByMe;
+                return (
+                  <article className="student-info-card student-rating-card" key={`${programWorkout.programId}-${programWorkout.dayNumber}`}>
+                    <div>
+                      <strong>{programWorkout.programTitle}</strong>
+                      <span>{programWorkout.modality ?? "Hipertrofia"}</span>
+                    </div>
+                    {alreadyRated ? (
+                      <span className="student-rating-done"><Check size={16} /> Avaliado</span>
+                    ) : (
+                      <div className="student-rating-form">
+                        <div className="student-rating-stars">
+                          {[1, 2, 3, 4, 5].map((score) => (
+                            <button
+                              key={score}
+                              type="button"
+                              aria-label={`${score} estrelas`}
+                              className={draft && score <= draft.score ? "active" : ""}
+                              onClick={() =>
+                                setRatingDraft((current) => ({
+                                  ...current,
+                                  [programWorkout.programId]: { score, comment: current[programWorkout.programId]?.comment ?? "" }
+                                }))
+                              }
+                            >
+                              <Star size={24} fill={draft && score <= draft.score ? "currentColor" : "none"} />
+                            </button>
+                          ))}
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Comentário (opcional)"
+                          value={draft?.comment ?? ""}
+                          onChange={(event) =>
+                            setRatingDraft((current) => ({
+                              ...current,
+                              [programWorkout.programId]: { score: current[programWorkout.programId]?.score ?? 0, comment: event.target.value }
+                            }))
+                          }
+                        />
+                        <button
+                          className="student-green-button"
+                          type="button"
+                          disabled={!draft || draft.score < 1 || submittingRatingId === programWorkout.programId}
+                          onClick={() => void handleSubmitWorkoutProgramRating(programWorkout.programId, programWorkout.assignmentId)}
+                        >
+                          {submittingRatingId === programWorkout.programId ? "Enviando..." : "Enviar avaliação"}
+                        </button>
+                      </div>
+                    )}
+                  </article>
+                );
+              })
+            ) : (
+              <article className="student-empty-state">
+                <Trophy size={34} />
+                <strong>Nenhum treino para avaliar</strong>
+                <span>Os treinos publicados aparecerão aqui para você avaliar.</span>
+              </article>
+            )}
+          </section>
+        )}
         {studentSection === "assessments" && (
           <section className="student-sheet">
             <div className="student-sheet-heading">
@@ -3305,7 +6378,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
               <div className="student-metric-grid">
                 <span><strong>{latestAssessment.weightKg ?? "-"}</strong>kg</span>
                 <span><strong>{latestAssessment.heightCm ?? "-"}</strong>cm</span>
-                <span><strong>{latestAssessment.bodyFatPct ?? "-"}</strong>% gordura</span>
+                <span><strong>{latestAssessment.bodyFatPct ?? computedBodyFatPct ?? "-"}</strong>% gordura</span>
                 <span><strong>{latestAssessment.waistCm ?? "-"}</strong>cm cintura</span>
               </div>
             ) : (
@@ -3314,6 +6387,303 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                 <strong>Nenhuma avaliação</strong>
                 <span>Solicite sua primeira avaliação com a equipe.</span>
               </article>
+            )}
+
+            {latestAssessmentForm && (
+              <>
+                <article className="student-info-card">
+                  <Ruler size={22} />
+                  <div>
+                    <strong>Formulário de avaliação física</strong>
+                    <span>Preenchido em {new Date(latestAssessment.assessedAt).toLocaleDateString("pt-BR")}</span>
+                  </div>
+                </article>
+                <div className="student-assessment-section">
+                  <h2>Dados pessoais e objetivos</h2>
+                  <div className="student-assessment-summary">
+                    <span><strong>Nome</strong>{latestAssessmentForm.dados_pessoais_e_objetivos.nome_completo || "-"}</span>
+                    <span><strong>Nascimento</strong>{latestAssessmentForm.dados_pessoais_e_objetivos.data_nascimento || "-"}</span>
+                    <span><strong>Gênero</strong>{latestAssessmentForm.dados_pessoais_e_objetivos.genero_biologico.resposta || "-"}</span>
+                    <span><strong>Objetivo</strong>{latestAssessmentForm.dados_pessoais_e_objetivos.objetivo_principal.resposta || "-"}</span>
+                    <span><strong>Nível de atividade</strong>{latestAssessmentForm.dados_pessoais_e_objetivos.nivel_atividade_atual.resposta || "-"}</span>
+                  </div>
+                </div>
+                <div className="student-assessment-section">
+                  <h2>Histórico de saúde</h2>
+                  <div className="student-assessment-summary">
+                    <span><strong>Lesões</strong>{latestAssessmentForm.historico_de_saude_anamnese.possui_lesao.resposta || "Nenhuma informada"}</span>
+                    <span><strong>Medicação contínua</strong>{latestAssessmentForm.historico_de_saude_anamnese.medicamento_continuo.resposta || "Nenhuma informada"}</span>
+                    <span><strong>Restrição cardíaca</strong>{latestAssessmentForm.historico_de_saude_anamnese.restricao_medica_cardiaca.resposta || "Nenhuma informada"}</span>
+                  </div>
+                </div>
+                <div className="student-assessment-section">
+                  <h2>Composição corporal</h2>
+                  <div className="student-metric-grid">
+                    <span><strong>{latestAssessmentForm.composicao_corporal_basica.peso_atual_kg ?? "-"}</strong>kg</span>
+                    <span><strong>{latestAssessmentForm.composicao_corporal_basica.altura_cm ?? "-"}</strong>cm</span>
+                    <span>
+                      <strong>{computedBodyFatPct ?? "-"}</strong>% gordura
+                      {computedBodyFat && <small>estimado pelo método {computedBodyFat.method === "Navy" ? "Navy" : "IMC"}</small>}
+                    </span>
+                  </div>
+                </div>
+                <div className="student-assessment-section">
+                  <h2>Perímetros (cm)</h2>
+                  <div className="student-assessment-grid">
+                    {perimeterKeys.map((key) => {
+                      const item = latestAssessmentForm.perimetros_corporais_cm[key];
+                      return (
+                        <span className="student-assessment-summary-item" key={key}>
+                          <strong>{key.replace(/_/g, " ")}</strong>
+                          {item.valor != null ? `${item.valor} cm` : "-"}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+                {(
+                  [
+                    ["foto_frente", "Foto de frente"],
+                    ["foto_costas", "Foto de costas"],
+                    ["foto_perfil", "Foto de perfil"]
+                  ] as const
+                ).some(([key]) => latestAssessmentForm.fotos_analise_visual.arquivos[key]) && (
+                  <div className="student-assessment-section">
+                    <h2>Fotos anexadas</h2>
+                    <div className="student-assessment-summary">
+                      {(
+                        [
+                          ["foto_frente", "Foto de frente"],
+                          ["foto_costas", "Foto de costas"],
+                          ["foto_perfil", "Foto de perfil"]
+                        ] as const
+                      ).map(([key, label]) =>
+                        latestAssessmentForm.fotos_analise_visual.arquivos[key] ? (
+                          <span key={key}><strong>{label}</strong>{latestAssessmentForm.fotos_analise_visual.arquivos[key]}</span>
+                        ) : null
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {assessmentForm ? (
+              <form className="student-assessment-form" onSubmit={handleSubmitPhysicalAssessment}>
+                <div className="student-assessment-section">
+                  <h2>Dados pessoais e objetivos</h2>
+                  <div className="student-assessment-field">
+                    <label>Nome completo</label>
+                    <input
+                      type="text"
+                      placeholder="Seu nome"
+                      value={assessmentForm.formulario_avaliacao_fisica.dados_pessoais_e_objetivos.nome_completo}
+                      onChange={(event) =>
+                        updateAssessmentForm((draft) => {
+                          draft.formulario_avaliacao_fisica.dados_pessoais_e_objetivos.nome_completo = event.target.value;
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="student-assessment-field">
+                    <label>Data de nascimento</label>
+                    <input
+                      type="date"
+                      value={assessmentForm.formulario_avaliacao_fisica.dados_pessoais_e_objetivos.data_nascimento}
+                      onChange={(event) =>
+                        updateAssessmentForm((draft) => {
+                          draft.formulario_avaliacao_fisica.dados_pessoais_e_objetivos.data_nascimento = event.target.value;
+                        })
+                      }
+                    />
+                  </div>
+                  {(
+                    [
+                      ["genero_biologico", "Gênero biológico"],
+                      ["objetivo_principal", "Objetivo principal"],
+                      ["nivel_atividade_atual", "Nível de atividade atual"]
+                    ] as const
+                  ).map(([key, label]) => {
+                    const section = assessmentForm.formulario_avaliacao_fisica.dados_pessoais_e_objetivos[key];
+                    return (
+                      <div className="student-assessment-field" key={key}>
+                        <label>{label}</label>
+                        <select
+                          value={section.resposta}
+                          onChange={(event) =>
+                            updateAssessmentForm((draft) => {
+                              draft.formulario_avaliacao_fisica.dados_pessoais_e_objetivos[key].resposta = event.target.value;
+                            })
+                          }
+                        >
+                          <option value="">Selecione</option>
+                          {section.opcoes.map((opcao) => (
+                            <option key={opcao} value={opcao}>{opcao}</option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="student-assessment-section">
+                  <h2>Histórico de saúde (anamnese)</h2>
+                  {(
+                    [
+                      ["possui_lesao", "Você possui alguma lesão?"],
+                      ["medicamento_continuo", "Usa algum medicamento contínuo?"],
+                      ["restricao_medica_cardiaca", "Alguma restrição médica cardíaca?"]
+                    ] as const
+                  ).map(([key, label]) => {
+                    const field = assessmentForm.formulario_avaliacao_fisica.historico_de_saude_anamnese[key];
+                    return (
+                      <div className="student-assessment-field" key={key}>
+                        <label>{label}</label>
+                        <input
+                          type="text"
+                          placeholder={field.descricao}
+                          value={field.resposta}
+                          onChange={(event) =>
+                            updateAssessmentForm((draft) => {
+                              draft.formulario_avaliacao_fisica.historico_de_saude_anamnese[key].resposta = event.target.value;
+                            })
+                          }
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="student-assessment-section">
+                  <h2>Composição corporal básica</h2>
+                  <p className="student-assessment-hint">
+                    {assessmentForm.formulario_avaliacao_fisica.composicao_corporal_basica.instrucao}
+                  </p>
+                  <div className="student-assessment-inline">
+                    <div className="student-assessment-field">
+                      <label>Peso atual (kg)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        placeholder="Ex.: 72,5"
+                        value={assessmentForm.formulario_avaliacao_fisica.composicao_corporal_basica.peso_atual_kg ?? ""}
+                        onChange={(event) =>
+                          updateAssessmentForm((draft) => {
+                            draft.formulario_avaliacao_fisica.composicao_corporal_basica.peso_atual_kg =
+                              event.target.value === "" ? null : Number(event.target.value);
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="student-assessment-field">
+                      <label>Altura (cm)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        placeholder="Ex.: 175"
+                        value={assessmentForm.formulario_avaliacao_fisica.composicao_corporal_basica.altura_cm ?? ""}
+                        onChange={(event) =>
+                          updateAssessmentForm((draft) => {
+                            draft.formulario_avaliacao_fisica.composicao_corporal_basica.altura_cm =
+                              event.target.value === "" ? null : Number(event.target.value);
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="student-assessment-section">
+                  <h2>Perímetros corporais (cm)</h2>
+                  <p className="student-assessment-hint">
+                    {assessmentForm.formulario_avaliacao_fisica.perimetros_corporais_cm.instrucao}
+                  </p>
+                  <div className="student-assessment-grid">
+                    {perimeterKeys.map((key) => {
+                      const item = assessmentForm.formulario_avaliacao_fisica.perimetros_corporais_cm[key];
+                      return (
+                        <div className="student-assessment-field" key={key}>
+                          <label>{key.replace(/_/g, " ")}</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            placeholder={item.detalhe}
+                            value={item.valor ?? ""}
+                            onChange={(event) =>
+                              updateAssessmentForm((draft) => {
+                                draft.formulario_avaliacao_fisica.perimetros_corporais_cm[key].valor =
+                                  event.target.value === "" ? null : Number(event.target.value);
+                              })
+                            }
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="student-assessment-section">
+                  <h2>Fotos para análise visual</h2>
+                  <p className="student-assessment-hint">
+                    {assessmentForm.formulario_avaliacao_fisica.fotos_analise_visual.instrucao}
+                  </p>
+                  <div className="student-assessment-grid">
+                    {(
+                      [
+                        ["foto_frente", "Foto de frente"],
+                        ["foto_costas", "Foto de costas"],
+                        ["foto_perfil", "Foto de perfil"]
+                      ] as const
+                    ).map(([key, label]) => {
+                      const preview = assessmentPhotoPreviews[key];
+                      const fileName = assessmentForm.formulario_avaliacao_fisica.fotos_analise_visual.arquivos[key];
+                      return (
+                        <div className="student-assessment-field" key={key}>
+                          <label>{label}</label>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(event) => handleAssessmentPhotoSelect(key, event.target.files?.[0])}
+                          />
+                          {preview && (
+                            <div className="student-assessment-photo-confirm">
+                              <img src={preview} alt={label} />
+                              <div>
+                                <strong><Check size={16} /> Foto enviada</strong>
+                                <span>{fileName}</span>
+                                <button type="button" onClick={() => handleAssessmentPhotoSelect(key, undefined)}>
+                                  Remover
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="student-assessment-actions">
+                  <button className="student-green-button" type="submit" disabled={submittingAssessment}>
+                    {submittingAssessment ? "Salvando..." : "Salvar avaliação física"}
+                  </button>
+                  <button
+                    className="student-outline-button"
+                    type="button"
+                    disabled={submittingAssessment}
+                    onClick={clearAssessmentForm}
+                  >
+                    Cancelar avaliação
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <button className="student-outline-button student-assessment-new-button" onClick={() => setAssessmentForm(createEmptyAssessmentForm())}>
+                Preencher avaliação física
+              </button>
             )}
           </section>
         )}
@@ -3394,25 +6764,191 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
           </section>
         )}
 
+        {studentSection === "profile" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Perfil</span>
+              <h1>Dados cadastrais</h1>
+              <p>Complete seus dados para personalizar sua experiência e seus treinos.</p>
+            </div>
+            <article className="student-profile-note">
+              <ShieldCheck size={18} />
+              <span>
+                Nome, e-mail, telefone e sexo já foram informados na contratação do plano. Complete o restante quando
+                quiser.
+              </span>
+            </article>
+            <form className="student-profile-form" onSubmit={handleUpdateStudentProfile}>
+              <label>
+                Nome
+                <input name="name" defaultValue={profile?.name ?? ""} minLength={2} required placeholder="Seu nome completo" />
+              </label>
+              <label>
+                E-mail
+                <input name="email" type="email" value={profile?.email ?? ""} readOnly disabled placeholder="seuemail@exemplo.com" />
+              </label>
+              <label>
+                Telefone
+                <input name="phone" type="tel" defaultValue={profile?.phone ?? ""} placeholder="+55 11 99999-9999" />
+              </label>
+              <label>
+                CPF
+                <input name="document" defaultValue={profile?.document ?? ""} placeholder="000.000.000-00" />
+              </label>
+              <label>
+                Data de nascimento
+                <input
+                  name="birthDate"
+                  type="date"
+                  defaultValue={profile?.birthDate ? profile.birthDate.slice(0, 10) : ""}
+                />
+              </label>
+              <label>
+                Sexo
+                <select name="gender" defaultValue={profile?.gender ?? ""}>
+                  <option value="">Selecione</option>
+                  <option value="MALE">Masculino</option>
+                  <option value="FEMALE">Feminino</option>
+                </select>
+              </label>
+              <label>
+                Objetivo
+                <input
+                  name="objective"
+                  list="objective-options"
+                  defaultValue={profile?.objective ?? ""}
+                  placeholder="Ex.: Hipertrofia, emagrecimento"
+                />
+                <datalist id="objective-options">
+                  <option value="Hipertrofia" />
+                  <option value="Emagrecimento" />
+                  <option value="Condicionamento" />
+                  <option value="Saúde" />
+                  <option value="Definição" />
+                </datalist>
+              </label>
+              <label>
+                Nível
+                <input
+                  name="level"
+                  list="level-options"
+                  defaultValue={profile?.level ?? ""}
+                  placeholder="Ex.: Iniciante, intermediário"
+                />
+                <datalist id="level-options">
+                  <option value="Iniciante" />
+                  <option value="Intermediário" />
+                  <option value="Avançado" />
+                </datalist>
+              </label>
+              <button className="student-green-button" type="submit">
+                Salvar dados cadastrais
+              </button>
+            </form>
+          </section>
+        )}
+
+        {studentSection === "status" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Frequência</span>
+              <h1>Acessos e ofensiva</h1>
+              <p>Sua constância na academia, dia a dia.</p>
+            </div>
+            <div className="student-metric-grid">
+              <span><strong>{currentStreak}</strong> dias de ofensiva</span>
+              <span><strong>{workoutsCompleted}/{totalWorkoutDays}</strong> treinos feitos</span>
+              <span><strong>{attendanceThisMonth}</strong> acessos no mês</span>
+              <span><strong>{attendance.length}</strong> acessos registrados</span>
+            </div>
+            <div className="student-consistency-calendar">
+              <div className="student-consistency-heading">
+                <button
+                  className="student-calendar-arrow"
+                  aria-label="Mês anterior"
+                  disabled={streakCalendarMonth <= 1}
+                  onClick={() => setStreakCalendarMonth((month) => Math.max(1, month - 1))}
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <div>
+                  <span>Treinos concluídos</span>
+                  <strong>{monthLabel(currentMonth.year, currentMonth.month)}</strong>
+                </div>
+                <button
+                  className="student-calendar-arrow"
+                  aria-label="Próximo mês"
+                  disabled={streakCalendarMonth >= currentCalendarMonth}
+                  onClick={() => setStreakCalendarMonth((month) => Math.min(currentCalendarMonth, month + 1))}
+                >
+                  <ChevronRight size={20} />
+                </button>
+                <small>{completedDateSet.size} treino(s) no mês</small>
+              </div>
+              <div className="student-calendar-weekdays" aria-hidden="true">
+                {["D", "S", "T", "Q", "Q", "S", "S"].map((day, index) => (
+                  <span key={`${day}-${index}`}>{day}</span>
+                ))}
+              </div>
+              <div className="student-calendar-grid">
+                {calendarCells.map((cell, index) => {
+                  const isCompleted = Boolean(cell.isoDate && completedDateSet.has(cell.isoDate));
+                  const isToday = cell.isoDate === todayIsoDate;
+
+                  return (
+                    <span
+                      className={`${cell.day ? "" : "empty"} ${isCompleted ? "completed" : ""} ${isToday ? "today" : ""}`}
+                      key={`${cell.isoDate ?? "freq-empty"}-${index}`}
+                    >
+                      {cell.day}
+                    </span>
+                  );
+                })}
+              </div>
+              <p>Dias marcados representam treinos concluídos. O calendário mostra o mês atual e meses anteriores.</p>
+            </div>
+            <div className="student-section-title-row">
+              <h2 className="student-section-title">Registros de acesso</h2>
+            </div>
+            {recentAccesses.length > 0 ? (
+              recentAccesses.map((record) => (
+                <article className="student-info-card" key={record.id}>
+                  <CalendarDays size={22} />
+                  <div>
+                    <strong>{new Date(record.date).toLocaleDateString("pt-BR")}</strong>
+                    <span>Presença registrada</span>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <article className="student-empty-state">
+                <CalendarDays size={28} />
+                <strong>Nenhum acesso registrado</strong>
+                <span>Registre sua presença com o QR de check-in na recepção.</span>
+              </article>
+            )}
+          </section>
+        )}
+
         {studentSection === "menu" && (
           <section className="student-menu-list">
             {[
-              { icon: UserRound, title: "Perfil", action: () => setStudentSection("status") },
+              { icon: UserRound, title: "Perfil", action: () => setStudentSection("profile") },
               { icon: Dumbbell, title: "Treino", action: () => setStudentSection("training"), favorite: true },
-              { icon: ShieldCheck, title: "Matrículas", action: () => setStudentSection("payments") },
+              { icon: ShieldCheck, title: "Matrículas", action: () => setStudentSection("membership") },
               { icon: CreditCard, title: "Pagamentos", action: () => setStudentSection("payments"), favorite: true },
               { icon: Ruler, title: "Avaliações", action: () => setStudentSection("assessments") },
               { icon: CalendarDays, title: "Frequência", action: () => setStudentSection("status") },
               { icon: Package, title: "Produtos", action: () => setStudentSection("products"), favorite: true },
-              { icon: ShoppingCart, title: "Compras", action: () => setStudentSection("products") },
+              { icon: ShoppingCart, title: "Compras", action: () => setStudentSection("purchases") },
               { icon: CalendarPlus, title: "Eventos", action: () => setStudentSection("events") },
               { icon: Headphones, title: "Atendimento", action: () => setStudentSection("support") },
-              { icon: QrCode, title: "QR Code", action: () => setStudentSection("status") },
+              { icon: QrCode, title: "QR Code", action: () => { setStudentSection("home"); setShowStudentQr(true); } },
               { icon: CreditCard, title: "Meus Cartoes", action: () => setStudentSection("payments") },
-              { icon: Settings, title: "Configuracoes", action: () => setStudentSection("status") },
+              { icon: Settings, title: "Configuracoes", action: () => setStudentSection("profile") },
               { icon: MessageCircle, title: "Contato", action: () => setStudentSection("support") },
-              { icon: Star, title: "Favoritos", action: () => setStudentSection("training") },
-              { icon: Trophy, title: "Avaliar", action: () => setStudentSection("assessments") }
+              { icon: Star, title: "Favoritos", action: () => setStudentSection("favorites") },
+              { icon: Trophy, title: "Avaliar", action: () => setStudentSection("ratings") }
             ].map((item) => (
               <button className="student-menu-item" key={item.title} onClick={item.action}>
                 <item.icon size={24} />

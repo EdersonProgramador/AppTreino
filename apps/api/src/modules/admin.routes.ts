@@ -114,6 +114,7 @@ const cmsProgramSchema = z.object({
   description: z.string().min(2),
   modalityId: z.string().min(1),
   targetGender: z.enum(["ALL", "MALE", "FEMALE"]).default("ALL"),
+  totalWorkouts: z.coerce.number().int().min(1).default(30),
   status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).default("DRAFT"),
   isActive: z.coerce.boolean().default(true),
   days: z
@@ -125,6 +126,10 @@ const cmsProgramSchema = z.object({
       })
     )
     .min(1, "Cadastre ao menos um dia no programa.")
+});
+
+const cmsProgramUpdateSchema = cmsProgramSchema.partial().extend({
+  days: cmsProgramSchema.shape.days.optional()
 });
 
 const cmsModalitySchema = z.object({
@@ -140,7 +145,8 @@ const cmsModalitySchema = z.object({
 
 const cmsProgramAssignSchema = z.object({
   userIds: z.array(z.string().min(1)).min(1),
-  currentDay: z.coerce.number().int().min(1).default(1)
+  currentDay: z.coerce.number().int().min(1).default(1),
+  totalWorkouts: z.coerce.number().int().min(1).optional()
 });
 
 const planSchema = z.object({
@@ -163,6 +169,13 @@ const paymentSchema = z.object({
   amountInCents: z.coerce.number().int().positive(),
   dueDate: z.coerce.date(),
   billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED")
+});
+
+const paymentUpdateSchema = z.object({
+  amountInCents: z.coerce.number().int().positive().optional(),
+  dueDate: z.coerce.date().optional(),
+  status: z.enum(["PENDING", "CONFIRMED", "OVERDUE", "REFUNDED", "CANCELED"]).optional(),
+  paidAt: z.coerce.date().nullable().optional()
 });
 
 const physicalAssessmentSchema = z.object({
@@ -422,8 +435,8 @@ async function assertWorkoutBlocksExist(workoutBlockIds: string[]) {
   }
 }
 
-async function assignProgramToStudents(programId: string, currentDay = 1) {
-  return assignProgramToActiveStudents(programId, currentDay);
+async function assignProgramToStudents(programId: string, currentDay = 1, totalWorkouts?: number) {
+  return assignProgramToActiveStudents(programId, currentDay, totalWorkouts);
 }
 
 async function getActiveStudentIds(userIds?: string[], targetGender: "ALL" | "MALE" | "FEMALE" = "ALL") {
@@ -464,13 +477,15 @@ async function getActiveStudentIds(userIds?: string[], targetGender: "ALL" | "MA
     .map((student) => student.id);
 }
 
-async function assignProgramToActiveStudents(programId: string, currentDay = 1, userIds?: string[]) {
+async function assignProgramToActiveStudents(programId: string, currentDay = 1, totalWorkouts?: number, userIds?: string[]) {
   const program = await prisma.program.findUniqueOrThrow({
     where: { id: programId },
     select: {
-      targetGender: true
+      targetGender: true,
+      totalWorkouts: true
     }
   });
+  const workoutGoal = totalWorkouts ?? program.totalWorkouts;
   const activeStudentIds = await getActiveStudentIds(userIds, program.targetGender);
 
   if (activeStudentIds.length === 0) {
@@ -490,10 +505,13 @@ async function assignProgramToActiveStudents(programId: string, currentDay = 1, 
           userId,
           programId,
           currentDay,
+          totalWorkouts: workoutGoal,
+          completedWorkouts: 0,
           status: "ACTIVE"
         },
         update: {
           currentDay,
+          totalWorkouts: workoutGoal,
           status: "ACTIVE",
           completedAt: null
         }
@@ -689,6 +707,150 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     });
 
     return { users };
+  });
+
+  app.get("/admin/students/:id/overview", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const today = toDateOnly();
+    const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    const monthEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1));
+
+    const [
+      student,
+      payments,
+      assessments,
+      attendance,
+      workoutSessions,
+      programAssignments,
+      eventRegistrations,
+      tickets,
+      aiPlans
+    ] = await Promise.all([
+      prisma.user.findUniqueOrThrow({
+        where: { id },
+        include: {
+          profile: true,
+          memberships: {
+            include: {
+              plan: true,
+              payments: {
+                orderBy: {
+                  dueDate: "desc"
+                }
+              }
+            },
+            orderBy: {
+              createdAt: "desc"
+            }
+          }
+        }
+      }),
+      prisma.payment.findMany({
+        where: {
+          membership: {
+            userId: id
+          }
+        },
+        include: {
+          membership: {
+            include: {
+              plan: true
+            }
+          }
+        },
+        orderBy: {
+          dueDate: "desc"
+        }
+      }),
+      prisma.physicalAssessment.findMany({
+        where: { userId: id },
+        orderBy: {
+          assessedAt: "desc"
+        }
+      }),
+      prisma.attendanceRecord.findMany({
+        where: { userId: id },
+        orderBy: {
+          date: "desc"
+        },
+        take: 90
+      }),
+      prisma.workoutSession.findMany({
+        where: { userId: id },
+        orderBy: {
+          startedAt: "desc"
+        },
+        take: 30
+      }),
+      prisma.userProgram.findMany({
+        where: { userId: id },
+        include: {
+          program: {
+            include: {
+              modality: true,
+              days: {
+                include: {
+                  workoutBlock: true
+                },
+                orderBy: [{ dayNumber: "asc" }, { order: "asc" }]
+              }
+            }
+          }
+        },
+        orderBy: {
+          updatedAt: "desc"
+        }
+      }),
+      prisma.eventRegistration.findMany({
+        where: { userId: id },
+        include: {
+          event: true
+        },
+        orderBy: {
+          createdAt: "desc"
+        }
+      }),
+      prisma.supportTicket.findMany({
+        where: { userId: id },
+        include: {
+          assignedTo: true
+        },
+        orderBy: {
+          updatedAt: "desc"
+        }
+      }),
+      prisma.aiWorkoutPlan.findMany({
+        where: { userId: id },
+        orderBy: {
+          createdAt: "desc"
+        },
+        take: 8
+      })
+    ]);
+
+    const attendanceThisMonth = attendance.filter((record) => record.date >= monthStart && record.date < monthEnd);
+    const completedWorkoutSessions = workoutSessions.filter((session) => session.status === "COMPLETED");
+    const activeMembership = student.memberships.find((membership) => membership.status === "ACTIVE") ?? null;
+
+    return {
+      student,
+      activeMembership,
+      payments,
+      assessments,
+      attendance,
+      workoutSessions,
+      programAssignments,
+      eventRegistrations,
+      tickets,
+      aiPlans,
+      summary: {
+        attendanceThisMonth: attendanceThisMonth.length,
+        completedWorkoutSessions: completedWorkoutSessions.length,
+        pendingPayments: payments.filter((payment) => payment.status === "PENDING").length,
+        openTickets: tickets.filter((ticket) => ticket.status === "OPEN" || ticket.status === "IN_PROGRESS").length
+      }
+    };
   });
 
   app.post("/admin/users", async (request, reply) => {
@@ -1269,6 +1431,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         title: body.title,
         description: buildProgramDescription(body.description, modality.name),
         targetGender: body.targetGender,
+        totalWorkouts: body.totalWorkouts,
         status: body.status,
         isActive: body.isActive,
         publishedAt: body.status === "PUBLISHED" ? new Date() : null,
@@ -1297,7 +1460,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     });
 
     if (program.status === "PUBLISHED" && program.isActive) {
-      await assignProgramToStudents(program.id);
+      await assignProgramToStudents(program.id, 1, program.totalWorkouts);
     }
 
     return reply.code(201).send({ program });
@@ -1306,30 +1469,54 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.put("/admin/cms/programs/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    const body = cmsProgramSchema.parse(request.body);
-    await assertModalitiesExist([body.modalityId]);
-    const modality = await prisma.modality.findUniqueOrThrow({ where: { id: body.modalityId } });
-    await assertWorkoutBlocksExist(body.days.map((day) => day.workoutBlockId));
+    const body = cmsProgramUpdateSchema.parse(request.body);
+    const currentProgram = await prisma.program.findUniqueOrThrow({
+      where: { id },
+      include: {
+        modality: true
+      }
+    });
+    const nextModalityId = body.modalityId ?? currentProgram.modalityId;
+    const modality = nextModalityId ? await prisma.modality.findUniqueOrThrow({ where: { id: nextModalityId } }) : null;
+
+    if (body.modalityId) {
+      await assertModalitiesExist([body.modalityId]);
+    }
+
+    if (body.days) {
+      await assertWorkoutBlocksExist(body.days.map((day) => day.workoutBlockId));
+    }
+
+    const descriptionText = body.description
+      ? buildProgramDescription(body.description, modality?.name ?? currentProgram.modality?.name ?? "Hipertrofia")
+      : currentProgram.description;
+    const publishedAt =
+      body.status === "PUBLISHED" ? new Date() : body.status === "DRAFT" || body.status === "ARCHIVED" ? null : currentProgram.publishedAt;
 
     await prisma.$transaction([
-      prisma.programDayWorkout.deleteMany({ where: { programId: id } }),
+      ...(body.days ? [prisma.programDayWorkout.deleteMany({ where: { programId: id } })] : []),
       prisma.program.update({
         where: { id },
         data: {
-          modalityId: body.modalityId,
-          title: body.title,
-          description: buildProgramDescription(body.description, modality.name),
-          targetGender: body.targetGender,
-          status: body.status,
-          isActive: body.isActive,
-          publishedAt: body.status === "PUBLISHED" ? new Date() : null,
-          days: {
-            create: body.days.map((day) => ({
-              workoutBlockId: day.workoutBlockId,
-              dayNumber: day.dayNumber,
-              order: day.order
-            }))
-          }
+          modalityId: nextModalityId,
+          title: body.title ?? currentProgram.title,
+          description: descriptionText,
+          targetGender: body.targetGender ?? currentProgram.targetGender,
+          totalWorkouts: body.totalWorkouts ?? currentProgram.totalWorkouts,
+          status: body.status ?? currentProgram.status,
+          isActive: body.isActive ?? currentProgram.isActive,
+          publishedAt,
+          ...(body.days
+            ? {
+                days: {
+                  create: body.days.map((day) => ({
+                    workoutBlockId: day.workoutBlockId,
+                    dayNumber: day.dayNumber,
+                    order: day.order
+                  }))
+                }
+              }
+            : {})
         }
       })
     ]);
@@ -1353,7 +1540,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     });
 
     if (program.status === "PUBLISHED" && program.isActive) {
-      await assignProgramToStudents(program.id);
+      await assignProgramToStudents(program.id, 1, program.totalWorkouts);
     }
 
     return { program };
@@ -1395,7 +1582,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         }
       }
     });
-    await assignProgramToStudents(program.id);
+    await assignProgramToStudents(program.id, 1, program.totalWorkouts);
 
     return { program };
   });
@@ -1441,7 +1628,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       });
     }
 
-    const assignments = await assignProgramToActiveStudents(id, body.currentDay, body.userIds);
+    const assignments = await assignProgramToActiveStudents(id, body.currentDay, body.totalWorkouts ?? program.totalWorkouts, body.userIds);
 
     if (assignments.length === 0) {
       return reply.code(409).send({
@@ -1643,6 +1830,26 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return reply.code(201).send({ payment: updatedPayment });
   });
 
+  app.put("/admin/payments/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const body = paymentUpdateSchema.parse(request.body);
+    const payment = await prisma.payment.update({
+      where: { id },
+      data: body
+    });
+
+    return { payment };
+  });
+
+  app.delete("/admin/payments/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    await prisma.payment.delete({ where: { id } });
+
+    return { ok: true };
+  });
+
   app.get("/admin/physical-assessments", async () => {
     requireDatabase();
     const assessments = await prisma.physicalAssessment.findMany({
@@ -1711,6 +1918,21 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return reply.code(201).send({ event });
   });
 
+  app.put("/admin/events/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const body = eventSchema.partial().parse(request.body);
+    const event = await prisma.event.update({
+      where: { id },
+      data: body,
+      include: {
+        registrations: true
+      }
+    });
+
+    return { event };
+  });
+
   app.delete("/admin/events/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
@@ -1755,6 +1977,14 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { ticket };
   });
 
+  app.delete("/admin/support-tickets/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    await prisma.supportTicket.delete({ where: { id } });
+
+    return { ok: true };
+  });
+
   app.get("/admin/ai-workout-plans", async () => {
     requireDatabase();
     const plans = await prisma.aiWorkoutPlan.findMany({
@@ -1768,5 +1998,261 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     });
 
     return { plans };
+  });
+
+  app.delete("/admin/ai-workout-plans/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    await prisma.aiWorkoutPlan.delete({ where: { id } });
+
+    return { ok: true };
+  });
+
+  // ===== Módulos: Produtos, Compras, Cartões, Favoritos, Avaliações, Contato e Configurações =====
+
+  const productSchema = z.object({
+    name: z.string().min(2),
+    description: z.string().optional(),
+    priceInCents: z.number().int().min(0).default(0),
+    imageUrl: z.string().optional(),
+    category: z.string().optional(),
+    isActive: z.boolean().default(true)
+  });
+
+  const purchaseSchema = z.object({
+    userId: z.string().min(1),
+    productId: z.string().min(1),
+    amountInCents: z.number().int().min(0),
+    status: z.enum(["PENDING", "CONFIRMED", "CANCELED", "REFUNDED"]).default("PENDING"),
+    paymentMethod: z.string().optional()
+  });
+
+  const paymentCardSchema = z.object({
+    userId: z.string().min(1),
+    brand: z.string().optional(),
+    lastFour: z.string().length(4),
+    holderName: z.string().optional(),
+    isDefault: z.boolean().default(false)
+  });
+
+  const contactMessageUpdateSchema = z.object({
+    status: z.enum(["OPEN", "RESOLVED", "CLOSED"]).optional()
+  });
+
+  app.get("/admin/products", async () => {
+    requireDatabase();
+    const products = await prisma.product.findMany({
+      include: {
+        _count: { select: { purchases: true, favorites: true, ratings: true } }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+
+    return { products };
+  });
+
+  app.post("/admin/products", async (request, reply) => {
+    requireDatabase();
+    const body = productSchema.parse(request.body);
+    const product = await prisma.product.create({ data: body });
+
+    return reply.code(201).send({ product });
+  });
+
+  app.put("/admin/products/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const body = productSchema.partial().parse(request.body);
+    const product = await prisma.product.update({ where: { id }, data: body });
+
+    return { product };
+  });
+
+  app.delete("/admin/products/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    await prisma.$transaction([
+      prisma.favorite.deleteMany({ where: { productId: id } }),
+      prisma.rating.deleteMany({ where: { productId: id } }),
+      prisma.product.delete({ where: { id } })
+    ]);
+
+    return { ok: true };
+  });
+
+  app.get("/admin/purchases", async () => {
+    requireDatabase();
+    const purchases = await prisma.purchase.findMany({
+      include: { user: true, product: true },
+      orderBy: { createdAt: "desc" }
+    });
+
+    return { purchases };
+  });
+
+  app.post("/admin/purchases", async (request, reply) => {
+    requireDatabase();
+    const body = purchaseSchema.parse(request.body);
+    const purchase = await prisma.purchase.create({
+      data: body,
+      include: { user: true, product: true }
+    });
+
+    return reply.code(201).send({ purchase });
+  });
+
+  app.put("/admin/purchases/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const body = purchaseSchema.partial().parse(request.body);
+    const purchase = await prisma.purchase.update({
+      where: { id },
+      data: {
+        ...body,
+        ...(body.status ? { paidAt: body.status === "CONFIRMED" ? new Date() : null } : {})
+      },
+      include: { user: true, product: true }
+    });
+
+    return { purchase };
+  });
+
+  app.delete("/admin/purchases/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    await prisma.purchase.delete({ where: { id } });
+
+    return { ok: true };
+  });
+
+  app.get("/admin/payment-cards", async () => {
+    requireDatabase();
+    const paymentCards = await prisma.paymentCard.findMany({
+      include: { user: true },
+      orderBy: { createdAt: "desc" }
+    });
+
+    return { paymentCards };
+  });
+
+  app.post("/admin/payment-cards", async (request, reply) => {
+    requireDatabase();
+    const body = paymentCardSchema.parse(request.body);
+    if (body.isDefault) {
+      await prisma.paymentCard.updateMany({
+        where: { userId: body.userId },
+        data: { isDefault: false }
+      });
+    }
+    const paymentCard = await prisma.paymentCard.create({
+      data: body,
+      include: { user: true }
+    });
+
+    return reply.code(201).send({ paymentCard });
+  });
+
+  app.delete("/admin/payment-cards/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    await prisma.paymentCard.delete({ where: { id } });
+
+    return { ok: true };
+  });
+
+  app.get("/admin/favorites", async () => {
+    requireDatabase();
+    const favorites = await prisma.favorite.findMany({
+      include: { user: true, product: true },
+      orderBy: { createdAt: "desc" }
+    });
+
+    return { favorites };
+  });
+
+  app.delete("/admin/favorites/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    await prisma.favorite.delete({ where: { id } });
+
+    return { ok: true };
+  });
+
+  app.get("/admin/ratings", async () => {
+    requireDatabase();
+    const ratings = await prisma.rating.findMany({
+      include: { user: true, product: true },
+      orderBy: { createdAt: "desc" }
+    });
+
+    return { ratings };
+  });
+
+  app.delete("/admin/ratings/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    await prisma.rating.delete({ where: { id } });
+
+    return { ok: true };
+  });
+
+  app.get("/admin/contact-messages", async () => {
+    requireDatabase();
+    const contactMessages = await prisma.contactMessage.findMany({
+      orderBy: { createdAt: "desc" }
+    });
+
+    return { contactMessages };
+  });
+
+  app.put("/admin/contact-messages/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const body = contactMessageUpdateSchema.parse(request.body);
+    const contactMessage = await prisma.contactMessage.update({
+      where: { id },
+      data: {
+        ...body,
+        repliedAt: body.status === "RESOLVED" ? new Date() : null
+      }
+    });
+
+    return { contactMessage };
+  });
+
+  app.delete("/admin/contact-messages/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    await prisma.contactMessage.delete({ where: { id } });
+
+    return { ok: true };
+  });
+
+  app.get("/admin/settings", async () => {
+    requireDatabase();
+    const records = await prisma.systemSetting.findMany();
+    const settings = records.reduce<Record<string, string>>((acc, record) => {
+      acc[record.key] = record.value;
+      return acc;
+    }, {});
+
+    return { settings };
+  });
+
+  app.put("/admin/settings", async (request) => {
+    requireDatabase();
+    const body = z.record(z.string(), z.string()).parse(request.body);
+    const entries = Object.entries(body);
+    await prisma.$transaction(
+      entries.map(([key, value]) =>
+        prisma.systemSetting.upsert({
+          where: { key },
+          update: { value },
+          create: { key, value }
+        })
+      )
+    );
+
+    return { ok: true };
   });
 }
