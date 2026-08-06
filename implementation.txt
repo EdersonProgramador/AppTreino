@@ -1,0 +1,176 @@
+# App Treino — Plano de Implementação para Produção (implementation.txt)
+
+Análise completa do sistema (API, Frontend, Infra/Deploy) realizada em 2026-08-05.
+Ao enviar este arquivo de volta, a execução será retomada por fases.
+
+---
+
+## VEREDITO
+
+O sistema é funcional e rico em features, mas NÃO está pronto para produção.
+Existem vulnerabilidades críticas de segurança (autenticação) e problemas de deploy
+que impedem o lançamento. Estimativa: 3-5 dias para lançamento seguro (sem QA).
+
+Caminhos relativos à raiz do monorepo: C:\Users\EDERSON\Desktop\EATech\B7web\AppTreino
+
+---
+
+## P0 — BLOQUEIA PRODUÇÃO (corrigir primeiro)
+
+### Segurança (API)
+
+1. AUTENTICACAO POR EMAIL SEM TOKEN NO /auth/google — apps/api/src/modules/auth.routes.ts:480-603
+   - O endpoint aceita `email` puro sem token Google (idToken ausente -> verifyGoogleIdToken retorna null, nao e erro).
+   - Qualquer pessoa que souber um email loga na conta (ou cria conta) sem provar identidade.
+   - FIX: exigir idToken valido/verificado SEMPRE quando provider GOOGLE; validar aud/iss; usar email SOMENTE do token verificado.
+
+2. JWT SEM EXPIRACAO — apps/api/src/modules/auth.routes.ts:289,372,414,472,518,597 e apps/api/src/modules/checkout.routes.ts:409; registro em apps/api/src/server.ts:59-61
+   - Tokens assinados sem `expiresIn` -> validos para sempre, sem revogacao.
+   - FIX: configurar `sign: { expiresIn: ... }` no @fastify/jwt (ex.: 7d ou 24h) e tratar 401 expirado no frontend.
+
+3. BACKDOOR DE DEV ATIVO EM PRODUCAO — apps/api/src/modules/auth.routes.ts:116-118,195-229,273-320
+   - `admin@app-treino.local` / senha `123456` cria usuario ADMIN.
+   - `roleForDemoEmail` (116-118): qualquer email contendo "admin" vira ADMIN.
+   - Fallback de senha `123456` (212, 306).
+   - FIX: bloquear TODOS os fallbacks de dev quando `NODE_ENV === "production"` (fail closed); exigir senha forte; remover auto-criacao de usuarios @app-treino.local em producao.
+
+4. UPLOADS: MIME CLIENT-CONTROLLED + ARQUIVOS PUBLICOS — apps/api/src/modules/admin.routes.ts:18-37,646-653 e apps/api/src/server.ts:70-73
+   - Confia no mimetype declarado pelo cliente; extensao vem do filename original.
+   - Possivel enviar evil.html como "image/png" e ele e servido publicamente por /uploads (stored XSS).
+   - FIX: validar extensao/conteudo real (magic bytes), forcar `Content-Disposition: attachment` e/ou `X-Content-Type-Options: nosniff`, autenticar /uploads se necessario.
+
+### Dados / Migracao
+
+5. SCHEMA DIVERGENTE DA MIGRACAO — apps/api/prisma/schema.prisma vs apps/api/prisma/migrations/*
+   - `TicketMessage`, `WorkoutFavorite` e enum `WAITING_STUDENT` no schema SEM migration correspondente.
+   - `prisma migrate deploy` falha em producao -> chat de atendimento quebra (500).
+   - FIX: gerar migration (ex.: `npx prisma migrate dev --name add_ticket_messages_workout_favorites_enum`), revisar SQL, commitar migration.
+
+6. ASAAS_API_URL DEFAULT SANDBOX — apps/api/src/env.ts:19 e .github/workflows/deploy-hostgator.yml:105-118
+   - Default e https://api-sandbox.asaas.com/v3 e o workflow de deploy NAO seta a URL de producao.
+   - Pagamentos reais iriam para a sandbox silenciosamente.
+   - FIX: exigir `ASAAS_API_URL` em producao; adicionar `PRODUCTION_ASAAS_API_URL=https://api.asaas.com/v3` aos secrets/var do GitHub.
+
+### Deploy / Infra
+
+7. DOCKERFILE API QUEBRADO E ORFAO — Dockerfile.api:27
+   - 13 deps de workspace aninhadas sob apps/api/node_modules NAO sao copiadas -> imagem nao sobe.
+   - Nenhum workflow builda/push a imagem (infra orfa).
+   - FIX: copiar `apps/api/node_modules` ou rodar `npm ci --omit=dev` no stage runner; adicionar job de build/push ou remover o Dockerfile.
+
+8. DEPLOY HOSTGATOR DESTRUTIVO SEM ROLLBACK — .github/workflows/deploy-hostgator.yml:125-145
+   - Remove dist antes de copiar (125-128), migra DEPOIS do swap (143-144), sem health-check (145).
+   - FIX: parar->backup->swap atomico (dir blue/green), migrar antes do swap, POST /health apos deploy, plano de rollback (dir anterior + dump do DB).
+
+### Frontend
+
+9. SEM ERROR BOUNDARY — apps/web/src/main.tsx:6-9 e apps/web/src/App.tsx:743-938
+   - Qualquer erro de render/hook zera a tela inteira (foi o bug da pagina do aluno).
+   - FIX: criar ErrorBoundary no topo do main.tsx com fallback + botao recarregar.
+
+10. SEM ROUTER — apps/web/src/App.tsx:744,923-936
+    - Refresh volta para a home, botao voltar sai do app, sem deep links.
+    - FIX: router hash-based (minimo) ou react-router; persistir view/section no hash/localStorage.
+
+11. DEMO LOGIN NO UI DE PRODUCAO — apps/web/src/App.tsx:783-800,1327-1334
+    - Botoes "Demo admin/aluno" com credenciais hardcoded (admin@app-treino.local / 123456).
+    - FIX: remover ou gate por `import.meta.env.DEV`.
+
+12. SEM LOGOUT EM 401 — apps/web/src/api.ts:30-101 e apps/web/src/App.tsx:746,756-774
+    - So `/me` limpa o token; qualquer outra chamada com token expirado deixa o usuario preso.
+    - FIX: interceptor central em api.ts que limpa token + redireciona para login em qualquer 401.
+
+---
+
+## P1 — CORRIGIR ANTES DO LANCAMENTO
+
+### Seguranca / Operacao
+- SEM RATE LIMITING no login/registro (brute force). FIX: @fastify/rate-limit no /auth.
+- FORGOT-PASSWORD E NO-OP — auth.routes.ts:605-611 retorna "instrucoes preparadas" sem enviar email. FIX: implementar envio de email (nodemailer/Resend/etc.) ou remover o fluxo ate ter envio.
+- WEBHOOK ASAAS — apps/api/src/modules/asaas.routes.ts:23: token opcional; sem idempotencia/ordenacao; sem tratar REFUNDED/OVERDUE/CANCELLED. FIX: exigir token em producao, guardar eventId processados, tratar todos os status.
+- SEM AUTOMACAO DE ASSINATURA — sem job de expiracao de membership (status fica ACTIVE no DB; acesso checado so na leitura), sem reenvio de cobranca, auto-close de tickets so roda lazy no GET. FIX: node-cron/interval com expiracao de membership + auto-close + sweep de pagamentos OVERDUE.
+- LOGOUT E NO-OP; usuarios desativados mantem JWT valido. FIX: revogar/invalidar token ou checar status do user em cada request autenticado.
+- ERROR HANDLER VAZA MENSAGENS INTERNAS (500 com Prisma/stack) — server.ts:42-44. FIX: logar erro completo no servidor e devolver mensagem generica.
+- SEM GRACEFUL SHUTDOWN nem handlers de unhandledRejection/uncaughtException. FIX: process.on(...) fechando server + prisma.$disconnect.
+- SEM TIMEOUTS em fetches externos (Asaas/Google). FIX: AbortSignal.timeout.
+- trustProxy NAO SETADO -> URLs de arquivos erradas atras de proxy. FIX: app.set("trustProxy", true) atras de proxy.
+- ENV PERMISSIVA — JWT_SECRET tem default "change-me..." (env.ts:16), DATABASE_URL opcional. FIX: fail-fast no boot em producao.
+
+### Deploy / Infra
+- SEM BACKUPS DE DB. FIX: pg_dump agendado + runbook de restore testado.
+- HTTPS/DOMINIO/REVERSE PROXY NAO PROVISIONADOS (README usa placeholder). FIX: provisionar dominio/SSL (cPanel/Let's Encrypt) + nginx reverse proxy.
+- CI FRACO — ci.yml:35-45 (so install/generate/typecheck/build). FIX: testes, eslint/prettier, `prisma migrate diff --exit-code`, `npm audit`.
+- SEM `prisma generate` NO SERVIDOR apos `npm ci --omit=dev` (deploy-hostgator.yml:143-144). FIX: rodar generate no deploy.
+- VITE_GOOGLE_CLIENT_ID NAO CONFIGURADO NO DEPLOY -> login Google morto em producao. FIX: var PRODUCTION_GOOGLE_CLIENT_ID -> build.
+- GITHUB PAGES COM CAMINHOS ABSOLUTOS (favicon/CSS 404 no base /AppTreino/). FIX: base config no vite + caminhos relativos.
+
+### Frontend / UX
+- "JA CONCLUI O PAGAMENTO" NAO REVALIDA — App.tsx:6194 so muda o passo, mostra "Obrigado" sem verificar. FIX: chamar endpoint de status/atualizar membership antes de mostrar thanks.
+- UPLOADS SEM GUARD CLIENT-SIDE (so atributo accept). FIX: checar size/type no front.
+- ASSETS GIGANTES — PNG de 1,8 MB no bundle (um orfao), JS de ~366 KB num arquivo de 7.700 linhas. FIX: remover orfao, otimizar imagens.
+- APP MOBILE E STUB — apps/mobile: API http://localhost:3333 hardcoded e credenciais demo. FIX: definir ou descartar o mobile antes do launch.
+
+---
+
+## P2 — MELHORAR (pos-lancamento)
+
+- Helmet/security headers; healthcheck no Dockerfile; pool do Prisma; indices em colunas quentes; N+1 em getPublishedWorkouts; valores monetarios como float; duplicacao de helpers (requireDatabase, httpError, addCycleDate).
+- Checkout: corrida criando memberships duplicados (checkout.routes.ts:129-188); TOCTOU no email (327-335).
+- Frontend: lazy loading/code-splitting; testes; a11y (aria/foco/contraste); empty states (Eventos, App.tsx:7223-7244); typos ("usanão" App.tsx:972, "J? concluí", "matrculas"); History com bpm/calorias hardcoded (7599-7601); cartoes sem tokenizacao real; substitutos de exercicio sem UI (endpoint morto handleRequestSubstitutes App.tsx:5472-5479); AI plans sem historico.
+
+---
+
+## O QUE JA ESTA OK
+- Senhas com scrypt (auth.ts:18-40); validacao zod; rotas separadas por modulo.
+- Sem segredos commitados (git history verificado); .env gitignored.
+- Chat com polling (8s), notificacoes de atendimento, badge de nao lidas, modal de finalizacao.
+- Painel admin completo; CI roda typecheck+build; monorepo limpo.
+
+---
+
+## ROADMAP SUGERIDO (ordem de execucao)
+
+### Fase 1 — Seguranca critica (~1-2 dias)
+- [ ] Fechar /auth/google (exigir token verificado, aud/iss).
+- [ ] JWT com expiresIn (config no @fastify/jwt).
+- [ ] Bloquear backdoor/dev em NODE_ENV=production (fail closed).
+- [ ] Exigir JWT_SECRET / ASAAS_API_URL / WEB_ORIGIN no boot em producao.
+- [ ] Rate limit no /auth (brute force).
+- [ ] nosniff + validacao server-side de upload (extensao/conteudo).
+
+### Fase 2 — Dados e automacao (~1 dia)
+- [ ] Migration para TicketMessage / WorkoutFavorite / WAITING_STUDENT.
+- [ ] Job de expiracao de membership + sweep de pagamentos OVERDUE.
+- [ ] Job de auto-close de tickets (independente de GET).
+- [ ] Webhook Asaas idempotente com REFUNDED/OVERDUE/CANCELLED.
+
+### Fase 3 — Deploy (~1 dia)
+- [ ] Corrigir Dockerfile.api (copiar deps aninhadas).
+- [ ] Melhorar deploy-hostgator.yml: backup -> swap -> migrate -> /health -> rollback.
+- [ ] CI: migrate-diff, testes, lint, npm audit.
+- [ ] Backup agendado do DB (pg_dump) + runbook de restore.
+- [ ] Setar PRODUCTION_ASAAS_API_URL e PRODUCTION_GOOGLE_CLIENT_ID.
+
+### Fase 4 — Frontend (~1 dia)
+- [ ] ErrorBoundary global.
+- [ ] Router hash-based + persistir secao.
+- [ ] Remover/gatear demo login.
+- [ ] Logout central em 401 (interceptor na api.ts).
+- [ ] Corrigir caminhos absolutos do GitHub Pages.
+- [ ] Revalidar pagamento no "Já concluí o pagamento".
+
+### Fase 5 — Qualidade (continua)
+- [ ] Testes (API e web), lint/prettier.
+- [ ] Code-splitting / lazy loading.
+- [ ] A11y e empty states.
+- [ ] Docs de deploy + monitoramento (Sentry/uptime).
+
+---
+
+## COMANDOS DE VALIDACAO
+- API: `npm run typecheck --workspace @app-treino/api` | `npm run build --workspace @app-treino/api`
+- Web: `npm run typecheck --workspace @app-treino/web` | `npm run build --workspace @app-treino/web`
+- Raiz: `npm run build` | `npm run typecheck`
+- Migrations: `npm run prisma:migrate` (em apps/api: `npx prisma migrate dev`)
+- Gerar schema: `npm run prisma:generate`
+- Servidores dev: API apps/api `npm run dev` (porta 3333) | Web apps/web `npm run dev` (porta 5174)

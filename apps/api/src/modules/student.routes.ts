@@ -854,7 +854,7 @@ export async function registerStudentRoutes(app: FastifyInstance) {
     const endsAt = new Date(Date.UTC(year, month, 1));
     const historyStartsAt = new Date(Date.UTC(year - 1, month - 1, 1));
 
-    const [sessions, attendanceRecords, historySessions, historyAttendanceRecords, userPrograms] = await Promise.all([
+    const [sessions, historySessions, userPrograms] = await Promise.all([
       prisma.workoutSession.findMany({
         where: {
           userId: authUser.id,
@@ -866,18 +866,6 @@ export async function registerStudentRoutes(app: FastifyInstance) {
         },
         orderBy: {
           finishedAt: "asc"
-        }
-      }),
-      prisma.attendanceRecord.findMany({
-        where: {
-          userId: authUser.id,
-          date: {
-            gte: startsAt,
-            lt: endsAt
-          }
-        },
-        orderBy: {
-          date: "asc"
         }
       }),
       prisma.workoutSession.findMany({
@@ -894,21 +882,6 @@ export async function registerStudentRoutes(app: FastifyInstance) {
         },
         orderBy: {
           finishedAt: "asc"
-        }
-      }),
-      prisma.attendanceRecord.findMany({
-        where: {
-          userId: authUser.id,
-          date: {
-            gte: historyStartsAt,
-            lt: endsAt
-          }
-        },
-        select: {
-          date: true
-        },
-        orderBy: {
-          date: "asc"
         }
       }),
       prisma.userProgram.findMany({
@@ -939,14 +912,12 @@ export async function registerStudentRoutes(app: FastifyInstance) {
         completedDateSet.add(session.finishedAt.toISOString().slice(0, 10));
       }
     });
-    attendanceRecords.forEach((record) => completedDateSet.add(record.date.toISOString().slice(0, 10)));
     const historyDateSet = new Set<string>();
     historySessions.forEach((session) => {
       if (session.finishedAt) {
         historyDateSet.add(session.finishedAt.toISOString().slice(0, 10));
       }
     });
-    historyAttendanceRecords.forEach((record) => historyDateSet.add(record.date.toISOString().slice(0, 10)));
     const totalWorkoutDays = userPrograms.reduce((total, assignment) => total + assignment.totalWorkouts, 0);
     const completedWorkoutCount = userPrograms.reduce(
       (total, assignment) => total + Math.min(assignment.completedWorkouts, assignment.totalWorkouts),

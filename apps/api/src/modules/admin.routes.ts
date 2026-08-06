@@ -8,6 +8,7 @@ import { z } from "zod";
 import { hashPassword, requireRole } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
+import { autoCloseStaleTickets, FINALIZE_PROMPT, ticketInclude } from "./ticket.utils.js";
 
 const uploadsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../uploads");
 const uploadGroups = ["lessons", "materials", "images", "audio"] as const;
@@ -202,8 +203,12 @@ const eventSchema = z.object({
 
 const supportTicketUpdateSchema = z.object({
   assignedToId: z.string().optional(),
-  status: z.enum(["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"]).optional(),
+  status: z.enum(["OPEN", "IN_PROGRESS", "WAITING_STUDENT", "RESOLVED", "CLOSED"]).optional(),
   priority: z.enum(["LOW", "NORMAL", "HIGH"]).optional()
+});
+
+const adminTicketMessageSchema = z.object({
+  body: z.string().min(1).max(2000)
 });
 
 const idParamSchema = z.object({
@@ -1946,14 +1951,27 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get("/admin/support-tickets", async () => {
     requireDatabase();
     const tickets = await prisma.supportTicket.findMany({
-      include: {
-        user: true,
-        assignedTo: true
-      },
+      include: ticketInclude,
       orderBy: {
         updatedAt: "desc"
       }
     });
+
+    await autoCloseStaleTickets(prisma, tickets.map((ticket) => ticket.id));
+
+    if (
+      tickets.some(
+        (ticket) => ticket.status === "OPEN" || ticket.status === "IN_PROGRESS" || ticket.status === "WAITING_STUDENT"
+      )
+    ) {
+      const refreshed = await prisma.supportTicket.findMany({
+        include: ticketInclude,
+        orderBy: {
+          updatedAt: "desc"
+        }
+      });
+      return { tickets: refreshed };
+    }
 
     return { tickets };
   });
@@ -1968,10 +1986,69 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         ...body,
         assignedToId: body.assignedToId || null
       },
-      include: {
-        user: true,
-        assignedTo: true
-      }
+      include: ticketInclude
+    });
+
+    return { ticket };
+  });
+
+  app.post("/admin/support-tickets/:id/messages", async (request, reply) => {
+    requireDatabase();
+    const authUser = await requireRole(app, request, "ADMIN");
+    const { id } = idParamSchema.parse(request.params);
+    const body = adminTicketMessageSchema.parse(request.body);
+
+    const ticket = await prisma.supportTicket.update({
+      where: { id },
+      data: {
+        status: "IN_PROGRESS",
+        assignedToId: authUser.id,
+        messages: {
+          create: {
+            senderId: authUser.id,
+            senderType: "ADMIN",
+            body: body.body
+          }
+        }
+      },
+      include: ticketInclude
+    });
+
+    return { ticket };
+  });
+
+  app.post("/admin/support-tickets/:id/finalize", async (request) => {
+    requireDatabase();
+    const authUser = await requireRole(app, request, "ADMIN");
+    const { id } = idParamSchema.parse(request.params);
+
+    const ticket = await prisma.supportTicket.update({
+      where: { id },
+      data: {
+        status: "WAITING_STUDENT",
+        assignedToId: authUser.id,
+        messages: {
+          create: {
+            senderId: authUser.id,
+            senderType: "ADMIN",
+            body: FINALIZE_PROMPT
+          }
+        }
+      },
+      include: ticketInclude
+    });
+
+    return { ticket };
+  });
+
+  app.post("/admin/support-tickets/:id/close", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+
+    const ticket = await prisma.supportTicket.update({
+      where: { id },
+      data: { status: "CLOSED" },
+      include: ticketInclude
     });
 
     return { ticket };

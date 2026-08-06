@@ -375,8 +375,22 @@ model SupportTicket {
   priority     TicketPriority @default(NORMAL)
   createdAt    DateTime       @default(now()) @map("created_at")
   updatedAt    DateTime       @updatedAt @map("updated_at")
+  messages     TicketMessage[]
 
   @@map("support_tickets")
+}
+
+model TicketMessage {
+  id         String         @id @default(cuid())
+  ticketId   String         @map("ticket_id")
+  senderId   String?        @map("sender_id")
+  senderType String         @map("sender_type")
+  body       String
+  createdAt  DateTime       @default(now()) @map("created_at")
+  ticket     SupportTicket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_messages")
 }
 
 model AiWorkoutPlan {
@@ -509,6 +523,7 @@ enum TicketCategory {
 enum TicketStatus {
   OPEN
   IN_PROGRESS
+  WAITING_STUDENT
   RESOLVED
   CLOSED
 

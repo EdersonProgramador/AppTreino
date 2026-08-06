@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
+import { autoCloseStaleTickets, ticketInclude } from "./ticket.utils.js";
 
 const eventRegistrationSchema = z.object({
   eventId: z.string().min(1)
@@ -13,6 +14,14 @@ const supportTicketSchema = z.object({
   message: z.string().min(8),
   category: z.enum(["GENERAL", "WORKOUT", "PAYMENT", "TECHNICAL"]).default("GENERAL"),
   priority: z.enum(["LOW", "NORMAL", "HIGH"]).default("NORMAL")
+});
+
+const ticketMessageSchema = z.object({
+  body: z.string().min(1).max(2000)
+});
+
+const ticketIdParamSchema = z.object({
+  id: z.string().min(1)
 });
 
 const aiWorkoutRequestSchema = z.object({
@@ -420,9 +429,9 @@ export async function registerUserRoutes(app: FastifyInstance) {
 
   app.get("/user/notifications", async (request) => {
     requireDatabase();
-    await requireAuth(app, request);
+    const user = await requireAuth(app, request);
 
-    const [programs, events, workouts] = await Promise.all([
+    const [programs, events, workouts, tickets] = await Promise.all([
       prisma.program.findMany({
         where: {
           status: "PUBLISHED",
@@ -447,10 +456,58 @@ export async function registerUserRoutes(app: FastifyInstance) {
           createdAt: "desc"
         },
         take: 10
+      }),
+      prisma.supportTicket.findMany({
+        where: {
+          userId: user.id
+        },
+        orderBy: {
+          updatedAt: "desc"
+        },
+        include: {
+          messages: {
+            orderBy: {
+              createdAt: "desc"
+            },
+            take: 1
+          }
+        }
       })
     ]);
 
+    const supportNotifications = tickets
+      .map((ticket) => {
+        const lastMessage = ticket.messages[0];
+        const isActive =
+          ticket.status === "OPEN" || ticket.status === "IN_PROGRESS" || ticket.status === "WAITING_STUDENT";
+
+        if (isActive && lastMessage && lastMessage.senderType === "ADMIN") {
+          return {
+            id: `support-${ticket.id}`,
+            type: "SUPPORT",
+            title: "Nova resposta no seu atendimento",
+            message: ticket.subject,
+            publishedAt: lastMessage.createdAt
+          };
+        }
+
+        const closedSince = new Date().getTime() - new Date(ticket.updatedAt).getTime();
+        if (ticket.status === "CLOSED" && closedSince < 7 * 24 * 60 * 60 * 1000) {
+          return {
+            id: `support-closed-${ticket.id}`,
+            type: "SUPPORT",
+            title: "Atendimento encerrado",
+            message: ticket.subject,
+            publishedAt: ticket.updatedAt
+          };
+        }
+
+        return null;
+      })
+      .filter((notification): notification is NonNullable<typeof notification> => notification !== null);
+
     const notifications = [
+      ...supportNotifications,
       ...programs.map((program) => ({
         id: `program-${program.id}`,
         type: "WORKOUT_PROGRAM",
@@ -659,10 +716,26 @@ export async function registerUserRoutes(app: FastifyInstance) {
       where: {
         userId: user.id
       },
+      include: ticketInclude,
       orderBy: {
         updatedAt: "desc"
       }
     });
+
+    await autoCloseStaleTickets(prisma, tickets.map((ticket) => ticket.id));
+
+    if (tickets.some((ticket) => ticket.status === "OPEN" || ticket.status === "IN_PROGRESS" || ticket.status === "WAITING_STUDENT")) {
+      const refreshed = await prisma.supportTicket.findMany({
+        where: {
+          userId: user.id
+        },
+        include: ticketInclude,
+        orderBy: {
+          updatedAt: "desc"
+        }
+      });
+      return { tickets: refreshed };
+    }
 
     return { tickets };
   });
@@ -674,11 +747,73 @@ export async function registerUserRoutes(app: FastifyInstance) {
     const ticket = await prisma.supportTicket.create({
       data: {
         ...body,
-        userId: user.id
-      }
+        userId: user.id,
+        messages: {
+          create: {
+            senderId: user.id,
+            senderType: "STUDENT",
+            body: body.message
+          }
+        }
+      },
+      include: ticketInclude
     });
 
     return reply.code(201).send({ ticket });
+  });
+
+  app.post("/user/support-tickets/:id/messages", async (request, reply) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const { id } = ticketIdParamSchema.parse(request.params);
+    const body = ticketMessageSchema.parse(request.body);
+
+    const ticket = await prisma.supportTicket.findFirstOrThrow({
+      where: { id, userId: user.id }
+    });
+
+    if (ticket.status === "CLOSED" || ticket.status === "RESOLVED") {
+      return reply.code(409).send({ error: "Atendimento encerrado." });
+    }
+
+    const updatedTicket = await prisma.supportTicket.update({
+      where: { id },
+      data: {
+        status: "OPEN",
+        messages: {
+          create: {
+            senderId: user.id,
+            senderType: "STUDENT",
+            body: body.body
+          }
+        }
+      },
+      include: ticketInclude
+    });
+
+    return { ticket: updatedTicket };
+  });
+
+  app.post("/user/support-tickets/:id/close", async (request, reply) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const { id } = ticketIdParamSchema.parse(request.params);
+
+    const ticket = await prisma.supportTicket.findFirstOrThrow({
+      where: { id, userId: user.id }
+    });
+
+    if (ticket.status === "CLOSED") {
+      return reply.code(409).send({ error: "Atendimento já encerrado." });
+    }
+
+    const updatedTicket = await prisma.supportTicket.update({
+      where: { id },
+      data: { status: "CLOSED" },
+      include: ticketInclude
+    });
+
+    return { ticket: updatedTicket };
   });
 
   app.get("/user/ai-workout-plans", async (request) => {

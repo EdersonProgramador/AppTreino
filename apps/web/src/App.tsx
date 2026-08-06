@@ -27,6 +27,8 @@ import {
   MessageCircle,
   Menu,
   Package,
+  PanelLeftClose,
+  PanelLeftOpen,
   Play,
   QrCode,
   RefreshCw,
@@ -414,7 +416,7 @@ interface PhysicalAssessmentRow {
   hipCm?: number | null;
   notes?: string | null;
   details?: PhysicalAssessmentForm | null;
-  userá: AdminUser;
+  user: AdminUser;
 }
 
 interface PhysicalAssessmentForm {
@@ -471,6 +473,15 @@ interface EventRow {
   registrations?: Array<{ id: string; user: AdminUser }>;
 }
 
+interface TicketMessageRow {
+  id: string;
+  ticketId: string;
+  senderId?: string | null;
+  senderType: "STUDENT" | "ADMIN";
+  body: string;
+  createdAt: string;
+}
+
 interface SupportTicketRow {
   id: string;
   userId: string;
@@ -478,17 +489,18 @@ interface SupportTicketRow {
   subject: string;
   message: string;
   category: "GENERAL" | "WORKOUT" | "PAYMENT" | "TECHNICAL";
-  status: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
+  status: "OPEN" | "IN_PROGRESS" | "WAITING_STUDENT" | "RESOLVED" | "CLOSED";
   priority: "LOW" | "NORMAL" | "HIGH";
   createdAt: string;
   updatedAt: string;
-  userá: AdminUser;
+  user: AdminUser;
   assignedTo?: AdminUser | null;
+  messages: TicketMessageRow[];
 }
 
 interface NotificationRow {
   id: string;
-  type: "WORKOUT_PROGRAM" | "EVENT" | "WORKOUT";
+  type: "WORKOUT_PROGRAM" | "EVENT" | "WORKOUT" | "SUPPORT";
   title: string;
   message: string;
   publishedAt: string;
@@ -515,7 +527,7 @@ interface AiWorkoutPlanRow {
     recommendations: string[];
   };
   createdAt: string;
-  userá: AdminUser;
+  user: AdminUser;
 }
 
 interface ProductRow {
@@ -1411,7 +1423,6 @@ function AdminDashboardOverview({
       | "users"
       | "finance"
       | "programs"
-      | "reports"
       | "settings"
       | "products"
       | "purchases"
@@ -1422,6 +1433,9 @@ function AdminDashboardOverview({
       | "ratings"
   ) => void;
 }) {
+  const scrollToOperations = () => {
+    document.getElementById("admin-operations")?.scrollIntoView({ behavior: "smooth" });
+  };
   const now = useMemo(() => new Date(), [lastUpdatedAt]);
   const currentMonthKey = useMemo(() => `${now.getFullYear()}-${now.getMonth()}`, [now]);
 
@@ -1686,14 +1700,6 @@ function AdminDashboardOverview({
               </span>
               <ArrowUpRight size={16} />
             </button>
-            <button type="button" onClick={() => onNavigate("reports")}>
-              <LineChart size={18} />
-              <span>
-                <strong>Relatórios</strong>
-                <small>Avaliações, eventos e atendimentos</small>
-              </span>
-              <ArrowUpRight size={16} />
-            </button>
           </div>
         </article>
 
@@ -1830,7 +1836,7 @@ function AdminDashboardOverview({
               <div className="data-row ticket-row" key={ticket.id}>
                 <span>
                   <strong>{ticket.subject}</strong>
-                  {ticket.userá?.name ?? "Aluno"} · {ticket.category}
+                  {ticket.user?.name ?? "Aluno"} · {ticket.category}
                 </span>
                 <small className={ticket.priority === "HIGH" ? "dash-badge danger" : "dash-badge"}>
                   {ticket.priority === "HIGH" ? "Prioridade alta" : ticket.priority.toLowerCase()}
@@ -1843,7 +1849,7 @@ function AdminDashboardOverview({
               Nenhum atendimento aberto.
             </div>
           )}
-          <button className="dash-link-button" type="button" onClick={() => onNavigate("reports")}>
+          <button className="dash-link-button" type="button" onClick={scrollToOperations}>
             Ver atendimentos
             <ArrowRight size={15} />
           </button>
@@ -1905,7 +1911,7 @@ function AdminDashboardOverview({
               Nenhum evento agendado.
             </div>
           )}
-          <button className="dash-link-button" type="button" onClick={() => onNavigate("reports")}>
+          <button className="dash-link-button" type="button" onClick={scrollToOperations}>
             Gerenciar eventos
             <ArrowRight size={15} />
           </button>
@@ -1945,6 +1951,234 @@ function AdminDashboardOverview({
   );
 }
 
+function AdminReports({
+  users,
+  payments,
+  assessments,
+  ratings,
+  lastUpdatedAt,
+  loading,
+  onRefresh
+}: {
+  users: AdminUser[];
+  payments: PaymentRow[];
+  assessments: PhysicalAssessmentRow[];
+  ratings: RatingRow[];
+  lastUpdatedAt: Date | null;
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  const now = useMemo(() => new Date(), [lastUpdatedAt]);
+
+  const monthBuckets = useMemo(() => {
+    const buckets: Array<{ key: string; label: string; students: number; assessments: number }> = [];
+
+    for (let offset = 5; offset >= 0; offset -= 1) {
+      const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      buckets.push({
+        key: `${date.getFullYear()}-${date.getMonth()}`,
+        label: date.toLocaleDateString("pt-BR", { month: "short" }),
+        students: 0,
+        assessments: 0
+      });
+    }
+
+    for (const user of users) {
+      if (user.role !== "USER" || !user.createdAt) continue;
+      const date = new Date(user.createdAt);
+      const bucket = buckets.find((item) => item.key === `${date.getFullYear()}-${date.getMonth()}`);
+      if (bucket) bucket.students += 1;
+    }
+
+    for (const assessment of assessments) {
+      const date = new Date(assessment.assessedAt);
+      const bucket = buckets.find((item) => item.key === `${date.getFullYear()}-${date.getMonth()}`);
+      if (bucket) bucket.assessments += 1;
+    }
+
+    return buckets;
+  }, [assessments, now, users]);
+
+  const maxStudents = useMemo(() => Math.max(1, ...monthBuckets.map((bucket) => bucket.students)), [monthBuckets]);
+  const maxAssessments = useMemo(() => Math.max(1, ...monthBuckets.map((bucket) => bucket.assessments)), [monthBuckets]);
+
+  const revenueByPlan = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const payment of payments) {
+      if (payment.status !== "CONFIRMED") continue;
+      const planName = payment.membership?.plan?.name ?? "Sem plano";
+      map.set(planName, (map.get(planName) ?? 0) + payment.amountInCents);
+    }
+    return [...map.entries()]
+      .map(([name, total]) => ({ name, total }))
+      .sort((first, second) => second.total - first.total)
+      .slice(0, 6);
+  }, [payments]);
+  const maxPlanRevenue = useMemo(() => Math.max(1, ...revenueByPlan.map((item) => item.total)), [revenueByPlan]);
+
+  const ratingSummary = useMemo(() => {
+    if (ratings.length === 0) {
+      return {
+        average: null as number | null,
+        count: 0,
+        distribution: [5, 4, 3, 2, 1].map((score) => ({ score, count: 0 })),
+        workoutCount: 0,
+        productCount: 0
+      };
+    }
+    return {
+      average: Math.round((ratings.reduce((sum, rating) => sum + rating.score, 0) / ratings.length) * 10) / 10,
+      count: ratings.length,
+      distribution: [5, 4, 3, 2, 1].map((score) => ({ score, count: ratings.filter((rating) => rating.score === score).length })),
+      workoutCount: ratings.filter((rating) => rating.targetType === "WORKOUT").length,
+      productCount: ratings.filter((rating) => rating.targetType === "PRODUCT").length
+    };
+  }, [ratings]);
+  const maxRatingCount = useMemo(() => Math.max(1, ...ratingSummary.distribution.map((item) => item.count)), [ratingSummary]);
+
+  const formatUpdatedAt = lastUpdatedAt
+    ? lastUpdatedAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    : "—";
+
+  return (
+    <section className="admin-reports" id="admin-reports">
+      <div className="dashboard-heading">
+        <div>
+          <span className="eyebrow">Análise e desempenho</span>
+          <h1>Relatórios</h1>
+        </div>
+        <div className="dashboard-actions">
+          <button className="outline-button compact-button" onClick={onRefresh} disabled={loading}>
+            {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
+            Atualizar
+          </button>
+        </div>
+      </div>
+      <p className="admin-sync-label">
+        {loading ? "Sincronizando dados..." : `Atualizado às ${formatUpdatedAt} · sincronização automática a cada 1 minuto`}
+      </p>
+
+      <section className="admin-dashboard-grid">
+        <article className="table-panel dash-panel dash-panel-wide">
+          <div className="panel-title">
+            <div>
+              <h2>Receita confirmada por plano</h2>
+              <p>Valor dos pagamentos confirmados de cada plano contratado.</p>
+            </div>
+            <span>{revenueByPlan.length} plano(s)</span>
+          </div>
+          {revenueByPlan.length > 0 ? (
+            <div className="dash-bar-chart">
+              {revenueByPlan.map((item) => (
+                <div className="dash-bar-column" key={item.name}>
+                  <div className="dash-bar-track">
+                    <div className="dash-bar-fill" style={{ height: `${Math.round((item.total / maxPlanRevenue) * 100)}%` }} />
+                  </div>
+                  <span>{item.name}</span>
+                  <strong>{formatPriceInBRL(item.total)}</strong>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="dash-empty">
+              <Wallet size={18} />
+              Nenhum pagamento confirmado ainda.
+            </div>
+          )}
+        </article>
+
+        <article className="table-panel dash-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Novos alunos</h2>
+              <p>Cadastros de alunos nos últimos 6 meses.</p>
+            </div>
+            <span>{users.filter((item) => item.role === "USER").length}</span>
+          </div>
+          <div className="dash-bar-chart">
+            {monthBuckets.map((bucket) => (
+              <div className="dash-bar-column" key={bucket.key}>
+                <div className="dash-bar-track">
+                  <div className="dash-bar-fill" style={{ height: `${Math.round((bucket.students / maxStudents) * 100)}%` }} />
+                </div>
+                <span>{bucket.label}</span>
+                <strong>{bucket.students}</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="table-panel dash-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Avaliações físicas</h2>
+              <p>Registros de avaliação realizados por mês.</p>
+            </div>
+            <span>{assessments.length}</span>
+          </div>
+          <div className="dash-bar-chart">
+            {monthBuckets.map((bucket) => (
+              <div className="dash-bar-column" key={bucket.key}>
+                <div className="dash-bar-track">
+                  <div className="dash-bar-fill" style={{ height: `${Math.round((bucket.assessments / maxAssessments) * 100)}%` }} />
+                </div>
+                <span>{bucket.label}</span>
+                <strong>{bucket.assessments}</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      <section className="admin-dashboard-grid">
+        <article className="table-panel dash-panel dash-panel-wide">
+          <div className="panel-title">
+            <div>
+              <h2>Avaliações de alunos</h2>
+              <p>
+                {ratingSummary.count} avaliação(ões) · {ratingSummary.workoutCount} treino(s) · {ratingSummary.productCount} produto(s)
+              </p>
+            </div>
+            <span>{ratingSummary.average !== null ? `Média ${String(ratingSummary.average).replace(".", ",")}` : "Sem notas"}</span>
+          </div>
+          <div className="reports-dist-list">
+            {ratingSummary.distribution.map((item) => (
+              <div className="reports-dist-row" key={item.score}>
+                <span>{item.score} ★</span>
+                <div className="reports-dist-track">
+                  <div className="reports-dist-fill" style={{ width: `${Math.round((item.count / maxRatingCount) * 100)}%` }} />
+                </div>
+                <small>{item.count}</small>
+              </div>
+            ))}
+          </div>
+          {ratings.length > 0 ? (
+            [...ratings]
+              .sort((first, second) => new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime())
+              .slice(0, 5)
+              .map((rating) => (
+                <div className="data-row" key={rating.id}>
+                  <span>
+                    <strong>{rating.user.name}</strong>
+                    {rating.targetType === "WORKOUT" ? "Treino" : rating.product?.name ?? "Produto"}
+                  </span>
+                  <small>
+                    {rating.score} ★ {rating.comment ? ` · ${rating.comment}` : ""}
+                  </small>
+                </div>
+              ))
+          ) : (
+            <div className="dash-empty">
+              <Star size={18} />
+              Nenhuma avaliação registrada ainda.
+            </div>
+          )}
+        </article>
+      </section>
+    </section>
+  );
+}
+
 function AdminView({ token, onLogout }: { token: string | null; onLogout: () => void }) {
   const [adminSection, setAdminSection] = useState<
     | "overview"
@@ -1952,7 +2186,6 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     | "users"
     | "finance"
     | "programs"
-    | "reports"
     | "settings"
     | "products"
     | "purchases"
@@ -1979,6 +2212,9 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const [assessments, setAssessments] = useState<PhysicalAssessmentRow[]>([]);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [tickets, setTickets] = useState<SupportTicketRow[]>([]);
+  const [selectedChatTicketId, setSelectedChatTicketId] = useState<string | null>(null);
+  const [pendingFinalizeTicketId, setPendingFinalizeTicketId] = useState<string | null>(null);
+  const [ticketsReadAt, setTicketsReadAt] = useState<string | null>(() => window.localStorage.getItem("admin-tickets-read-at"));
   const [aiPlans, setAiPlans] = useState<AiWorkoutPlanRow[]>([]);
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [purchases, setPurchases] = useState<PurchaseRow[]>([]);
@@ -2211,6 +2447,16 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   useEffect(() => {
     setUsersPage(1);
   }, [userRoleFilter, userSearch, userStatusFilter]);
+
+  useEffect(() => {
+    if (adminSection !== "contact" || !token) return;
+    const interval = window.setInterval(() => {
+      void apiGet<{ tickets: SupportTicketRow[] }>("/admin/support-tickets", token)
+        .then((response) => setTickets(response.tickets))
+        .catch(() => undefined);
+    }, 8000);
+    return () => window.clearInterval(interval);
+  }, [adminSection, token]);
 
   async function refreshAdminStudentOverview(resources: AdminResource[] = ["users", "summary"]) {
     await Promise.all([loadAdminData(resources), loadAdminStudentOverview()]);
@@ -2710,6 +2956,39 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     }
   }
 
+  async function handleSendTicketMessage(ticketId: string, body: string) {
+    try {
+      await apiPost(`/admin/support-tickets/${ticketId}/messages`, { body }, token);
+      await refreshAdminStudentOverview(["tickets"]);
+    } catch {
+      setFeedback("Não foi possível enviar a resposta.");
+    }
+  }
+
+  function openFinalizeModal(ticketId: string) {
+    setPendingFinalizeTicketId(ticketId);
+  }
+
+  async function confirmFinalizeTicket() {
+    if (!pendingFinalizeTicketId) return;
+    try {
+      await apiPost(`/admin/support-tickets/${pendingFinalizeTicketId}/finalize`, {}, token);
+      setPendingFinalizeTicketId(null);
+      await refreshAdminStudentOverview(["tickets"]);
+    } catch {
+      setFeedback("Não foi possível finalizar a chamada.");
+    }
+  }
+
+  async function handleCloseTicket(ticketId: string) {
+    try {
+      await apiPost(`/admin/support-tickets/${ticketId}/close`, {}, token);
+      await refreshAdminStudentOverview(["tickets"]);
+    } catch {
+      setFeedback("Não foi possível encerrar a chamada.");
+    }
+  }
+
   async function handleDelete(path: string) {
     try {
       await apiDelete(path, token);
@@ -2956,34 +3235,58 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     }
   ];
 
+  const selectedChatTicket = useMemo(
+    () => tickets.find((ticket) => ticket.id === selectedChatTicketId) ?? tickets[0] ?? null,
+    [selectedChatTicketId, tickets]
+  );
+
+  const unreadTicketsCount = useMemo(() => {
+    const since = ticketsReadAt ? new Date(ticketsReadAt) : new Date(0);
+    return tickets.filter((ticket) => {
+      const last = ticket.messages[ticket.messages.length - 1];
+      return Boolean(last && last.senderType === "STUDENT" && new Date(last.createdAt) > since);
+    }).length;
+  }, [tickets, ticketsReadAt]);
+
+  useEffect(() => {
+    if (adminSection !== "contact") return;
+    const now = new Date().toISOString();
+    setTicketsReadAt(now);
+    window.localStorage.setItem("admin-tickets-read-at", now);
+  }, [adminSection]);
+
+  const ticketStatusLabel: Record<SupportTicketRow["status"], string> = {
+    OPEN: "Aguardando resposta",
+    IN_PROGRESS: "Em andamento",
+    WAITING_STUDENT: "Aguardando aluno",
+    RESOLVED: "Resolvido",
+    CLOSED: "Encerrado"
+  };
+
   return (
     <main className={sidebarCollapsed ? "workspace-shell admin-workspace-shell sidebar-collapsed" : "workspace-shell admin-workspace-shell"}>
       <aside className="workspace-sidebar" aria-label="Menu administrativo">
-        <button
-          type="button"
-          className="sidebar-toggle"
-          aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
-          title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
-          onClick={() => setSidebarCollapsed((value) => !value)}
-        >
-          {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-        </button>
         <div className="workspace-sidebar-brand">
           <img src={assetUrl("assets/app-treino-mark.svg")} alt="" aria-hidden="true" />
           <div>
             <strong>App Treino</strong>
             <span>Admin</span>
           </div>
+          <button
+            type="button"
+            className="sidebar-toggle"
+            aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+            title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+            onClick={() => setSidebarCollapsed((value) => !value)}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>
         </div>
         <nav className="workspace-nav">
           <span className="admin-nav-group-label">Principal</span>
           <button className={adminSection === "overview" ? "active" : ""} onClick={() => setAdminSection("overview")}>
             <Home size={18} />
             <span className="sidebar-label">Dashboard</span>
-          </button>
-          <button className={adminSection === "reports" ? "active" : ""} onClick={() => setAdminSection("reports")}>
-            <LineChart size={18} />
-            <span className="sidebar-label">Relatórios</span>
           </button>
 
           <span className="admin-nav-group-label">Conteúdo e membros</span>
@@ -3031,6 +3334,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           <button className={adminSection === "contact" ? "active" : ""} onClick={() => setAdminSection("contact")}>
             <MessageCircle size={18} />
             <span className="sidebar-label">Contato</span>
+            {unreadTicketsCount > 0 && <span className="admin-nav-badge">{unreadTicketsCount}</span>}
           </button>
           <button className={adminSection === "favorites" ? "active" : ""} onClick={() => setAdminSection("favorites")}>
             <Star size={18} />
@@ -3088,28 +3392,39 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       {success && <div className="success-box">{success}</div>}
       {feedback && <div className="error-box">{feedback}</div>}
       {adminSection === "overview" && (
-        <AdminDashboardOverview
-          stats={stats}
-          payments={payments}
-          events={events}
-          tickets={tickets}
-          users={users}
-          memberships={memberships}
-          products={products}
-          purchases={purchases}
-          contactMessages={contactMessages}
-          favorites={favorites}
-          ratings={ratings}
-          systemSettings={systemSettings}
-          lastUpdatedAt={lastUpdatedAt}
-          loading={loading}
-          onRefresh={() => void loadAdminData()}
-          onNavigate={(section) => {
-            setAdminSection(section);
-            if (section === "training") setCmsStep("lessons");
-            if (section === "programs") setCmsStep("publish");
-          }}
-        />
+        <>
+          <AdminDashboardOverview
+            stats={stats}
+            payments={payments}
+            events={events}
+            tickets={tickets}
+            users={users}
+            memberships={memberships}
+            products={products}
+            purchases={purchases}
+            contactMessages={contactMessages}
+            favorites={favorites}
+            ratings={ratings}
+            systemSettings={systemSettings}
+            lastUpdatedAt={lastUpdatedAt}
+            loading={loading}
+            onRefresh={() => void loadAdminData()}
+            onNavigate={(section) => {
+              setAdminSection(section);
+              if (section === "training") setCmsStep("lessons");
+              if (section === "programs") setCmsStep("publish");
+            }}
+          />
+          <AdminReports
+            users={users}
+            payments={payments}
+            assessments={assessments}
+            ratings={ratings}
+            lastUpdatedAt={lastUpdatedAt}
+            loading={loading}
+            onRefresh={() => void loadAdminData()}
+          />
+        </>
       )}
 
       {adminSection === "users" && <section className="admin-grid">
@@ -4075,7 +4390,9 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         </article>
       </section>}
 
-      {adminSection === "reports" && <section className="admin-grid phase-three-grid" id="admin-operations">
+      {adminSection === "overview" && <section className="admin-grid phase-three-grid" id="admin-operations">
+        <h2 className="admin-reports-operations-title">Operações e atendimento</h2>
+        <div className="admin-reports-operations-grid">
         <article className="table-panel">
           <div className="panel-title">
             <h2>Avaliações físicas</h2>
@@ -4108,7 +4425,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           {assessments.slice(0, 8).map((item) => (
             <div className="data-row" key={item.id}>
               <span>
-                <strong>{item.userá.name ?? "Aluno"}</strong>
+                <strong>{item.user?.name ?? "Aluno"}</strong>
                 {new Date(item.assessedAt).toLocaleDateString("pt-BR")} - {item.weightKg ?? "-"} kg
               </span>
               <small>{item.bodyFatPct ? `${item.bodyFatPct}% gordura` : "Sem dobra"}</small>
@@ -4167,7 +4484,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             <div className="data-row ticket-row" key={item.id}>
               <span>
                 <strong>{item.subject}</strong>
-                {item.userá.name ?? "Aluno"} - {item.category} - {item.message}
+                {item.user?.name ?? "Aluno"} - {item.category} - {item.message}
               </span>
               <select
                 aria-label="Status do atendimento"
@@ -4176,6 +4493,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               >
                 <option value="OPEN">Aberto</option>
                 <option value="IN_PROGRESS">Em andamento</option>
+                <option value="WAITING_STUDENT">Aguardando aluno</option>
                 <option value="RESOLVED">Resolvido</option>
                 <option value="CLOSED">Fechado</option>
               </select>
@@ -4195,7 +4513,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           {aiPlans.slice(0, 8).map((item) => (
             <div className="data-row" key={item.id}>
               <span>
-                <strong>{item.userá.name ?? "Aluno"}</strong>
+                <strong>{item.user?.name ?? "Aluno"}</strong>
                 {item.plan.summary}
               </span>
               <small>{item.daysPerWeek}x/sem</small>
@@ -4206,6 +4524,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             </div>
           ))}
         </article>
+        </div>
       </section>}
 
       {adminSection === "products" && <section className="admin-grid phase-three-grid" id="admin-products">
@@ -4459,6 +4778,123 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       </section>}
 
       {adminSection === "contact" && <section className="admin-grid phase-three-grid" id="admin-contact">
+        <article className="table-panel admin-chat-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Chat de atendimento</h2>
+              <p>Dúvidas e solicitações enviadas pelos alunos no painel.</p>
+            </div>
+            <span>{tickets.filter((item) => item.status !== "CLOSED" && item.status !== "RESOLVED").length} ativa(s)</span>
+          </div>
+          {tickets.length > 0 ? (
+            <div className="admin-chat">
+              <div className="admin-chat-list">
+                {[...tickets]
+                  .sort((first, second) => {
+                    const firstActive = first.status !== "CLOSED" && first.status !== "RESOLVED" ? 0 : 1;
+                    const secondActive = second.status !== "CLOSED" && second.status !== "RESOLVED" ? 0 : 1;
+                    if (firstActive !== secondActive) return firstActive - secondActive;
+                    return new Date(second.updatedAt).getTime() - new Date(first.updatedAt).getTime();
+                  })
+                  .slice(0, 30)
+                  .map((ticket) => {
+                    const lastMessage = ticket.messages[ticket.messages.length - 1];
+                    const closed = ticket.status === "CLOSED" || ticket.status === "RESOLVED";
+                    return (
+                    <button
+                      type="button"
+                      key={ticket.id}
+                      className={selectedChatTicket?.id === ticket.id ? "admin-chat-item active" : "admin-chat-item"}
+                      onClick={() => setSelectedChatTicketId(ticket.id)}
+                    >
+                      <span className="admin-chat-item-head">
+                        <strong>{ticket.user?.name ?? "Aluno"}</strong>
+                        <small>{new Date(ticket.updatedAt).toLocaleDateString("pt-BR")}</small>
+                      </span>
+                      <span>{ticket.subject}</span>
+                      <small>{lastMessage ? lastMessage.body : ticket.message}</small>
+                      <em className={closed ? "admin-chat-status closed" : "admin-chat-status"}>
+                        {ticketStatusLabel[ticket.status]}
+                      </em>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="admin-chat-thread">
+                {selectedChatTicket ? (
+                  <>
+                    <div className="admin-chat-header">
+                      <span>
+                        <strong>{selectedChatTicket.user?.name ?? "Aluno"}</strong>
+                        <small>{selectedChatTicket.subject} · {selectedChatTicket.category}</small>
+                      </span>
+                      <em className={selectedChatTicket.status === "CLOSED" || selectedChatTicket.status === "RESOLVED" ? "admin-chat-status closed" : "admin-chat-status"}>
+                        {ticketStatusLabel[selectedChatTicket.status]}
+                      </em>
+                    </div>
+                    <div className="admin-chat-messages">
+                      {selectedChatTicket.messages.length > 0 ? (
+                        selectedChatTicket.messages.map((message) => (
+                          <div key={message.id} className={message.senderType === "ADMIN" ? "admin-chat-msg admin-chat-msg--admin" : "admin-chat-msg"}>
+                            <strong>{message.senderType === "ADMIN" ? "Equipe" : selectedChatTicket.user?.name ?? "Aluno"}</strong>
+                            <p>{message.body}</p>
+                            <small>{new Date(message.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</small>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="admin-chat-placeholder">Sem mensagens ainda.</div>
+                      )}
+                    </div>
+                    {selectedChatTicket.status !== "CLOSED" && selectedChatTicket.status !== "RESOLVED" ? (
+                      <>
+                        {selectedChatTicket.status === "WAITING_STUDENT" && (
+                          <p className="admin-chat-hint">
+                            Perguntamos se há algo a mais em que podemos ajudar. O chat será encerrado automaticamente se o aluno não responder em 24h.
+                          </p>
+                        )}
+                        <form
+                          className="admin-chat-composer"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            const form = event.currentTarget;
+                            const input = form.elements.namedItem("body") as HTMLTextAreaElement;
+                            const value = input.value.trim();
+                            if (!value) return;
+                            void handleSendTicketMessage(selectedChatTicket.id, value);
+                            input.value = "";
+                          }}
+                        >
+                          <textarea name="body" placeholder="Digite a resposta..." required />
+                          <button type="submit" className="outline-button compact-button">Enviar</button>
+                        </form>
+                        <div className="admin-chat-actions">
+                          {selectedChatTicket.status !== "WAITING_STUDENT" && (
+                          <button type="button" className="outline-button compact-button" onClick={() => openFinalizeModal(selectedChatTicket.id)}>
+                            Finalizar chamada
+                          </button>
+                          )}
+                          <button type="button" className="outline-button compact-button admin-chat-danger" onClick={() => void handleCloseTicket(selectedChatTicket.id)}>
+                            Encerrar agora
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="admin-chat-closed">Chamado encerrado.</p>
+                    )}
+                  </>
+                ) : (
+                  <div className="admin-chat-placeholder">Selecione uma conversa para responder.</div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="dash-empty">
+              <MessageCircle size={18} />
+              Nenhuma dúvida enviada pelos alunos ainda.
+            </div>
+          )}
+        </article>
+
         <article className="table-panel">
           <div className="panel-title">
             <div>
@@ -4501,6 +4937,44 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             </div>
           )}
         </article>
+
+        {pendingFinalizeTicketId && (
+          <div className="admin-finalize-modal-backdrop" role="presentation" onClick={() => setPendingFinalizeTicketId(null)}>
+            <section
+              className="admin-finalize-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Finalizar chamada"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="admin-finalize-modal-header">
+                <div>
+                  <span>Enviar mensagem</span>
+                  <strong>Finalizar chamada?</strong>
+                </div>
+                <button className="student-icon-button" aria-label="Fechar" onClick={() => setPendingFinalizeTicketId(null)}>
+                  <Check size={20} />
+                </button>
+              </div>
+              <p className="admin-finalize-modal-text">Antes de encerrar, envie esta mensagem ao aluno:</p>
+              <div className="admin-finalize-modal-bubble">
+                <strong>Equipe App Treino</strong>
+                <p>Há algo a mais em que podemos ajudar?</p>
+              </div>
+              <p className="admin-finalize-modal-hint">
+                O aluno poderá continuar a conversa ou finalizar. Sem resposta em 24h, o chat será encerrado automaticamente.
+              </p>
+              <div className="admin-finalize-modal-actions">
+                <button type="button" className="outline-button compact-button" onClick={() => setPendingFinalizeTicketId(null)}>
+                  Cancelar
+                </button>
+                <button type="button" className="admin-finalize-confirm" onClick={() => void confirmFinalizeTicket()}>
+                  Enviar ao aluno
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
       </section>}
 
       {adminSection === "favorites" && <section className="admin-grid phase-three-grid" id="admin-favorites">
@@ -4688,8 +5162,12 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
   const [assessments, setAssessments] = useState<PhysicalAssessmentRow[]>([]);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [tickets, setTickets] = useState<SupportTicketRow[]>([]);
+  const [selectedStudentTicketId, setSelectedStudentTicketId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationsReadAt, setNotificationsReadAt] = useState<string | null>(() =>
+    window.localStorage.getItem("student-notifications-read-at")
+  );
   const [aiPlans, setAiPlans] = useState<AiWorkoutPlanRow[]>([]);
   const [publicConfig, setPublicConfig] = useState<Record<string, string>>({});
   const [showStudentQr, setShowStudentQr] = useState(false);
@@ -4825,6 +5303,23 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     setSelectedWorkoutModality(null);
   }, [publishedWorkouts]);
 
+  useEffect(() => {
+    if (studentSection !== "support" || !token) return;
+    const interval = window.setInterval(() => {
+      void apiGet<{ tickets: SupportTicketRow[] }>("/user/support-tickets", token)
+        .then((response) => setTickets(response.tickets))
+        .catch(() => undefined);
+    }, 8000);
+    return () => window.clearInterval(interval);
+  }, [studentSection, token]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    const now = new Date().toISOString();
+    setNotificationsReadAt(now);
+    window.localStorage.setItem("student-notifications-read-at", now);
+  }, [notificationsOpen]);
+
   async function handleEventRegistration(eventId: string) {
     try {
       await apiPost("/user/events/register", { eventId }, token);
@@ -4840,7 +5335,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     const data = new FormData(form);
 
     try {
-      await apiPost(
+      const created = await apiPost<{ ticket: SupportTicketRow }>(
         "/user/support-tickets",
         {
           subject: String(data.get("subject") ?? ""),
@@ -4850,9 +5345,28 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
         token
       );
       form.reset();
+      setSelectedStudentTicketId(created.ticket.id);
       await loadUserData();
     } catch {
       setError("Não foi possível abrir o atendimento.");
+    }
+  }
+
+  async function handleStudentSendTicketMessage(ticketId: string, body: string) {
+    try {
+      await apiPost(`/user/support-tickets/${ticketId}/messages`, { body }, token);
+      await loadUserData();
+    } catch {
+      setError("Não foi possível enviar a mensagem.");
+    }
+  }
+
+  async function handleStudentCloseTicket(ticketId: string) {
+    try {
+      await apiPost(`/user/support-tickets/${ticketId}/close`, {}, token);
+      await loadUserData();
+    } catch {
+      setError("Não foi possível encerrar o atendimento.");
     }
   }
 
@@ -5564,6 +6078,16 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     [attendance]
   );
 
+  const selectedStudentTicket = useMemo(
+    () => tickets.find((ticket) => ticket.id === selectedStudentTicketId) ?? tickets[0] ?? null,
+    [selectedStudentTicketId, tickets]
+  );
+
+  const unreadNotificationsCount = useMemo(() => {
+    const since = notificationsReadAt ? new Date(notificationsReadAt) : new Date(0);
+    return notifications.filter((notification) => new Date(notification.publishedAt) > since).length;
+  }, [notifications, notificationsReadAt]);
+
   if (!hasStudentAreaAccess) {
     return (
       <main className="workspace-shell">
@@ -5752,6 +6276,14 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     );
   }
 
+  const studentTicketStatusLabel: Record<SupportTicketRow["status"], string> = {
+    OPEN: "Aguardando resposta",
+    IN_PROGRESS: "Em andamento",
+    WAITING_STUDENT: "Aguardando sua resposta",
+    RESOLVED: "Resolvido",
+    CLOSED: "Encerrado"
+  };
+
   return (
     <main className="student-app-shell">
       <section className="student-app-header">
@@ -5771,7 +6303,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
           <div className="student-notification-wrap">
             <button className="student-icon-button" aria-label="Notificações" onClick={() => setNotificationsOpen((open) => !open)}>
               <Bell size={24} />
-              {notifications.length > 0 && <span className="student-notification-badge">{notifications.length}</span>}
+              {unreadNotificationsCount > 0 && <span className="student-notification-badge">{unreadNotificationsCount}</span>}
             </button>
             {notificationsOpen && (
               <section className="student-notification-panel" aria-label="Notificações publicadas">
@@ -6717,6 +7249,88 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
               <h1>Suporte</h1>
               <p>{tickets.length} chamado(s)</p>
             </div>
+
+            {tickets.length > 0 && selectedStudentTicket ? (
+              <>
+                <div className="student-chat-list">
+                  {tickets.slice(0, 8).map((item) => (
+                    <button
+                      type="button"
+                      key={item.id}
+                      className={selectedStudentTicket.id === item.id ? "student-chat-item active" : "student-chat-item"}
+                      onClick={() => setSelectedStudentTicketId(item.id)}
+                    >
+                      <strong>{item.subject}</strong>
+                      <span>{item.category} · {studentTicketStatusLabel[item.status]}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <article className="student-chat">
+                  <div className="student-chat-head">
+                    <strong>{selectedStudentTicket.subject}</strong>
+                    <span>{studentTicketStatusLabel[selectedStudentTicket.status]}</span>
+                  </div>
+                  <div className="student-chat-messages">
+                    {selectedStudentTicket.messages.map((message) => (
+                      <div key={message.id} className={message.senderType === "STUDENT" ? "student-chat-msg student-chat-msg--me" : "student-chat-msg"}>
+                        <strong>{message.senderType === "STUDENT" ? "Você" : "Equipe App Treino"}</strong>
+                        <p>{message.body}</p>
+                        <small>
+                          {new Date(message.createdAt).toLocaleString("pt-BR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit"
+                          })}
+                        </small>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedStudentTicket.status !== "CLOSED" && selectedStudentTicket.status !== "RESOLVED" ? (
+                    <>
+                      {selectedStudentTicket.status === "WAITING_STUDENT" && (
+                        <p className="student-chat-hint">
+                          A equipe perguntou se há algo a mais em que podemos ajudar. Responda para continuar a conversa ou finalize o
+                          atendimento. Sem resposta em 24h, o chat será encerrado automaticamente.
+                        </p>
+                      )}
+                      <form
+                        className="student-chat-composer"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          const form = event.currentTarget;
+                          const input = form.elements.namedItem("body") as HTMLTextAreaElement;
+                          const value = input.value.trim();
+                          if (!value) return;
+                          void handleStudentSendTicketMessage(selectedStudentTicket.id, value);
+                          input.value = "";
+                        }}
+                      >
+                        <textarea name="body" placeholder="Digite uma mensagem" required />
+                        <button type="submit" className="student-green-button">Enviar</button>
+                      </form>
+                      <button
+                        type="button"
+                        className="student-outline-button"
+                        onClick={() => void handleStudentCloseTicket(selectedStudentTicket.id)}
+                      >
+                        Encerrar atendimento
+                      </button>
+                    </>
+                  ) : (
+                    <p className="student-chat-closed">Atendimento encerrado.</p>
+                  )}
+                </article>
+              </>
+            ) : (
+              <div className="student-empty-state">
+                <MessageCircle size={26} />
+                <strong>Nenhum chamado aberto</strong>
+                <span>Envie sua dúvida abaixo para falar com a equipe.</span>
+              </div>
+            )}
+
             <form className="student-form" onSubmit={handleCreateTicket}>
               <input name="subject" placeholder="Assunto" required />
               <select name="category" defaultValue="GENERAL">
@@ -6728,15 +7342,6 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
               <textarea name="message" placeholder="Descreva o que você precisa" required />
               <button className="student-green-button">Abrir atendimento</button>
             </form>
-            {tickets.slice(0, 4).map((item) => (
-              <article className="student-info-card" key={item.id}>
-                <MessageCircle size={22} />
-                <div>
-                  <strong>{item.subject}</strong>
-                  <span>{item.status}</span>
-                </div>
-              </article>
-            ))}
           </section>
         )}
 
