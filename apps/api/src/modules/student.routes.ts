@@ -195,6 +195,7 @@ function mapWorkoutExercise(item: {
     title: string | null;
     name: string | null;
     videoUrl: string | null;
+    audioUrl: string | null;
     materialUrl: string | null;
     notes: string | null;
     targetMuscles: string[];
@@ -204,6 +205,8 @@ function mapWorkoutExercise(item: {
       title: string | null;
       name: string | null;
       videoUrl: string | null;
+      audioUrl: string | null;
+      materialUrl: string | null;
     }>;
   };
 }, latestWeightUsed = 0, restSeconds = 0) {
@@ -211,6 +214,7 @@ function mapWorkoutExercise(item: {
     id: item.exercise.id,
     title: item.exercise.title ?? item.exercise.name ?? "Exercício",
     videoUrl: item.exercise.videoUrl ?? "",
+    audioUrl: item.exercise.audioUrl ?? "",
     materialUrl: item.exercise.materialUrl ?? "",
     description: item.exercise.notes ?? "",
     targetMuscles: item.exercise.targetMuscles,
@@ -223,7 +227,9 @@ function mapWorkoutExercise(item: {
     alternatives: item.exercise.alternatives.map((alternative) => ({
       id: alternative.id,
       title: alternative.title ?? alternative.name ?? "Alternativa",
-      videoUrl: alternative.videoUrl ?? ""
+      videoUrl: alternative.videoUrl ?? "",
+      audioUrl: alternative.audioUrl ?? "",
+      materialUrl: alternative.materialUrl ?? ""
     }))
   };
 }
@@ -979,6 +985,8 @@ export async function registerStudentRoutes(app: FastifyInstance) {
         id: exercise.id,
         title: exercise.title ?? exercise.name ?? "Alternativa",
         videoUrl: exercise.videoUrl ?? "",
+        audioUrl: exercise.audioUrl ?? "",
+        materialUrl: exercise.materialUrl ?? "",
         targetMuscles: exercise.targetMuscles,
         equipmentTags: exercise.equipmentTags
       }))
@@ -1323,5 +1331,18 @@ export async function registerStudentRoutes(app: FastifyInstance) {
     });
 
     return { purchases };
+  });
+
+  app.get("/student/locations", async (request) => {
+    requireDatabase();
+    await requireAuth(app, request);
+    const locations = await prisma.location.findMany({
+      where: {
+        isActive: true
+      },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }]
+    });
+
+    return { locations };
   });
 }

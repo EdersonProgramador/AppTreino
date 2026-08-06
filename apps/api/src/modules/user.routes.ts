@@ -431,7 +431,7 @@ export async function registerUserRoutes(app: FastifyInstance) {
     requireDatabase();
     const user = await requireAuth(app, request);
 
-    const [programs, events, workouts, tickets] = await Promise.all([
+    const [programs, events, workouts, tickets, announcements] = await Promise.all([
       prisma.program.findMany({
         where: {
           status: "PUBLISHED",
@@ -472,6 +472,15 @@ export async function registerUserRoutes(app: FastifyInstance) {
             take: 1
           }
         }
+      }),
+      prisma.announcement.findMany({
+        where: {
+          status: "PUBLISHED"
+        },
+        orderBy: {
+          publishedAt: "desc"
+        },
+        take: 10
       })
     ]);
 
@@ -521,6 +530,13 @@ export async function registerUserRoutes(app: FastifyInstance) {
         title: "Evento publicado",
         message: event.title,
         publishedAt: event.createdAt
+      })),
+      ...announcements.map((announcement) => ({
+        id: `announcement-${announcement.id}`,
+        type: "ANNOUNCEMENT",
+        title: announcement.title,
+        message: announcement.body,
+        publishedAt: announcement.publishedAt ?? announcement.createdAt
       })),
       ...workouts.map((workout) => ({
         id: `workout-${workout.id}`,

@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   Bell,
   Bot,
+  Building2,
   CalendarDays,
   CalendarPlus,
   Check,
@@ -18,23 +19,28 @@ import {
   Flame,
   Headphones,
   Home,
+  Image as ImageIcon,
   LineChart,
   Loader2,
   LockKeyhole,
   LogOut,
   LogIn,
   FileText,
-  MessageCircle,
+  MapPin,
+  Megaphone,
   Menu,
+  MessageCircle,
   Package,
   PanelLeftClose,
   PanelLeftOpen,
+  Phone,
   Play,
   QrCode,
   RefreshCw,
   Ruler,
   Save,
   Search,
+  Send,
   Settings,
   Share2,
   ShieldCheck,
@@ -306,6 +312,45 @@ interface CmsModalityRow {
   sortOrder: number;
 }
 
+interface CmsLocationRow {
+  id: string;
+  name: string;
+  slug: string;
+  type: "ACADEMY" | "UNIT" | "CLUB";
+  description?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  phone?: string | null;
+  imageUrl?: string | null;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+interface CmsAnnouncementRow {
+  id: string;
+  title: string;
+  body: string;
+  status: "DRAFT" | "PUBLISHED";
+  publishedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface StudentLocationRow {
+  id: string;
+  name: string;
+  slug: string;
+  type: "ACADEMY" | "UNIT" | "CLUB";
+  description?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  phone?: string | null;
+  imageUrl?: string | null;
+  sortOrder: number;
+}
+
 interface CmsWorkoutBlockRow {
   id: string;
   title: string;
@@ -500,7 +545,7 @@ interface SupportTicketRow {
 
 interface NotificationRow {
   id: string;
-  type: "WORKOUT_PROGRAM" | "EVENT" | "WORKOUT" | "SUPPORT";
+  type: "WORKOUT_PROGRAM" | "EVENT" | "WORKOUT" | "SUPPORT" | "ANNOUNCEMENT";
   title: string;
   message: string;
   publishedAt: string;
@@ -1341,10 +1386,12 @@ function LoginView({
 type AdminResource =
   | "summary"
   | "users"
+  | "locations"
   | "modalities"
   | "exercises"
   | "workoutBlocks"
   | "programs"
+  | "announcements"
   | "plans"
   | "memberships"
   | "payments"
@@ -1363,10 +1410,12 @@ type AdminResource =
 const ALL_ADMIN_RESOURCES: AdminResource[] = [
   "summary",
   "users",
+  "locations",
   "modalities",
   "exercises",
   "workoutBlocks",
   "programs",
+  "announcements",
   "plans",
   "memberships",
   "payments",
@@ -2203,6 +2252,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   });
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [cmsModalities, setCmsModalities] = useState<CmsModalityRow[]>([]);
+  const [cmsLocations, setCmsLocations] = useState<CmsLocationRow[]>([]);
+  const [cmsAnnouncements, setCmsAnnouncements] = useState<CmsAnnouncementRow[]>([]);
+  const [cmsLocationImagePreview, setCmsLocationImagePreview] = useState<string | null>(null);
+  const cmsLocationImageRef = useRef<HTMLInputElement | null>(null);
   const [cmsExercises, setCmsExercises] = useState<CmsExerciseRow[]>([]);
   const [cmsWorkoutBlocks, setCmsWorkoutBlocks] = useState<CmsWorkoutBlockRow[]>([]);
   const [cmsPrograms, setCmsPrograms] = useState<CmsProgramRow[]>([]);
@@ -2236,7 +2289,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const [success, setSuccess] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [cmsStep, setCmsStep] = useState<"modalities" | "lessons" | "blocks" | "publish">("lessons");
+  const [cmsStep, setCmsStep] = useState<"locations" | "modalities" | "lessons" | "blocks" | "publish">("locations");
 
   function getApiErrorMessage(error: unknown, fallback: string) {
     return error instanceof ApiError ? error.message : fallback;
@@ -2262,6 +2315,16 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       case "modalities": {
         const response = await apiGet<{ modalities: CmsModalityRow[] }>("/admin/cms/modalities", token);
         setCmsModalities(response.modalities);
+        break;
+      }
+      case "locations": {
+        const response = await apiGet<{ locations: CmsLocationRow[] }>("/admin/cms/locations", token);
+        setCmsLocations(response.locations);
+        break;
+      }
+      case "announcements": {
+        const response = await apiGet<{ announcements: CmsAnnouncementRow[] }>("/admin/cms/announcements", token);
+        setCmsAnnouncements(response.announcements);
         break;
       }
       case "exercises": {
@@ -2376,6 +2439,8 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   function resourcesForDeletePath(path: string): AdminResource[] {
     if (path.startsWith("/admin/users/")) return ["users", "summary"];
     if (path.startsWith("/admin/cms/modalities/")) return ["modalities"];
+    if (path.startsWith("/admin/cms/locations/")) return ["locations"];
+    if (path.startsWith("/admin/cms/announcements/")) return ["announcements"];
     if (path.startsWith("/admin/cms/exercises/")) return ["exercises", "workoutBlocks"];
     if (path.startsWith("/admin/cms/workout-blocks/")) return ["workoutBlocks", "programs"];
     if (path.startsWith("/admin/cms/programs/")) return ["programs"];
@@ -2572,6 +2637,101 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     }
   }
 
+  async function handleCreateCmsLocation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+
+    try {
+      const imageUrl = await uploadCmsFile(data.get("locationImage"), "images");
+      await apiPost(
+        "/admin/cms/locations",
+        {
+          name: String(data.get("name") ?? ""),
+          type: String(data.get("type") ?? "ACADEMY"),
+          description: String(data.get("description") ?? ""),
+          address: String(data.get("address") ?? ""),
+          city: String(data.get("city") ?? ""),
+          state: String(data.get("state") ?? ""),
+          phone: String(data.get("phone") ?? ""),
+          imageUrl,
+          isActive: true
+        },
+        token
+      );
+      form.reset();
+      setCmsLocationImagePreview(null);
+      await applyAdminChange(["locations"], "Localidade cadastrada com sucesso.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar a localidade."));
+    }
+  }
+
+  function handleCmsLocationImageChange(file: File | null) {
+    if (!file) {
+      setCmsLocationImagePreview(null);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => setCmsLocationImagePreview(String(reader.result ?? ""));
+    reader.readAsDataURL(file);
+  }
+
+  function handleCmsLocationImageClear() {
+    setCmsLocationImagePreview(null);
+    if (cmsLocationImageRef.current) {
+      cmsLocationImageRef.current.value = "";
+    }
+  }
+
+  async function handleUpdateCmsLocationStatus(id: string, isActive: boolean) {
+    try {
+      await apiPut(`/admin/cms/locations/${id}`, { isActive }, token);
+      await applyAdminChange(["locations"], isActive ? "Localidade reativada." : "Localidade desativada.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar a localidade."));
+    }
+  }
+
+  async function handleCreateCmsAnnouncement(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+
+    try {
+      await apiPost(
+        "/admin/cms/announcements",
+        {
+          title: String(data.get("title") ?? ""),
+          body: String(data.get("body") ?? ""),
+          status: data.get("publishNow") ? "PUBLISHED" : "DRAFT"
+        },
+        token
+      );
+      form.reset();
+      await applyAdminChange(["announcements"], data.get("publishNow") ? "Aviso publicado para os alunos." : "Aviso salvo como rascunho.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar o aviso."));
+    }
+  }
+
+  async function handleToggleCmsAnnouncement(announcement: CmsAnnouncementRow) {
+    try {
+      await apiPut(
+        `/admin/cms/announcements/${announcement.id}`,
+        { status: announcement.status === "PUBLISHED" ? "DRAFT" : "PUBLISHED" },
+        token
+      );
+      await applyAdminChange(
+        ["announcements"],
+        announcement.status === "PUBLISHED" ? "Publicação recolhida (rascunho)." : "Aviso publicado para os alunos."
+      );
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o aviso."));
+    }
+  }
+
   function parseCmsWorkoutBlockExercises(data: FormData) {
     return Array.from({ length: 6 })
       .map((_, index) => {
@@ -2630,7 +2790,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           targetMuscles: parseTagList(data.get("targetMuscles")),
           equipmentTags: parseTagList(data.get("equipmentTags")),
           modalityIds: data.getAll("modalityIds").map((item) => String(item)).filter(Boolean),
-          alternativeIds: parseTagList(data.get("alternativeIds"))
+          alternativeIds: data.getAll("alternativeIds").map((item) => String(item)).filter(Boolean)
         },
         token
       );
@@ -3206,10 +3366,17 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const cmsAssignmentCount = cmsPrograms.reduce((total, item) => total + (item.assignedUsers?.length ?? 0), 0);
   const cmsStepCards = [
     {
-      id: "modalities" as const,
-      icon: Dumbbell,
+      id: "locations" as const,
+      icon: MapPin,
       title: "Localidades",
       text: "Gerencie academias, unidades ou clubes.",
+      metric: `${cmsLocations.filter((item) => item.isActive).length} ativa(s)`
+    },
+    {
+      id: "modalities" as const,
+      icon: Dumbbell,
+      title: "Modalidades",
+      text: "Crie categorias de treino para organizar o catálogo.",
       metric: `${cmsModalities.filter((item) => item.isActive).length} ativa(s)`
     },
     {
@@ -3856,6 +4023,96 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             ))}
           </div>
           <div className="cms-admin-grid cms-studio-grid">
+            {cmsStep === "locations" && <section className="cms-studio-card">
+              <div className="panel-title cms-subtitle">
+                <div>
+                  <h2>Localidades</h2>
+                  <p>Gerencie academias, unidades ou clubes exibidos para os alunos.</p>
+                </div>
+                <span>{cmsLocations.length}</span>
+              </div>
+              <form className="crud-form cms-form" onSubmit={handleCreateCmsLocation}>
+                <label>
+                  Nome
+                  <input name="name" placeholder="Ex.: Academia Centro" required />
+                </label>
+                <label>
+                  Tipo
+                  <select name="type" defaultValue="ACADEMY">
+                    <option value="ACADEMY">Academia</option>
+                    <option value="UNIT">Unidade</option>
+                    <option value="CLUB">Clube</option>
+                  </select>
+                </label>
+                <label className="wide-field">
+                  Descrição
+                  <input name="description" placeholder="Resumo da unidade" />
+                </label>
+                <label className="wide-field">
+                  Endereço
+                  <input name="address" placeholder="Rua, número, bairro" />
+                </label>
+                <label>
+                  Cidade
+                  <input name="city" placeholder="Ex.: São Paulo" />
+                </label>
+                <label>
+                  Estado (UF)
+                  <input name="state" placeholder="Ex.: SP" />
+                </label>
+                <label className="wide-field">
+                  Telefone
+                  <input name="phone" placeholder="(11) 99999-9999" />
+                </label>
+                <label className="cms-upload-field wide-field">
+                  <ImageIcon size={24} />
+                  <strong>Imagem da localidade</strong>
+                  <small>Upload com preview. Envie uma imagem (PNG ou JPG).</small>
+                  <input
+                    name="locationImage"
+                    type="file"
+                    accept="image/*"
+                    aria-label="Selecionar imagem da localidade"
+                    ref={cmsLocationImageRef}
+                    onChange={(event) => handleCmsLocationImageChange(event.target.files?.[0] ?? null)}
+                  />
+                </label>
+                {cmsLocationImagePreview && (
+                  <div className="cms-image-preview wide-field">
+                    <img src={cmsLocationImagePreview} alt="Prévia da imagem da localidade" />
+                    <button type="button" onClick={handleCmsLocationImageClear}>
+                      <Trash2 size={17} />
+                      Remover imagem
+                    </button>
+                  </div>
+                )}
+                <button className="primary-button">
+                  <Save size={18} />
+                  Salvar localidade
+                </button>
+              </form>
+              {cmsLocations.slice(0, 12).map((item) => (
+                <div className="data-row cms-data-row" key={item.id}>
+                  <span>
+                    <strong>{item.name}</strong>
+                    {[item.city, item.state].filter(Boolean).join(" - ") || item.address || item.slug}
+                  </span>
+                  <select
+                    aria-label="Status da localidade"
+                    value={item.isActive ? "ACTIVE" : "INACTIVE"}
+                    onChange={(event) => handleUpdateCmsLocationStatus(item.id, event.target.value === "ACTIVE")}
+                  >
+                    <option value="ACTIVE">Ativa</option>
+                    <option value="INACTIVE">Inativa</option>
+                  </select>
+                  <small>ordem {item.sortOrder}</small>
+                  <button aria-label="Desativar localidade" onClick={() => handleDelete(`/admin/cms/locations/${item.id}`)}>
+                    <Trash2 size={17} />
+                  </button>
+                </div>
+              ))}
+            </section>}
+
             {cmsStep === "modalities" && <section className="cms-studio-card">
               <div className="panel-title cms-subtitle">
                 <div>
@@ -3975,7 +4232,13 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </label>
                 <label className="wide-field">
                   Alternativas
-                  <input name="alternativeIds" placeholder="IDs de exercícios alternativos, separados por vírgula" />
+                  <select name="alternativeIds" multiple>
+                    {cmsExercises.map((exercise) => (
+                      <option value={exercise.id} key={exercise.id}>
+                        {cmsExerciseLabel(exercise)}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <button className="primary-button">
                   <Save size={18} />
@@ -4227,6 +4490,51 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     )}
                   </div>
                 </article>
+              ))}
+            </section>}
+
+            {cmsStep === "publish" && <section className="cms-studio-card">
+              <div className="panel-title cms-subtitle">
+                <div>
+                  <h2>Avisos para alunos</h2>
+                  <p>Publique avisos gerais que aparecem na central de notificações do aluno.</p>
+                </div>
+                <span>{cmsAnnouncements.length}</span>
+              </div>
+              <form className="crud-form cms-form" onSubmit={handleCreateCmsAnnouncement}>
+                <label className="wide-field">
+                  Título do aviso
+                  <input name="title" placeholder="Ex.: Treino liberado no sábado" required />
+                </label>
+                <label className="wide-field">
+                  Mensagem
+                  <textarea name="body" placeholder="Escreva o conteúdo do aviso" required />
+                </label>
+                <label className="cms-publish-check wide-field">
+                  <input name="publishNow" type="checkbox" defaultChecked />
+                  Publicar agora (se desmarcado, vira rascunho)
+                </label>
+                <button className="primary-button">
+                  <Send size={18} />
+                  Salvar aviso
+                </button>
+              </form>
+              {cmsAnnouncements.slice(0, 12).map((item) => (
+                <div className="data-row cms-data-row" key={item.id}>
+                  <span>
+                    <strong>{item.title}</strong>
+                    {item.body}
+                  </span>
+                  <small>
+                    {item.status === "PUBLISHED" ? `Publicado ${item.publishedAt ? new Date(item.publishedAt).toLocaleDateString("pt-BR") : ""}` : "Rascunho"}
+                  </small>
+                  <button aria-label={item.status === "PUBLISHED" ? "Recolher aviso" : "Publicar aviso"} onClick={() => void handleToggleCmsAnnouncement(item)}>
+                    {item.status === "PUBLISHED" ? <Megaphone size={17} /> : <Send size={17} />}
+                  </button>
+                  <button aria-label="Excluir aviso" onClick={() => handleDelete(`/admin/cms/announcements/${item.id}`)}>
+                    <Trash2 size={17} />
+                  </button>
+                </div>
               ))}
             </section>}
           </div>
@@ -5148,6 +5456,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     | "purchases"
     | "favorites"
     | "ratings"
+    | "locations"
   >("home");
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [workout, setWorkout] = useState<WorkoutRow | null>(null);
@@ -5165,6 +5474,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
   const [selectedStudentTicketId, setSelectedStudentTicketId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [studentLocations, setStudentLocations] = useState<StudentLocationRow[]>([]);
   const [notificationsReadAt, setNotificationsReadAt] = useState<string | null>(() =>
     window.localStorage.getItem("student-notifications-read-at")
   );
@@ -5259,7 +5569,8 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
         consistencyResponse,
         productsResponse,
         purchasesResponse,
-        workoutFavoritesResponse
+        workoutFavoritesResponse,
+        locationsResponse
       ] = await Promise.all([
         apiGet<{ workout: WorkoutRow | null }>("/user/workout", token),
         apiGet<{ records: Array<{ id: string; date: string }> }>("/user/attendance", token),
@@ -5271,7 +5582,8 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
         apiGet<WorkoutConsistencyResponse>("/student/workout/consistency", token).catch(() => null),
         apiGet<{ products: ProductRow[] }>("/student/products", token),
         apiGet<{ purchases: PurchaseRow[] }>("/student/purchases", token),
-        apiGet<{ favorites: StudentFavoriteRow[] }>("/student/workout/favorites", token)
+        apiGet<{ favorites: StudentFavoriteRow[] }>("/student/workout/favorites", token),
+        apiGet<{ locations: StudentLocationRow[] }>("/student/locations", token)
       ]);
 
       setWorkout(workoutResponse.workout);
@@ -5280,6 +5592,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
       setEvents(eventsResponse.events);
       setTickets(ticketsResponse.tickets);
       setNotifications(notificationsResponse.notifications);
+      setStudentLocations(locationsResponse.locations);
       setAiPlans(aiPlansResponse.plans);
       setConsistency(consistencyResponse);
       setStudentProducts(productsResponse.products);
@@ -6397,6 +6710,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                 { icon: Ruler, title: "Avaliações", text: "Veja sua evolução", section: "assessments" as const },
                 { icon: CalendarDays, title: "Frequência", text: "Consulte seus acessos", section: "status" as const },
                 { icon: CalendarPlus, title: "Eventos", text: "Veja os eventos", section: "events" as const },
+                { icon: MapPin, title: "Localidades", text: "Nossas unidades e clubes", section: "locations" as const },
                 { icon: Headphones, title: "Atendimento", text: "Histórico de conversas", section: "support" as const },
                 ...(publicConfig["module_products"] !== "false"
                   ? [{ icon: Package, title: "Produtos", text: "Vitrine online", section: "products" as const }]
@@ -6582,11 +6896,13 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
               blockTitle={todayWorkout.block.title}
               exercises={todayWorkout.block.exercises}
               restTimeDefault={todayWorkout.block.restTime}
+              structureType={todayWorkout.block.structureType}
               sessionId={workoutSession?.id ?? null}
               onBack={() => setStudentSection("training")}
               onWorkoutStart={handleBeginWorkoutSession}
               onCancelSession={handleCancelWorkoutSession}
               onExerciseProgressChange={handleExerciseProgressChange}
+              onRequestSubstitutes={handleRequestSubstitutes}
               onWorkoutComplete={handleCompleteWorkoutDay}
             />
           </section>
@@ -7239,6 +7555,47 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                 </button>
               </article>
             ))}
+          </section>
+        )}
+
+        {studentSection === "locations" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Localidades</span>
+              <h1>Nossas unidades e clubes</h1>
+              <p>{studentLocations.length} localidade(s) disponível(is)</p>
+            </div>
+            {studentLocations.length > 0 ? (
+              studentLocations.slice(0, 12).map((item) => (
+                <article className="student-info-card" key={item.id}>
+                  {item.imageUrl ? (
+                    <img className="student-location-thumb" src={mediaUrl(item.imageUrl)} alt={item.name} />
+                  ) : (
+                    <Building2 size={22} />
+                  )}
+                  <div>
+                    <strong>{item.name}</strong>
+                    <span>
+                      {item.type === "ACADEMY" ? "Academia" : item.type === "UNIT" ? "Unidade" : "Clube"}
+                      {item.address ? ` • ${item.address}` : ""}
+                    </span>
+                    <span>
+                      {[item.city, item.state].filter(Boolean).join(" - ")}
+                      {item.phone ? ` • ${item.phone}` : ""}
+                    </span>
+                    {item.description && <small>{item.description}</small>}
+                  </div>
+                </article>
+              ))
+            ) : (
+              <article className="student-info-card">
+                <MapPin size={22} />
+                <div>
+                  <strong>Nenhuma localidade publicada</strong>
+                  <span>As unidades e clubes cadastrados aparecerão aqui.</span>
+                </div>
+              </article>
+            )}
           </section>
         )}
 

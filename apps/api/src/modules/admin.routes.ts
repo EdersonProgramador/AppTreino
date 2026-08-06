@@ -133,6 +133,10 @@ const cmsProgramUpdateSchema = cmsProgramSchema.partial().extend({
   days: cmsProgramSchema.shape.days.optional()
 });
 
+const cmsExerciseUpdateSchema = cmsExerciseSchema.partial();
+
+const cmsWorkoutBlockUpdateSchema = cmsWorkoutBlockSchema.partial();
+
 const cmsModalitySchema = z.object({
   name: z.string().min(2),
   slug: z.string().min(2).optional(),
@@ -148,6 +152,26 @@ const cmsProgramAssignSchema = z.object({
   userIds: z.array(z.string().min(1)).min(1),
   currentDay: z.coerce.number().int().min(1).default(1),
   totalWorkouts: z.coerce.number().int().min(1).optional()
+});
+
+const cmsLocationSchema = z.object({
+  name: z.string().min(2),
+  slug: z.string().min(2).optional(),
+  type: z.enum(["ACADEMY", "UNIT", "CLUB"]).default("ACADEMY"),
+  description: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  phone: z.string().optional(),
+  imageUrl: z.string().url().optional().or(z.literal("")),
+  isActive: z.coerce.boolean().default(true),
+  sortOrder: z.coerce.number().int().min(0).optional()
+});
+
+const cmsAnnouncementSchema = z.object({
+  title: z.string().min(2),
+  body: z.string().min(2),
+  status: z.enum(["DRAFT", "PUBLISHED"]).default("DRAFT")
 });
 
 const planSchema = z.object({
@@ -362,6 +386,38 @@ function buildProgramDescription(description: string, modality?: string) {
     description,
     modality: modality || "Hipertrofia"
   });
+}
+
+async function assertModalitySlugAvailable(slug: string, excludeId?: string) {
+  const existing = await prisma.modality.findFirst({
+    where: {
+      slug,
+      ...(excludeId ? { id: { not: excludeId } } : {})
+    },
+    select: {
+      id: true
+    }
+  });
+
+  if (existing) {
+    throw httpError(409, "Já existe uma modalidade com este nome.");
+  }
+}
+
+async function assertLocationSlugAvailable(slug: string, excludeId?: string) {
+  const existing = await prisma.location.findFirst({
+    where: {
+      slug,
+      ...(excludeId ? { id: { not: excludeId } } : {})
+    },
+    select: {
+      id: true
+    }
+  });
+
+  if (existing) {
+    throw httpError(409, "Já existe uma localidade com este nome.");
+  }
 }
 
 async function assertModalitiesExist(modalityIds: string[]) {
@@ -1101,10 +1157,12 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.post("/admin/cms/modalities", async (request, reply) => {
     requireDatabase();
     const body = cmsModalitySchema.parse(request.body);
+    const slug = body.slug ? slugify(body.slug) : slugify(body.name);
+    await assertModalitySlugAvailable(slug);
     const modality = await prisma.modality.create({
       data: {
         name: body.name,
-        slug: body.slug ? slugify(body.slug) : slugify(body.name),
+        slug,
         description: body.description,
         icon: body.icon,
         imageUrl: body.imageUrl || null,
@@ -1121,6 +1179,11 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
     const body = cmsModalitySchema.partial().parse(request.body);
+
+    if (body.slug) {
+      await assertModalitySlugAvailable(slugify(body.slug), id);
+    }
+
     const modality = await prisma.modality.update({
       where: { id },
       data: {
@@ -1147,6 +1210,140 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         isActive: false
       }
     });
+
+    return { ok: true };
+  });
+
+  app.get("/admin/cms/locations", async () => {
+    requireDatabase();
+    const locations = await prisma.location.findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }]
+    });
+
+    return { locations };
+  });
+
+  app.post("/admin/cms/locations", async (request, reply) => {
+    requireDatabase();
+    const body = cmsLocationSchema.parse(request.body);
+    const slug = body.slug ? slugify(body.slug) : slugify(body.name);
+    await assertLocationSlugAvailable(slug);
+
+    const maxSort = body.sortOrder ?? undefined;
+    const sortOrder =
+      maxSort ??
+      ((await prisma.location.aggregate({ _max: { sortOrder: true } }))._max.sortOrder ?? 0) + 1;
+
+    const location = await prisma.location.create({
+      data: {
+        name: body.name,
+        slug,
+        type: body.type,
+        description: body.description,
+        address: body.address,
+        city: body.city,
+        state: body.state,
+        phone: body.phone,
+        imageUrl: body.imageUrl || null,
+        isActive: body.isActive,
+        sortOrder
+      }
+    });
+
+    return reply.code(201).send({ location });
+  });
+
+  app.put("/admin/cms/locations/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const body = cmsLocationSchema.partial().parse(request.body);
+
+    if (body.slug) {
+      await assertLocationSlugAvailable(slugify(body.slug), id);
+    }
+
+    const location = await prisma.location.update({
+      where: { id },
+      data: {
+        name: body.name,
+        slug: body.slug ? slugify(body.slug) : undefined,
+        type: body.type,
+        description: body.description,
+        address: body.address,
+        city: body.city,
+        state: body.state,
+        phone: body.phone,
+        imageUrl: body.imageUrl === undefined ? undefined : body.imageUrl || null,
+        isActive: body.isActive,
+        sortOrder: body.sortOrder
+      }
+    });
+
+    return { location };
+  });
+
+  app.delete("/admin/cms/locations/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    await prisma.location.update({
+      where: { id },
+      data: {
+        isActive: false
+      }
+    });
+
+    return { ok: true };
+  });
+
+  app.get("/admin/cms/announcements", async () => {
+    requireDatabase();
+    const announcements = await prisma.announcement.findMany({
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+
+    return { announcements };
+  });
+
+  app.post("/admin/cms/announcements", async (request, reply) => {
+    requireDatabase();
+    const body = cmsAnnouncementSchema.parse(request.body);
+    const announcement = await prisma.announcement.create({
+      data: {
+        title: body.title,
+        body: body.body,
+        status: body.status,
+        publishedAt: body.status === "PUBLISHED" ? new Date() : null
+      }
+    });
+
+    return reply.code(201).send({ announcement });
+  });
+
+  app.put("/admin/cms/announcements/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const body = cmsAnnouncementSchema.partial().parse(request.body);
+    const current = await prisma.announcement.findUniqueOrThrow({ where: { id } });
+    const nextStatus = body.status ?? current.status;
+    const announcement = await prisma.announcement.update({
+      where: { id },
+      data: {
+        title: body.title,
+        body: body.body,
+        status: nextStatus,
+        publishedAt: nextStatus === "PUBLISHED" && current.status !== "PUBLISHED" ? new Date() : undefined
+      }
+    });
+
+    return { announcement };
+  });
+
+  app.delete("/admin/cms/announcements/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    await prisma.announcement.delete({ where: { id } });
 
     return { ok: true };
   });
@@ -1178,6 +1375,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     const body = cmsExerciseSchema.parse(request.body);
     await assertModalitiesExist(body.modalityIds);
+    await assertCmsExercisesExist(body.alternativeIds);
     const exercise = await prisma.exercise.create({
       data: {
         title: body.title,
@@ -1214,34 +1412,52 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.put("/admin/cms/exercises/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    const body = cmsExerciseSchema.parse(request.body);
-    await assertModalitiesExist(body.modalityIds);
+    const body = cmsExerciseUpdateSchema.parse(request.body);
+
+    if (body.modalityIds !== undefined) {
+      await assertModalitiesExist(body.modalityIds);
+    }
+
+    if (body.alternativeIds !== undefined) {
+      await assertCmsExercisesExist(body.alternativeIds);
+    }
+
     const current = await prisma.exercise.findUniqueOrThrow({
       where: { id },
       include: { alternatives: true }
     });
     await prisma.$transaction([
-      prisma.exerciseModality.deleteMany({ where: { exerciseId: id } }),
+      ...(body.modalityIds !== undefined
+        ? [prisma.exerciseModality.deleteMany({ where: { exerciseId: id } })]
+        : []),
       prisma.exercise.update({
         where: { id },
         data: {
-          title: body.title,
-          videoUrl: body.videoUrl || null,
-          audioUrl: body.audioUrl || null,
-          materialUrl: body.materialUrl || null,
-          notes: body.notes || null,
-          targetMuscles: body.targetMuscles,
-          equipmentTags: body.equipmentTags,
-          modalityLinks: {
-            create: body.modalityIds.map((modalityId, index) => ({
-              modalityId,
-              principal: index === 0
-            }))
-          },
-          alternatives: {
-            disconnect: current.alternatives.map((item) => ({ id: item.id })),
-            connect: body.alternativeIds.map((alternativeId) => ({ id: alternativeId }))
-          }
+          ...(body.title !== undefined ? { title: body.title } : {}),
+          ...(body.videoUrl !== undefined ? { videoUrl: body.videoUrl || null } : {}),
+          ...(body.audioUrl !== undefined ? { audioUrl: body.audioUrl || null } : {}),
+          ...(body.materialUrl !== undefined ? { materialUrl: body.materialUrl || null } : {}),
+          ...(body.notes !== undefined ? { notes: body.notes || null } : {}),
+          ...(body.targetMuscles !== undefined ? { targetMuscles: body.targetMuscles } : {}),
+          ...(body.equipmentTags !== undefined ? { equipmentTags: body.equipmentTags } : {}),
+          ...(body.modalityIds !== undefined
+            ? {
+                modalityLinks: {
+                  create: body.modalityIds.map((modalityId, index) => ({
+                    modalityId,
+                    principal: index === 0
+                  }))
+                }
+              }
+            : {}),
+          ...(body.alternativeIds !== undefined
+            ? {
+                alternatives: {
+                  disconnect: current.alternatives.map((item) => ({ id: item.id })),
+                  connect: body.alternativeIds.map((alternativeId) => ({ id: alternativeId }))
+                }
+              }
+            : {})
         }
       })
     ]);
@@ -1344,25 +1560,34 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.put("/admin/cms/workout-blocks/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    const body = cmsWorkoutBlockSchema.parse(request.body);
-    await assertCmsExercisesExist(body.exercises.map((exercise) => exercise.exerciseId));
+    const body = cmsWorkoutBlockUpdateSchema.parse(request.body);
+
+    if (body.exercises !== undefined) {
+      await assertCmsExercisesExist(body.exercises.map((exercise) => exercise.exerciseId));
+    }
 
     await prisma.$transaction([
-      prisma.workoutBlockExercise.deleteMany({ where: { workoutBlockId: id } }),
+      ...(body.exercises !== undefined
+        ? [prisma.workoutBlockExercise.deleteMany({ where: { workoutBlockId: id } })]
+        : []),
       prisma.workoutBlock.update({
         where: { id },
         data: {
-          title: body.title,
-          structureType: body.structureType,
-          restTime: body.restTime,
-          exercises: {
-            create: body.exercises.map((exercise) => ({
-              exerciseId: exercise.exerciseId,
-              sets: exercise.sets,
-              repsRange: exercise.repsRange,
-              order: exercise.order
-            }))
-          }
+          ...(body.title !== undefined ? { title: body.title } : {}),
+          ...(body.structureType !== undefined ? { structureType: body.structureType } : {}),
+          ...(body.restTime !== undefined ? { restTime: body.restTime } : {}),
+          ...(body.exercises !== undefined
+            ? {
+                exercises: {
+                  create: body.exercises.map((exercise) => ({
+                    exerciseId: exercise.exerciseId,
+                    sets: exercise.sets,
+                    repsRange: exercise.repsRange,
+                    order: exercise.order
+                  }))
+                }
+              }
+            : {})
         }
       })
     ]);
