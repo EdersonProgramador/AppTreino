@@ -63,6 +63,7 @@ import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState 
 import { formatPriceInBRL, initialPlans, type AuthUser } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "./api";
 import { BRAZILIAN_STATES, CITIES_BY_STATE } from "./brazil-data";
+import { StateCityFields } from "./components/admin/StateCityFields";
 import { LockedOverlay } from "./components/student/LockedOverlay";
 import { WorkoutPlayer, type WorkoutPlayerExercise } from "./components/student/WorkoutPlayer";
 
@@ -3675,8 +3676,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             </select>
             <input name="objective" placeholder="Objetivo" />
             <input name="level" placeholder="Nível" />
-            <input name="city" placeholder="Cidade" />
-            <input name="state" placeholder="UF (ex.: SP)" maxLength={2} />
+            <StateCityFields />
             <select name="locationId" defaultValue="">
               <option value="">Localidade</option>
               {cmsLocations.filter((item) => item.isActive).map((item) => (
@@ -3857,8 +3857,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   </select>
                   <input name="objective" defaultValue={selectedAdminStudent.student.profile?.objective ?? ""} placeholder="Objetivo" />
                   <input name="level" defaultValue={selectedAdminStudent.student.profile?.level ?? ""} placeholder="Nível" />
-                  <input name="city" defaultValue={selectedAdminStudent.student.profile?.city ?? ""} placeholder="Cidade" />
-                  <input name="state" defaultValue={selectedAdminStudent.student.profile?.state ?? ""} placeholder="UF (ex.: SP)" maxLength={2} />
+                  <StateCityFields
+                    stateDefault={selectedAdminStudent.student.profile?.state ?? ""}
+                    cityDefault={selectedAdminStudent.student.profile?.city ?? ""}
+                  />
                   <select name="locationId" defaultValue={selectedAdminStudent.student.profile?.locationId ?? ""}>
                     <option value="">Localidade</option>
                     {cmsLocations.filter((item) => item.isActive).map((item) => (
@@ -4129,14 +4131,11 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   Endereço
                   <input name="address" placeholder="Rua, número, bairro" defaultValue={editingCmsLocation?.address ?? ""} />
                 </label>
-                <label>
-                  Cidade
-                  <input name="city" placeholder="Ex.: São Paulo" defaultValue={editingCmsLocation?.city ?? ""} />
-                </label>
-                <label>
-                  Estado (UF)
-                  <input name="state" placeholder="Ex.: SP" defaultValue={editingCmsLocation?.state ?? ""} />
-                </label>
+                <StateCityFields
+                  stateDefault={editingCmsLocation?.state ?? ""}
+                  cityDefault={editingCmsLocation?.city ?? ""}
+                  withLabels
+                />
                 <label className="wide-field">
                   Telefone
                   <input name="phone" placeholder="(11) 99999-9999" defaultValue={editingCmsLocation?.phone ?? ""} />
