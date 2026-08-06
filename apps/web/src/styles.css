@@ -1538,7 +1538,25 @@ summary:focus-visible {
 }
 
 .cms-data-row {
-  grid-template-columns: minmax(0, 1fr) minmax(100px, auto) repeat(4, auto);
+  grid-template-columns: minmax(0, 1fr) minmax(100px, auto) auto auto;
+}
+
+.cms-data-row.with-thumb {
+  grid-template-columns: 52px minmax(0, 1fr) minmax(100px, auto) auto auto;
+}
+
+.cms-data-row-thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cms-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .cms-data-row span {
@@ -4598,6 +4616,16 @@ summary:focus-visible {
   object-fit: cover;
 }
 
+.runner-video-lesson .runner-focus-media.expanded video {
+  object-fit: contain;
+  background: #000;
+}
+
+.runner-video-lesson .runner-focus-media.expanded {
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+}
+
 .runner-set-track {
   display: flex;
   align-items: center;
@@ -6113,6 +6141,7 @@ summary:focus-visible {
   .crud-form.inline-form,
   .data-row,
   .cms-data-row,
+  .cms-data-row.with-thumb,
   .ticket-row,
   .metric-grid,
   .flow-steps,

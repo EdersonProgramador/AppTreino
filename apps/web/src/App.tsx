@@ -20,6 +20,7 @@ import {
   Headphones,
   Home,
   Image as ImageIcon,
+  ImageOff,
   LineChart,
   Loader2,
   LockKeyhole,
@@ -2266,8 +2267,16 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const [cmsLocations, setCmsLocations] = useState<CmsLocationRow[]>([]);
   const [cmsAnnouncements, setCmsAnnouncements] = useState<CmsAnnouncementRow[]>([]);
   const [cmsLocationImagePreview, setCmsLocationImagePreview] = useState<string | null>(null);
+  const [cmsLocationImageRemove, setCmsLocationImageRemove] = useState(false);
   const cmsLocationImageRef = useRef<HTMLInputElement | null>(null);
   const [editingCmsLocation, setEditingCmsLocation] = useState<CmsLocationRow | null>(null);
+  const [cmsModalityImagePreview, setCmsModalityImagePreview] = useState<string | null>(null);
+  const [cmsModalityImageRemove, setCmsModalityImageRemove] = useState(false);
+  const cmsModalityImageRef = useRef<HTMLInputElement | null>(null);
+  const [editingCmsModality, setEditingCmsModality] = useState<CmsModalityRow | null>(null);
+  const [editingCmsExercise, setEditingCmsExercise] = useState<CmsExerciseRow | null>(null);
+  const cmsLessonFileRef = useRef<HTMLInputElement | null>(null);
+  const cmsMaterialFileRef = useRef<HTMLInputElement | null>(null);
   const [cmsExercises, setCmsExercises] = useState<CmsExerciseRow[]>([]);
   const [cmsWorkoutBlocks, setCmsWorkoutBlocks] = useState<CmsWorkoutBlockRow[]>([]);
   const [cmsPrograms, setCmsPrograms] = useState<CmsProgramRow[]>([]);
@@ -2629,29 +2638,78 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     return exercise.title ?? exercise.name ?? "Exercício";
   }
 
-  async function handleCreateCmsModality(event: FormEvent<HTMLFormElement>) {
+  async function handleSaveCmsModality(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
 
     try {
-      await apiPost(
-        "/admin/cms/modalities",
-        {
-          name: String(data.get("name") ?? ""),
-          description: String(data.get("description") ?? ""),
-          icon: String(data.get("icon") ?? ""),
-          imageUrl: String(data.get("imageUrl") ?? ""),
-          type: String(data.get("type") ?? "EXERCISE"),
-          sortOrder: Number(data.get("sortOrder") ?? cmsModalities.length + 1),
-          isActive: true
-        },
-        token
-      );
+      const uploadedImage = await uploadCmsFile(data.get("modalityImage"), "images");
+      const imageUrl = cmsModalityImageRemove ? "" : (uploadedImage || (editingCmsModality?.imageUrl ?? "") || "");
+      const payload = {
+        name: String(data.get("name") ?? ""),
+        description: String(data.get("description") ?? ""),
+        icon: String(data.get("icon") ?? ""),
+        imageUrl,
+        type: String(data.get("type") ?? "EXERCISE"),
+        sortOrder: Number(data.get("sortOrder") ?? cmsModalities.length + 1),
+        isActive: true
+      };
+
+      if (editingCmsModality) {
+        await apiPut(`/admin/cms/modalities/${editingCmsModality.id}`, payload, token);
+        form.reset();
+        setCmsModalityImagePreview(null);
+        setCmsModalityImageRemove(false);
+        setEditingCmsModality(null);
+        await applyAdminChange(["modalities"], "Modalidade atualizada com sucesso.");
+        return;
+      }
+
+      await apiPost("/admin/cms/modalities", payload, token);
       form.reset();
+      setCmsModalityImagePreview(null);
+      setCmsModalityImageRemove(false);
       await applyAdminChange(["modalities"], "Modalidade cadastrada com sucesso.");
     } catch (error) {
-      setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar a modalidade."));
+      setFeedback(getApiErrorMessage(error, "Não foi possível salvar a modalidade."));
+    }
+  }
+
+  function startEditCmsModality(item: CmsModalityRow) {
+    setEditingCmsModality(item);
+    setCmsModalityImagePreview(null);
+    setCmsModalityImageRemove(false);
+    if (cmsModalityImageRef.current) {
+      cmsModalityImageRef.current.value = "";
+    }
+  }
+
+  function handleCancelCmsModalityEdit() {
+    setEditingCmsModality(null);
+    setCmsModalityImagePreview(null);
+    setCmsModalityImageRemove(false);
+    if (cmsModalityImageRef.current) {
+      cmsModalityImageRef.current.value = "";
+    }
+  }
+
+  function handleCmsModalityImageChange(file: File | null) {
+    if (!file) {
+      setCmsModalityImagePreview(null);
+      return;
+    }
+
+    setCmsModalityImageRemove(false);
+    const reader = new FileReader();
+    reader.onload = () => setCmsModalityImagePreview(String(reader.result ?? ""));
+    reader.readAsDataURL(file);
+  }
+
+  function handleCmsModalityImageClear() {
+    setCmsModalityImagePreview(null);
+    if (cmsModalityImageRef.current) {
+      cmsModalityImageRef.current.value = "";
     }
   }
 
@@ -2662,7 +2720,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
     try {
       const uploadedImage = await uploadCmsFile(data.get("locationImage"), "images");
-      const imageUrl = uploadedImage || (editingCmsLocation?.imageUrl ?? "") || "";
+      const imageUrl = cmsLocationImageRemove ? "" : (uploadedImage || (editingCmsLocation?.imageUrl ?? "") || "");
 
       if (editingCmsLocation) {
         await apiPut(
@@ -2681,6 +2739,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         );
         form.reset();
         setCmsLocationImagePreview(null);
+        setCmsLocationImageRemove(false);
         setEditingCmsLocation(null);
         await applyAdminChange(["locations"], "Localidade atualizada com sucesso.");
         return;
@@ -2703,6 +2762,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       );
       form.reset();
       setCmsLocationImagePreview(null);
+      setCmsLocationImageRemove(false);
       await applyAdminChange(["locations"], "Localidade cadastrada com sucesso.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível salvar a localidade."));
@@ -2712,6 +2772,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   function startEditCmsLocation(item: CmsLocationRow) {
     setEditingCmsLocation(item);
     setCmsLocationImagePreview(null);
+    setCmsLocationImageRemove(false);
     if (cmsLocationImageRef.current) {
       cmsLocationImageRef.current.value = "";
     }
@@ -2720,6 +2781,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   function handleCancelCmsLocationEdit() {
     setEditingCmsLocation(null);
     setCmsLocationImagePreview(null);
+    setCmsLocationImageRemove(false);
     if (cmsLocationImageRef.current) {
       cmsLocationImageRef.current.value = "";
     }
@@ -2731,6 +2793,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       return;
     }
 
+    setCmsLocationImageRemove(false);
     const reader = new FileReader();
     reader.onload = () => setCmsLocationImagePreview(String(reader.result ?? ""));
     reader.readAsDataURL(file);
@@ -2829,7 +2892,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       .filter((day): day is { dayNumber: number; workoutBlockId: string; order: number } => Boolean(day));
   }
 
-  async function handleCreateCmsExercise(event: FormEvent<HTMLFormElement>) {
+  async function handleSaveCmsExercise(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
@@ -2837,25 +2900,51 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     try {
       const uploadedLessonUrl = await uploadCmsFile(data.get("lessonFile"), "lessons");
       const uploadedMaterialUrl = await uploadCmsFile(data.get("materialFile"), "materials");
-      await apiPost(
-        "/admin/cms/exercises",
-        {
-          title: String(data.get("title") ?? ""),
-          videoUrl: uploadedLessonUrl || String(data.get("videoUrl") ?? ""),
-          audioUrl: String(data.get("audioUrl") ?? ""),
-          materialUrl: uploadedMaterialUrl || String(data.get("materialUrl") ?? ""),
-          notes: String(data.get("notes") ?? ""),
-          targetMuscles: parseTagList(data.get("targetMuscles")),
-          equipmentTags: parseTagList(data.get("equipmentTags")),
-          modalityIds: data.getAll("modalityIds").map((item) => String(item)).filter(Boolean),
-          alternativeIds: data.getAll("alternativeIds").map((item) => String(item)).filter(Boolean)
-        },
-        token
-      );
+      const payload = {
+        title: String(data.get("title") ?? ""),
+        videoUrl: uploadedLessonUrl || String(data.get("videoUrl") ?? ""),
+        audioUrl: String(data.get("audioUrl") ?? ""),
+        materialUrl: uploadedMaterialUrl || String(data.get("materialUrl") ?? ""),
+        notes: String(data.get("notes") ?? ""),
+        targetMuscles: parseTagList(data.get("targetMuscles")),
+        equipmentTags: parseTagList(data.get("equipmentTags")),
+        modalityIds: data.getAll("modalityIds").map((item) => String(item)).filter(Boolean),
+        alternativeIds: data.getAll("alternativeIds").map((item) => String(item)).filter(Boolean)
+      };
+
+      if (editingCmsExercise) {
+        await apiPut(`/admin/cms/exercises/${editingCmsExercise.id}`, payload, token);
+        form.reset();
+        setEditingCmsExercise(null);
+        await applyAdminChange(["exercises", "workoutBlocks"], "Aula atualizada com sucesso.");
+        return;
+      }
+
+      await apiPost("/admin/cms/exercises", payload, token);
       form.reset();
       await applyAdminChange(["exercises", "workoutBlocks"], "Aula cadastrada com sucesso.");
     } catch (error) {
-      setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar o exercício CMS."));
+      setFeedback(getApiErrorMessage(error, "Não foi possível salvar o exercício CMS."));
+    }
+  }
+
+  function startEditCmsExercise(item: CmsExerciseRow) {
+    setEditingCmsExercise(item);
+    if (cmsLessonFileRef.current) {
+      cmsLessonFileRef.current.value = "";
+    }
+    if (cmsMaterialFileRef.current) {
+      cmsMaterialFileRef.current.value = "";
+    }
+  }
+
+  function handleCancelCmsExerciseEdit() {
+    setEditingCmsExercise(null);
+    if (cmsLessonFileRef.current) {
+      cmsLessonFileRef.current.value = "";
+    }
+    if (cmsMaterialFileRef.current) {
+      cmsMaterialFileRef.current.value = "";
     }
   }
 
@@ -2933,20 +3022,6 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       await applyAdminChange(["modalities"]);
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível atualizar a modalidade."));
-    }
-  }
-
-  async function handleRenameCmsExercise(exercise: CmsExerciseRow) {
-    const currentTitle = exercise.title ?? exercise.name ?? "";
-    const title = window.prompt("Título da aula", currentTitle)?.trim();
-
-    if (!title || title === currentTitle) return;
-
-    try {
-      await apiPut(`/admin/cms/exercises/${exercise.id}`, { title }, token);
-      await applyAdminChange(["exercises"], "Aula atualizada.");
-    } catch (error) {
-      setFeedback(getApiErrorMessage(error, "Não foi possível editar a aula."));
     }
   }
 
@@ -3440,8 +3515,8 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     {
       id: "lessons" as const,
       icon: UploadCloud,
-      title: "Aulas e materiais",
-      text: "Crie aulas, videos e materiais de apoio.",
+      title: "Exercícios/Aulas e Materiais",
+      text: "Crie, edite e exclua exercícios, aulas e materiais de apoio.",
       metric: `${cmsExercises.length} ativo(s)`
     },
     {
@@ -4161,10 +4236,22 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                       Remover imagem
                     </button>
                   </div>
-                ) : editingCmsLocation?.imageUrl ? (
+                ) : editingCmsLocation?.imageUrl && !cmsLocationImageRemove ? (
                   <div className="cms-image-preview wide-field">
                     <img src={mediaUrl(editingCmsLocation.imageUrl)} alt="Imagem atual da localidade" />
                     <small>Imagem atual (envie uma nova para substituir)</small>
+                    <button type="button" onClick={() => setCmsLocationImageRemove(true)}>
+                      <ImageOff size={17} />
+                      Remover imagem
+                    </button>
+                  </div>
+                ) : editingCmsLocation?.imageUrl ? (
+                  <div className="cms-image-preview wide-field">
+                    <small>Foto marcada para remoção — ela será apagada ao salvar.</small>
+                    <button type="button" onClick={() => setCmsLocationImageRemove(false)}>
+                      <RefreshCw size={17} />
+                      Desfazer remoção
+                    </button>
                   </div>
                 ) : null}
                 <button className="primary-button">
@@ -4178,7 +4265,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 )}
               </form>
               {cmsLocations.slice(0, 12).map((item) => (
-                <div className="data-row cms-data-row" key={item.id}>
+                <div className={`data-row cms-data-row${item.imageUrl ? " with-thumb" : ""}`} key={item.id}>
+                  {item.imageUrl && (
+                    <img className="cms-data-row-thumb" src={mediaUrl(item.imageUrl)} alt={item.name} />
+                  )}
                   <span>
                     <strong>{item.name}</strong>
                     {[item.city, item.state].filter(Boolean).join(" - ") || item.address || item.slug}
@@ -4192,12 +4282,14 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     <option value="INACTIVE">Inativa</option>
                   </select>
                   <small>ordem {item.sortOrder}</small>
-                  <button aria-label="Editar localidade" onClick={() => startEditCmsLocation(item)}>
-                    <Pencil size={17} />
-                  </button>
-                  <button aria-label="Excluir localidade" onClick={() => handleDelete(`/admin/cms/locations/${item.id}`)}>
-                    <Trash2 size={17} />
-                  </button>
+                  <div className="cms-row-actions">
+                    <button aria-label="Editar localidade" onClick={() => startEditCmsLocation(item)}>
+                      <Pencil size={17} />
+                    </button>
+                    <button aria-label="Excluir localidade" onClick={() => handleDelete(`/admin/cms/locations/${item.id}`)}>
+                      <Trash2 size={17} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </section>}
@@ -4210,34 +4302,76 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </div>
                 <span>{cmsModalities.length}</span>
               </div>
-              <form className="crud-form cms-form" onSubmit={handleCreateCmsModality}>
+              <form className="crud-form cms-form" key={editingCmsModality?.id ?? "new"} onSubmit={handleSaveCmsModality}>
                 <label>
                   Nome
-                  <input name="name" placeholder="Ex.: Musculação iniciante" required />
+                  <input name="name" placeholder="Ex.: Musculação iniciante" required defaultValue={editingCmsModality?.name ?? ""} />
                 </label>
                 <label className="wide-field">
                   Descrição curta
-                  <input name="description" placeholder="Resumo para identificar a categoria" />
+                  <input name="description" placeholder="Resumo para identificar a categoria" defaultValue={editingCmsModality?.description ?? ""} />
                 </label>
                 <label>
                   Ícone
-                  <input name="icon" placeholder="Ex.: força, mobilidade" />
+                  <input name="icon" placeholder="Ex.: força, mobilidade" defaultValue={editingCmsModality?.icon ?? ""} />
                 </label>
-                <label>
-                  Capa da modalidade
-                  <input name="imageUrl" type="url" placeholder="https://.../capa.jpg" />
+                <label className="wide-field">
+                  <strong>Capa da modalidade</strong>
+                  <small>Upload com preview. Envie uma imagem (PNG ou JPG).</small>
+                  <input
+                    name="modalityImage"
+                    type="file"
+                    accept="image/*"
+                    aria-label="Selecionar imagem da modalidade"
+                    ref={cmsModalityImageRef}
+                    onChange={(event) => handleCmsModalityImageChange(event.target.files?.[0] ?? null)}
+                  />
                 </label>
+                {cmsModalityImagePreview ? (
+                  <div className="cms-image-preview wide-field">
+                    <img src={cmsModalityImagePreview} alt="Prévia da imagem da modalidade" />
+                    <button type="button" onClick={handleCmsModalityImageClear}>
+                      <Trash2 size={17} />
+                      Remover imagem
+                    </button>
+                  </div>
+                ) : editingCmsModality?.imageUrl && !cmsModalityImageRemove ? (
+                  <div className="cms-image-preview wide-field">
+                    <img src={mediaUrl(editingCmsModality.imageUrl)} alt="Imagem atual da modalidade" />
+                    <small>Imagem atual (envie uma nova para substituir)</small>
+                    <button type="button" onClick={() => setCmsModalityImageRemove(true)}>
+                      <ImageOff size={17} />
+                      Remover imagem
+                    </button>
+                  </div>
+                ) : editingCmsModality?.imageUrl ? (
+                  <div className="cms-image-preview wide-field">
+                    <small>Foto marcada para remoção — ela será apagada ao salvar.</small>
+                    <button type="button" onClick={() => setCmsModalityImageRemove(false)}>
+                      <RefreshCw size={17} />
+                      Desfazer remoção
+                    </button>
+                  </div>
+                ) : null}
                 <label>
                   Ordem
-                  <input name="sortOrder" type="number" min="0" defaultValue={cmsModalities.length + 1} />
+                  <input name="sortOrder" type="number" min="0" defaultValue={editingCmsModality?.sortOrder ?? cmsModalities.length + 1} />
                 </label>
                 <button className="primary-button">
                   <Save size={18} />
-                  Salvar modalidade
+                  {editingCmsModality ? "Salvar alterações" : "Salvar modalidade"}
                 </button>
+                {editingCmsModality && (
+                  <button type="button" className="outline-button" onClick={handleCancelCmsModalityEdit}>
+                    Cancelar edição
+                  </button>
+                )}
               </form>
               {cmsModalities.slice(0, 10).map((item) => (
-                <div className="data-row cms-data-row" key={item.id}>
+                <div className={`data-row cms-data-row${item.imageUrl ? " with-thumb" : ""}`} key={item.id}>
+                  {item.imageUrl && (
+                    <img className="cms-data-row-thumb" src={mediaUrl(item.imageUrl)} alt={item.name} />
+                  )}
                   <span>
                     <strong>{item.name}</strong>
                     {item.description || item.slug}
@@ -4251,9 +4385,14 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     <option value="INACTIVE">Inativa</option>
                   </select>
                   <small>ordem {item.sortOrder}</small>
-                  <button aria-label="Desativar modalidade" onClick={() => handleDelete(`/admin/cms/modalities/${item.id}`)}>
-                    <Trash2 size={17} />
-                  </button>
+                  <div className="cms-row-actions">
+                    <button aria-label="Editar modalidade" onClick={() => startEditCmsModality(item)}>
+                      <Pencil size={17} />
+                    </button>
+                    <button aria-label="Excluir modalidade" onClick={() => handleDelete(`/admin/cms/modalities/${item.id}`)}>
+                      <Trash2 size={17} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </section>}
@@ -4261,55 +4400,55 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             {cmsStep === "lessons" && <section className="cms-studio-card">
               <div className="panel-title cms-subtitle">
                 <div>
-                  <h2>Aulas e materiais</h2>
-                  <p>Cadastre o que o aluno verá: título, vídeo, áudio, materiais e tags de organização.</p>
+                  <h2>Exercícios/Aulas e Materiais</h2>
+                  <p>Aqui serão criados, adicionados, editados e deletados todos os exercícios, aulas e materiais que já estão ativos para os alunos com assinatura ativa no sistema e os que serão adicionados.</p>
                 </div>
                 <span>{cmsExercises.length}</span>
               </div>
-              <form className="crud-form cms-form" onSubmit={handleCreateCmsExercise}>
+              <form className="crud-form cms-form" key={editingCmsExercise?.id ?? "new"} onSubmit={handleSaveCmsExercise}>
                 <label className="wide-field">
                   Título da aula
-                  <input name="title" placeholder="Ex.: Agachamento livre" required />
+                  <input name="title" placeholder="Ex.: Agachamento livre" required defaultValue={editingCmsExercise?.title ?? editingCmsExercise?.name ?? ""} />
                 </label>
                 <label className="cms-upload-field">
                   <UploadCloud size={24} />
                   <strong>Upload de aula</strong>
                   <small>Vídeo, imagem ou GIF. Se preferir, cole uma URL pública no campo abaixo.</small>
-                  <input name="lessonFile" type="file" accept="video/*,image/*,.gif" aria-label="Selecionar mídia da aula" />
+                  <input name="lessonFile" type="file" accept="video/*,image/*,.gif" aria-label="Selecionar mídia da aula" ref={cmsLessonFileRef} />
                 </label>
                 <label className="cms-upload-field">
                   <FileText size={24} />
                   <strong>Arquivo de apoio</strong>
                   <small>PDF, planilha, ficha ou guia complementar para anexar ao conteúdo da aula.</small>
-                  <input name="materialFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,image/*" aria-label="Selecionar material de apoio" />
+                  <input name="materialFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,image/*" aria-label="Selecionar material de apoio" ref={cmsMaterialFileRef} />
                 </label>
                 <label>
                   URL do vídeo, imagem ou GIF
-                  <input name="videoUrl" type="url" placeholder="https://.../aula.mp4" />
+                  <input name="videoUrl" type="text" placeholder="https://.../aula.mp4" defaultValue={editingCmsExercise?.videoUrl ?? ""} />
                 </label>
                 <label>
                   URL do áudio
-                  <input name="audioUrl" type="url" placeholder="https://.../orientacao.mp3" />
+                  <input name="audioUrl" type="text" placeholder="https://.../orientacao.mp3" defaultValue={editingCmsExercise?.audioUrl ?? ""} />
                 </label>
                 <label className="wide-field">
                   URL do material de apoio
-                  <input name="materialUrl" type="url" placeholder="https://.../ficha.pdf" />
+                  <input name="materialUrl" type="text" placeholder="https://.../ficha.pdf" defaultValue={editingCmsExercise?.materialUrl ?? ""} />
                 </label>
                 <label className="wide-field">
                   Descrição e instruções da aula
-                  <textarea name="notes" placeholder="Descreva execução, postura, cuidados e sequência lógica do exercício" />
+                  <textarea name="notes" placeholder="Descreva execução, postura, cuidados e sequência lógica do exercício" defaultValue={editingCmsExercise?.notes ?? ""} />
                 </label>
                 <label>
                   Músculos trabalhados
-                  <input name="targetMuscles" placeholder="Peitoral, tríceps, ombros" />
+                  <input name="targetMuscles" placeholder="Peitoral, tríceps, ombros" defaultValue={(editingCmsExercise?.targetMuscles ?? []).join(", ")} />
                 </label>
                 <label>
                   Equipamentos
-                  <input name="equipmentTags" placeholder="Barra, banco, halteres" />
+                  <input name="equipmentTags" placeholder="Barra, banco, halteres" defaultValue={(editingCmsExercise?.equipmentTags ?? []).join(", ")} />
                 </label>
                 <label className="wide-field">
                   Modalidades
-                  <select name="modalityIds" multiple>
+                  <select name="modalityIds" multiple defaultValue={(editingCmsExercise?.modalityLinks ?? []).map((link) => link.modality.id)}>
                     {cmsModalities
                       .filter((item) => item.isActive)
                       .map((modality) => (
@@ -4321,7 +4460,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </label>
                 <label className="wide-field">
                   Alternativas
-                  <select name="alternativeIds" multiple>
+                  <select name="alternativeIds" multiple defaultValue={(editingCmsExercise?.alternatives ?? []).map((item) => item.id)}>
                     {cmsExercises.map((exercise) => (
                       <option value={exercise.id} key={exercise.id}>
                         {cmsExerciseLabel(exercise)}
@@ -4331,8 +4470,13 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </label>
                 <button className="primary-button">
                   <Save size={18} />
-                  Salvar aula
+                  {editingCmsExercise ? "Salvar alterações" : "Salvar aula"}
                 </button>
+                {editingCmsExercise && (
+                  <button type="button" className="outline-button" onClick={handleCancelCmsExerciseEdit}>
+                    Cancelar edição
+                  </button>
+                )}
               </form>
               {cmsExercises.slice(0, 8).map((item) => (
                 <div className="data-row cms-data-row" key={item.id}>
@@ -4341,12 +4485,14 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     {(item.modalityLinks ?? []).map((link) => link.modality.name).join(", ") || "Sem modalidade"}
                   </span>
                   <small>{item.materialUrl ? "Material anexado" : item.equipmentTags.join(", ") || "Sem equipamento"}</small>
-                  <button aria-label="Editar aula CMS" onClick={() => void handleRenameCmsExercise(item)}>
-                    <Settings size={17} />
-                  </button>
-                  <button aria-label="Excluir exercício CMS" onClick={() => handleDelete(`/admin/cms/exercises/${item.id}`)}>
-                    <Trash2 size={17} />
-                  </button>
+                  <div className="cms-row-actions">
+                    <button aria-label="Editar exercício" onClick={() => startEditCmsExercise(item)}>
+                      <Pencil size={17} />
+                    </button>
+                    <button aria-label="Excluir exercício CMS" onClick={() => handleDelete(`/admin/cms/exercises/${item.id}`)}>
+                      <Trash2 size={17} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </section>}

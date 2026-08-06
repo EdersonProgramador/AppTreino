@@ -74,7 +74,7 @@ interface WorkoutPlayerProps {
   onWorkoutComplete?: () => Promise<void> | void;
 }
 
-type RunnerPanel = "sequence" | "run" | "execution" | "muscles" | "expand" | "load";
+type RunnerPanel = "sequence" | "run" | "execution" | "muscles" | "expand" | "video" | "load";
 type RunnerPhase = "idle" | "active" | "rest";
 
 const structureTypeLabels: Record<WorkoutStructureType, string> = {
@@ -105,8 +105,15 @@ function restPauseTargetReps(repsRange: string) {
   return Math.max(2, parseReps(repsRange) * 2);
 }
 
+function resolveMediaUrl(path?: string | null) {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${import.meta.env.BASE_URL}${path.replace(/^\/+/, "")}`;
+}
+
 function isVideoMedia(url: string) {
-  return /\.(mp4|webm|ogg|mov)(\?|#|$)/i.test(url);
+  if (/^data:video\//i.test(url)) return true;
+  return /\.(mp4|webm|ogg|ogv|mov|m4v|mkv|mpg|mpeg|m3u8|ts)(\?|#|$)/i.test(url);
 }
 
 function mediaAlt(exercise: WorkoutPlayerExercise) {
@@ -129,7 +136,7 @@ function instructionSteps(exercise: WorkoutPlayerExercise) {
 }
 
 function MediaBlock({ exercise, expanded = false, resting = false }: { exercise: WorkoutPlayerExercise; expanded?: boolean; resting?: boolean }) {
-  const mediaUrl = exercise.videoUrl;
+  const mediaUrl = resolveMediaUrl(exercise.videoUrl);
 
   return (
     <div className={`runner-focus-media ${expanded ? "expanded" : ""} ${resting ? "resting" : ""}`}>
@@ -137,7 +144,14 @@ function MediaBlock({ exercise, expanded = false, resting = false }: { exercise:
         <Timer size={74} />
       ) : mediaUrl ? (
         isVideoMedia(mediaUrl) ? (
-          <video src={mediaUrl} controls={expanded} autoPlay={expanded} loop muted playsInline />
+          <video
+            src={mediaUrl}
+            controls={expanded}
+            autoPlay={false}
+            loop={!expanded}
+            muted={!expanded}
+            playsInline
+          />
         ) : (
           <img src={mediaUrl} alt={mediaAlt(exercise)} />
         )
@@ -694,6 +708,7 @@ export function WorkoutPlayer({
 
   const resolvedCurrentExercise = resolveExercise(currentExercise);
   const executionSteps = instructionSteps(resolvedCurrentExercise);
+  const currentVideoUrl = isVideoMedia(resolveMediaUrl(resolvedCurrentExercise.videoUrl)) ? resolveMediaUrl(resolvedCurrentExercise.videoUrl) : "";
 
   return (
     <div className="workout-runner">
@@ -723,7 +738,7 @@ export function WorkoutPlayer({
               const instanceKey = exerciseInstanceKey(exercise);
               const selected = index === currentExerciseIndex;
               const musclesText = (resolvedExercise.targetMuscles ?? []).join(", ") || "Grupo muscular não informado";
-              const mediaUrl = resolvedExercise.videoUrl;
+              const mediaUrl = resolveMediaUrl(resolvedExercise.videoUrl);
 
               return (
                 <article className={`workout-runner-card ${selected ? "selected" : ""}`} key={instanceKey}>
@@ -781,7 +796,7 @@ export function WorkoutPlayer({
             <MediaBlock exercise={resolvedCurrentExercise} resting={phase === "rest"} />
             {resolvedCurrentExercise.audioUrl && (
               <div className="runner-audio">
-                <audio src={resolvedCurrentExercise.audioUrl} controls preload="none" />
+                <audio src={resolveMediaUrl(resolvedCurrentExercise.audioUrl)} controls preload="none" />
               </div>
             )}
             <div className="runner-set-track" aria-label="Séries do exercício">
@@ -846,8 +861,14 @@ export function WorkoutPlayer({
                 <Expand size={18} />
                 <span>Ampliar</span>
               </button>
+              {currentVideoUrl && (
+                <button onClick={() => setPanel("video")}>
+                  <Play size={18} />
+                  <span>Aula em vídeo</span>
+                </button>
+              )}
               {resolvedCurrentExercise.materialUrl && (
-                <button onClick={() => window.open(resolvedCurrentExercise.materialUrl, "_blank", "noopener,noreferrer")}>
+                <button onClick={() => window.open(resolveMediaUrl(resolvedCurrentExercise.materialUrl), "_blank", "noopener,noreferrer")}>
                   <FileText size={18} />
                   <span>Material</span>
                 </button>
@@ -899,14 +920,14 @@ export function WorkoutPlayer({
               <section>
                 <h2>Áudio de orientação</h2>
                 <div className="runner-audio">
-                  <audio src={resolvedCurrentExercise.audioUrl} controls preload="none" />
+                  <audio src={resolveMediaUrl(resolvedCurrentExercise.audioUrl)} controls preload="none" />
                 </div>
               </section>
             )}
             {resolvedCurrentExercise.materialUrl && (
               <section>
                 <h2>Material de apoio</h2>
-                <button className="runner-save-load" onClick={() => window.open(resolvedCurrentExercise.materialUrl, "_blank", "noopener,noreferrer")}>
+                <button className="runner-save-load" onClick={() => window.open(resolveMediaUrl(resolvedCurrentExercise.materialUrl), "_blank", "noopener,noreferrer")}>
                   <FileText size={18} />
                   Abrir material
                 </button>
@@ -956,6 +977,41 @@ export function WorkoutPlayer({
                 ))}
               </ol>
             </section>
+          </article>
+        )}
+
+        {panel === "video" && (
+          <article className="runner-detail-page runner-video-lesson">
+            <button className="runner-back-link" onClick={() => setPanel("run")}>
+              <ChevronLeft size={20} />
+              Voltar ao exercício
+            </button>
+            <header>
+              <h1>{resolvedCurrentExercise.title}</h1>
+              <p>Aula em vídeo do treino — assista com atenção à execução antes de realizar as séries.</p>
+            </header>
+            <MediaBlock exercise={resolvedCurrentExercise} expanded />
+            <section>
+              <h2>Descrição</h2>
+              <p>{resolvedCurrentExercise.description || (muscles.length ? `Exercício focado em ${muscles.join(", ")}.` : "Descrição técnica ainda não cadastrada no CMS.")}</p>
+            </section>
+            {resolvedCurrentExercise.audioUrl && (
+              <section>
+                <h2>Áudio de orientação</h2>
+                <div className="runner-audio">
+                  <audio src={resolveMediaUrl(resolvedCurrentExercise.audioUrl)} controls preload="none" />
+                </div>
+              </section>
+            )}
+            {resolvedCurrentExercise.materialUrl && (
+              <section>
+                <h2>Material de apoio</h2>
+                <button className="runner-save-load" onClick={() => window.open(resolveMediaUrl(resolvedCurrentExercise.materialUrl), "_blank", "noopener,noreferrer")}>
+                  <FileText size={18} />
+                  Abrir material
+                </button>
+              </section>
+            )}
           </article>
         )}
 

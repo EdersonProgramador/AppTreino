@@ -86,11 +86,13 @@ const workoutProgramSchema = workoutSchema.extend({
   assignToActiveStudents: z.coerce.boolean().default(true)
 });
 
+const urlOrRelative = z.union([z.string().url(), z.literal(""), z.string().startsWith("/")]);
+
 const cmsExerciseSchema = z.object({
   title: z.string().min(2),
-  videoUrl: z.string().url().optional().or(z.literal("")),
-  audioUrl: z.string().url().optional().or(z.literal("")),
-  materialUrl: z.string().url().optional().or(z.literal("")),
+  videoUrl: urlOrRelative,
+  audioUrl: urlOrRelative,
+  materialUrl: urlOrRelative,
   notes: z.string().optional(),
   targetMuscles: z.array(z.string().min(1)).default([]),
   equipmentTags: z.array(z.string().min(1)).default([]),
@@ -146,7 +148,7 @@ const cmsModalitySchema = z.object({
   slug: z.string().min(2).optional(),
   description: z.string().optional(),
   icon: z.string().optional(),
-  imageUrl: z.string().url().optional().or(z.literal("")),
+  imageUrl: urlOrRelative,
   type: z.string().default("EXERCISE"),
   isActive: z.coerce.boolean().default(true),
   sortOrder: z.coerce.number().int().min(0).default(0)
@@ -167,7 +169,7 @@ const cmsLocationSchema = z.object({
   city: z.string().optional(),
   state: z.string().optional(),
   phone: z.string().optional(),
-  imageUrl: z.string().url().optional().or(z.literal("")),
+  imageUrl: urlOrRelative,
   isActive: z.coerce.boolean().default(true),
   sortOrder: z.coerce.number().int().min(0).optional()
 });
