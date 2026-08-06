@@ -1,9 +1,22 @@
 import type { FastifyInstance } from "fastify";
+import { createWriteStream, mkdirSync } from "node:fs";
+import { resolve } from "node:path";
+import { pipeline } from "node:stream/promises";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
+import { allowedUploadMimeTypes, publicUploadUrl, safeFileExtension, uploadsDir } from "./admin.routes.js";
 import { autoCloseStaleTickets, ticketInclude } from "./ticket.utils.js";
+
+function normalizeSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
 
 const eventRegistrationSchema = z.object({
   eventId: z.string().min(1)
@@ -301,7 +314,11 @@ export async function registerUserRoutes(app: FastifyInstance) {
         gender: profile.profile?.gender,
         birthDate: profile.profile?.birthDate,
         objective: profile.profile?.objective,
-        level: profile.profile?.level
+        level: profile.profile?.level,
+        city: profile.profile?.city ?? null,
+        state: profile.profile?.state ?? null,
+        avatarUrl: profile.profile?.avatarUrl ?? null,
+        locationId: profile.profile?.locationId ?? null
       }
     };
   });
@@ -313,7 +330,11 @@ export async function registerUserRoutes(app: FastifyInstance) {
     gender: z.enum(["MALE", "FEMALE"]).nullable().optional(),
     birthDate: z.string().optional(),
     objective: z.string().optional(),
-    level: z.string().optional()
+    level: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    avatarUrl: z.string().optional().or(z.literal("")),
+    locationId: z.string().optional().or(z.literal(""))
   });
 
   app.put("/user/profile", async (request) => {
@@ -335,7 +356,11 @@ export async function registerUserRoutes(app: FastifyInstance) {
               gender: body.gender || null,
               birthDate,
               objective: body.objective,
-              level: body.level
+              level: body.level,
+              city: body.city,
+              state: body.state,
+              avatarUrl: body.avatarUrl === undefined ? undefined : body.avatarUrl || null,
+              locationId: body.locationId || null
             },
             update: {
               phone: body.phone,
@@ -343,7 +368,11 @@ export async function registerUserRoutes(app: FastifyInstance) {
               gender: body.gender || null,
               birthDate,
               objective: body.objective,
-              level: body.level
+              level: body.level,
+              city: body.city,
+              state: body.state,
+              avatarUrl: body.avatarUrl === undefined ? undefined : body.avatarUrl || null,
+              locationId: body.locationId || null
             }
           }
         }
@@ -362,9 +391,48 @@ export async function registerUserRoutes(app: FastifyInstance) {
         gender: updated.profile?.gender,
         birthDate: updated.profile?.birthDate,
         objective: updated.profile?.objective,
-        level: updated.profile?.level
+        level: updated.profile?.level,
+        city: updated.profile?.city ?? null,
+        state: updated.profile?.state ?? null,
+        avatarUrl: updated.profile?.avatarUrl ?? null,
+        locationId: updated.profile?.locationId ?? null
       }
     };
+  });
+
+  app.post("/user/uploads", async (request, reply) => {
+    requireDatabase();
+    await requireAuth(app, request);
+    const file = await request.file();
+
+    if (!file) {
+      return reply.code(400).send({ error: "Selecione um arquivo para enviar." });
+    }
+
+    if (!allowedUploadMimeTypes.has(file.mimetype)) {
+      return reply.code(400).send({ error: "Tipo de arquivo não permitido." });
+    }
+
+    const targetDir = resolve(uploadsDir, "images");
+    mkdirSync(targetDir, { recursive: true });
+
+    const extension = safeFileExtension(file.filename);
+    const filename = `${Date.now()}-${randomUUID()}${extension}`;
+    const targetPath = resolve(targetDir, filename);
+
+    await pipeline(file.file, createWriteStream(targetPath));
+
+    const relativePath = `images/${filename}`;
+
+    return reply.code(201).send({
+      file: {
+        originalName: file.filename,
+        filename,
+        mimeType: file.mimetype,
+        url: publicUploadUrl(request, relativePath),
+        path: relativePath
+      }
+    });
   });
 
   app.get("/user/workout", async (request) => {
@@ -430,8 +498,12 @@ export async function registerUserRoutes(app: FastifyInstance) {
   app.get("/user/notifications", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);
+    const userProfile = await prisma.profile.findUnique({
+      where: { userId: user.id },
+      select: { city: true, state: true }
+    });
 
-    const [programs, events, workouts, tickets, announcements] = await Promise.all([
+    const [programs, events, workouts, tickets, announcements, locations] = await Promise.all([
       prisma.program.findMany({
         where: {
           status: "PUBLISHED",
@@ -481,6 +553,18 @@ export async function registerUserRoutes(app: FastifyInstance) {
           publishedAt: "desc"
         },
         take: 10
+      }),
+      prisma.location.findMany({
+        where: {
+          isActive: true,
+          createdAt: {
+            gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+          }
+        },
+        orderBy: {
+          createdAt: "desc"
+        },
+        take: 10
       })
     ]);
 
@@ -515,7 +599,30 @@ export async function registerUserRoutes(app: FastifyInstance) {
       })
       .filter((notification): notification is NonNullable<typeof notification> => notification !== null);
 
+    const profileCity = normalizeSearch(userProfile?.city ?? "");
+    const profileState = normalizeSearch(userProfile?.state ?? "");
+
+    const locationNotifications = locations
+      .filter((location) => {
+        if (!profileCity) return false;
+        const locationCity = normalizeSearch(location.city ?? "");
+        if (!locationCity || locationCity !== profileCity) return false;
+        if (profileState) {
+          const locationState = normalizeSearch(location.state ?? "");
+          if (locationState && locationState !== profileState) return false;
+        }
+        return true;
+      })
+      .map((location) => ({
+        id: `location-${location.id}`,
+        type: "LOCATION",
+        title: "Nova unidade cadastrada",
+        message: location.name,
+        publishedAt: location.createdAt
+      }));
+
     const notifications = [
+      ...locationNotifications,
       ...supportNotifications,
       ...programs.map((program) => ({
         id: `program-${program.id}`,

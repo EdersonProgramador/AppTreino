@@ -304,6 +304,30 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
     }
   });
 
+  const assignedPrograms = await prisma.userProgram.findMany({
+    where: {
+      userId,
+      status: "ACTIVE",
+      program: {
+        status: "PUBLISHED",
+        isActive: true
+      }
+    },
+    select: {
+      program: {
+        include: {
+          days: true
+        }
+      }
+    }
+  });
+
+  for (const { program } of assignedPrograms) {
+    if (program.days.length > 0 && !publishedPrograms.some((publishedProgram) => publishedProgram.id === program.id)) {
+      publishedPrograms.push(program);
+    }
+  }
+
   if (publishedPrograms.length === 0) {
     return [];
   }

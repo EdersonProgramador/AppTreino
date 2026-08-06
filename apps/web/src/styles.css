@@ -2609,9 +2609,17 @@ summary:focus-visible {
   width: 42px;
   height: 42px;
   place-items: center;
+  overflow: hidden;
   border: 3px solid rgba(255, 255, 255, 0.82);
   border-radius: 50%;
   background: rgba(242, 180, 97, 0.16);
+}
+
+.student-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .student-app-header strong {
@@ -3205,6 +3213,21 @@ summary:focus-visible {
   font-size: 18px;
   font-weight: 950;
   text-transform: uppercase;
+}
+
+.student-outline-button {
+  min-height: 58px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 14px;
+  background: transparent;
+  color: #cfc7bb;
+  font-size: 18px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.student-outline-button:disabled {
+  opacity: 0.55;
 }
 
 .student-section-title {
@@ -6949,6 +6972,19 @@ summary:focus-visible {
     #151817;
 }
 
+.student-profile-form.student-profile-locked input:not(:disabled),
+.student-profile-form.student-profile-locked select:not(:disabled) {
+  opacity: 0.78;
+  cursor: not-allowed;
+}
+
+.student-profile-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin: 0 12px 20px;
+}
+
 .student-profile-form label {
   display: grid;
   gap: 7px;
@@ -6982,11 +7018,51 @@ summary:focus-visible {
   padding-right: 36px;
 }
 
-.student-profile-form .student-green-button {
+.student-profile-actions .student-green-button,
+.student-profile-actions .student-outline-button {
   grid-column: 1 / -1;
   min-height: 54px;
   margin-top: 4px;
   font-size: 16px;
+}
+
+.student-profile-form .wide-field {
+  grid-column: 1 / -1;
+}
+
+.student-profile-form .student-avatar-field {
+  align-items: center;
+  justify-items: center;
+  text-align: center;
+}
+
+.student-profile-form .student-avatar-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(8, 9, 11, 0.6);
+}
+
+.student-profile-form .student-avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.student-profile-form .student-avatar-placeholder {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.student-profile-form input[type="file"] {
+  padding: 8px 10px;
+  min-height: 42px;
+  line-height: 1.4;
 }
 
 @media (min-width: 560px) {
@@ -7002,7 +7078,7 @@ summary:focus-visible {
     padding: 18px;
   }
 
-  .student-profile-form .student-green-button {
+  .student-profile-actions .student-green-button {
     min-height: 54px;
   }
 }

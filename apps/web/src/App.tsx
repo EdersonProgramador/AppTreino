@@ -33,6 +33,7 @@ import {
   Package,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
   Phone,
   Play,
   QrCode,
@@ -58,9 +59,10 @@ import {
   Wallet
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { formatPriceInBRL, initialPlans, type AuthUser } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "./api";
+import { BRAZILIAN_STATES, CITIES_BY_STATE } from "./brazil-data";
 import { LockedOverlay } from "./components/student/LockedOverlay";
 import { WorkoutPlayer, type WorkoutPlayerExercise } from "./components/student/WorkoutPlayer";
 
@@ -257,6 +259,10 @@ interface AdminUser {
     document?: string | null;
     objective?: string | null;
     level?: string | null;
+    city?: string | null;
+    state?: string | null;
+    avatarUrl?: string | null;
+    locationId?: string | null;
   } | null;
   memberships?: MembershipRow[];
 }
@@ -436,6 +442,10 @@ interface StudentProfile {
   birthDate?: string | null;
   objective?: string | null;
   level?: string | null;
+  city?: string | null;
+  state?: string | null;
+  avatarUrl?: string | null;
+  locationId?: string | null;
 }
 
 interface PaymentRow {
@@ -545,7 +555,7 @@ interface SupportTicketRow {
 
 interface NotificationRow {
   id: string;
-  type: "WORKOUT_PROGRAM" | "EVENT" | "WORKOUT" | "SUPPORT" | "ANNOUNCEMENT";
+  type: "WORKOUT_PROGRAM" | "EVENT" | "WORKOUT" | "SUPPORT" | "ANNOUNCEMENT" | "LOCATION";
   title: string;
   message: string;
   publishedAt: string;
@@ -2256,6 +2266,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const [cmsAnnouncements, setCmsAnnouncements] = useState<CmsAnnouncementRow[]>([]);
   const [cmsLocationImagePreview, setCmsLocationImagePreview] = useState<string | null>(null);
   const cmsLocationImageRef = useRef<HTMLInputElement | null>(null);
+  const [editingCmsLocation, setEditingCmsLocation] = useState<CmsLocationRow | null>(null);
   const [cmsExercises, setCmsExercises] = useState<CmsExerciseRow[]>([]);
   const [cmsWorkoutBlocks, setCmsWorkoutBlocks] = useState<CmsWorkoutBlockRow[]>([]);
   const [cmsPrograms, setCmsPrograms] = useState<CmsProgramRow[]>([]);
@@ -2542,7 +2553,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           role: String(data.get("role") ?? "USER"),
           gender: String(data.get("gender") ?? ""),
           objective: String(data.get("objective") ?? ""),
-          level: String(data.get("level") ?? "")
+          level: String(data.get("level") ?? ""),
+          city: String(data.get("city") ?? ""),
+          state: String(data.get("state") ?? ""),
+          locationId: String(data.get("locationId") ?? "")
         },
         token
       );
@@ -2578,7 +2592,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           gender: String(data.get("gender") ?? ""),
           objective: String(data.get("objective") ?? ""),
           level: String(data.get("level") ?? ""),
-          status: String(data.get("status") ?? "ACTIVE")
+          city: String(data.get("city") ?? ""),
+          state: String(data.get("state") ?? ""),
+          status: String(data.get("status") ?? "ACTIVE"),
+          locationId: String(data.get("locationId") ?? "")
         },
         token
       );
@@ -2643,7 +2660,31 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     const data = new FormData(form);
 
     try {
-      const imageUrl = await uploadCmsFile(data.get("locationImage"), "images");
+      const uploadedImage = await uploadCmsFile(data.get("locationImage"), "images");
+      const imageUrl = uploadedImage || (editingCmsLocation?.imageUrl ?? "") || "";
+
+      if (editingCmsLocation) {
+        await apiPut(
+          `/admin/cms/locations/${editingCmsLocation.id}`,
+          {
+            name: String(data.get("name") ?? ""),
+            type: String(data.get("type") ?? "ACADEMY"),
+            description: String(data.get("description") ?? ""),
+            address: String(data.get("address") ?? ""),
+            city: String(data.get("city") ?? ""),
+            state: String(data.get("state") ?? ""),
+            phone: String(data.get("phone") ?? ""),
+            imageUrl
+          },
+          token
+        );
+        form.reset();
+        setCmsLocationImagePreview(null);
+        setEditingCmsLocation(null);
+        await applyAdminChange(["locations"], "Localidade atualizada com sucesso.");
+        return;
+      }
+
       await apiPost(
         "/admin/cms/locations",
         {
@@ -2663,7 +2704,23 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       setCmsLocationImagePreview(null);
       await applyAdminChange(["locations"], "Localidade cadastrada com sucesso.");
     } catch (error) {
-      setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar a localidade."));
+      setFeedback(getApiErrorMessage(error, "Não foi possível salvar a localidade."));
+    }
+  }
+
+  function startEditCmsLocation(item: CmsLocationRow) {
+    setEditingCmsLocation(item);
+    setCmsLocationImagePreview(null);
+    if (cmsLocationImageRef.current) {
+      cmsLocationImageRef.current.value = "";
+    }
+  }
+
+  function handleCancelCmsLocationEdit() {
+    setEditingCmsLocation(null);
+    setCmsLocationImagePreview(null);
+    if (cmsLocationImageRef.current) {
+      cmsLocationImageRef.current.value = "";
     }
   }
 
@@ -3618,6 +3675,16 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             </select>
             <input name="objective" placeholder="Objetivo" />
             <input name="level" placeholder="Nível" />
+            <input name="city" placeholder="Cidade" />
+            <input name="state" placeholder="UF (ex.: SP)" maxLength={2} />
+            <select name="locationId" defaultValue="">
+              <option value="">Localidade</option>
+              {cmsLocations.filter((item) => item.isActive).map((item) => (
+                <option value={item.id} key={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
             <button className="primary-button">
               <Save size={18} />
               Salvar usuário
@@ -3790,6 +3857,16 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   </select>
                   <input name="objective" defaultValue={selectedAdminStudent.student.profile?.objective ?? ""} placeholder="Objetivo" />
                   <input name="level" defaultValue={selectedAdminStudent.student.profile?.level ?? ""} placeholder="Nível" />
+                  <input name="city" defaultValue={selectedAdminStudent.student.profile?.city ?? ""} placeholder="Cidade" />
+                  <input name="state" defaultValue={selectedAdminStudent.student.profile?.state ?? ""} placeholder="UF (ex.: SP)" maxLength={2} />
+                  <select name="locationId" defaultValue={selectedAdminStudent.student.profile?.locationId ?? ""}>
+                    <option value="">Localidade</option>
+                    {cmsLocations.filter((item) => item.isActive).map((item) => (
+                      <option value={item.id} key={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
                   <button className="primary-button">
                     <Save size={18} />
                     Salvar perfil
@@ -4031,14 +4108,14 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </div>
                 <span>{cmsLocations.length}</span>
               </div>
-              <form className="crud-form cms-form" onSubmit={handleCreateCmsLocation}>
+              <form key={editingCmsLocation?.id ?? "new-location"} className="crud-form cms-form" onSubmit={handleCreateCmsLocation}>
                 <label>
                   Nome
-                  <input name="name" placeholder="Ex.: Academia Centro" required />
+                  <input name="name" placeholder="Ex.: Academia Centro" defaultValue={editingCmsLocation?.name ?? ""} required />
                 </label>
                 <label>
                   Tipo
-                  <select name="type" defaultValue="ACADEMY">
+                  <select name="type" defaultValue={editingCmsLocation?.type ?? "ACADEMY"}>
                     <option value="ACADEMY">Academia</option>
                     <option value="UNIT">Unidade</option>
                     <option value="CLUB">Clube</option>
@@ -4046,23 +4123,23 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </label>
                 <label className="wide-field">
                   Descrição
-                  <input name="description" placeholder="Resumo da unidade" />
+                  <input name="description" placeholder="Resumo da unidade" defaultValue={editingCmsLocation?.description ?? ""} />
                 </label>
                 <label className="wide-field">
                   Endereço
-                  <input name="address" placeholder="Rua, número, bairro" />
+                  <input name="address" placeholder="Rua, número, bairro" defaultValue={editingCmsLocation?.address ?? ""} />
                 </label>
                 <label>
                   Cidade
-                  <input name="city" placeholder="Ex.: São Paulo" />
+                  <input name="city" placeholder="Ex.: São Paulo" defaultValue={editingCmsLocation?.city ?? ""} />
                 </label>
                 <label>
                   Estado (UF)
-                  <input name="state" placeholder="Ex.: SP" />
+                  <input name="state" placeholder="Ex.: SP" defaultValue={editingCmsLocation?.state ?? ""} />
                 </label>
                 <label className="wide-field">
                   Telefone
-                  <input name="phone" placeholder="(11) 99999-9999" />
+                  <input name="phone" placeholder="(11) 99999-9999" defaultValue={editingCmsLocation?.phone ?? ""} />
                 </label>
                 <label className="cms-upload-field wide-field">
                   <ImageIcon size={24} />
@@ -4077,7 +4154,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     onChange={(event) => handleCmsLocationImageChange(event.target.files?.[0] ?? null)}
                   />
                 </label>
-                {cmsLocationImagePreview && (
+                {cmsLocationImagePreview ? (
                   <div className="cms-image-preview wide-field">
                     <img src={cmsLocationImagePreview} alt="Prévia da imagem da localidade" />
                     <button type="button" onClick={handleCmsLocationImageClear}>
@@ -4085,11 +4162,21 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                       Remover imagem
                     </button>
                   </div>
-                )}
+                ) : editingCmsLocation?.imageUrl ? (
+                  <div className="cms-image-preview wide-field">
+                    <img src={mediaUrl(editingCmsLocation.imageUrl)} alt="Imagem atual da localidade" />
+                    <small>Imagem atual (envie uma nova para substituir)</small>
+                  </div>
+                ) : null}
                 <button className="primary-button">
                   <Save size={18} />
-                  Salvar localidade
+                  {editingCmsLocation ? "Salvar alterações" : "Salvar localidade"}
                 </button>
+                {editingCmsLocation && (
+                  <button type="button" className="outline-button" onClick={handleCancelCmsLocationEdit}>
+                    Cancelar edição
+                  </button>
+                )}
               </form>
               {cmsLocations.slice(0, 12).map((item) => (
                 <div className="data-row cms-data-row" key={item.id}>
@@ -4106,7 +4193,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     <option value="INACTIVE">Inativa</option>
                   </select>
                   <small>ordem {item.sortOrder}</small>
-                  <button aria-label="Desativar localidade" onClick={() => handleDelete(`/admin/cms/locations/${item.id}`)}>
+                  <button aria-label="Editar localidade" onClick={() => startEditCmsLocation(item)}>
+                    <Pencil size={17} />
+                  </button>
+                  <button aria-label="Excluir localidade" onClick={() => handleDelete(`/admin/cms/locations/${item.id}`)}>
                     <Trash2 size={17} />
                   </button>
                 </div>
@@ -5475,6 +5565,9 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [studentLocations, setStudentLocations] = useState<StudentLocationRow[]>([]);
+  const [studentAvatarPreview, setStudentAvatarPreview] = useState<string | null>(null);
+  const [studentProfileEditing, setStudentProfileEditing] = useState(false);
+  const [studentProfileUf, setStudentProfileUf] = useState<string>(profile?.state ?? "");
   const [notificationsReadAt, setNotificationsReadAt] = useState<string | null>(() =>
     window.localStorage.getItem("student-notifications-read-at")
   );
@@ -5603,6 +5696,10 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
       setError(message ?? "Não foi possível carregar sua área. Verifique API e banco.");
     }
   }
+
+  useEffect(() => {
+    setStudentProfileUf(profile?.state ?? "");
+  }, [profile]);
 
   useEffect(() => {
     void loadUserData();
@@ -5906,10 +6003,26 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     }
   }
 
-  async function handleUpdateStudentProfile(event: FormEvent<HTMLFormElement>) {
+  function handleStudentAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setStudentAvatarPreview(String(reader.result));
+    reader.readAsDataURL(file);
+  }
+
+  function handleCancelStudentProfileEdit() {
+    setStudentProfileEditing(false);
+    setStudentAvatarPreview(null);
+  }
+
+  function handleUpdateStudentProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    void saveStudentProfile(event.currentTarget);
+  }
+
+  async function saveStudentProfile(form: HTMLFormElement) {
     if (!token) return;
-    const form = event.currentTarget;
     const data = new FormData(form);
     const name = String(data.get("name") ?? "").trim();
     const phone = String(data.get("phone") ?? "").trim();
@@ -5918,6 +6031,9 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     const birthDate = String(data.get("birthDate") ?? "").trim();
     const objective = String(data.get("objective") ?? "").trim();
     const level = String(data.get("level") ?? "").trim();
+    const city = String(data.get("city") ?? "").trim();
+    const state = String(data.get("state") ?? "").trim();
+    const avatarFile = data.get("avatar");
 
     if (!name) {
       setError("Informe seu nome.");
@@ -5925,6 +6041,14 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     }
 
     try {
+      let avatarUrl: string | undefined;
+      if (avatarFile instanceof File && avatarFile.size > 0) {
+        const uploadData = new FormData();
+        uploadData.append("file", avatarFile);
+        const uploaded = await apiUpload<UploadResponse>(`/user/uploads?group=images`, uploadData, token);
+        avatarUrl = uploaded.file.url;
+      }
+
       const response = await apiPut<{ profile: StudentProfile }>(
         "/user/profile",
         {
@@ -5934,11 +6058,16 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
           gender: gender === "MALE" || gender === "FEMALE" ? gender : null,
           birthDate: birthDate ? `${birthDate}T12:00:00.000Z` : undefined,
           objective: objective || undefined,
-          level: level || undefined
+          level: level || undefined,
+          city: city || undefined,
+          state: state || undefined,
+          avatarUrl
         },
         token
       );
       setProfile(response.profile);
+      setStudentAvatarPreview(null);
+      setStudentProfileEditing(false);
       setSuccess("Dados cadastrais atualizados com sucesso.");
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;
@@ -6601,7 +6730,11 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     <main className="student-app-shell">
       <section className="student-app-header">
         <div className="student-avatar">
-          <UserRound size={34} />
+          {profile?.avatarUrl ? (
+            <img src={profile.avatarUrl} alt="" />
+          ) : (
+            <UserRound size={34} />
+          )}
         </div>
         <div>
           <strong>{profile?.name ?? "Aluno"}</strong>
@@ -7740,10 +7873,32 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                 quiser.
               </span>
             </article>
-            <form className="student-profile-form" onSubmit={handleUpdateStudentProfile}>
+            <form
+              id="student-profile-form"
+              className={`student-profile-form${studentProfileEditing ? "" : " student-profile-locked"}`}
+              onSubmit={handleUpdateStudentProfile}
+            >
+              <label className="student-avatar-field wide-field">
+                Foto de perfil
+                <span className="student-avatar-preview">
+                  {studentAvatarPreview ?? profile?.avatarUrl ? (
+                    <img src={studentAvatarPreview ?? profile?.avatarUrl ?? ""} alt="" />
+                  ) : (
+                    <UserRound size={34} className="student-avatar-placeholder" />
+                  )}
+                </span>
+                <input
+                  name="avatar"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={handleStudentAvatarChange}
+                  disabled={!studentProfileEditing}
+                />
+                <small>Formatos JPG, PNG, WEBP ou GIF.</small>
+              </label>
               <label>
                 Nome
-                <input name="name" defaultValue={profile?.name ?? ""} minLength={2} required placeholder="Seu nome completo" />
+                <input name="name" defaultValue={profile?.name ?? ""} minLength={2} required placeholder="Seu nome completo" disabled={!studentProfileEditing} />
               </label>
               <label>
                 E-mail
@@ -7751,11 +7906,11 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
               </label>
               <label>
                 Telefone
-                <input name="phone" type="tel" defaultValue={profile?.phone ?? ""} placeholder="+55 11 99999-9999" />
+                <input name="phone" type="tel" defaultValue={profile?.phone ?? ""} placeholder="+55 11 99999-9999" disabled={!studentProfileEditing} />
               </label>
               <label>
                 CPF
-                <input name="document" defaultValue={profile?.document ?? ""} placeholder="000.000.000-00" />
+                <input name="document" defaultValue={profile?.document ?? ""} placeholder="000.000.000-00" disabled={!studentProfileEditing} />
               </label>
               <label>
                 Data de nascimento
@@ -7763,50 +7918,93 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                   name="birthDate"
                   type="date"
                   defaultValue={profile?.birthDate ? profile.birthDate.slice(0, 10) : ""}
+                  disabled={!studentProfileEditing}
                 />
               </label>
               <label>
                 Sexo
-                <select name="gender" defaultValue={profile?.gender ?? ""}>
+                <select name="gender" defaultValue={profile?.gender ?? ""} disabled={!studentProfileEditing}>
                   <option value="">Selecione</option>
                   <option value="MALE">Masculino</option>
                   <option value="FEMALE">Feminino</option>
                 </select>
               </label>
+              <label className="wide-field">
+                Estado
+                <select
+                  name="state"
+                  defaultValue={profile?.state ?? ""}
+                  onChange={(event) => setStudentProfileUf(event.target.value)}
+                  disabled={!studentProfileEditing}
+                >
+                  <option value="">Selecione seu estado</option>
+                  {BRAZILIAN_STATES.map((state) => (
+                    <option key={state.uf} value={state.uf}>
+                      {state.name} ({state.uf})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="wide-field">
+                Cidade
+                <select name="city" defaultValue={profile?.city ?? ""} disabled={!studentProfileEditing}>
+                  <option value="">Selecione sua cidade</option>
+                  {profile?.city &&
+                    studentProfileUf === profile?.state &&
+                    !(CITIES_BY_STATE[studentProfileUf] ?? []).includes(profile.city) && (
+                      <option value={profile.city}>{profile.city}</option>
+                    )}
+                  {(CITIES_BY_STATE[studentProfileUf] ?? []).map((city) => (
+                    <option key={city} value={city}>
+                      {city}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label>
                 Objetivo
-                <input
-                  name="objective"
-                  list="objective-options"
-                  defaultValue={profile?.objective ?? ""}
-                  placeholder="Ex.: Hipertrofia, emagrecimento"
-                />
-                <datalist id="objective-options">
-                  <option value="Hipertrofia" />
-                  <option value="Emagrecimento" />
-                  <option value="Condicionamento" />
-                  <option value="Saúde" />
-                  <option value="Definição" />
-                </datalist>
+                <select name="objective" defaultValue={profile?.objective ?? ""} disabled={!studentProfileEditing}>
+                  <option value="">Selecione seu objetivo</option>
+                  <option value="Hipertrofia">Hipertrofia</option>
+                  <option value="Emagrecimento">Emagrecimento</option>
+                  <option value="Condicionamento">Condicionamento</option>
+                  <option value="Saúde">Saúde</option>
+                  <option value="Definição">Definição</option>
+                </select>
               </label>
               <label>
                 Nível
-                <input
-                  name="level"
-                  list="level-options"
-                  defaultValue={profile?.level ?? ""}
-                  placeholder="Ex.: Iniciante, intermediário"
-                />
-                <datalist id="level-options">
-                  <option value="Iniciante" />
-                  <option value="Intermediário" />
-                  <option value="Avançado" />
-                </datalist>
+                <select name="level" defaultValue={profile?.level ?? ""} disabled={!studentProfileEditing}>
+                  <option value="">Selecione seu nível</option>
+                  <option value="Iniciante">Iniciante</option>
+                  <option value="Intermediário">Intermediário</option>
+                  <option value="Avançado">Avançado</option>
+                </select>
               </label>
-              <button className="student-green-button" type="submit">
-                Salvar dados cadastrais
-              </button>
             </form>
+            <div className="student-profile-actions">
+              {studentProfileEditing ? (
+                <>
+                  <button
+                    className="student-green-button"
+                    type="button"
+                    onClick={() => {
+                      const form = document.getElementById("student-profile-form");
+                      if (form instanceof HTMLFormElement) void saveStudentProfile(form);
+                    }}
+                  >
+                    Salvar dados cadastrais
+                  </button>
+                  <button className="student-outline-button" type="button" onClick={handleCancelStudentProfileEdit}>
+                    Cancelar
+                  </button>
+                </>
+              ) : (
+                <button className="student-green-button" type="button" onClick={() => setStudentProfileEditing(true)}>
+                  Editar Informações
+                </button>
+              )}
+            </div>
           </section>
         )}
 

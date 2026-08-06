@@ -10,12 +10,12 @@ import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { autoCloseStaleTickets, FINALIZE_PROMPT, ticketInclude } from "./ticket.utils.js";
 
-const uploadsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../uploads");
+export const uploadsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../uploads");
 const uploadGroups = ["lessons", "materials", "images", "audio"] as const;
 const uploadSchema = z.object({
   group: z.enum(uploadGroups).default("materials")
 });
-const allowedUploadMimeTypes = new Set([
+export const allowedUploadMimeTypes = new Set([
   "video/mp4",
   "video/webm",
   "video/ogg",
@@ -46,7 +46,11 @@ const userSchema = z.object({
   document: z.string().optional(),
   gender: z.enum(["MALE", "FEMALE"]).optional().or(z.literal("")),
   objective: z.string().optional(),
-  level: z.string().optional()
+  level: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  avatarUrl: z.string().optional().or(z.literal("")),
+  locationId: z.string().optional().or(z.literal(""))
 });
 
 const updateUserSchema = userSchema.partial().extend({
@@ -321,11 +325,11 @@ function httpError(statusCode: number, message: string) {
   return error;
 }
 
-function safeFileExtension(filename: string) {
+export function safeFileExtension(filename: string) {
   return extname(filename).toLowerCase().replace(/[^a-z0-9.]/g, "").slice(0, 12);
 }
 
-function publicUploadUrl(request: { headers: { host?: string }; protocol: string }, relativePath: string) {
+export function publicUploadUrl(request: { headers: { host?: string }; protocol: string }, relativePath: string) {
   const host = request.headers.host ?? `localhost:${env.API_PORT}`;
   return `${request.protocol}://${host}/uploads/${relativePath.replace(/\\/g, "/")}`;
 }
@@ -931,7 +935,11 @@ export async function registerAdminRoutes(app: FastifyInstance) {
             document: body.document,
             gender: body.gender || null,
             objective: body.objective,
-            level: body.level
+            level: body.level,
+            city: body.city,
+            state: body.state,
+            avatarUrl: body.avatarUrl || null,
+            locationId: body.locationId || null
           }
         }
       },
@@ -947,7 +955,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
     const body = updateUserSchema.parse(request.body);
-    const { password, phone, document, gender, objective, level, ...userData } = body;
+    const { password, phone, document, gender, objective, level, city, state, avatarUrl, locationId, ...userData } = body;
 
     const user = await prisma.user.update({
       where: { id },
@@ -958,8 +966,28 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         passwordHash: password ? await hashPassword(password) : undefined,
         profile: {
           upsert: {
-            create: { phone, document, gender: gender || null, objective, level },
-            update: { phone, document, gender: gender || null, objective, level }
+            create: {
+              phone,
+              document,
+              gender: gender || null,
+              objective,
+              level,
+              city,
+              state,
+              avatarUrl: avatarUrl === undefined ? undefined : avatarUrl || null,
+              locationId: locationId || null
+            },
+            update: {
+              phone,
+              document,
+              gender: gender || null,
+              objective,
+              level,
+              city,
+              state,
+              avatarUrl: avatarUrl === undefined ? undefined : avatarUrl || null,
+              locationId: locationId || null
+            }
           }
         }
       },
@@ -1285,12 +1313,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/cms/locations/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    await prisma.location.update({
-      where: { id },
-      data: {
-        isActive: false
-      }
-    });
+    await prisma.location.delete({ where: { id } });
 
     return { ok: true };
   });

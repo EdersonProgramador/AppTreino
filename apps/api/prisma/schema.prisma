@@ -55,17 +55,22 @@ model Enrollment {
 }
 
 model Profile {
-  id        String    @id @default(cuid())
-  userId    String    @unique @map("user_id")
-  user      User      @relation(fields: [userId], references: [id])
-  phone     String?
-  document  String?
-  gender    Gender?
-  birthDate DateTime? @map("birth_date")
-  objective String?
-  level     String?
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
+  id         String    @id @default(cuid())
+  userId     String    @unique @map("user_id")
+  user       User      @relation(fields: [userId], references: [id])
+  phone      String?
+  document   String?
+  gender     Gender?
+  birthDate  DateTime? @map("birth_date")
+  objective  String?
+  level      String?
+  city       String?
+  state      String?
+  avatarUrl  String?   @map("avatar_url")
+  locationId String?   @map("location_id")
+  location   Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
 
   @@map("profiles")
 }
@@ -677,6 +682,7 @@ model Location {
   imageUrl    String?      @map("image_url")
   isActive    Boolean      @default(true) @map("is_active")
   sortOrder   Int          @default(0) @map("sort_order")
+  profiles    Profile[]
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
