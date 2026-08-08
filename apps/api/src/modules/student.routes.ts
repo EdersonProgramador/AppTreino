@@ -1,5 +1,4 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { ProgramTargetGender } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { env } from "../env.js";
@@ -269,29 +268,10 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
     return [];
   }
 
-  const studentProfile = await prisma.profile.findUnique({
-    where: {
-      userId
-    },
-    select: {
-      gender: true
-    }
-  });
-  const targetGenderFilter =
-    studentProfile?.gender === "MALE" || studentProfile?.gender === "FEMALE"
-      ? {
-          in: [
-            ProgramTargetGender.ALL,
-            studentProfile.gender === "MALE" ? ProgramTargetGender.MALE : ProgramTargetGender.FEMALE
-          ]
-        }
-      : ProgramTargetGender.ALL;
-
   const publishedPrograms = await prisma.program.findMany({
     where: {
       status: "PUBLISHED",
       isActive: true,
-      targetGender: targetGenderFilter,
       days: {
         some: {}
       }
