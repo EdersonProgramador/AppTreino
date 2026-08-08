@@ -425,6 +425,501 @@ async function main() {
     });
   }
 
+  const annualWomenExerciseNotes =
+    "Programa anual feminino: aquecer com series progressivas antes dos exercicios principais, trabalhar com 1-3 repeticoes em reserva e progredir carga apenas quando todas as series atingirem o topo da faixa com tecnica segura.";
+
+  const annualWomenExercises = [
+    {
+      id: "seed-annual-women-ex-supino-inclinado-barra",
+      title: "Supino inclinado com barra",
+      materialUrl: "https://www.strengthlog.com/incline-bench-press/",
+      targetMuscles: ["Peitoral", "Ombro", "Triceps"],
+      equipmentTags: ["Barra", "Banco Inclinado"]
+    },
+    {
+      id: "seed-annual-women-ex-supino-inclinado-halteres",
+      title: "Supino inclinado com halteres",
+      materialUrl: "https://www.strengthlog.com/dumbbell-incline-press/",
+      targetMuscles: ["Peitoral", "Ombro", "Triceps"],
+      equipmentTags: ["Halter", "Banco Inclinado"]
+    },
+    {
+      id: "seed-annual-women-ex-supino-reto-barra",
+      title: "Supino reto com barra",
+      materialUrl: "https://www.strengthlog.com/bench-press/",
+      targetMuscles: ["Peitoral", "Ombro", "Triceps"],
+      equipmentTags: ["Barra", "Banco Reto"]
+    },
+    {
+      id: "seed-annual-women-ex-supino-reto-halteres",
+      title: "Supino reto com halteres",
+      materialUrl: "https://www.strengthlog.com/dumbbell-chest-press/",
+      targetMuscles: ["Peitoral", "Ombro", "Triceps"],
+      equipmentTags: ["Halter", "Banco Reto"]
+    },
+    {
+      id: "seed-annual-women-ex-mergulho-assistido",
+      title: "Mergulho assistido",
+      materialUrl: "https://www.strengthlog.com/assisted-dips/",
+      targetMuscles: ["Peitoral", "Triceps"],
+      equipmentTags: ["Maquina", "Peso Corporal"]
+    },
+    {
+      id: "seed-annual-women-ex-levantamento-terra",
+      title: "Levantamento terra",
+      materialUrl: "https://www.strengthlog.com/deadlift/",
+      targetMuscles: ["Costas", "Gluteos", "Posterior"],
+      equipmentTags: ["Barra"]
+    },
+    {
+      id: "seed-annual-women-ex-remada-curvada",
+      title: "Remada curvada",
+      materialUrl: "https://www.strengthlog.com/barbell-row/",
+      targetMuscles: ["Costas", "Biceps"],
+      equipmentTags: ["Barra"]
+    },
+    {
+      id: "seed-annual-women-ex-remada-unilateral",
+      title: "Remada unilateral",
+      materialUrl: "https://www.strengthlog.com/dumbbell-row/",
+      targetMuscles: ["Costas", "Biceps"],
+      equipmentTags: ["Halter", "Banco"]
+    },
+    {
+      id: "seed-annual-women-ex-remada-baixa",
+      title: "Remada baixa",
+      materialUrl: "https://www.strengthlog.com/cable-close-grip-seated-row/",
+      targetMuscles: ["Costas", "Biceps"],
+      equipmentTags: ["Cabo", "Remada"]
+    },
+    {
+      id: "seed-annual-women-ex-puxada-frente",
+      title: "Puxada pela frente",
+      materialUrl: "https://www.strengthlog.com/lat-pulldown-with-pronated-grip/",
+      targetMuscles: ["Costas", "Biceps"],
+      equipmentTags: ["Puxador", "Cabo"]
+    },
+    {
+      id: "seed-annual-women-ex-barra-fixa-supinada",
+      title: "Barra fixa supinada",
+      materialUrl: "https://www.strengthlog.com/chin-up/",
+      targetMuscles: ["Costas", "Biceps"],
+      equipmentTags: ["Peso Corporal", "Barra Fixa"]
+    },
+    {
+      id: "seed-annual-women-ex-desenvolvimento-barra",
+      title: "Desenvolvimento com barra",
+      materialUrl: "https://www.strengthlog.com/overhead-press/",
+      targetMuscles: ["Ombro", "Triceps"],
+      equipmentTags: ["Barra"]
+    },
+    {
+      id: "seed-annual-women-ex-desenvolvimento-halteres",
+      title: "Desenvolvimento com halteres",
+      materialUrl: "https://www.strengthlog.com/dumbbell-shoulder-press/",
+      targetMuscles: ["Ombro", "Triceps"],
+      equipmentTags: ["Halter"]
+    },
+    {
+      id: "seed-annual-women-ex-desenvolvimento-arnold",
+      title: "Desenvolvimento Arnold",
+      materialUrl: "https://www.strengthlog.com/arnold-press/",
+      targetMuscles: ["Ombro", "Triceps"],
+      equipmentTags: ["Halter"]
+    },
+    {
+      id: "seed-annual-women-ex-elevacao-lateral",
+      title: "Elevacao lateral",
+      materialUrl: "https://www.strengthlog.com/dumbbell-lateral-raise/",
+      targetMuscles: ["Ombro"],
+      equipmentTags: ["Halter"]
+    },
+    {
+      id: "seed-annual-women-ex-face-pull",
+      title: "Face pull",
+      materialUrl: "https://www.strengthlog.com/face-pull/",
+      targetMuscles: ["Ombro", "Costas"],
+      equipmentTags: ["Cabo", "Corda"]
+    },
+    {
+      id: "seed-annual-women-ex-agachamento-livre",
+      title: "Agachamento livre",
+      materialUrl: "https://www.strengthlog.com/squat/",
+      targetMuscles: ["Quadriceps", "Gluteos", "Posterior"],
+      equipmentTags: ["Barra"]
+    },
+    {
+      id: "seed-annual-women-ex-agachamento-frontal",
+      title: "Agachamento frontal",
+      materialUrl: "https://www.strengthlog.com/front-squat/",
+      targetMuscles: ["Quadriceps", "Gluteos", "Core"],
+      equipmentTags: ["Barra"]
+    },
+    {
+      id: "seed-annual-women-ex-agachamento-hack",
+      title: "Agachamento hack",
+      materialUrl: "https://www.strengthlog.com/hack-squat-machine/",
+      targetMuscles: ["Quadriceps", "Gluteos"],
+      equipmentTags: ["Maquina Hack"]
+    },
+    {
+      id: "seed-annual-women-ex-leg-press",
+      title: "Leg press",
+      materialUrl: "https://www.strengthlog.com/leg-press/",
+      targetMuscles: ["Quadriceps", "Gluteos", "Posterior"],
+      equipmentTags: ["Leg Press"]
+    },
+    {
+      id: "seed-annual-women-ex-passada",
+      title: "Passada",
+      materialUrl: "https://www.strengthlog.com/dumbbell-walking-lunge/",
+      targetMuscles: ["Quadriceps", "Gluteos"],
+      equipmentTags: ["Halter"]
+    },
+    {
+      id: "seed-annual-women-ex-terra-romeno",
+      title: "Terra romeno",
+      materialUrl: "https://www.strengthlog.com/romanian-deadlift/",
+      targetMuscles: ["Posterior", "Gluteos", "Costas"],
+      equipmentTags: ["Barra", "Halter"]
+    },
+    {
+      id: "seed-annual-women-ex-mesa-flexora",
+      title: "Mesa flexora",
+      materialUrl: "https://www.strengthlog.com/lying-leg-curl/",
+      targetMuscles: ["Posterior"],
+      equipmentTags: ["Mesa Flexora"]
+    },
+    {
+      id: "seed-annual-women-ex-panturrilhas",
+      title: "Panturrilhas",
+      materialUrl: "https://www.strengthlog.com/standing-calf-raise/",
+      targetMuscles: ["Panturrilhas"],
+      equipmentTags: ["Maquina", "Peso Corporal"]
+    },
+    {
+      id: "seed-annual-women-ex-elevacao-quadril",
+      title: "Elevacao de quadril",
+      materialUrl: "https://www.strengthlog.com/hip-thrust/",
+      targetMuscles: ["Gluteos", "Posterior"],
+      equipmentTags: ["Barra", "Banco"]
+    },
+    {
+      id: "seed-annual-women-ex-agachamento-bulgaro",
+      title: "Agachamento bulgaro",
+      materialUrl: "https://www.strengthlog.com/bulgarian-split-squat/",
+      targetMuscles: ["Quadriceps", "Gluteos"],
+      equipmentTags: ["Halter", "Banco"]
+    },
+    {
+      id: "seed-annual-women-ex-ponte-gluteos",
+      title: "Ponte de gluteos",
+      materialUrl: "https://www.strengthlog.com/glute-bridge/",
+      targetMuscles: ["Gluteos", "Posterior"],
+      equipmentTags: ["Peso Corporal", "Barra"]
+    },
+    {
+      id: "seed-annual-women-ex-coice-cabo",
+      title: "Coice no cabo",
+      materialUrl: "https://www.strengthlog.com/cable-glute-kickback/",
+      targetMuscles: ["Gluteos"],
+      equipmentTags: ["Cabo"]
+    },
+    {
+      id: "seed-annual-women-ex-rosca-direta",
+      title: "Rosca direta",
+      materialUrl: "https://www.strengthlog.com/barbell-curl/",
+      targetMuscles: ["Biceps"],
+      equipmentTags: ["Barra"]
+    },
+    {
+      id: "seed-annual-women-ex-rosca-ez",
+      title: "Rosca com barra EZ",
+      materialUrl: "https://www.strengthlog.com/ez-curl/",
+      targetMuscles: ["Biceps"],
+      equipmentTags: ["Barra EZ"]
+    },
+    {
+      id: "seed-annual-women-ex-rosca-alternada",
+      title: "Rosca alternada",
+      materialUrl: "https://www.strengthlog.com/dumbbell-curl/",
+      targetMuscles: ["Biceps"],
+      equipmentTags: ["Halter"]
+    },
+    {
+      id: "seed-annual-women-ex-rosca-martelo",
+      title: "Rosca martelo",
+      materialUrl: "https://www.strengthlog.com/hammer-curl/",
+      targetMuscles: ["Biceps", "Antebraco"],
+      equipmentTags: ["Halter"]
+    },
+    {
+      id: "seed-annual-women-ex-extensao-triceps",
+      title: "Extensao de triceps",
+      materialUrl: "https://www.strengthlog.com/overhead-cable-triceps-extension/",
+      targetMuscles: ["Triceps"],
+      equipmentTags: ["Cabo", "Corda"]
+    },
+    {
+      id: "seed-annual-women-ex-triceps-testa",
+      title: "Triceps testa",
+      materialUrl: "https://www.strengthlog.com/lying-triceps-extension-ez-bar/",
+      targetMuscles: ["Triceps"],
+      equipmentTags: ["Barra EZ", "Banco"]
+    },
+    {
+      id: "seed-annual-women-ex-triceps-cabo",
+      title: "Triceps no cabo",
+      materialUrl: "https://www.strengthlog.com/tricep-pushdown-with-bar/",
+      targetMuscles: ["Triceps"],
+      equipmentTags: ["Cabo", "Barra"]
+    },
+    {
+      id: "seed-annual-women-ex-abdominal-corda",
+      title: "Abdominal com corda",
+      materialUrl: "https://www.strengthlog.com/cable-crunch/",
+      targetMuscles: ["Abdomen"],
+      equipmentTags: ["Cabo", "Corda"]
+    },
+    {
+      id: "seed-annual-women-ex-elevacao-pernas-cadeira",
+      title: "Elevacao de pernas em cadeira",
+      materialUrl: "https://www.strengthlog.com/captains-chair-leg-raise/",
+      targetMuscles: ["Abdomen"],
+      equipmentTags: ["Cadeira Romana"]
+    },
+    {
+      id: "seed-annual-women-ex-roda-abdominal",
+      title: "Roda abdominal",
+      materialUrl: "https://www.strengthlog.com/kneeling-ab-wheel-roll-out/",
+      targetMuscles: ["Abdomen", "Core"],
+      equipmentTags: ["Roda Abdominal"]
+    },
+    {
+      id: "seed-annual-women-ex-bicicleta",
+      title: "Bicicleta abdominal",
+      materialUrl: "https://www.strengthlog.com/bicycle-crunch/",
+      targetMuscles: ["Abdomen"],
+      equipmentTags: ["Peso Corporal"]
+    },
+    {
+      id: "seed-annual-women-ex-prancha-inclinada",
+      title: "Prancha inclinada",
+      materialUrl: "https://www.strengthlog.com/plank/",
+      targetMuscles: ["Abdomen", "Core"],
+      equipmentTags: ["Peso Corporal", "Banco"]
+    }
+  ];
+
+  for (const exercise of annualWomenExercises) {
+    await prisma.exercise.upsert({
+      where: { id: exercise.id },
+      create: {
+        id: exercise.id,
+        title: exercise.title,
+        name: exercise.title,
+        materialUrl: exercise.materialUrl,
+        notes: annualWomenExerciseNotes,
+        targetMuscles: exercise.targetMuscles,
+        equipmentTags: exercise.equipmentTags,
+        modalityLinks: {
+          create: {
+            modalityId: musculacao.id,
+            principal: true
+          }
+        }
+      },
+      update: {
+        title: exercise.title,
+        name: exercise.title,
+        materialUrl: exercise.materialUrl,
+        notes: annualWomenExerciseNotes,
+        targetMuscles: exercise.targetMuscles,
+        equipmentTags: exercise.equipmentTags
+      }
+    });
+
+    await prisma.exerciseModality.upsert({
+      where: {
+        exerciseId_modalityId: {
+          exerciseId: exercise.id,
+          modalityId: musculacao.id
+        }
+      },
+      create: {
+        exerciseId: exercise.id,
+        modalityId: musculacao.id,
+        principal: true
+      },
+      update: {
+        principal: true
+      }
+    });
+  }
+
+  const annualWomenBlocks = [
+    {
+      id: "seed-annual-women-block-1-peito-panturrilhas",
+      title: "Anual Feminino D1 - Peito + panturrilhas",
+      restTime: 120,
+      exercises: [
+        { exerciseId: "seed-annual-women-ex-supino-inclinado-barra", sets: 3, repsRange: "8-10", order: 1 },
+        { exerciseId: "seed-annual-women-ex-supino-reto-halteres", sets: 3, repsRange: "8-10", order: 2 },
+        { exerciseId: "seed-annual-women-ex-mergulho-assistido", sets: 3, repsRange: "8-10", order: 3 },
+        { exerciseId: "seed-annual-women-ex-panturrilhas", sets: 3, repsRange: "10-12", order: 4 }
+      ]
+    },
+    {
+      id: "seed-annual-women-block-2-costas-gluteos-abdome",
+      title: "Anual Feminino D2 - Costas + gluteos e abdome",
+      restTime: 120,
+      exercises: [
+        { exerciseId: "seed-annual-women-ex-levantamento-terra", sets: 3, repsRange: "8-10", order: 1 },
+        { exerciseId: "seed-annual-women-ex-remada-unilateral", sets: 3, repsRange: "8-10", order: 2 },
+        { exerciseId: "seed-annual-women-ex-puxada-frente", sets: 3, repsRange: "8-10", order: 3 },
+        { exerciseId: "seed-annual-women-ex-elevacao-quadril", sets: 3, repsRange: "8-10", order: 4 },
+        { exerciseId: "seed-annual-women-ex-abdominal-corda", sets: 3, repsRange: "10-12", order: 5 }
+      ]
+    },
+    {
+      id: "seed-annual-women-block-3-ombros-panturrilhas",
+      title: "Anual Feminino D3 - Ombros + panturrilhas",
+      restTime: 120,
+      exercises: [
+        { exerciseId: "seed-annual-women-ex-desenvolvimento-halteres", sets: 3, repsRange: "8-10", order: 1 },
+        { exerciseId: "seed-annual-women-ex-desenvolvimento-arnold", sets: 3, repsRange: "8-10", order: 2 },
+        { exerciseId: "seed-annual-women-ex-elevacao-lateral", sets: 3, repsRange: "10-12", order: 3 },
+        { exerciseId: "seed-annual-women-ex-face-pull", sets: 3, repsRange: "10-12", order: 4 },
+        { exerciseId: "seed-annual-women-ex-panturrilhas", sets: 3, repsRange: "10-12", order: 5 }
+      ]
+    },
+    {
+      id: "seed-annual-women-block-4-bracos-abdome",
+      title: "Anual Feminino D4 - Bracos + abdome",
+      restTime: 90,
+      exercises: [
+        { exerciseId: "seed-annual-women-ex-rosca-direta", sets: 3, repsRange: "8-10", order: 1 },
+        { exerciseId: "seed-annual-women-ex-rosca-martelo", sets: 3, repsRange: "8-10", order: 2 },
+        { exerciseId: "seed-annual-women-ex-extensao-triceps", sets: 3, repsRange: "8-10", order: 3 },
+        { exerciseId: "seed-annual-women-ex-triceps-cabo", sets: 3, repsRange: "8-10", order: 4 },
+        { exerciseId: "seed-annual-women-ex-roda-abdominal", sets: 3, repsRange: "10-12", order: 5 }
+      ]
+    },
+    {
+      id: "seed-annual-women-block-5-pernas-gluteos",
+      title: "Anual Feminino D5 - Pernas + gluteos",
+      restTime: 120,
+      exercises: [
+        { exerciseId: "seed-annual-women-ex-agachamento-livre", sets: 3, repsRange: "8-10", order: 1 },
+        { exerciseId: "seed-annual-women-ex-leg-press", sets: 3, repsRange: "8-10", order: 2 },
+        { exerciseId: "seed-annual-women-ex-terra-romeno", sets: 3, repsRange: "8-10", order: 3 },
+        { exerciseId: "seed-annual-women-ex-agachamento-bulgaro", sets: 3, repsRange: "8-10", order: 4 },
+        { exerciseId: "seed-annual-women-ex-mesa-flexora", sets: 3, repsRange: "10-12", order: 5 },
+        { exerciseId: "seed-annual-women-ex-coice-cabo", sets: 3, repsRange: "10-12", order: 6 }
+      ]
+    }
+  ];
+
+  for (const block of annualWomenBlocks) {
+    await prisma.workoutBlock.upsert({
+      where: { id: block.id },
+      create: {
+        id: block.id,
+        title: block.title,
+        structureType: "NORMAL",
+        restTime: block.restTime,
+        modalityId: musculacao.id
+      },
+      update: {
+        title: block.title,
+        structureType: "NORMAL",
+        restTime: block.restTime,
+        modalityId: musculacao.id
+      }
+    });
+
+    for (const exercise of block.exercises) {
+      await prisma.workoutBlockExercise.upsert({
+        where: { id: `${block.id}-${exercise.order}` },
+        create: {
+          id: `${block.id}-${exercise.order}`,
+          workoutBlockId: block.id,
+          exerciseId: exercise.exerciseId,
+          sets: exercise.sets,
+          repsRange: exercise.repsRange,
+          order: exercise.order
+        },
+        update: {
+          workoutBlockId: block.id,
+          exerciseId: exercise.exerciseId,
+          sets: exercise.sets,
+          repsRange: exercise.repsRange,
+          order: exercise.order
+        }
+      });
+    }
+  }
+
+  const annualWomenProgram = await prisma.program.upsert({
+    where: { id: "seed-program-anual-musculacao-mulheres" },
+    create: {
+      id: "seed-program-anual-musculacao-mulheres",
+      modalityId: musculacao.id,
+      title: "Programa anual de musculação para mulheres",
+      description: JSON.stringify({
+        description:
+          "Ciclo anual de 53 semanas para forca, hipertrofia e melhora sustentavel da composicao corporal. Inclui 6 fases de 8 semanas, semanas de recuperacao entre fases, aquecimento progressivo, controle de esforco com 1-3 repeticoes em reserva e adaptacao para 3, 4 ou 5 dias semanais conforme agenda e recuperacao.",
+        modality: "Musculação"
+      }),
+      targetGender: "FEMALE",
+      totalWorkouts: 265,
+      sortOrder: 2,
+      status: "PUBLISHED",
+      isActive: true,
+      publishedAt: new Date()
+    },
+    update: {
+      modalityId: musculacao.id,
+      title: "Programa anual de musculação para mulheres",
+      description: JSON.stringify({
+        description:
+          "Ciclo anual de 53 semanas para forca, hipertrofia e melhora sustentavel da composicao corporal. Inclui 6 fases de 8 semanas, semanas de recuperacao entre fases, aquecimento progressivo, controle de esforco com 1-3 repeticoes em reserva e adaptacao para 3, 4 ou 5 dias semanais conforme agenda e recuperacao.",
+        modality: "Musculação"
+      }),
+      targetGender: "FEMALE",
+      totalWorkouts: 265,
+      sortOrder: 2,
+      status: "PUBLISHED",
+      isActive: true,
+      publishedAt: new Date()
+    }
+  });
+
+  const annualWomenProgramDays = annualWomenBlocks.map((block, index) => ({
+    id: `seed-annual-women-program-day-${index + 1}`,
+    workoutBlockId: block.id,
+    dayNumber: index + 1
+  }));
+
+  for (const day of annualWomenProgramDays) {
+    await prisma.programDayWorkout.upsert({
+      where: { id: day.id },
+      create: {
+        id: day.id,
+        programId: annualWomenProgram.id,
+        workoutBlockId: day.workoutBlockId,
+        dayNumber: day.dayNumber,
+        order: 1
+      },
+      update: {
+        programId: annualWomenProgram.id,
+        workoutBlockId: day.workoutBlockId,
+        dayNumber: day.dayNumber,
+        order: 1
+      }
+    });
+  }
+
   console.log("Seed do CMS Fitness executado com sucesso.");
 }
 
