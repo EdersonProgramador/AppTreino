@@ -5695,6 +5695,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkoutResponse["workout"] | null>(null);
   const [publishedWorkouts, setPublishedWorkouts] = useState<TodayWorkoutResponse["workout"][]>([]);
   const [selectedWorkoutModality, setSelectedWorkoutModality] = useState<string | null>(null);
+  const [selectedWorkoutProgramId, setSelectedWorkoutProgramId] = useState<string | null>(null);
   const [workoutSession, setWorkoutSession] = useState<WorkoutSessionResponse["session"] | null>(null);
   const [consistency, setConsistency] = useState<WorkoutConsistencyResponse | null>(null);
   const [membership, setMembership] = useState<StudentMembershipRow | null>(null);
@@ -5853,6 +5854,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
 
   useEffect(() => {
     setSelectedWorkoutModality(null);
+    setSelectedWorkoutProgramId(null);
   }, [publishedWorkouts]);
 
   useEffect(() => {
@@ -6562,7 +6564,14 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
   const modalityWorkouts = selectedWorkoutModality
     ? publishedWorkouts.filter((item) => (item.modality ?? "Hipertrofia") === selectedWorkoutModality)
     : [];
-  const workoutSheet = modalityWorkouts[0] ?? (selectedWorkoutModality && todayWorkout?.modality === selectedWorkoutModality ? todayWorkout : null);
+  const selectedProgramWorkout =
+    selectedWorkoutProgramId && selectedWorkoutModality
+      ? modalityWorkouts.find((item) => item.programId === selectedWorkoutProgramId) ?? null
+      : null;
+  const workoutSheet =
+    selectedProgramWorkout ??
+    (selectedWorkoutModality && modalityWorkouts.length === 1 ? modalityWorkouts[0] : null) ??
+    (selectedWorkoutModality && todayWorkout?.modality === selectedWorkoutModality && modalityWorkouts.length <= 1 ? todayWorkout : null);
   const workoutSequence = workoutSheet?.sequence?.length ? workoutSheet.sequence : publishedWorkouts;
   const sheetCompleted = Math.min(workoutSheet?.completedWorkouts ?? workoutsCompleted, workoutSheet?.totalWorkouts ?? workoutSheet?.totalDays ?? totalWorkoutDays);
   const sheetTotal = workoutSheet?.totalWorkouts ?? workoutSheet?.totalDays ?? totalWorkoutDays;
@@ -7021,7 +7030,14 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                 </div>
                 <div className="student-modality-list">
                   {publishedModalities.map((item) => (
-                    <button className="student-modality-card" key={item.modality} onClick={() => setSelectedWorkoutModality(item.modality)}>
+                    <button
+                      className="student-modality-card"
+                      key={item.modality}
+                      onClick={() => {
+                        setSelectedWorkoutModality(item.modality);
+                        setSelectedWorkoutProgramId(null);
+                      }}
+                    >
                       <span className={`student-modality-media ${item.imageUrl ? "with-image" : ""}`}>
                         {item.imageUrl ? (
                           <img src={mediaUrl(item.imageUrl)} alt="" aria-hidden="true" />
@@ -7039,12 +7055,60 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
               </>
             )}
 
+            {selectedWorkoutModality && !workoutSheet && modalityWorkouts.length > 1 ? (
+              <article className="student-training-sheet-card">
+                <header className="student-training-sheet-header">
+                  <button
+                    className="student-training-back-button"
+                    onClick={() => {
+                      setSelectedWorkoutModality(null);
+                      setSelectedWorkoutProgramId(null);
+                    }}
+                  >
+                    <ChevronLeft size={18} />
+                    Modalidades
+                  </button>
+                  <span>Fichas publicadas</span>
+                  <h1>{selectedWorkoutModality}</h1>
+                  <p>Escolha o programa que deseja abrir.</p>
+                </header>
+                <div className="student-program-list">
+                  {modalityWorkouts.map((programWorkout) => (
+                    <article className="student-program-card" key={programWorkout.programId}>
+                      <div className="student-training-card">
+                        <div className="student-card-icon">
+                          <Dumbbell size={24} />
+                        </div>
+                        <div>
+                          <h2>{programWorkout.programTitle}</h2>
+                          <p>{programWorkout.completedWorkouts ?? 0}/{programWorkout.totalWorkouts} treino(s) realizados</p>
+                        </div>
+                        <button onClick={() => setSelectedWorkoutProgramId(programWorkout.programId)}>
+                          Abrir
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </article>
+            ) : null}
+
             {selectedWorkoutModality && workoutSheet && workoutSequence.length > 0 ? (
               <article className="student-training-sheet-card">
                 <header className="student-training-sheet-header">
-                  <button className="student-training-back-button" onClick={() => setSelectedWorkoutModality(null)}>
+                  <button
+                    className="student-training-back-button"
+                    onClick={() => {
+                      if (modalityWorkouts.length > 1 && selectedWorkoutProgramId) {
+                        setSelectedWorkoutProgramId(null);
+                        return;
+                      }
+                      setSelectedWorkoutModality(null);
+                      setSelectedWorkoutProgramId(null);
+                    }}
+                  >
                     <ChevronLeft size={18} />
-                    Modalidades
+                    {modalityWorkouts.length > 1 && selectedWorkoutProgramId ? "Fichas" : "Modalidades"}
                   </button>
                   <span>Ficha de treino</span>
                   <h1>{workoutSheet.programTitle}</h1>
