@@ -920,6 +920,53 @@ async function main() {
     });
   }
 
+  const activeStudentsForAnnualWomenProgram = await prisma.user.findMany({
+    where: {
+      role: "USER",
+      status: "ACTIVE",
+      OR: [
+        {
+          enrollmentStatus: "ACTIVE"
+        },
+        {
+          memberships: {
+            some: {
+              status: "ACTIVE"
+            }
+          }
+        }
+      ]
+    },
+    select: {
+      id: true
+    }
+  });
+
+  for (const student of activeStudentsForAnnualWomenProgram) {
+    await prisma.userProgram.upsert({
+      where: {
+        userId_programId: {
+          userId: student.id,
+          programId: annualWomenProgram.id
+        }
+      },
+      create: {
+        userId: student.id,
+        programId: annualWomenProgram.id,
+        currentDay: 1,
+        totalWorkouts: annualWomenProgram.totalWorkouts,
+        completedWorkouts: 0,
+        status: "ACTIVE"
+      },
+      update: {
+        currentDay: 1,
+        totalWorkouts: annualWomenProgram.totalWorkouts,
+        status: "ACTIVE",
+        completedAt: null
+      }
+    });
+  }
+
   console.log("Seed do CMS Fitness executado com sucesso.");
 }
 
