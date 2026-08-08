@@ -5738,7 +5738,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </label>
                 <span className="cms-filter-count">{filteredCmsExercises.length} aula(s)</span>
               </div>
-              {filteredCmsExercises.slice(0, 8).map((item) => {
+              {filteredCmsExercises.map((item) => {
                 const thumbSrc = cmsExerciseThumbSrc(item.videoUrl);
                 const thumbKind = item.videoUrl ? cmsMediaKind(item.videoUrl) : "file";
                 return (
