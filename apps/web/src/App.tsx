@@ -4607,7 +4607,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       id: "blocks" as const,
       icon: ClipboardList,
       title: "Fichas de treino",
-      text: "Monte fichas com series, repeticoes e descanso.",
+      text: "Defina divisões, exercícios, séries, carga e descanso.",
       metric: `${cmsWorkoutBlocks.length} ativo(s)`
     },
     {
@@ -4678,7 +4678,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             className={adminSection === "training" ? "active" : ""}
             onClick={() => {
               setAdminSection("training");
-              setCmsStep("lessons");
+              setCmsStep("locations");
             }}
           >
             <Dumbbell size={18} />
@@ -5250,7 +5250,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               <span className="eyebrow">CMS Fitness</span>
               <h3>Crie uma aula, monte a ficha e publique para alunos sem procurar campos escondidos.</h3>
               <p>
-                O fluxo agora está separado por etapas: modalidades, aulas com materiais, fichas de treino e publicação.
+                O fluxo está separado por etapas: localidades, modalidades, aulas com materiais, fichas de treino e publicação.
               </p>
             </div>
             <div className="cms-hero-metrics">
@@ -5777,12 +5777,19 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             {!cmsTrashOpen && cmsStep === "blocks" && <section className="cms-studio-card">
               <div className="panel-title cms-subtitle">
                 <div>
-                  <h2>Ficha de treino</h2>
-                  <p>Combine aulas em um bloco que represente um dia de treino completo.</p>
+                  <h2>Divisões e execução da ficha</h2>
+                  <p>Cadastre cada divisão do treino e detalhe exatamente o que o aluno deve executar.</p>
                 </div>
                 <span>{cmsWorkoutBlocks.length}</span>
               </div>
               <form className="crud-form cms-form" key={editingCmsWorkoutBlock?.id ?? "new"} onSubmit={handleSaveCmsWorkoutBlock}>
+                <div className="cms-form-section-title wide-field">
+                  <span>Bloco 2</span>
+                  <div>
+                    <h3>Divisão dos treinos</h3>
+                    <p>Identifique o treino, informe o foco e indique quantas vezes ele deve ser realizado na semana.</p>
+                  </div>
+                </div>
                 <label>
                   Identificador
                   <input name="title" placeholder="Ex.: Treino A" required defaultValue={editingCmsWorkoutBlock?.identifier ?? editingCmsWorkoutBlock?.title ?? ""} />
@@ -5819,6 +5826,13 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     ))}
                   </select>
                 </label>
+                <div className="cms-form-section-title wide-field">
+                  <span>Bloco 3</span>
+                  <div>
+                    <h3>Exercícios e execução</h3>
+                    <p>Defina séries, repetições, carga inicial, descanso do cronômetro e material de apoio.</p>
+                  </div>
+                </div>
                 <div className="cms-builder-list wide-field">
                   <div className="cms-builder-heading exercise-execution-row">
                     <span>Aula</span>
@@ -5851,10 +5865,25 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                         <input name={`repsRange${row}`} placeholder="10-12 ou falha" defaultValue={editRow?.repsRange ?? "10-12"} aria-label={`Repetições do exercício ${row}`} />
                         <input name={`initialLoad${row}`} placeholder="Ex.: 20kg" defaultValue={editRow?.initialLoad ?? ""} aria-label={`Carga inicial do exercício ${row}`} />
                         <input name={`restSeconds${row}`} type="number" min="0" placeholder="60" defaultValue={editRow?.restSeconds ?? ""} aria-label={`Descanso do exercício ${row}`} />
-                        <input name={`supportMaterialUrl${row}`} type="text" placeholder={editRow?.exercise.materialUrl ? "Usar material da aula" : "https://..."} defaultValue={editRow?.supportMaterialUrl ?? ""} aria-label={`Material de apoio do exercício ${row}`} />
+                        <input
+                          name={`supportMaterialUrl${row}`}
+                          type="text"
+                          list="cms-support-materials"
+                          placeholder={editRow?.exercise.materialUrl ? "Material da aula ou URL" : "Selecione ou informe a URL"}
+                          defaultValue={editRow?.supportMaterialUrl ?? ""}
+                          aria-label={`Material de apoio do exercício ${row}`}
+                        />
                       </div>
                     );
                   })}
+                  <datalist id="cms-support-materials">
+                    {cmsExercises.map((exercise) => exercise.materialUrl && (
+                      <option value={exercise.materialUrl} label={`${cmsExerciseLabel(exercise)} - material`} key={`${exercise.id}-material`} />
+                    ))}
+                    {cmsExercises.map((exercise) => exercise.videoUrl && (
+                      <option value={exercise.videoUrl} label={`${cmsExerciseLabel(exercise)} - vídeo`} key={`${exercise.id}-video`} />
+                    ))}
+                  </datalist>
                 </div>
                 <button className="primary-button">
                   <Save size={18} />
@@ -5921,14 +5950,21 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             {!cmsTrashOpen && cmsStep === "publish" && <section className="cms-program-section cms-studio-card">
               <div className="panel-title cms-subtitle">
                 <div>
-                  <h2>Publicar programa</h2>
-                  <p>Revise a jornada final, publique e atribua para um aluno ou para todos.</p>
+                  <h2>Cabeçalho, vigência e publicação</h2>
+                  <p>Finalize a ficha, revise sua duração e publique para um aluno ou para todos.</p>
                 </div>
                 <span>{cmsPrograms.length}</span>
               </div>
               <form className="crud-form cms-form" key={editingCmsProgram?.id ?? "new"} onSubmit={handleSaveCmsProgram}>
+                <div className="cms-form-section-title wide-field">
+                  <span>Bloco 1</span>
+                  <div>
+                    <h3>Cabeçalho e vigência</h3>
+                    <p>Dê um nome claro à ficha e informe por quanto tempo o aluno deverá segui-la.</p>
+                  </div>
+                </div>
                 <label>
-                  Título do programa
+                  Nome da ficha
                   <input name="title" placeholder="Ex.: Treino Iniciante ABC - Academia" required defaultValue={editingCmsProgram?.title ?? ""} />
                 </label>
                 <label>
@@ -5991,7 +6027,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </label>
                 <label>
                   Dias de treino
-                  <input name="totalWorkouts" type="number" min="1" value={cmsProgramDurationWeeks * 7} readOnly />
+                  <div className="cms-readonly-duration">
+                    <input name="totalWorkouts" type="number" min="1" value={cmsProgramDurationWeeks * 7} readOnly />
+                    <span>{cmsProgramDurationWeeks * 7} dias de duração</span>
+                  </div>
                 </label>
                 <label className="wide-field">
                   Descrição para o aluno
@@ -6002,6 +6041,13 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     defaultValue={editingCmsProgram ? parseProgramMetadata(editingCmsProgram.description).description : ""}
                   />
                 </label>
+                <div className="cms-form-section-title wide-field">
+                  <span>Montagem</span>
+                  <div>
+                    <h3>Divisões da ficha</h3>
+                    <p>Vincule os Treinos A, B e C já configurados na etapa anterior.</p>
+                  </div>
+                </div>
                 <div className="cms-builder-list wide-field">
                   {Array.from({ length: 7 }).map((_, index) => {
                     const dayNumber = index + 1;
@@ -6014,7 +6060,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                           <option value="">{dayNumber === 1 ? "Selecione a ficha" : "Ficha opcional"}</option>
                           {cmsWorkoutBlocks.map((block) => (
                             <option value={block.id} key={block.id}>
-                              {block.title}
+                              {block.identifier ?? block.title}{block.focus ? ` - ${block.focus}` : ""} ({block.weeklyFrequency ?? 1}x/semana)
                             </option>
                           ))}
                         </select>

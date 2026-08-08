@@ -1449,7 +1449,7 @@ summary:focus-visible {
 
 .cms-workflow {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 20px;
 }
@@ -1634,6 +1634,65 @@ summary:focus-visible {
   display: grid;
   grid-column: 1 / -1;
   gap: 10px;
+}
+
+.cms-form-section-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.11);
+  padding-top: 18px;
+}
+
+.cms-form-section-title:first-child {
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 0;
+}
+
+.cms-form-section-title > span {
+  flex: 0 0 auto;
+  border: 1px solid rgba(53, 212, 95, 0.38);
+  border-radius: 6px;
+  padding: 6px 9px;
+  background: rgba(53, 212, 95, 0.12);
+  color: #67e58a;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.cms-form-section-title h3 {
+  margin: 0 0 4px;
+  color: #ffffff;
+  font-size: 17px;
+}
+
+.cms-form-section-title p {
+  margin: 0;
+  color: #b8c4bd;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.cms-readonly-duration {
+  position: relative;
+}
+
+.cms-readonly-duration input {
+  padding-right: 138px;
+}
+
+.cms-readonly-duration span {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  color: #9eb2a5;
+  font-size: 11px;
+  font-weight: 800;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .cms-builder-heading {
@@ -6587,6 +6646,17 @@ summary:focus-visible {
   .cms-program-actions,
   .cms-assign-form {
     grid-template-columns: 1fr;
+  }
+
+  .cms-readonly-duration input {
+    padding-right: 12px;
+  }
+
+  .cms-readonly-duration span {
+    position: static;
+    display: block;
+    margin-top: 6px;
+    transform: none;
   }
 
   .cms-hero-metrics {
