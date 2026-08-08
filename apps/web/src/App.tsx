@@ -2713,6 +2713,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const [cmsWorkoutBlocks, setCmsWorkoutBlocks] = useState<CmsWorkoutBlockRow[]>([]);
   const [editingCmsWorkoutBlock, setEditingCmsWorkoutBlock] = useState<CmsWorkoutBlockRow | null>(null);
   const [cmsLessonsModalityFilter, setCmsLessonsModalityFilter] = useState("");
+  const [cmsLessonsPage, setCmsLessonsPage] = useState(1);
   const [cmsBlocksModalityFilter, setCmsBlocksModalityFilter] = useState("");
   const [cmsBlockFormModality, setCmsBlockFormModality] = useState("");
   const [editingCmsProgram, setEditingCmsProgram] = useState<CmsProgramRow | null>(null);
@@ -2744,6 +2745,13 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const filteredCmsExercises = cmsLessonsModalityFilter
     ? cmsExercises.filter((item) => (item.modalityLinks ?? []).some((link) => link.modality.id === cmsLessonsModalityFilter))
     : cmsExercises;
+  const CMS_LESSONS_PAGE_SIZE = 10;
+  const cmsLessonsPageCount = Math.max(1, Math.ceil(filteredCmsExercises.length / CMS_LESSONS_PAGE_SIZE));
+  const cmsLessonsSafePage = Math.min(cmsLessonsPage, cmsLessonsPageCount);
+  const cmsLessonsPageItems = filteredCmsExercises.slice(
+    (cmsLessonsSafePage - 1) * CMS_LESSONS_PAGE_SIZE,
+    cmsLessonsSafePage * CMS_LESSONS_PAGE_SIZE
+  );
   const filteredCmsWorkoutBlocks = cmsBlocksModalityFilter
     ? cmsWorkoutBlocks.filter((item) => item.modality?.id === cmsBlocksModalityFilter)
     : cmsWorkoutBlocks;
@@ -5727,7 +5735,13 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               <div className="cms-filter-bar wide-field">
                 <label className="cms-filter-label">
                   <span>Filtrar por modalidade</span>
-                  <select value={cmsLessonsModalityFilter} onChange={(event) => setCmsLessonsModalityFilter(event.target.value)}>
+                  <select
+                    value={cmsLessonsModalityFilter}
+                    onChange={(event) => {
+                      setCmsLessonsModalityFilter(event.target.value);
+                      setCmsLessonsPage(1);
+                    }}
+                  >
                     <option value="">Todas as modalidades</option>
                     {activeCmsModalities.map((modality) => (
                       <option value={modality.id} key={modality.id}>
@@ -5738,7 +5752,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </label>
                 <span className="cms-filter-count">{filteredCmsExercises.length} aula(s)</span>
               </div>
-              {filteredCmsExercises.map((item) => {
+              {cmsLessonsPageItems.map((item) => {
                 const thumbSrc = cmsExerciseThumbSrc(item.videoUrl);
                 const thumbKind = item.videoUrl ? cmsMediaKind(item.videoUrl) : "file";
                 return (
@@ -5772,6 +5786,31 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   </div>
                 );
               })}
+              {filteredCmsExercises.length > CMS_LESSONS_PAGE_SIZE && (
+                <div className="admin-users-pagination">
+                  <span>
+                    Página {cmsLessonsSafePage} de {cmsLessonsPageCount} • {filteredCmsExercises.length} aula(s)
+                  </span>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setCmsLessonsPage((page) => Math.max(1, page - 1))}
+                      disabled={cmsLessonsSafePage <= 1}
+                    >
+                      <ChevronLeft size={17} />
+                      Anterior
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCmsLessonsPage((page) => Math.min(cmsLessonsPageCount, page + 1))}
+                      disabled={cmsLessonsSafePage >= cmsLessonsPageCount}
+                    >
+                      Próxima
+                      <ChevronRight size={17} />
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>}
 
             {!cmsTrashOpen && cmsStep === "blocks" && <section className="cms-studio-card">
