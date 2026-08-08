@@ -3053,15 +3053,12 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   }
 
   async function handleAssignCmsProgram(programId: string, userIds?: string[], currentDay = 1, totalWorkouts = 30) {
-    const targetUserIds = userIds?.length ? userIds : activeStudents.map((item) => item.id);
-
-    if (targetUserIds.length === 0) {
-      setFeedback("Cadastre alunos antes de atribuir o programa.");
-      return;
-    }
-
     try {
-      await apiPost(`/admin/cms/programs/${programId}/assign`, { userIds: targetUserIds, currentDay, totalWorkouts }, token);
+      await apiPost(
+        `/admin/cms/programs/${programId}/assign`,
+        { ...(userIds?.length ? { userIds } : {}), currentDay, totalWorkouts },
+        token
+      );
       await applyAdminChange(["programs"], "Programa atribuído aos alunos.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível atribuir o programa aos alunos."));

@@ -155,7 +155,7 @@ const cmsModalitySchema = z.object({
 });
 
 const cmsProgramAssignSchema = z.object({
-  userIds: z.array(z.string().min(1)).min(1),
+  userIds: z.array(z.string().min(1)).optional(),
   currentDay: z.coerce.number().int().min(1).default(1),
   totalWorkouts: z.coerce.number().int().min(1).optional()
 });
@@ -544,7 +544,13 @@ async function getActiveStudentIds(userIds?: string[], targetGender: "ALL" | "MA
     .map((student) => student.id);
 }
 
-async function assignProgramToActiveStudents(programId: string, currentDay = 1, totalWorkouts?: number, userIds?: string[]) {
+async function assignProgramToActiveStudents(
+  programId: string,
+  currentDay = 1,
+  totalWorkouts?: number,
+  userIds?: string[],
+  targetGenderOverride?: "ALL" | "MALE" | "FEMALE"
+) {
   const program = await prisma.program.findUniqueOrThrow({
     where: { id: programId },
     select: {
@@ -553,7 +559,7 @@ async function assignProgramToActiveStudents(programId: string, currentDay = 1, 
     }
   });
   const workoutGoal = totalWorkouts ?? program.totalWorkouts;
-  const activeStudentIds = await getActiveStudentIds(userIds, program.targetGender);
+  const activeStudentIds = await getActiveStudentIds(userIds, targetGenderOverride ?? program.targetGender);
 
   if (activeStudentIds.length === 0) {
     return [];
@@ -1883,7 +1889,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       });
     }
 
-    const assignments = await assignProgramToActiveStudents(id, body.currentDay, body.totalWorkouts ?? program.totalWorkouts, body.userIds);
+    const assignments = await assignProgramToActiveStudents(id, body.currentDay, body.totalWorkouts ?? program.totalWorkouts, body.userIds, "ALL");
 
     if (assignments.length === 0) {
       return reply.code(409).send({
