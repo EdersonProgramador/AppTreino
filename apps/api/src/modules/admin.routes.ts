@@ -9,6 +9,7 @@ import { hashPassword, requireRole } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { autoCloseStaleTickets, FINALIZE_PROMPT, ticketInclude } from "./ticket.utils.js";
+import { calculateBodyFatEstimate, physicalAssessmentFormSchema } from "./physical-assessment.utils.js";
 
 export const uploadsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../uploads");
 const uploadGroups = ["lessons", "materials", "images", "audio"] as const;
@@ -104,6 +105,7 @@ const cmsWorkoutBlockSchema = z.object({
   title: z.string().min(2),
   structureType: z.enum(["NORMAL", "BI_SET", "DROP_SET", "REST_PAUSE"]).default("NORMAL"),
   restTime: z.coerce.number().int().min(0),
+  modalityId: z.string().min(1).nullable().optional(),
   exercises: z
     .array(
       z.object({
@@ -122,6 +124,7 @@ const cmsProgramSchema = z.object({
   modalityId: z.string().min(1),
   targetGender: z.enum(["ALL", "MALE", "FEMALE"]).default("ALL"),
   totalWorkouts: z.coerce.number().int().min(1).default(30),
+  sortOrder: z.coerce.number().int().min(0).optional(),
   status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).default("DRAFT"),
   isActive: z.coerce.boolean().default(true),
   days: z
@@ -209,16 +212,9 @@ const paymentUpdateSchema = z.object({
   paidAt: z.coerce.date().nullable().optional()
 });
 
-const physicalAssessmentSchema = z.object({
+const physicalAssessmentFormWithUserSchema = physicalAssessmentFormSchema.extend({
   userId: z.string().min(1),
-  assessedAt: z.coerce.date(),
-  weightKg: z.coerce.number().positive().optional(),
-  heightCm: z.coerce.number().positive().optional(),
-  bodyFatPct: z.coerce.number().min(0).max(100).optional(),
-  waistCm: z.coerce.number().positive().optional(),
-  chestCm: z.coerce.number().positive().optional(),
-  hipCm: z.coerce.number().positive().optional(),
-  notes: z.string().optional()
+  assessedAt: z.coerce.date().optional()
 });
 
 const eventSchema = z.object({
@@ -398,6 +394,7 @@ async function assertModalitySlugAvailable(slug: string, excludeId?: string) {
   const existing = await prisma.modality.findFirst({
     where: {
       slug,
+      deletedAt: null,
       ...(excludeId ? { id: { not: excludeId } } : {})
     },
     select: {
@@ -414,6 +411,7 @@ async function assertLocationSlugAvailable(slug: string, excludeId?: string) {
   const existing = await prisma.location.findFirst({
     where: {
       slug,
+      deletedAt: null,
       ...(excludeId ? { id: { not: excludeId } } : {})
     },
     select: {
@@ -437,7 +435,8 @@ async function assertModalitiesExist(modalityIds: string[]) {
     where: {
       id: {
         in: uniqueIds
-      }
+      },
+      deletedAt: null
     },
     select: {
       id: true
@@ -463,7 +462,8 @@ async function assertCmsExercisesExist(exerciseIds: string[]) {
       id: {
         in: uniqueIds
       },
-      workoutDayId: null
+      workoutDayId: null,
+      deletedAt: null
     },
     select: {
       id: true
@@ -488,7 +488,8 @@ async function assertWorkoutBlocksExist(workoutBlockIds: string[]) {
     where: {
       id: {
         in: uniqueIds
-      }
+      },
+      deletedAt: null
     },
     select: {
       id: true
@@ -744,9 +745,9 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
 
     const [users, activeMemberships, pendingPayments, todayAttendance] = await Promise.all([
-      prisma.user.count(),
-      prisma.membership.count({ where: { status: "ACTIVE" } }),
-      prisma.payment.count({ where: { status: "PENDING" } }),
+      prisma.user.count({ where: { deletedAt: null } }),
+      prisma.membership.count({ where: { status: "ACTIVE", deletedAt: null } }),
+      prisma.payment.count({ where: { status: "PENDING", deletedAt: null } }),
       prisma.attendanceRecord.count({
         where: {
           date: {
@@ -763,6 +764,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get("/admin/users", async () => {
     requireDatabase();
     const users = await prisma.user.findMany({
+      where: { deletedAt: null },
       include: {
         profile: true,
         memberships: {
@@ -1010,36 +1012,18 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/users/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    const memberships = await prisma.membership.findMany({
-      where: { userId: id },
-      select: { id: true }
+    await prisma.user.update({
+      where: { id },
+      data: { deletedAt: new Date(), status: "INACTIVE" }
     });
-    const membershipIds = memberships.map((membership) => membership.id);
 
-    await prisma.$transaction([
-      prisma.payment.deleteMany({
-        where: {
-          membershipId: {
-            in: membershipIds
-          }
-        }
-      }),
-      prisma.membership.deleteMany({ where: { userId: id } }),
-      prisma.attendanceRecord.deleteMany({ where: { userId: id } }),
-      prisma.physicalAssessment.deleteMany({ where: { userId: id } }),
-      prisma.eventRegistration.deleteMany({ where: { userId: id } }),
-      prisma.supportTicket.deleteMany({ where: { userId: id } }),
-      prisma.supportTicket.updateMany({ where: { assignedToId: id }, data: { assignedToId: null } }),
-      prisma.aiWorkoutPlan.deleteMany({ where: { userId: id } }),
-      prisma.profile.deleteMany({ where: { userId: id } }),
-      prisma.user.delete({ where: { id } })
-    ]);
     return { ok: true };
   });
 
   app.get("/admin/workouts", async () => {
     requireDatabase();
     const workouts = await prisma.workout.findMany({
+      where: { deletedAt: null },
       include: {
         days: {
           include: {
@@ -1166,17 +1150,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/workouts/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    await prisma.$transaction([
-      prisma.exercise.deleteMany({
-        where: {
-          workoutDay: {
-            workoutId: id
-          }
-        }
-      }),
-      prisma.workoutDay.deleteMany({ where: { workoutId: id } }),
-      prisma.workout.delete({ where: { id } })
-    ]);
+    await prisma.workout.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
     return { ok: true };
   });
 
@@ -1184,6 +1161,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     await ensureDefaultModalities();
     const modalities = await prisma.modality.findMany({
+      where: { deletedAt: null },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }]
     });
 
@@ -1237,15 +1215,69 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { modality };
   });
 
+  app.post("/admin/cms/modalities/reorder", async (request, reply) => {
+    requireDatabase();
+    const body = z
+      .object({
+        ids: z.array(z.string().min(1)).min(1)
+      })
+      .parse(request.body);
+    if (new Set(body.ids).size !== body.ids.length) {
+      return reply.code(400).send({ error: "Lista de reordenação contém duplicados." });
+    }
+    await prisma.$transaction(
+      body.ids.map((id, index) =>
+        prisma.modality.update({
+          where: { id },
+          data: { sortOrder: index + 1 }
+        })
+      )
+    );
+    const modalities = await prisma.modality.findMany({
+      where: { deletedAt: null },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }]
+    });
+
+    return { modalities };
+  });
+
   app.delete("/admin/cms/modalities/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
     await prisma.modality.update({
       where: { id },
       data: {
-        isActive: false
+        isActive: false,
+        deletedAt: new Date()
       }
     });
+
+    return { ok: true };
+  });
+
+  app.post("/admin/cms/modalities/:id/restore", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const modality = await prisma.modality.update({
+      where: { id },
+      data: {
+        isActive: true,
+        deletedAt: null
+      }
+    });
+
+    return { ok: true, modality };
+  });
+
+  app.delete("/admin/cms/modalities/:id/permanent", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    await prisma.$transaction([
+      prisma.exerciseModality.deleteMany({ where: { modalityId: id } }),
+      prisma.workoutBlock.updateMany({ where: { modalityId: id }, data: { modalityId: null } }),
+      prisma.program.updateMany({ where: { modalityId: id }, data: { modalityId: null } }),
+      prisma.modality.delete({ where: { id } })
+    ]);
 
     return { ok: true };
   });
@@ -1253,6 +1285,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get("/admin/cms/locations", async () => {
     requireDatabase();
     const locations = await prisma.location.findMany({
+      where: { deletedAt: null },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }]
     });
 
@@ -1321,6 +1354,34 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/cms/locations/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
+    await prisma.location.update({
+      where: { id },
+      data: {
+        isActive: false,
+        deletedAt: new Date()
+      }
+    });
+
+    return { ok: true };
+  });
+
+  app.post("/admin/cms/locations/:id/restore", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const location = await prisma.location.update({
+      where: { id },
+      data: {
+        isActive: true,
+        deletedAt: null
+      }
+    });
+
+    return { ok: true, location };
+  });
+
+  app.delete("/admin/cms/locations/:id/permanent", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
     await prisma.location.delete({ where: { id } });
 
     return { ok: true };
@@ -1329,6 +1390,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get("/admin/cms/announcements", async () => {
     requireDatabase();
     const announcements = await prisma.announcement.findMany({
+      where: { deletedAt: null },
       orderBy: {
         createdAt: "desc"
       }
@@ -1374,7 +1436,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/cms/announcements/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    await prisma.announcement.delete({ where: { id } });
+    await prisma.announcement.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
 
     return { ok: true };
   });
@@ -1383,7 +1448,8 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     const exercises = await prisma.exercise.findMany({
       where: {
-        workoutDayId: null
+        workoutDayId: null,
+        deletedAt: null
       },
       include: {
         alternatives: true,
@@ -1512,6 +1578,28 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/cms/exercises/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
+    await prisma.exercise.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
+
+    return { ok: true };
+  });
+
+  app.post("/admin/cms/exercises/:id/restore", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const exercise = await prisma.exercise.update({
+      where: { id },
+      data: { deletedAt: null }
+    });
+
+    return { ok: true, exercise };
+  });
+
+  app.delete("/admin/cms/exercises/:id/permanent", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
     await prisma.$transaction([
       prisma.userProgress.deleteMany({ where: { exerciseId: id } }),
       prisma.workoutBlockExercise.deleteMany({ where: { exerciseId: id } }),
@@ -1532,7 +1620,9 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get("/admin/cms/workout-blocks", async () => {
     requireDatabase();
     const workoutBlocks = await prisma.workoutBlock.findMany({
+      where: { deletedAt: null },
       include: {
+        modality: true,
         exercises: {
           include: {
             exercise: true
@@ -1564,6 +1654,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         title: body.title,
         structureType: body.structureType,
         restTime: body.restTime,
+        modalityId: body.modalityId ?? null,
         exercises: {
           create: body.exercises.map((exercise) => ({
             exerciseId: exercise.exerciseId,
@@ -1574,6 +1665,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         }
       },
       include: {
+        modality: true,
         exercises: {
           include: {
             exercise: true
@@ -1607,6 +1699,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           ...(body.title !== undefined ? { title: body.title } : {}),
           ...(body.structureType !== undefined ? { structureType: body.structureType } : {}),
           ...(body.restTime !== undefined ? { restTime: body.restTime } : {}),
+          ...(body.modalityId !== undefined ? { modalityId: body.modalityId ?? null } : {}),
           ...(body.exercises !== undefined
             ? {
                 exercises: {
@@ -1626,6 +1719,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     const workoutBlock = await prisma.workoutBlock.findUniqueOrThrow({
       where: { id },
       include: {
+        modality: true,
         exercises: {
           include: {
             exercise: true
@@ -1643,6 +1737,28 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/cms/workout-blocks/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
+    await prisma.workoutBlock.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
+
+    return { ok: true };
+  });
+
+  app.post("/admin/cms/workout-blocks/:id/restore", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const workoutBlock = await prisma.workoutBlock.update({
+      where: { id },
+      data: { deletedAt: null }
+    });
+
+    return { ok: true, workoutBlock };
+  });
+
+  app.delete("/admin/cms/workout-blocks/:id/permanent", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
     await prisma.$transaction([
       prisma.programDayWorkout.deleteMany({ where: { workoutBlockId: id } }),
       prisma.workoutBlockExercise.deleteMany({ where: { workoutBlockId: id } }),
@@ -1655,6 +1771,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get("/admin/cms/programs", async () => {
     requireDatabase();
     const programs = await prisma.program.findMany({
+      where: { deletedAt: null },
       include: {
         modality: true,
         days: {
@@ -1672,9 +1789,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           }
         }
       },
-      orderBy: {
-        createdAt: "desc"
-      }
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
     });
 
     return { programs };
@@ -1686,6 +1801,12 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     await assertModalitiesExist([body.modalityId]);
     const modality = await prisma.modality.findUniqueOrThrow({ where: { id: body.modalityId } });
     await assertWorkoutBlocksExist(body.days.map((day) => day.workoutBlockId));
+    const maxSortOrder = await prisma.program.aggregate({
+      where: { deletedAt: null },
+      _max: {
+        sortOrder: true
+      }
+    });
     const program = await prisma.program.create({
       data: {
         modalityId: body.modalityId,
@@ -1693,6 +1814,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         description: buildProgramDescription(body.description, modality.name),
         targetGender: body.targetGender,
         totalWorkouts: body.totalWorkouts,
+        sortOrder: body.sortOrder ?? (maxSortOrder._max.sortOrder ?? 0) + 1,
         status: body.status,
         isActive: body.isActive,
         publishedAt: body.status === "PUBLISHED" ? new Date() : null,
@@ -1753,6 +1875,19 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       : currentProgram.description;
     const publishedAt =
       body.status === "PUBLISHED" ? new Date() : body.status === "DRAFT" || body.status === "ARCHIVED" ? null : currentProgram.publishedAt;
+    const nextPublishedSortOrder =
+      body.status === "PUBLISHED" && currentProgram.status !== "PUBLISHED" && body.sortOrder == null
+        ? ((await prisma.program.aggregate({
+            where: {
+              status: "PUBLISHED",
+              isActive: true,
+              deletedAt: null
+            },
+            _max: {
+              sortOrder: true
+            }
+          }))._max.sortOrder ?? 0) + 1
+        : null;
 
     await prisma.$transaction([
       ...(body.days ? [prisma.programDayWorkout.deleteMany({ where: { programId: id } })] : []),
@@ -1764,6 +1899,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           description: descriptionText,
           targetGender: body.targetGender ?? currentProgram.targetGender,
           totalWorkouts: body.totalWorkouts ?? currentProgram.totalWorkouts,
+          sortOrder: body.sortOrder ?? nextPublishedSortOrder ?? currentProgram.sortOrder,
           status: body.status ?? currentProgram.status,
           isActive: body.isActive ?? currentProgram.isActive,
           publishedAt,
@@ -1807,6 +1943,69 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { program };
   });
 
+  app.post("/admin/cms/programs/reorder", async (request, reply) => {
+    requireDatabase();
+    const body = z
+      .object({
+        ids: z.array(z.string().min(1)).min(1)
+      })
+      .parse(request.body);
+
+    if (new Set(body.ids).size !== body.ids.length) {
+      return reply.code(400).send({ error: "Lista de reordenação contém duplicados." });
+    }
+
+    const publishedPrograms = await prisma.program.findMany({
+      where: {
+        status: "PUBLISHED",
+        isActive: true,
+        deletedAt: null
+      },
+      select: {
+        id: true
+      }
+    });
+    const publishedIds = new Set(publishedPrograms.map((program) => program.id));
+    const containsOnlyPublished = body.ids.every((id) => publishedIds.has(id));
+
+    if (!containsOnlyPublished || publishedIds.size !== body.ids.length) {
+      return reply.code(400).send({ error: "Envie todos e apenas os programas publicados para reordenar." });
+    }
+
+    await prisma.$transaction(
+      body.ids.map((id, index) =>
+        prisma.program.update({
+          where: { id },
+          data: { sortOrder: index + 1 }
+        })
+      )
+    );
+
+    const programs = await prisma.program.findMany({
+      where: { deletedAt: null },
+      include: {
+        modality: true,
+        days: {
+          include: {
+            workoutBlock: true
+          },
+          orderBy: [{ dayNumber: "asc" }, { order: "asc" }]
+        },
+        assignedUsers: {
+          include: {
+            user: true
+          },
+          orderBy: {
+            startedAt: "desc"
+          }
+        }
+      },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
+    });
+
+    return { programs };
+  });
+
   app.post("/admin/cms/programs/:id/publish", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
@@ -1821,11 +2020,26 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       throw httpError(409, "Cadastre ao menos um dia antes de publicar o programa.");
     }
 
+    const maxPublishedSortOrder = await prisma.program.aggregate({
+      where: {
+        status: "PUBLISHED",
+        isActive: true,
+        deletedAt: null,
+        id: {
+          not: id
+        }
+      },
+      _max: {
+        sortOrder: true
+      }
+    });
+
     const program = await prisma.program.update({
       where: { id },
       data: {
         status: "PUBLISHED",
         isActive: true,
+        sortOrder: currentProgram.status === "PUBLISHED" ? currentProgram.sortOrder : (maxPublishedSortOrder._max.sortOrder ?? 0) + 1,
         publishedAt: new Date()
       },
       include: {
@@ -1903,6 +2117,34 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/cms/programs/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
+    await prisma.program.update({
+      where: { id },
+      data: {
+        isActive: false,
+        deletedAt: new Date()
+      }
+    });
+
+    return { ok: true };
+  });
+
+  app.post("/admin/cms/programs/:id/restore", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const program = await prisma.program.update({
+      where: { id },
+      data: {
+        isActive: true,
+        deletedAt: null
+      }
+    });
+
+    return { ok: true, program };
+  });
+
+  app.delete("/admin/cms/programs/:id/permanent", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
     await prisma.$transaction([
       prisma.programDayWorkout.deleteMany({ where: { programId: id } }),
       prisma.program.delete({ where: { id } })
@@ -1911,9 +2153,463 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  const trashKindSchema = z.enum([
+    "users",
+    "workouts",
+    "announcements",
+    "plans",
+    "memberships",
+    "payments",
+    "assessments",
+    "events",
+    "tickets",
+    "aiPlans",
+    "products",
+    "purchases",
+    "cards",
+    "favorites",
+    "ratings",
+    "contactMessages",
+    "modalities",
+    "locations",
+    "exercises",
+    "workoutBlocks",
+    "programs"
+  ]);
+
+  const trashParamsSchema = z.object({
+    kind: trashKindSchema,
+    id: z.string().min(1)
+  });
+
+  function formatBRL(cents: number): string {
+    return `R$ ${(cents / 100).toFixed(2).replace(".", ",")}`;
+  }
+
+  function formatDate(value: Date | string | null | undefined): string {
+    if (!value) return "—";
+    return new Date(value).toLocaleDateString("pt-BR");
+  }
+
+  app.get("/admin/trash", async () => {
+    requireDatabase();
+    const [
+      users,
+      workouts,
+      announcements,
+      plans,
+      memberships,
+      payments,
+      assessments,
+      events,
+      tickets,
+      aiPlans,
+      products,
+      purchases,
+      cards,
+      favorites,
+      ratings,
+      contactMessages,
+      modalities,
+      locations,
+      exercises,
+      workoutBlocks,
+      programs
+    ] = await Promise.all([
+      prisma.user.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, name: true, email: true, phone: true },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.workout.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, title: true, objective: true },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.announcement.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, title: true, status: true },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.plan.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, name: true, code: true, priceInCents: true },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.membership.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, status: true, user: { select: { name: true } }, plan: { select: { name: true } } },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.payment.findMany({
+        where: { deletedAt: { not: null } },
+        select: {
+          id: true,
+          amountInCents: true,
+          status: true,
+          dueDate: true,
+          membership: { select: { user: { select: { name: true } }, plan: { select: { name: true } } } }
+        },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.physicalAssessment.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, assessedAt: true, user: { select: { name: true } } },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.event.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, title: true, startsAt: true, status: true },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.supportTicket.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, subject: true, status: true, user: { select: { name: true } } },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.aiWorkoutPlan.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, objective: true, level: true, user: { select: { name: true } } },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.product.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, name: true, priceInCents: true, category: true },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.purchase.findMany({
+        where: { deletedAt: { not: null } },
+        select: {
+          id: true,
+          amountInCents: true,
+          status: true,
+          user: { select: { name: true } },
+          product: { select: { name: true } }
+        },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.paymentCard.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, brand: true, lastFour: true, holderName: true, user: { select: { name: true } } },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.favorite.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, user: { select: { name: true } }, product: { select: { name: true } } },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.rating.findMany({
+        where: { deletedAt: { not: null } },
+        select: {
+          id: true,
+          score: true,
+          comment: true,
+          user: { select: { name: true } },
+          product: { select: { name: true } }
+        },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.contactMessage.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, name: true, subject: true, email: true },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.modality.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, name: true, description: true },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.location.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, name: true, city: true, address: true },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.exercise.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, title: true, name: true, equipmentTags: true },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.workoutBlock.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, title: true, structureType: true },
+        orderBy: { deletedAt: "desc" }
+      }),
+      prisma.program.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, title: true, status: true },
+        orderBy: { deletedAt: "desc" }
+      })
+    ]);
+
+    return {
+      trash: {
+        users: users.map((item) => ({ id: item.id, name: item.name, sub: item.email ?? item.phone ?? "Sem e-mail" })),
+        workouts: workouts.map((item) => ({ id: item.id, name: item.title, sub: item.objective ?? "Treino" })),
+        announcements: announcements.map((item) => ({ id: item.id, name: item.title, sub: item.status })),
+        plans: plans.map((item) => ({ id: item.id, name: item.name, sub: `${item.code} · ${formatBRL(item.priceInCents)}` })),
+        memberships: memberships.map((item) => ({
+          id: item.id,
+          name: item.user.name,
+          sub: `${item.plan.name} · ${item.status}`
+        })),
+        payments: payments.map((item) => ({
+          id: item.id,
+          name: item.membership.user.name,
+          sub: `${item.membership.plan.name} · ${formatBRL(item.amountInCents)} · ${item.status}`
+        })),
+        assessments: assessments.map((item) => ({ id: item.id, name: item.user.name, sub: formatDate(item.assessedAt) })),
+        events: events.map((item) => ({ id: item.id, name: item.title, sub: `${formatDate(item.startsAt)} · ${item.status}` })),
+        tickets: tickets.map((item) => ({ id: item.id, name: item.subject, sub: `${item.user.name} · ${item.status}` })),
+        aiPlans: aiPlans.map((item) => ({ id: item.id, name: item.objective, sub: `${item.user.name} · ${item.level}` })),
+        products: products.map((item) => ({
+          id: item.id,
+          name: item.name,
+          sub: `${formatBRL(item.priceInCents)}${item.category ? ` · ${item.category}` : ""}`
+        })),
+        purchases: purchases.map((item) => ({
+          id: item.id,
+          name: item.product.name,
+          sub: `${item.user.name} · ${formatBRL(item.amountInCents)} · ${item.status}`
+        })),
+        cards: cards.map((item) => ({
+          id: item.id,
+          name: item.brand ? `${item.brand} •••• ${item.lastFour}` : `•••• ${item.lastFour}`,
+          sub: item.holderName ?? item.user.name
+        })),
+        favorites: favorites.map((item) => ({ id: item.id, name: item.product.name, sub: item.user.name })),
+        ratings: ratings.map((item) => ({
+          id: item.id,
+          name: item.product?.name ?? "Produto removido",
+          sub: `${item.user.name} · ${item.score}★${item.comment ? ` · ${item.comment}` : ""}`
+        })),
+        contactMessages: contactMessages.map((item) => ({
+          id: item.id,
+          name: item.name,
+          sub: `${item.email}${item.subject ? ` · ${item.subject}` : ""}`
+        })),
+        modalities: modalities.map((item) => ({ id: item.id, name: item.name, sub: item.description ?? "Modalidade" })),
+        locations: locations.map((item) => ({ id: item.id, name: item.name, sub: item.city ?? item.address ?? "Localidade" })),
+        exercises: exercises.map((item) => ({
+          id: item.id,
+          name: item.title ?? item.name ?? "Aula",
+          sub: item.equipmentTags.join(", ") || "Aula"
+        })),
+        workoutBlocks: workoutBlocks.map((item) => ({ id: item.id, name: item.title, sub: item.structureType })),
+        programs: programs.map((item) => ({ id: item.id, name: item.title, sub: item.status }))
+      }
+    };
+  });
+
+  app.post("/admin/trash/:kind/:id/restore", async (request) => {
+    requireDatabase();
+    const { kind, id } = trashParamsSchema.parse(request.params);
+
+    switch (kind) {
+      case "users":
+        await prisma.user.update({ where: { id }, data: { deletedAt: null, status: "ACTIVE" } });
+        break;
+      case "workouts":
+        await prisma.workout.update({ where: { id }, data: { deletedAt: null } });
+        break;
+      case "announcements":
+        await prisma.announcement.update({ where: { id }, data: { deletedAt: null } });
+        break;
+      case "plans":
+        await prisma.plan.update({ where: { id }, data: { deletedAt: null } });
+        break;
+      case "memberships":
+        await prisma.membership.update({ where: { id }, data: { deletedAt: null } });
+        break;
+      case "payments":
+        await prisma.payment.update({ where: { id }, data: { deletedAt: null } });
+        break;
+      case "assessments":
+        await prisma.physicalAssessment.update({ where: { id }, data: { deletedAt: null } });
+        break;
+      case "events":
+        await prisma.event.update({ where: { id }, data: { deletedAt: null } });
+        break;
+      case "tickets":
+        await prisma.supportTicket.update({ where: { id }, data: { deletedAt: null } });
+        break;
+      case "aiPlans":
+        await prisma.aiWorkoutPlan.update({ where: { id }, data: { deletedAt: null } });
+        break;
+      case "products":
+        await prisma.product.update({ where: { id }, data: { deletedAt: null, isActive: true } });
+        break;
+      case "purchases":
+        await prisma.purchase.update({ where: { id }, data: { deletedAt: null } });
+        break;
+      case "cards":
+        await prisma.paymentCard.update({ where: { id }, data: { deletedAt: null } });
+        break;
+      case "favorites":
+        await prisma.favorite.update({ where: { id }, data: { deletedAt: null } });
+        break;
+      case "ratings":
+        await prisma.rating.update({ where: { id }, data: { deletedAt: null } });
+        break;
+      case "contactMessages":
+        await prisma.contactMessage.update({ where: { id }, data: { deletedAt: null } });
+        break;
+      case "modalities":
+        await prisma.modality.update({ where: { id }, data: { deletedAt: null, isActive: true } });
+        break;
+      case "locations":
+        await prisma.location.update({ where: { id }, data: { deletedAt: null, isActive: true } });
+        break;
+      case "exercises":
+        await prisma.exercise.update({ where: { id }, data: { deletedAt: null } });
+        break;
+      case "workoutBlocks":
+        await prisma.workoutBlock.update({ where: { id }, data: { deletedAt: null } });
+        break;
+      case "programs":
+        await prisma.program.update({ where: { id }, data: { deletedAt: null, isActive: true } });
+        break;
+    }
+
+    return { ok: true };
+  });
+
+  app.delete("/admin/trash/:kind/:id/permanent", async (request) => {
+    requireDatabase();
+    const { kind, id } = trashParamsSchema.parse(request.params);
+
+    switch (kind) {
+      case "users": {
+        const memberships = await prisma.membership.findMany({ where: { userId: id }, select: { id: true } });
+        const membershipIds = memberships.map((membership) => membership.id);
+        await prisma.$transaction([
+          prisma.payment.deleteMany({ where: { membershipId: { in: membershipIds } } }),
+          prisma.membership.deleteMany({ where: { userId: id } }),
+          prisma.attendanceRecord.deleteMany({ where: { userId: id } }),
+          prisma.physicalAssessment.deleteMany({ where: { userId: id } }),
+          prisma.eventRegistration.deleteMany({ where: { userId: id } }),
+          prisma.supportTicket.deleteMany({ where: { userId: id } }),
+          prisma.supportTicket.updateMany({ where: { assignedToId: id }, data: { assignedToId: null } }),
+          prisma.aiWorkoutPlan.deleteMany({ where: { userId: id } }),
+          prisma.profile.deleteMany({ where: { userId: id } }),
+          prisma.user.delete({ where: { id } })
+        ]);
+        break;
+      }
+      case "workouts": {
+        await prisma.$transaction([
+          prisma.exercise.deleteMany({ where: { workoutDay: { workoutId: id } } }),
+          prisma.workoutDay.deleteMany({ where: { workoutId: id } }),
+          prisma.workout.delete({ where: { id } })
+        ]);
+        break;
+      }
+      case "announcements":
+        await prisma.announcement.delete({ where: { id } });
+        break;
+      case "plans": {
+        const memberships = await prisma.membership.findMany({ where: { planId: id }, select: { id: true } });
+        const membershipIds = memberships.map((membership) => membership.id);
+        await prisma.$transaction([
+          prisma.payment.deleteMany({ where: { membershipId: { in: membershipIds } } }),
+          prisma.membership.deleteMany({ where: { planId: id } }),
+          prisma.plan.delete({ where: { id } })
+        ]);
+        break;
+      }
+      case "memberships":
+        await prisma.$transaction([
+          prisma.payment.deleteMany({ where: { membershipId: id } }),
+          prisma.membership.delete({ where: { id } })
+        ]);
+        break;
+      case "payments":
+        await prisma.payment.delete({ where: { id } });
+        break;
+      case "assessments":
+        await prisma.physicalAssessment.delete({ where: { id } });
+        break;
+      case "events":
+        await prisma.$transaction([
+          prisma.eventRegistration.deleteMany({ where: { eventId: id } }),
+          prisma.event.delete({ where: { id } })
+        ]);
+        break;
+      case "tickets":
+        await prisma.supportTicket.delete({ where: { id } });
+        break;
+      case "aiPlans":
+        await prisma.aiWorkoutPlan.delete({ where: { id } });
+        break;
+      case "products":
+        await prisma.$transaction([
+          prisma.favorite.deleteMany({ where: { productId: id } }),
+          prisma.rating.deleteMany({ where: { productId: id } }),
+          prisma.product.delete({ where: { id } })
+        ]);
+        break;
+      case "purchases":
+        await prisma.purchase.delete({ where: { id } });
+        break;
+      case "cards":
+        await prisma.paymentCard.delete({ where: { id } });
+        break;
+      case "favorites":
+        await prisma.favorite.delete({ where: { id } });
+        break;
+      case "ratings":
+        await prisma.rating.delete({ where: { id } });
+        break;
+      case "contactMessages":
+        await prisma.contactMessage.delete({ where: { id } });
+        break;
+      case "modalities":
+        await prisma.$transaction([
+          prisma.exerciseModality.deleteMany({ where: { modalityId: id } }),
+          prisma.workoutBlock.updateMany({ where: { modalityId: id }, data: { modalityId: null } }),
+          prisma.program.updateMany({ where: { modalityId: id }, data: { modalityId: null } }),
+          prisma.modality.delete({ where: { id } })
+        ]);
+        break;
+      case "locations":
+        await prisma.location.delete({ where: { id } });
+        break;
+      case "exercises":
+        await prisma.$transaction([
+          prisma.userProgress.deleteMany({ where: { exerciseId: id } }),
+          prisma.workoutBlockExercise.deleteMany({ where: { exerciseId: id } }),
+          prisma.exerciseModality.deleteMany({ where: { exerciseId: id } }),
+          prisma.exercise.update({
+            where: { id },
+            data: {
+              alternatives: { set: [] },
+              alternativeTo: { set: [] }
+            }
+          }),
+          prisma.exercise.delete({ where: { id } })
+        ]);
+        break;
+      case "workoutBlocks":
+        await prisma.$transaction([
+          prisma.programDayWorkout.deleteMany({ where: { workoutBlockId: id } }),
+          prisma.workoutBlockExercise.deleteMany({ where: { workoutBlockId: id } }),
+          prisma.workoutBlock.delete({ where: { id } })
+        ]);
+        break;
+      case "programs":
+        await prisma.$transaction([
+          prisma.programDayWorkout.deleteMany({ where: { programId: id } }),
+          prisma.program.delete({ where: { id } })
+        ]);
+        break;
+    }
+
+    return { ok: true };
+  });
+
+
   app.get("/admin/plans", async () => {
     requireDatabase();
-    const plans = await prisma.plan.findMany({ orderBy: { priceInCents: "asc" } });
+    const plans = await prisma.plan.findMany({ where: { deletedAt: null }, orderBy: { priceInCents: "asc" } });
     return { plans };
   });
 
@@ -1935,28 +2631,17 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/plans/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    const memberships = await prisma.membership.findMany({
-      where: { planId: id },
-      select: { id: true }
+    await prisma.plan.update({
+      where: { id },
+      data: { deletedAt: new Date() }
     });
-    const membershipIds = memberships.map((membership) => membership.id);
-    await prisma.$transaction([
-      prisma.payment.deleteMany({
-        where: {
-          membershipId: {
-            in: membershipIds
-          }
-        }
-      }),
-      prisma.membership.deleteMany({ where: { planId: id } }),
-      prisma.plan.delete({ where: { id } })
-    ]);
     return { ok: true };
   });
 
   app.get("/admin/memberships", async () => {
     requireDatabase();
     const memberships = await prisma.membership.findMany({
+      where: { deletedAt: null },
       include: {
         user: true,
         plan: true,
@@ -2026,16 +2711,17 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/memberships/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    await prisma.$transaction([
-      prisma.payment.deleteMany({ where: { membershipId: id } }),
-      prisma.membership.delete({ where: { id } })
-    ]);
+    await prisma.membership.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
     return { ok: true };
   });
 
   app.get("/admin/payments", async () => {
     requireDatabase();
     const payments = await prisma.payment.findMany({
+      where: { deletedAt: null },
       include: {
         membership: {
           include: {
@@ -2106,7 +2792,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/payments/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    await prisma.payment.delete({ where: { id } });
+    await prisma.payment.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
 
     return { ok: true };
   });
@@ -2114,8 +2803,13 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get("/admin/physical-assessments", async () => {
     requireDatabase();
     const assessments = await prisma.physicalAssessment.findMany({
+      where: { deletedAt: null },
       include: {
-        user: true
+        user: {
+          include: {
+            profile: true
+          }
+        }
       },
       orderBy: {
         assessedAt: "desc"
@@ -2127,27 +2821,96 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
   app.post("/admin/physical-assessments", async (request, reply) => {
     requireDatabase();
-    const body = physicalAssessmentSchema.parse(request.body);
+    const body = physicalAssessmentFormWithUserSchema.parse(request.body);
+    const form = body.formulario_avaliacao_fisica;
+    const bodyFatPct = calculateBodyFatEstimate({
+      gender: form.dados_pessoais_e_objetivos.genero_biologico.resposta,
+      heightCm: form.composicao_corporal_basica.altura_cm,
+      neckCm: form.perimetros_corporais_cm.pescoço.valor,
+      waistCm: form.perimetros_corporais_cm.cintura.valor,
+      hipCm: form.perimetros_corporais_cm.quadril.valor,
+      weightKg: form.composicao_corporal_basica.peso_atual_kg,
+      birthDate: form.dados_pessoais_e_objetivos.data_nascimento
+    });
     const assessment = await prisma.physicalAssessment.create({
-      data: body,
+      data: {
+        userId: body.userId,
+        source: "ADMIN",
+        assessedAt: body.assessedAt ?? new Date(),
+        weightKg: form.composicao_corporal_basica.peso_atual_kg,
+        heightCm: form.composicao_corporal_basica.altura_cm,
+        bodyFatPct,
+        waistCm: form.perimetros_corporais_cm.cintura.valor,
+        chestCm: form.perimetros_corporais_cm.torax.valor,
+        hipCm: form.perimetros_corporais_cm.quadril.valor,
+        details: body
+      },
       include: {
-        user: true
+        user: {
+          include: {
+            profile: true
+          }
+        }
       }
     });
 
     return reply.code(201).send({ assessment });
   });
 
+  app.put("/admin/physical-assessments/:id", async (request, reply) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const body = physicalAssessmentFormWithUserSchema.parse(request.body);
+    const form = body.formulario_avaliacao_fisica;
+    const bodyFatPct = calculateBodyFatEstimate({
+      gender: form.dados_pessoais_e_objetivos.genero_biologico.resposta,
+      heightCm: form.composicao_corporal_basica.altura_cm,
+      neckCm: form.perimetros_corporais_cm.pescoço.valor,
+      waistCm: form.perimetros_corporais_cm.cintura.valor,
+      hipCm: form.perimetros_corporais_cm.quadril.valor,
+      weightKg: form.composicao_corporal_basica.peso_atual_kg,
+      birthDate: form.dados_pessoais_e_objetivos.data_nascimento
+    });
+    const assessment = await prisma.physicalAssessment.update({
+      where: { id },
+      data: {
+        userId: body.userId,
+        source: "ADMIN",
+        assessedAt: body.assessedAt ?? new Date(),
+        weightKg: form.composicao_corporal_basica.peso_atual_kg,
+        heightCm: form.composicao_corporal_basica.altura_cm,
+        bodyFatPct,
+        waistCm: form.perimetros_corporais_cm.cintura.valor,
+        chestCm: form.perimetros_corporais_cm.torax.valor,
+        hipCm: form.perimetros_corporais_cm.quadril.valor,
+        details: body
+      },
+      include: {
+        user: {
+          include: {
+            profile: true
+          }
+        }
+      }
+    });
+
+    return { assessment };
+  });
+
   app.delete("/admin/physical-assessments/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    await prisma.physicalAssessment.delete({ where: { id } });
+    await prisma.physicalAssessment.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
     return { ok: true };
   });
 
   app.get("/admin/events", async () => {
     requireDatabase();
     const events = await prisma.event.findMany({
+      where: { deletedAt: null },
       include: {
         registrations: {
           include: {
@@ -2197,16 +2960,17 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/events/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    await prisma.$transaction([
-      prisma.eventRegistration.deleteMany({ where: { eventId: id } }),
-      prisma.event.delete({ where: { id } })
-    ]);
+    await prisma.event.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
     return { ok: true };
   });
 
   app.get("/admin/support-tickets", async () => {
     requireDatabase();
     const tickets = await prisma.supportTicket.findMany({
+      where: { deletedAt: null },
       include: ticketInclude,
       orderBy: {
         updatedAt: "desc"
@@ -2221,6 +2985,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       )
     ) {
       const refreshed = await prisma.supportTicket.findMany({
+        where: { deletedAt: null },
         include: ticketInclude,
         orderBy: {
           updatedAt: "desc"
@@ -2313,7 +3078,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/support-tickets/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    await prisma.supportTicket.delete({ where: { id } });
+    await prisma.supportTicket.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
 
     return { ok: true };
   });
@@ -2321,6 +3089,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get("/admin/ai-workout-plans", async () => {
     requireDatabase();
     const plans = await prisma.aiWorkoutPlan.findMany({
+      where: { deletedAt: null },
       include: {
         user: true
       },
@@ -2336,7 +3105,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/ai-workout-plans/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    await prisma.aiWorkoutPlan.delete({ where: { id } });
+    await prisma.aiWorkoutPlan.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
 
     return { ok: true };
   });
@@ -2375,6 +3147,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get("/admin/products", async () => {
     requireDatabase();
     const products = await prisma.product.findMany({
+      where: { deletedAt: null },
       include: {
         _count: { select: { purchases: true, favorites: true, ratings: true } }
       },
@@ -2404,11 +3177,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/products/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    await prisma.$transaction([
-      prisma.favorite.deleteMany({ where: { productId: id } }),
-      prisma.rating.deleteMany({ where: { productId: id } }),
-      prisma.product.delete({ where: { id } })
-    ]);
+    await prisma.product.update({
+      where: { id },
+      data: { deletedAt: new Date(), isActive: false }
+    });
 
     return { ok: true };
   });
@@ -2416,6 +3188,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get("/admin/purchases", async () => {
     requireDatabase();
     const purchases = await prisma.purchase.findMany({
+      where: { deletedAt: null },
       include: { user: true, product: true },
       orderBy: { createdAt: "desc" }
     });
@@ -2453,7 +3226,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/purchases/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    await prisma.purchase.delete({ where: { id } });
+    await prisma.purchase.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
 
     return { ok: true };
   });
@@ -2461,6 +3237,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get("/admin/payment-cards", async () => {
     requireDatabase();
     const paymentCards = await prisma.paymentCard.findMany({
+      where: { deletedAt: null },
       include: { user: true },
       orderBy: { createdAt: "desc" }
     });
@@ -2488,7 +3265,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/payment-cards/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    await prisma.paymentCard.delete({ where: { id } });
+    await prisma.paymentCard.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
 
     return { ok: true };
   });
@@ -2496,6 +3276,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get("/admin/favorites", async () => {
     requireDatabase();
     const favorites = await prisma.favorite.findMany({
+      where: { deletedAt: null },
       include: { user: true, product: true },
       orderBy: { createdAt: "desc" }
     });
@@ -2506,7 +3287,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/favorites/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    await prisma.favorite.delete({ where: { id } });
+    await prisma.favorite.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
 
     return { ok: true };
   });
@@ -2514,6 +3298,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get("/admin/ratings", async () => {
     requireDatabase();
     const ratings = await prisma.rating.findMany({
+      where: { deletedAt: null },
       include: { user: true, product: true },
       orderBy: { createdAt: "desc" }
     });
@@ -2524,7 +3309,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/ratings/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    await prisma.rating.delete({ where: { id } });
+    await prisma.rating.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
 
     return { ok: true };
   });
@@ -2532,6 +3320,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get("/admin/contact-messages", async () => {
     requireDatabase();
     const contactMessages = await prisma.contactMessage.findMany({
+      where: { deletedAt: null },
       orderBy: { createdAt: "desc" }
     });
 
@@ -2556,7 +3345,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/contact-messages/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    await prisma.contactMessage.delete({ where: { id } });
+    await prisma.contactMessage.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
 
     return { ok: true };
   });

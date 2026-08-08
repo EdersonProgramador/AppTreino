@@ -122,7 +122,8 @@ async function getEnrollmentStatus(userId: string) {
     prisma.membership.findFirst({
       where: {
         userId,
-        status: "ACTIVE"
+        status: "ACTIVE",
+        deletedAt: null
       },
       select: { id: true }
     })
@@ -137,6 +138,7 @@ async function getCurrentStudentMembership(userId: string) {
     where: {
       userId,
       status: "ACTIVE",
+      deletedAt: null,
       startsAt: {
         lte: now
       },
@@ -156,7 +158,8 @@ async function getCurrentStudentMembership(userId: string) {
   return prisma.membership.findFirst({
     where: {
       userId,
-      status: "ACTIVE"
+      status: "ACTIVE",
+      deletedAt: null
     },
     include: {
       plan: true,
@@ -272,6 +275,7 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
     where: {
       status: "PUBLISHED",
       isActive: true,
+      deletedAt: null,
       days: {
         some: {}
       }
@@ -279,9 +283,7 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
     include: {
       days: true
     },
-    orderBy: {
-      publishedAt: "desc"
-    }
+    orderBy: [{ sortOrder: "asc" }, { publishedAt: "desc" }, { createdAt: "asc" }]
   });
 
   const assignedPrograms = await prisma.userProgram.findMany({
@@ -307,6 +309,13 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
       publishedPrograms.push(program);
     }
   }
+
+  publishedPrograms.sort(
+    (first, second) =>
+      first.sortOrder - second.sortOrder ||
+      (second.publishedAt?.getTime() ?? 0) - (first.publishedAt?.getTime() ?? 0) ||
+      first.createdAt.getTime() - second.createdAt.getTime()
+  );
 
   if (publishedPrograms.length === 0) {
     return [];
@@ -957,7 +966,7 @@ export async function registerStudentRoutes(app: FastifyInstance) {
     const body = substituteSchema.parse(request.body);
 
     const current = await prisma.exercise.findUniqueOrThrow({
-      where: { id: body.exerciseId },
+      where: { id: body.exerciseId, deletedAt: null },
       include: {
         alternatives: true
       }
@@ -972,6 +981,8 @@ export async function registerStudentRoutes(app: FastifyInstance) {
               id: {
                 not: current.id
               },
+              workoutDayId: null,
+              deletedAt: null,
               targetMuscles: {
                 hasSome: current.targetMuscles
               },
@@ -1178,7 +1189,8 @@ export async function registerStudentRoutes(app: FastifyInstance) {
     const [products, purchasedProductIds, favoritedProductIds, ratedProductIds] = await Promise.all([
       prisma.product.findMany({
         where: {
-          isActive: true
+          isActive: true,
+          deletedAt: null
         },
         include: {
           _count: {
@@ -1342,7 +1354,8 @@ export async function registerStudentRoutes(app: FastifyInstance) {
     await requireAuth(app, request);
     const locations = await prisma.location.findMany({
       where: {
-        isActive: true
+        isActive: true,
+        deletedAt: null
       },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }]
     });

@@ -113,7 +113,37 @@ function resolveMediaUrl(path?: string | null) {
 
 function isVideoMedia(url: string) {
   if (/^data:video\//i.test(url)) return true;
+  if (isYouTubeUrl(url)) return true;
   return /\.(mp4|webm|ogg|ogv|mov|m4v|mkv|mpg|mpeg|m3u8|ts)(\?|#|$)/i.test(url);
+}
+
+function isYouTubeUrl(url: string) {
+  return /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(url);
+}
+
+function getYouTubeVideoId(url: string) {
+  const match =
+    url.match(/youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/)([\w-]{11})/) ??
+    url.match(/youtu\.be\/([\w-]{11})/);
+  return match ? match[1] : "";
+}
+
+function getYouTubeEmbedUrl(url: string, options: { autoplay?: boolean; loop?: boolean; controls?: boolean } = {}) {
+  const id = getYouTubeVideoId(url);
+  if (!id) return "";
+  const params = new URLSearchParams({ rel: "0" });
+  if (options.autoplay) params.set("autoplay", "1");
+  if (options.loop) {
+    params.set("loop", "1");
+    params.set("playlist", id);
+  }
+  params.set("controls", options.controls === false ? "0" : "1");
+  return `https://www.youtube-nocookie.com/embed/${id}?${params.toString()}`;
+}
+
+function getYouTubeThumbnailUrl(url: string) {
+  const id = getYouTubeVideoId(url);
+  return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : "";
 }
 
 function mediaAlt(exercise: WorkoutPlayerExercise) {
@@ -135,20 +165,33 @@ function instructionSteps(exercise: WorkoutPlayerExercise) {
   ];
 }
 
-function MediaBlock({ exercise, expanded = false, resting = false }: { exercise: WorkoutPlayerExercise; expanded?: boolean; resting?: boolean }) {
+function MediaBlock({ exercise, expanded = false, resting = false, lesson = false }: { exercise: WorkoutPlayerExercise; expanded?: boolean; resting?: boolean; lesson?: boolean }) {
   const mediaUrl = resolveMediaUrl(exercise.videoUrl);
+  const youtubeEmbedUrl = isYouTubeUrl(mediaUrl) ? getYouTubeEmbedUrl(mediaUrl, lesson ? { autoplay: true, loop: true } : {}) : "";
+  const youtubeThumbUrl = isYouTubeUrl(mediaUrl) ? getYouTubeThumbnailUrl(mediaUrl) : "";
 
   return (
     <div className={`runner-focus-media ${expanded ? "expanded" : ""} ${resting ? "resting" : ""}`}>
       {resting ? (
         <Timer size={74} />
+      ) : youtubeEmbedUrl ? (
+        expanded ? (
+          <iframe
+            src={youtubeEmbedUrl}
+            title={mediaAlt(exercise)}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        ) : (
+          <img src={youtubeThumbUrl} alt={mediaAlt(exercise)} />
+        )
       ) : mediaUrl ? (
         isVideoMedia(mediaUrl) ? (
           <video
             src={mediaUrl}
             controls={expanded}
-            autoPlay={false}
-            loop={!expanded}
+            autoPlay={lesson}
+            loop={lesson || !expanded}
             muted={!expanded}
             playsInline
           />
@@ -745,7 +788,9 @@ export function WorkoutPlayer({
                   <div className="runner-exercise-main runner-sequence-card-button" onClick={() => setCurrentExerciseIndex(index)}>
                     <div className="runner-media">
                       {mediaUrl ? (
-                        isVideoMedia(mediaUrl) ? (
+                        isYouTubeUrl(mediaUrl) ? (
+                          <img src={getYouTubeThumbnailUrl(mediaUrl)} alt={mediaAlt(resolvedExercise)} onClick={() => openExerciseFromSequence(index)} />
+                        ) : isVideoMedia(mediaUrl) ? (
                           <video src={mediaUrl} muted playsInline onClick={() => openExerciseFromSequence(index)} />
                         ) : (
                           <img src={mediaUrl} alt={mediaAlt(resolvedExercise)} onClick={() => openExerciseFromSequence(index)} />
@@ -990,7 +1035,7 @@ export function WorkoutPlayer({
               <h1>{resolvedCurrentExercise.title}</h1>
               <p>Aula em vídeo do treino — assista com atenção à execução antes de realizar as séries.</p>
             </header>
-            <MediaBlock exercise={resolvedCurrentExercise} expanded />
+            <MediaBlock exercise={resolvedCurrentExercise} expanded lesson />
             <section>
               <h2>Descrição</h2>
               <p>{resolvedCurrentExercise.description || (muscles.length ? `Exercício focado em ${muscles.join(", ")}.` : "Descrição técnica ainda não cadastrada no CMS.")}</p>

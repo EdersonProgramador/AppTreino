@@ -12,6 +12,7 @@ export async function registerPublicRoutes(app: FastifyInstance) {
     }
 
     const plans = await prisma.plan.findMany({
+      where: { deletedAt: null },
       orderBy: {
         priceInCents: "asc"
       }

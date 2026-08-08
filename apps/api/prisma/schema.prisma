@@ -18,6 +18,7 @@ model User {
   role                UserRole             @default(USER)
   status              UserStatus           @default(ACTIVE)
   enrollmentStatus    EnrollmentStatus     @default(PENDING) @map("enrollment_status")
+  deletedAt           DateTime?            @map("deleted_at")
   profile             Profile?
   memberships         Membership[]
   enrollments         Enrollment[]
@@ -81,6 +82,7 @@ model Plan {
   name         String
   priceInCents Int          @map("price_in_cents")
   billingCycle BillingCycle @map("billing_cycle")
+  deletedAt    DateTime?    @map("deleted_at")
   memberships  Membership[]
   createdAt    DateTime     @default(now()) @map("created_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
@@ -97,6 +99,7 @@ model Membership {
   status    MembershipStatus @default(PENDING)
   startsAt  DateTime         @map("starts_at")
   endsAt    DateTime?        @map("ends_at")
+  deletedAt DateTime?        @map("deleted_at")
   payments  Payment[]
   createdAt DateTime         @default(now()) @map("created_at")
   updatedAt DateTime         @updatedAt @map("updated_at")
@@ -114,6 +117,7 @@ model Payment {
   paidAt         DateTime?     @map("paid_at")
   asaasPaymentId String?       @unique @map("asaas_payment_id")
   paymentUrl     String?       @map("payment_url")
+  deletedAt      DateTime?     @map("deleted_at")
   createdAt      DateTime      @default(now()) @map("created_at")
   updatedAt      DateTime      @updatedAt @map("updated_at")
 
@@ -124,6 +128,7 @@ model Workout {
   id        String       @id @default(cuid())
   title     String
   objective String?
+  deletedAt DateTime?    @map("deleted_at")
   days      WorkoutDay[]
   createdAt DateTime     @default(now()) @map("created_at")
   updatedAt DateTime     @updatedAt @map("updated_at")
@@ -163,6 +168,7 @@ model Exercise {
   restSeconds      Int?                   @map("rest_seconds")
   notes            String?
   sortOrder        Int?                   @map("sort_order")
+  deletedAt        DateTime?              @map("deleted_at")
   createdAt        DateTime               @default(now()) @map("created_at")
 
   @@map("exercises")
@@ -180,8 +186,10 @@ model Modality {
   sortOrder     Int                @default(0) @map("sort_order")
   programs      Program[]
   exerciseLinks ExerciseModality[]
-  createdAt     DateTime           @default(now()) @map("created_at")
-  updatedAt     DateTime           @updatedAt @map("updated_at")
+  workoutBlocks WorkoutBlock[]
+  deletedAt     DateTime?              @map("deleted_at")
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
 
   @@map("modalities")
 }
@@ -203,6 +211,9 @@ model WorkoutBlock {
   title           String
   structureType   StructureType          @default(NORMAL) @map("structure_type")
   restTime        Int                    @map("rest_time")
+  modalityId      String?                @map("modality_id")
+  modality        Modality?              @relation(fields: [modalityId], references: [id], onDelete: SetNull)
+  deletedAt       DateTime?              @map("deleted_at")
   createdAt       DateTime               @default(now()) @map("created_at")
   exercises       WorkoutBlockExercise[]
   programDays     ProgramDayWorkout[]
@@ -234,6 +245,8 @@ model Program {
   totalWorkouts   Int                 @default(30) @map("total_workouts")
   status          ProgramStatus       @default(DRAFT)
   isActive        Boolean             @default(true) @map("is_active")
+  sortOrder       Int                 @default(1) @map("sort_order")
+  deletedAt       DateTime?           @map("deleted_at")
   publishedAt     DateTime?           @map("published_at")
   createdAt       DateTime            @default(now()) @map("created_at")
   days            ProgramDayWorkout[]
@@ -332,7 +345,9 @@ model PhysicalAssessment {
   chestCm    Float?   @map("chest_cm")
   hipCm      Float?   @map("hip_cm")
   notes      String?
+  source     String   @default("STUDENT")
   details    Json?
+  deletedAt  DateTime? @map("deleted_at")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
@@ -349,6 +364,7 @@ model Event {
   capacity      Int?
   status        EventStatus         @default(SCHEDULED)
   registrations EventRegistration[]
+  deletedAt     DateTime?           @map("deleted_at")
   createdAt     DateTime            @default(now()) @map("created_at")
   updatedAt     DateTime            @updatedAt @map("updated_at")
 
@@ -378,6 +394,7 @@ model SupportTicket {
   category     TicketCategory @default(GENERAL)
   status       TicketStatus   @default(OPEN)
   priority     TicketPriority @default(NORMAL)
+  deletedAt    DateTime?      @map("deleted_at")
   createdAt    DateTime       @default(now()) @map("created_at")
   updatedAt    DateTime       @updatedAt @map("updated_at")
   messages     TicketMessage[]
@@ -407,6 +424,7 @@ model AiWorkoutPlan {
   daysPerWeek Int      @map("days_per_week")
   focus       String?
   plan        Json
+  deletedAt   DateTime? @map("deleted_at")
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@map("ai_workout_plans")
@@ -551,6 +569,7 @@ model Product {
   imageUrl     String?    @map("image_url")
   category     String?
   isActive     Boolean    @default(true) @map("is_active")
+  deletedAt    DateTime?  @map("deleted_at")
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
@@ -577,6 +596,7 @@ model Purchase {
   amountInCents Int            @map("amount_in_cents")
   status        PurchaseStatus @default(PENDING)
   paymentMethod String?        @map("payment_method")
+  deletedAt     DateTime?      @map("deleted_at")
   createdAt     DateTime       @default(now()) @map("created_at")
   paidAt        DateTime?      @map("paid_at")
 
@@ -593,6 +613,7 @@ model PaymentCard {
   lastFour   String
   holderName String?  @map("holder_name")
   isDefault  Boolean  @default(false) @map("is_default")
+  deletedAt  DateTime? @map("deleted_at")
   createdAt  DateTime @default(now()) @map("created_at")
 
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -604,6 +625,7 @@ model Favorite {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
   productId String   @map("product_id")
+  deletedAt DateTime? @map("deleted_at")
   createdAt DateTime @default(now()) @map("created_at")
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -634,6 +656,7 @@ model Rating {
   targetId   String?  @map("target_id")
   score      Int
   comment    String?
+  deletedAt  DateTime? @map("deleted_at")
   createdAt  DateTime @default(now()) @map("created_at")
 
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -649,6 +672,7 @@ model ContactMessage {
   subject   String?
   message   String
   status    String    @default("OPEN")
+  deletedAt DateTime? @map("deleted_at")
   createdAt DateTime  @default(now()) @map("created_at")
   repliedAt DateTime? @map("replied_at")
 
@@ -682,6 +706,7 @@ model Location {
   imageUrl    String?      @map("image_url")
   isActive    Boolean      @default(true) @map("is_active")
   sortOrder   Int          @default(0) @map("sort_order")
+  deletedAt   DateTime?    @map("deleted_at")
   profiles    Profile[]
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
@@ -700,6 +725,7 @@ model Announcement {
   body        String
   status      AnnouncementStatus @default(DRAFT)
   publishedAt DateTime?          @map("published_at")
+  deletedAt   DateTime?          @map("deleted_at")
   createdAt   DateTime           @default(now()) @map("created_at")
   updatedAt   DateTime           @updatedAt @map("updated_at")
 

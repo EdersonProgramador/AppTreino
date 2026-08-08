@@ -16,6 +16,7 @@ import {
   Clock,
   CreditCard,
   Dumbbell,
+  Eye,
   Flame,
   Headphones,
   Home,
@@ -27,6 +28,7 @@ import {
   LogOut,
   LogIn,
   FileText,
+  GripVertical,
   MapPin,
   Megaphone,
   Menu,
@@ -39,6 +41,7 @@ import {
   Play,
   QrCode,
   RefreshCw,
+  RotateCcw,
   Ruler,
   Save,
   Search,
@@ -57,7 +60,8 @@ import {
   UploadCloud,
   UserRound,
   UsersRound,
-  Wallet
+  Wallet,
+  X
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -106,6 +110,28 @@ const mediaUrl = (path?: string | null) => {
   return assetUrl(path.replace(/^\/+/, ""));
 };
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+
+function studentLocationLabel(profile?: { city?: string | null; state?: string | null } | null) {
+  return [profile?.city, profile?.state].filter(Boolean).join(" - ") || "Sem município/UF";
+}
+
+function formatAssessmentDateTime(value: string) {
+  return new Date(value).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function formatDateTimeLocalInputValue(value: Date | string = new Date()) {
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (part: number) => String(part).padStart(2, "0");
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 function calculateBodyFatEstimate(input: {
   gender?: string;
@@ -257,6 +283,7 @@ interface AdminUser {
   createdAt?: string | null;
   profile?: {
     gender?: "MALE" | "FEMALE" | null;
+    birthDate?: string | null;
     phone?: string | null;
     document?: string | null;
     objective?: string | null;
@@ -364,6 +391,7 @@ interface CmsWorkoutBlockRow {
   title: string;
   structureType: "NORMAL" | "BI_SET" | "DROP_SET" | "REST_PAUSE";
   restTime: number;
+  modality?: CmsModalityRow | null;
   exercises: Array<{
     id: string;
     sets: number;
@@ -381,6 +409,7 @@ interface CmsProgramRow {
   isActive: boolean;
   targetGender: "ALL" | "MALE" | "FEMALE";
   totalWorkouts: number;
+  sortOrder: number;
   modality?: CmsModalityRow | null;
   assignedUsers?: Array<{
     id: string;
@@ -396,6 +425,124 @@ interface CmsProgramRow {
     order: number;
     workoutBlock: CmsWorkoutBlockRow;
   }>;
+}
+
+interface TrashDisplayItem {
+  id: string;
+  name: string;
+  sub?: string | null;
+}
+
+type AdminTrashKind =
+  | "users"
+  | "workouts"
+  | "announcements"
+  | "plans"
+  | "memberships"
+  | "payments"
+  | "assessments"
+  | "events"
+  | "tickets"
+  | "aiPlans"
+  | "products"
+  | "purchases"
+  | "cards"
+  | "favorites"
+  | "ratings"
+  | "contactMessages"
+  | "modalities"
+  | "locations"
+  | "exercises"
+  | "workoutBlocks"
+  | "programs";
+
+type AdminTrashData = Record<AdminTrashKind, TrashDisplayItem[]>;
+
+const CMS_TRASH_KINDS: AdminTrashKind[] = ["locations", "modalities", "exercises", "workoutBlocks", "programs"];
+
+const ALL_TRASH_KINDS: AdminTrashKind[] = [
+  "users",
+  "workouts",
+  "announcements",
+  "plans",
+  "memberships",
+  "payments",
+  "assessments",
+  "events",
+  "tickets",
+  "aiPlans",
+  "products",
+  "purchases",
+  "cards",
+  "favorites",
+  "ratings",
+  "contactMessages",
+  ...CMS_TRASH_KINDS
+];
+
+interface CmsDeleteTarget {
+  kind: AdminTrashKind;
+  id: string;
+  name: string;
+  permanent?: boolean;
+}
+
+function trashResourceBase(kind: AdminTrashKind): string {
+  return `/admin/trash/${kind}`;
+}
+
+function trashSoftDeleteBase(kind: AdminTrashKind): string {
+  const map: Record<AdminTrashKind, string> = {
+    users: "/admin/users",
+    workouts: "/admin/workouts",
+    announcements: "/admin/cms/announcements",
+    plans: "/admin/plans",
+    memberships: "/admin/memberships",
+    payments: "/admin/payments",
+    assessments: "/admin/physical-assessments",
+    events: "/admin/events",
+    tickets: "/admin/support-tickets",
+    aiPlans: "/admin/ai-workout-plans",
+    products: "/admin/products",
+    purchases: "/admin/purchases",
+    cards: "/admin/payment-cards",
+    favorites: "/admin/favorites",
+    ratings: "/admin/ratings",
+    contactMessages: "/admin/contact-messages",
+    modalities: "/admin/cms/modalities",
+    locations: "/admin/cms/locations",
+    exercises: "/admin/cms/exercises",
+    workoutBlocks: "/admin/cms/workout-blocks",
+    programs: "/admin/cms/programs"
+  };
+  return map[kind];
+}
+
+function trashKindLabel(kind: AdminTrashKind): string {
+  const labels: Record<AdminTrashKind, string> = {
+    users: "Usuários",
+    workouts: "Treinos",
+    announcements: "Avisos",
+    plans: "Planos",
+    memberships: "Matrículas",
+    payments: "Pagamentos",
+    assessments: "Avaliações físicas",
+    events: "Eventos",
+    tickets: "Atendimentos",
+    aiPlans: "Planos IA",
+    products: "Produtos",
+    purchases: "Compras",
+    cards: "Cartões",
+    favorites: "Favoritos",
+    ratings: "Avaliações",
+    contactMessages: "Mensagens de contato",
+    modalities: "Modalidades",
+    locations: "Localidades",
+    exercises: "Exercícios/Aulas",
+    workoutBlocks: "Fichas de treino",
+    programs: "Publicações"
+  };
+  return labels[kind];
 }
 
 function parseProgramMetadata(description: string) {
@@ -472,6 +619,7 @@ interface PhysicalAssessmentRow {
   chestCm?: number | null;
   hipCm?: number | null;
   notes?: string | null;
+  source?: "STUDENT" | "ADMIN";
   details?: PhysicalAssessmentForm | null;
   user: AdminUser;
 }
@@ -515,6 +663,29 @@ interface PhysicalAssessmentForm {
     };
   };
 }
+
+type AssessmentPhotoKey = "foto_frente" | "foto_costas" | "foto_perfil";
+type AssessmentPerimeterKey = keyof Omit<PhysicalAssessmentForm["formulario_avaliacao_fisica"]["perimetros_corporais_cm"], "instrucao">;
+
+const assessmentPerimeterKeys = [
+  "pescoço",
+  "torax",
+  "cintura",
+  "abdomen",
+  "quadril",
+  "braco_direito_relaxado",
+  "braco_esquerdo_relaxado",
+  "coxa_direita",
+  "coxa_esquerda",
+  "panturrilha_direita",
+  "panturrilha_esquerda"
+] as const satisfies readonly AssessmentPerimeterKey[];
+
+const assessmentPhotoFields = [
+  ["foto_frente", "Foto de frente"],
+  ["foto_costas", "Foto de costas"],
+  ["foto_perfil", "Foto de perfil"]
+] as const satisfies readonly (readonly [AssessmentPhotoKey, string])[];
 
 interface EventRow {
   id: string;
@@ -721,6 +892,231 @@ interface UploadResponse {
     mimeType: string;
     path: string;
   };
+}
+
+function PhysicalAssessmentFormView({
+  form,
+  photoPreviews,
+  submitting,
+  submitLabel,
+  submittingLabel = "Salvando...",
+  cancelLabel = "Cancelar avaliação",
+  namePlaceholder,
+  onSubmit,
+  onCancel,
+  onUpdate,
+  onPhotoSelect
+}: {
+  form: PhysicalAssessmentForm;
+  photoPreviews: Record<string, string>;
+  submitting: boolean;
+  submitLabel: string;
+  submittingLabel?: string;
+  cancelLabel?: string;
+  namePlaceholder: string;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+  onUpdate: (mutate: (draft: PhysicalAssessmentForm) => void) => void;
+  onPhotoSelect: (key: AssessmentPhotoKey, file: File | undefined) => void;
+}) {
+  const data = form.formulario_avaliacao_fisica;
+
+  return (
+    <form className="student-assessment-form" onSubmit={onSubmit}>
+      <div className="student-assessment-section">
+        <h2>Dados pessoais e objetivos</h2>
+        <div className="student-assessment-field">
+          <label>Nome completo</label>
+          <input
+            type="text"
+            placeholder={namePlaceholder}
+            value={data.dados_pessoais_e_objetivos.nome_completo}
+            onChange={(event) =>
+              onUpdate((draft) => {
+                draft.formulario_avaliacao_fisica.dados_pessoais_e_objetivos.nome_completo = event.target.value;
+              })
+            }
+          />
+        </div>
+        <div className="student-assessment-field">
+          <label>Data de nascimento</label>
+          <input
+            type="date"
+            value={data.dados_pessoais_e_objetivos.data_nascimento}
+            onChange={(event) =>
+              onUpdate((draft) => {
+                draft.formulario_avaliacao_fisica.dados_pessoais_e_objetivos.data_nascimento = event.target.value;
+              })
+            }
+          />
+        </div>
+        {(
+          [
+            ["genero_biologico", "Gênero biológico"],
+            ["objetivo_principal", "Objetivo principal"],
+            ["nivel_atividade_atual", "Nível de atividade atual"]
+          ] as const
+        ).map(([key, label]) => {
+          const section = data.dados_pessoais_e_objetivos[key];
+          return (
+            <div className="student-assessment-field" key={key}>
+              <label>{label}</label>
+              <select
+                value={section.resposta}
+                onChange={(event) =>
+                  onUpdate((draft) => {
+                    draft.formulario_avaliacao_fisica.dados_pessoais_e_objetivos[key].resposta = event.target.value;
+                  })
+                }
+              >
+                <option value="">Selecione</option>
+                {section.opcoes.map((opcao) => (
+                  <option key={opcao} value={opcao}>{opcao}</option>
+                ))}
+              </select>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="student-assessment-section">
+        <h2>Histórico de saúde (anamnese)</h2>
+        {(
+          [
+            ["possui_lesao", "Você possui alguma lesão?"],
+            ["medicamento_continuo", "Usa algum medicamento contínuo?"],
+            ["restricao_medica_cardiaca", "Alguma restrição médica cardíaca?"]
+          ] as const
+        ).map(([key, label]) => {
+          const field = data.historico_de_saude_anamnese[key];
+          return (
+            <div className="student-assessment-field" key={key}>
+              <label>{label}</label>
+              <input
+                type="text"
+                placeholder={field.descricao}
+                value={field.resposta}
+                onChange={(event) =>
+                  onUpdate((draft) => {
+                    draft.formulario_avaliacao_fisica.historico_de_saude_anamnese[key].resposta = event.target.value;
+                  })
+                }
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="student-assessment-section">
+        <h2>Composição corporal básica</h2>
+        <p className="student-assessment-hint">{data.composicao_corporal_basica.instrucao}</p>
+        <div className="student-assessment-inline">
+          <div className="student-assessment-field">
+            <label>Peso atual (kg)</label>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              placeholder="Ex.: 72,5"
+              value={data.composicao_corporal_basica.peso_atual_kg ?? ""}
+              onChange={(event) =>
+                onUpdate((draft) => {
+                  draft.formulario_avaliacao_fisica.composicao_corporal_basica.peso_atual_kg =
+                    event.target.value === "" ? null : Number(event.target.value);
+                })
+              }
+            />
+          </div>
+          <div className="student-assessment-field">
+            <label>Altura (cm)</label>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              placeholder="Ex.: 175"
+              value={data.composicao_corporal_basica.altura_cm ?? ""}
+              onChange={(event) =>
+                onUpdate((draft) => {
+                  draft.formulario_avaliacao_fisica.composicao_corporal_basica.altura_cm =
+                    event.target.value === "" ? null : Number(event.target.value);
+                })
+              }
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="student-assessment-section">
+        <h2>Perímetros corporais (cm)</h2>
+        <p className="student-assessment-hint">{data.perimetros_corporais_cm.instrucao}</p>
+        <div className="student-assessment-grid">
+          {assessmentPerimeterKeys.map((key) => {
+            const item = data.perimetros_corporais_cm[key];
+            return (
+              <div className="student-assessment-field" key={key}>
+                <label>{key.replace(/_/g, " ")}</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  placeholder={item.detalhe}
+                  value={item.valor ?? ""}
+                  onChange={(event) =>
+                    onUpdate((draft) => {
+                      draft.formulario_avaliacao_fisica.perimetros_corporais_cm[key].valor =
+                        event.target.value === "" ? null : Number(event.target.value);
+                    })
+                  }
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="student-assessment-section">
+        <h2>Fotos para análise visual</h2>
+        <p className="student-assessment-hint">{data.fotos_analise_visual.instrucao}</p>
+        <div className="student-assessment-grid">
+          {assessmentPhotoFields.map(([key, label]) => {
+            const fileName = data.fotos_analise_visual.arquivos[key];
+            const preview = photoPreviews[key] || (/^https?:\/\//i.test(fileName) ? mediaUrl(fileName) : "");
+            return (
+              <div className="student-assessment-field" key={key}>
+                <label>{label}</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) => onPhotoSelect(key, event.target.files?.[0])}
+                />
+                {preview && (
+                  <div className="student-assessment-photo-confirm">
+                    <img src={preview} alt={label} />
+                    <div>
+                      <strong><Check size={16} /> Foto enviada</strong>
+                      <span>{photoPreviews[key] ? fileName : "Imagem atual da avaliação"}</span>
+                      <button type="button" onClick={() => onPhotoSelect(key, undefined)}>
+                        Remover
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="student-assessment-actions">
+        <button className="student-green-button" type="submit" disabled={submitting}>
+          {submitting ? submittingLabel : submitLabel}
+        </button>
+        <button className="student-outline-button" type="button" disabled={submitting} onClick={onCancel}>
+          {cancelLabel}
+        </button>
+      </div>
+    </form>
+  );
 }
 
 interface TodayWorkoutResponse {
@@ -1492,6 +1888,8 @@ function AdminDashboardOverview({
       | "contact"
       | "favorites"
       | "ratings"
+      | "assessments"
+      | "events"
   ) => void;
 }) {
   const scrollToOperations = () => {
@@ -1972,7 +2370,7 @@ function AdminDashboardOverview({
               Nenhum evento agendado.
             </div>
           )}
-          <button className="dash-link-button" type="button" onClick={scrollToOperations}>
+          <button className="dash-link-button" type="button" onClick={() => onNavigate("events")}>
             Gerenciar eventos
             <ArrowRight size={15} />
           </button>
@@ -2255,6 +2653,9 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     | "contact"
     | "favorites"
     | "ratings"
+    | "assessments"
+    | "events"
+    | "trash"
   >("overview");
   const [summary, setSummary] = useState({
     users: 0,
@@ -2264,6 +2665,12 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   });
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [cmsModalities, setCmsModalities] = useState<CmsModalityRow[]>([]);
+  const [cmsModalitiesPage, setCmsModalitiesPage] = useState(1);
+  const [cmsModalitiesSortDir, setCmsModalitiesSortDir] = useState<"asc" | "desc">("asc");
+  const cmsModalityDragRef = useRef<{ fromIndex: number; overIndex: number } | null>(null);
+  const [cmsModalityDragState, setCmsModalityDragState] = useState<{ fromIndex: number; overIndex: number } | null>(null);
+  const [cmsModalityNavTarget, setCmsModalityNavTarget] = useState<"prev" | "next" | null>(null);
+  const cmsModalityNavTimerRef = useRef<number | null>(null);
   const [cmsLocations, setCmsLocations] = useState<CmsLocationRow[]>([]);
   const [cmsAnnouncements, setCmsAnnouncements] = useState<CmsAnnouncementRow[]>([]);
   const [cmsLocationImagePreview, setCmsLocationImagePreview] = useState<string | null>(null);
@@ -2277,9 +2684,55 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const [editingCmsExercise, setEditingCmsExercise] = useState<CmsExerciseRow | null>(null);
   const cmsLessonFileRef = useRef<HTMLInputElement | null>(null);
   const cmsMaterialFileRef = useRef<HTMLInputElement | null>(null);
+  const [cmsLessonFilePreview, setCmsLessonFilePreview] = useState<string | null>(null);
+  const [cmsLessonFileRemove, setCmsLessonFileRemove] = useState(false);
+  const [cmsMaterialFilePreview, setCmsMaterialFilePreview] = useState<string | null>(null);
+  const [cmsMaterialFileRemove, setCmsMaterialFileRemove] = useState(false);
   const [cmsExercises, setCmsExercises] = useState<CmsExerciseRow[]>([]);
   const [cmsWorkoutBlocks, setCmsWorkoutBlocks] = useState<CmsWorkoutBlockRow[]>([]);
+  const [editingCmsWorkoutBlock, setEditingCmsWorkoutBlock] = useState<CmsWorkoutBlockRow | null>(null);
+  const [cmsLessonsModalityFilter, setCmsLessonsModalityFilter] = useState("");
+  const [cmsBlocksModalityFilter, setCmsBlocksModalityFilter] = useState("");
+  const [cmsBlockFormModality, setCmsBlockFormModality] = useState("");
+  const [editingCmsProgram, setEditingCmsProgram] = useState<CmsProgramRow | null>(null);
+  const [expandedCmsProgramId, setExpandedCmsProgramId] = useState<string | null>(null);
+  const cmsProgramDragRef = useRef<{ fromIndex: number; overIndex: number } | null>(null);
+  const [cmsProgramDragState, setCmsProgramDragState] = useState<{ fromIndex: number; overIndex: number } | null>(null);
+  const [adminTrash, setAdminTrash] = useState<AdminTrashData>(() =>
+    Object.fromEntries(ALL_TRASH_KINDS.map((kind) => [kind, []])) as unknown as AdminTrashData
+  );
+  const [adminTrashLoading, setAdminTrashLoading] = useState(false);
+  const [cmsTrashOpen, setCmsTrashOpen] = useState(false);
+  const [pendingCmsDelete, setPendingCmsDelete] = useState<CmsDeleteTarget | null>(null);
+  const adminTrashTotal = ALL_TRASH_KINDS.reduce((total, kind) => total + adminTrash[kind].length, 0);
+  const cmsTrashTotal = CMS_TRASH_KINDS.reduce((total, kind) => total + adminTrash[kind].length, 0);
+  const MODALITIES_PAGE_SIZE = 10;
+  const cmsModalitiesView = cmsModalitiesSortDir === "desc" ? [...cmsModalities].reverse() : cmsModalities;
+  const cmsModalitiesPageCount = Math.max(1, Math.ceil(cmsModalitiesView.length / MODALITIES_PAGE_SIZE));
+  const cmsModalitiesSafePage = Math.min(cmsModalitiesPage, cmsModalitiesPageCount);
+  const cmsModalitiesPageItems = cmsModalitiesView.slice(
+    (cmsModalitiesSafePage - 1) * MODALITIES_PAGE_SIZE,
+    cmsModalitiesSafePage * MODALITIES_PAGE_SIZE
+  );
+
+  const activeCmsModalities = cmsModalities.filter((item) => item.isActive);
+  const cmsProgramFormModalities = cmsModalities.filter((item) => item.isActive || item.id === editingCmsProgram?.modality?.id);
+  const filteredCmsExercises = cmsLessonsModalityFilter
+    ? cmsExercises.filter((item) => (item.modalityLinks ?? []).some((link) => link.modality.id === cmsLessonsModalityFilter))
+    : cmsExercises;
+  const filteredCmsWorkoutBlocks = cmsBlocksModalityFilter
+    ? cmsWorkoutBlocks.filter((item) => item.modality?.id === cmsBlocksModalityFilter)
+    : cmsWorkoutBlocks;
+  const cmsBlockModalityExercises = cmsBlockFormModality
+    ? cmsExercises.filter((item) => (item.modalityLinks ?? []).some((link) => link.modality.id === cmsBlockFormModality))
+    : cmsExercises;
   const [cmsPrograms, setCmsPrograms] = useState<CmsProgramRow[]>([]);
+  const publishedCmsPrograms = cmsPrograms
+    .filter((item) => item.status === "PUBLISHED" && item.isActive)
+    .sort((first, second) => first.sortOrder - second.sortOrder || first.title.localeCompare(second.title));
+  const draftCmsPrograms = cmsPrograms
+    .filter((item) => item.status !== "PUBLISHED" || !item.isActive)
+    .sort((first, second) => first.sortOrder - second.sortOrder || first.title.localeCompare(second.title));
   const [plans, setPlans] = useState<PlanRow[]>([]);
   const [memberships, setMemberships] = useState<MembershipRow[]>([]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
@@ -2305,6 +2758,96 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const [userRoleFilter, setUserRoleFilter] = useState<"ALL" | AdminUser["role"]>("ALL");
   const [userStatusFilter, setUserStatusFilter] = useState<"ALL" | AdminUser["status"]>("ALL");
   const [usersPage, setUsersPage] = useState(1);
+  const [assessmentSearch, setAssessmentSearch] = useState("");
+  const [assessmentSourceFilter, setAssessmentSourceFilter] = useState<"ALL" | "STUDENT" | "ADMIN">("ALL");
+  const [assessmentStateFilter, setAssessmentStateFilter] = useState("");
+  const [assessmentCityFilter, setAssessmentCityFilter] = useState("");
+  const [assessmentsPage, setAssessmentsPage] = useState(1);
+  const [eventSearch, setEventSearch] = useState("");
+  const [eventStatusFilter, setEventStatusFilter] = useState<"ALL" | EventRow["status"]>("ALL");
+  const [adminAssessmentForm, setAdminAssessmentForm] = useState<PhysicalAssessmentForm>(() => createEmptyAdminAssessmentForm());
+  const [adminAssessmentFormOpen, setAdminAssessmentFormOpen] = useState(false);
+  const [adminAssessmentEditingId, setAdminAssessmentEditingId] = useState<string | null>(null);
+  const [adminAssessmentUserId, setAdminAssessmentUserId] = useState("");
+  const [adminAssessmentAssessedAt, setAdminAssessmentAssessedAt] = useState(() => formatDateTimeLocalInputValue());
+  const [adminAssessmentPhotoPreviews, setAdminAssessmentPhotoPreviews] = useState<Record<string, string>>({});
+  const [adminAssessmentPhotoFiles, setAdminAssessmentPhotoFiles] = useState<Partial<Record<AssessmentPhotoKey, File>>>({});
+  const [adminSubmittingAssessment, setAdminSubmittingAssessment] = useState(false);
+  const [expandedAssessmentId, setExpandedAssessmentId] = useState<string | null>(null);
+  const [assessmentLightbox, setAssessmentLightbox] = useState<{ urls: string[]; index: number } | null>(null);
+
+  const filteredAssessments = useMemo(() => {
+    const term = assessmentSearch.trim().toLowerCase();
+    let items = assessments;
+    if (assessmentSourceFilter !== "ALL") items = items.filter((item) => item.source === assessmentSourceFilter);
+    if (assessmentStateFilter) items = items.filter((item) => item.user?.profile?.state === assessmentStateFilter);
+    if (assessmentCityFilter) items = items.filter((item) => item.user?.profile?.city === assessmentCityFilter);
+    if (term) {
+      items = items.filter((item) =>
+        [
+          item.user?.name,
+          item.user?.email,
+          item.user?.phone,
+          item.user?.profile?.phone,
+          item.user?.profile?.document,
+          item.user?.profile?.city,
+          item.user?.profile?.state
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(term))
+      );
+    }
+    return items;
+  }, [assessments, assessmentCityFilter, assessmentSearch, assessmentSourceFilter, assessmentStateFilter]);
+  const assessmentsPageSize = 5;
+  const assessmentsTotalPages = Math.max(1, Math.ceil(filteredAssessments.length / assessmentsPageSize));
+  const currentAssessmentsPage = Math.min(assessmentsPage, assessmentsTotalPages);
+  const visibleAssessments = filteredAssessments.slice(
+    (currentAssessmentsPage - 1) * assessmentsPageSize,
+    currentAssessmentsPage * assessmentsPageSize
+  );
+  const selectedAdminAssessmentStudent = users.find((item) => item.id === adminAssessmentUserId);
+  const assessmentCityOptions = useMemo(
+    () => (assessmentStateFilter ? CITIES_BY_STATE[assessmentStateFilter] ?? [] : []),
+    [assessmentStateFilter]
+  );
+
+  useEffect(() => {
+    setAssessmentsPage(1);
+  }, [assessmentCityFilter, assessmentSearch, assessmentSourceFilter, assessmentStateFilter]);
+
+  useEffect(() => {
+    if (assessmentCityFilter && !assessmentCityOptions.includes(assessmentCityFilter)) {
+      setAssessmentCityFilter("");
+    }
+  }, [assessmentCityFilter, assessmentCityOptions]);
+
+  useEffect(() => {
+    if (!assessmentLightbox) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAssessmentLightbox(null);
+      if (event.key === "ArrowLeft") {
+        setAssessmentLightbox((current) =>
+          current ? { ...current, index: (current.index - 1 + current.urls.length) % current.urls.length } : current
+        );
+      }
+      if (event.key === "ArrowRight") {
+        setAssessmentLightbox((current) =>
+          current ? { ...current, index: (current.index + 1) % current.urls.length } : current
+        );
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [assessmentLightbox]);
+
+  const filteredEvents = useMemo(() => {
+    let items = events;
+    if (eventStatusFilter !== "ALL") items = items.filter((item) => item.status === eventStatusFilter);
+    const term = eventSearch.trim().toLowerCase();
+    if (term) items = items.filter((item) => item.title.toLowerCase().includes(term) || (item.location ?? "").toLowerCase().includes(term));
+    return items;
+  }, [events, eventStatusFilter, eventSearch]);
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -2457,30 +3000,6 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     }
   }
 
-  function resourcesForDeletePath(path: string): AdminResource[] {
-    if (path.startsWith("/admin/users/")) return ["users", "summary"];
-    if (path.startsWith("/admin/cms/modalities/")) return ["modalities"];
-    if (path.startsWith("/admin/cms/locations/")) return ["locations"];
-    if (path.startsWith("/admin/cms/announcements/")) return ["announcements"];
-    if (path.startsWith("/admin/cms/exercises/")) return ["exercises", "workoutBlocks"];
-    if (path.startsWith("/admin/cms/workout-blocks/")) return ["workoutBlocks", "programs"];
-    if (path.startsWith("/admin/cms/programs/")) return ["programs"];
-    if (path.startsWith("/admin/plans/")) return ["plans", "memberships", "payments"];
-    if (path.startsWith("/admin/memberships/")) return ["memberships", "users", "summary"];
-    if (path.startsWith("/admin/payments/")) return ["payments", "memberships", "summary"];
-    if (path.startsWith("/admin/physical-assessments/")) return ["assessments"];
-    if (path.startsWith("/admin/events/")) return ["events"];
-    if (path.startsWith("/admin/support-tickets/")) return ["tickets"];
-    if (path.startsWith("/admin/ai-workout-plans/")) return ["aiPlans"];
-    if (path.startsWith("/admin/products/")) return ["products", "purchases", "favorites", "ratings"];
-    if (path.startsWith("/admin/purchases/")) return ["purchases"];
-    if (path.startsWith("/admin/payment-cards/")) return ["paymentCards"];
-    if (path.startsWith("/admin/favorites/")) return ["favorites", "products"];
-    if (path.startsWith("/admin/ratings/")) return ["ratings", "products"];
-    if (path.startsWith("/admin/contact-messages/")) return ["contactMessages"];
-    return ALL_ADMIN_RESOURCES;
-  }
-
   async function applyAdminChange(resources: AdminResource[], successMessage = "Alteração aplicada com sucesso.") {
     await loadAdminData(resources);
     setSuccess(successMessage);
@@ -2488,6 +3007,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
   useEffect(() => {
     void loadAdminData();
+  }, [token]);
+
+  useEffect(() => {
+    void loadAdminTrash();
   }, [token]);
 
   useEffect(() => {
@@ -2638,6 +3161,103 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     return exercise.title ?? exercise.name ?? "Exercício";
   }
 
+  function cmsMediaKind(url: string): "youtube" | "image" | "video" | "audio" | "pdf" | "file" {
+    const lower = url.toLowerCase();
+    if (/youtu\.?be/i.test(lower)) return "youtube";
+    if (lower.startsWith("data:image") || /\.(png|jpe?g|gif|webp|svg|bmp|avif)(\?|#|$)/i.test(lower)) return "image";
+    if (lower.startsWith("data:video") || /\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/i.test(lower)) return "video";
+    if (lower.startsWith("data:audio") || /\.(mp3|wav|oga|m4a|aac)(\?|#|$)/i.test(lower)) return "audio";
+    if (/\.pdf(\?|#|$)/i.test(lower)) return "pdf";
+    return "file";
+  }
+
+  function cmsYouTubeVideoId(url: string) {
+    const match = url.match(/(?:youtube\.com\/(?:watch\?.*v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+    return match ? match[1] : "";
+  }
+
+  function cmsExerciseThumbSrc(videoUrl?: string | null) {
+    const url = String(videoUrl ?? "");
+    if (!url) return "";
+
+    const kind = cmsMediaKind(url);
+    if (kind === "youtube") {
+      const id = cmsYouTubeVideoId(url);
+      return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : "";
+    }
+    if (kind === "image" || kind === "video") {
+      return url.startsWith("data:") ? url : mediaUrl(url);
+    }
+    return "";
+  }
+
+  function cmsPreviewMedia(src: string, label: string) {
+    const kind = cmsMediaKind(src);
+
+    if (kind === "youtube") {
+      const id = cmsYouTubeVideoId(src);
+      return id ? (
+        <iframe
+          src={`https://www.youtube-nocookie.com/embed/${id}`}
+          title={label}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      ) : null;
+    }
+
+    const resolved = src.startsWith("data:") ? src : mediaUrl(src);
+
+    if (kind === "image") return <img src={resolved} alt={label} />;
+    if (kind === "video") return <video src={resolved} controls />;
+    if (kind === "audio") return <audio src={resolved} controls />;
+
+    return (
+      <span className="cms-file-preview-label">
+        <FileText size={18} />
+        <a href={resolved} target="_blank" rel="noreferrer">{label}</a>
+      </span>
+    );
+  }
+
+  function handleCmsLessonFileChange(file: File | null) {
+    if (!file) {
+      setCmsLessonFilePreview(null);
+      return;
+    }
+
+    setCmsLessonFileRemove(false);
+    const reader = new FileReader();
+    reader.onload = () => setCmsLessonFilePreview(String(reader.result ?? ""));
+    reader.readAsDataURL(file);
+  }
+
+  function handleCmsLessonFileClear() {
+    setCmsLessonFilePreview(null);
+    if (cmsLessonFileRef.current) {
+      cmsLessonFileRef.current.value = "";
+    }
+  }
+
+  function handleCmsMaterialFileChange(file: File | null) {
+    if (!file) {
+      setCmsMaterialFilePreview(null);
+      return;
+    }
+
+    setCmsMaterialFileRemove(false);
+    const reader = new FileReader();
+    reader.onload = () => setCmsMaterialFilePreview(String(reader.result ?? ""));
+    reader.readAsDataURL(file);
+  }
+
+  function handleCmsMaterialFileClear() {
+    setCmsMaterialFilePreview(null);
+    if (cmsMaterialFileRef.current) {
+      cmsMaterialFileRef.current.value = "";
+    }
+  }
+
   async function handleSaveCmsModality(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -2692,6 +3312,77 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     if (cmsModalityImageRef.current) {
       cmsModalityImageRef.current.value = "";
     }
+  }
+
+  async function handleReorderCmsModalities(nextView: CmsModalityRow[]) {
+    const nextCanonical = cmsModalitiesSortDir === "desc" ? [...nextView].reverse() : nextView;
+    setCmsModalities(nextCanonical);
+    try {
+      const response = await apiPost<{ modalities: CmsModalityRow[] }>(
+        "/admin/cms/modalities/reorder",
+        { ids: nextCanonical.map((item) => item.id) },
+        token
+      );
+      setCmsModalities(response.modalities);
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível salvar a nova ordem."));
+      await applyAdminChange(["modalities"]);
+    }
+  }
+
+  function handleCmsModalityDragStart(index: number) {
+    const value = { fromIndex: index, overIndex: index };
+    cmsModalityDragRef.current = value;
+    setCmsModalityDragState(value);
+  }
+
+  function handleCmsModalityDragOver(index: number) {
+    const current = cmsModalityDragRef.current;
+    if (!current || current.overIndex === index) return;
+    const value = { ...current, overIndex: index };
+    cmsModalityDragRef.current = value;
+    setCmsModalityDragState(value);
+  }
+
+  function handleCmsModalityDrop() {
+    const drag = cmsModalityDragRef.current;
+    cmsModalityDragRef.current = null;
+    setCmsModalityDragState(null);
+    setCmsModalityNavTarget(null);
+    clearCmsModalityNavTimer();
+    if (!drag || drag.fromIndex === drag.overIndex) return;
+    const nextView = [...cmsModalitiesView];
+    const moved = nextView[drag.fromIndex];
+    nextView[drag.fromIndex] = nextView[drag.overIndex];
+    nextView[drag.overIndex] = moved;
+    void handleReorderCmsModalities(nextView);
+  }
+
+  function clearCmsModalityNavTimer() {
+    if (cmsModalityNavTimerRef.current != null) {
+      window.clearTimeout(cmsModalityNavTimerRef.current);
+      cmsModalityNavTimerRef.current = null;
+    }
+  }
+
+  function handleCmsModalityNavDragOver(direction: "prev" | "next") {
+    if (!cmsModalityDragRef.current) return;
+    setCmsModalityNavTarget(direction);
+    const step = direction === "prev" ? -1 : 1;
+    const targetPage = Math.min(cmsModalitiesPageCount, Math.max(1, cmsModalitiesSafePage + step));
+    if (targetPage === cmsModalitiesSafePage) return;
+    if (cmsModalityNavTimerRef.current != null) return;
+    cmsModalityNavTimerRef.current = window.setTimeout(() => {
+      cmsModalityNavTimerRef.current = null;
+      setCmsModalitiesPage(targetPage);
+    }, 600);
+  }
+
+  function handleCmsModalityDragEnd() {
+    cmsModalityDragRef.current = null;
+    setCmsModalityDragState(null);
+    setCmsModalityNavTarget(null);
+    clearCmsModalityNavTimer();
   }
 
   function handleCmsModalityImageChange(file: File | null) {
@@ -2900,11 +3591,13 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     try {
       const uploadedLessonUrl = await uploadCmsFile(data.get("lessonFile"), "lessons");
       const uploadedMaterialUrl = await uploadCmsFile(data.get("materialFile"), "materials");
+      const lessonUrl = cmsLessonFileRemove ? "" : (uploadedLessonUrl || String(data.get("videoUrl") ?? ""));
+      const materialUrl = cmsMaterialFileRemove ? "" : (uploadedMaterialUrl || String(data.get("materialUrl") ?? ""));
       const payload = {
         title: String(data.get("title") ?? ""),
-        videoUrl: uploadedLessonUrl || String(data.get("videoUrl") ?? ""),
+        videoUrl: lessonUrl,
         audioUrl: String(data.get("audioUrl") ?? ""),
-        materialUrl: uploadedMaterialUrl || String(data.get("materialUrl") ?? ""),
+        materialUrl,
         notes: String(data.get("notes") ?? ""),
         targetMuscles: parseTagList(data.get("targetMuscles")),
         equipmentTags: parseTagList(data.get("equipmentTags")),
@@ -2915,6 +3608,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       if (editingCmsExercise) {
         await apiPut(`/admin/cms/exercises/${editingCmsExercise.id}`, payload, token);
         form.reset();
+        setCmsLessonFilePreview(null);
+        setCmsLessonFileRemove(false);
+        setCmsMaterialFilePreview(null);
+        setCmsMaterialFileRemove(false);
         setEditingCmsExercise(null);
         await applyAdminChange(["exercises", "workoutBlocks"], "Aula atualizada com sucesso.");
         return;
@@ -2922,6 +3619,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
       await apiPost("/admin/cms/exercises", payload, token);
       form.reset();
+      setCmsLessonFilePreview(null);
+      setCmsLessonFileRemove(false);
+      setCmsMaterialFilePreview(null);
+      setCmsMaterialFileRemove(false);
       await applyAdminChange(["exercises", "workoutBlocks"], "Aula cadastrada com sucesso.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível salvar o exercício CMS."));
@@ -2930,6 +3631,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
   function startEditCmsExercise(item: CmsExerciseRow) {
     setEditingCmsExercise(item);
+    setCmsLessonFilePreview(null);
+    setCmsLessonFileRemove(false);
+    setCmsMaterialFilePreview(null);
+    setCmsMaterialFileRemove(false);
     if (cmsLessonFileRef.current) {
       cmsLessonFileRef.current.value = "";
     }
@@ -2940,6 +3645,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
   function handleCancelCmsExerciseEdit() {
     setEditingCmsExercise(null);
+    setCmsLessonFilePreview(null);
+    setCmsLessonFileRemove(false);
+    setCmsMaterialFilePreview(null);
+    setCmsMaterialFileRemove(false);
     if (cmsLessonFileRef.current) {
       cmsLessonFileRef.current.value = "";
     }
@@ -2948,54 +3657,139 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     }
   }
 
-  async function handleCreateCmsWorkoutBlock(event: FormEvent<HTMLFormElement>) {
+  async function handleSaveCmsWorkoutBlock(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
 
     try {
-      await apiPost(
-        "/admin/cms/workout-blocks",
-        {
-          title: String(data.get("title") ?? ""),
-          structureType: String(data.get("structureType") ?? "NORMAL"),
-          restTime: Number(data.get("restTime") ?? 60),
-          exercises: parseCmsWorkoutBlockExercises(data)
-        },
-        token
-      );
+      const selectedModalityId = String(data.get("modalityId") ?? "").trim();
+      const payload = {
+        title: String(data.get("title") ?? ""),
+        structureType: String(data.get("structureType") ?? "NORMAL"),
+        restTime: Number(data.get("restTime") ?? 60),
+        modalityId: selectedModalityId ? selectedModalityId : null,
+        exercises: parseCmsWorkoutBlockExercises(data)
+      };
+
+      if (editingCmsWorkoutBlock) {
+        await apiPut(`/admin/cms/workout-blocks/${editingCmsWorkoutBlock.id}`, payload, token);
+        form.reset();
+        setEditingCmsWorkoutBlock(null);
+        setCmsBlockFormModality("");
+        await applyAdminChange(["workoutBlocks", "programs"], "Ficha atualizada com sucesso.");
+        return;
+      }
+
+      await apiPost("/admin/cms/workout-blocks", payload, token);
       form.reset();
+      setCmsBlockFormModality("");
       await applyAdminChange(["workoutBlocks", "programs"], "Ficha cadastrada com sucesso.");
     } catch (error) {
-      setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar o bloco CMS."));
+      setFeedback(getApiErrorMessage(error, "Não foi possível salvar o bloco CMS."));
     }
   }
 
-  async function handleCreateCmsProgram(event: FormEvent<HTMLFormElement>) {
+  function startEditCmsWorkoutBlock(item: CmsWorkoutBlockRow) {
+    setEditingCmsWorkoutBlock(item);
+    setCmsBlockFormModality(item.modality?.id ?? "");
+  }
+
+  function handleCancelCmsWorkoutBlockEdit() {
+    setEditingCmsWorkoutBlock(null);
+    setCmsBlockFormModality("");
+  }
+
+  async function handleSaveCmsProgram(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
+    const status = String(data.get("status") ?? "DRAFT");
+    const payload = {
+      title: String(data.get("title") ?? ""),
+      description: String(data.get("description") ?? ""),
+      modalityId: String(data.get("modalityId") ?? ""),
+      targetGender: String(data.get("targetGender") ?? "ALL"),
+      totalWorkouts: Number(data.get("totalWorkouts") ?? 30),
+      status,
+      isActive: status === "PUBLISHED",
+      days: parseCmsProgramDays(data)
+    };
 
     try {
-      await apiPost(
-        "/admin/cms/programs",
-        {
-          title: String(data.get("title") ?? ""),
-          description: String(data.get("description") ?? ""),
-          modalityId: String(data.get("modalityId") ?? ""),
-          targetGender: String(data.get("targetGender") ?? "ALL"),
-          totalWorkouts: Number(data.get("totalWorkouts") ?? 30),
-          status: String(data.get("status") ?? "DRAFT"),
-          isActive: String(data.get("status") ?? "DRAFT") === "PUBLISHED",
-          days: parseCmsProgramDays(data)
-        },
-        token
-      );
+      if (editingCmsProgram) {
+        await apiPut(`/admin/cms/programs/${editingCmsProgram.id}`, payload, token);
+        form.reset();
+        setEditingCmsProgram(null);
+        await applyAdminChange(["programs"], "Programa atualizado com sucesso.");
+        return;
+      }
+
+      await apiPost("/admin/cms/programs", payload, token);
       form.reset();
       await applyAdminChange(["programs"], "Programa cadastrado com sucesso.");
     } catch (error) {
-      setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar o programa CMS."));
+      setFeedback(getApiErrorMessage(error, "Não foi possível salvar o programa CMS."));
     }
+  }
+
+  function startEditCmsProgram(item: CmsProgramRow) {
+    setEditingCmsProgram(item);
+    setExpandedCmsProgramId(item.id);
+  }
+
+  function handleCancelCmsProgramEdit() {
+    setEditingCmsProgram(null);
+  }
+
+  async function handleReorderCmsPrograms(nextPrograms: CmsProgramRow[]) {
+    const reorderedPrograms = nextPrograms.map((item, index) => ({ ...item, sortOrder: index + 1 }));
+    setCmsPrograms((current) => [
+      ...reorderedPrograms,
+      ...current.filter((item) => item.status !== "PUBLISHED" || !item.isActive)
+    ]);
+    try {
+      const response = await apiPost<{ programs: CmsProgramRow[] }>(
+        "/admin/cms/programs/reorder",
+        { ids: reorderedPrograms.map((item) => item.id) },
+        token
+      );
+      setCmsPrograms(response.programs);
+      setFeedback("Ordem dos programas atualizada para os alunos.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível salvar a nova ordem dos programas."));
+      await applyAdminChange(["programs"]);
+    }
+  }
+
+  function handleCmsProgramDragStart(index: number) {
+    const value = { fromIndex: index, overIndex: index };
+    cmsProgramDragRef.current = value;
+    setCmsProgramDragState(value);
+  }
+
+  function handleCmsProgramDragOver(index: number) {
+    const current = cmsProgramDragRef.current;
+    if (!current || current.overIndex === index) return;
+    const value = { ...current, overIndex: index };
+    cmsProgramDragRef.current = value;
+    setCmsProgramDragState(value);
+  }
+
+  function handleCmsProgramDrop() {
+    const drag = cmsProgramDragRef.current;
+    cmsProgramDragRef.current = null;
+    setCmsProgramDragState(null);
+    if (!drag || drag.fromIndex === drag.overIndex) return;
+    const nextPrograms = [...publishedCmsPrograms];
+    const [moved] = nextPrograms.splice(drag.fromIndex, 1);
+    nextPrograms.splice(drag.overIndex, 0, moved);
+    void handleReorderCmsPrograms(nextPrograms);
+  }
+
+  function handleCmsProgramDragEnd() {
+    cmsProgramDragRef.current = null;
+    setCmsProgramDragState(null);
   }
 
   async function handlePublishCmsProgram(programId: string) {
@@ -3176,31 +3970,181 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     }
   }
 
-  async function handleCreateAssessment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const data = new FormData(form);
-
-    try {
-      await apiPost(
-        "/admin/physical-assessments",
-        {
-          userId: String(data.get("userId") ?? ""),
-          assessedAt: String(data.get("assessedAt") ?? new Date().toISOString().slice(0, 10)),
-          weightKg: optionalNumber(data.get("weightKg")),
-          heightCm: optionalNumber(data.get("heightCm")),
-          bodyFatPct: optionalNumber(data.get("bodyFatPct")),
-          waistCm: optionalNumber(data.get("waistCm")),
-          chestCm: optionalNumber(data.get("chestCm")),
-          hipCm: optionalNumber(data.get("hipCm")),
-          notes: String(data.get("notes") ?? "")
+  function createEmptyAdminAssessmentForm(): PhysicalAssessmentForm {
+    return {
+      formulario_avaliacao_fisica: {
+        dados_pessoais_e_objetivos: {
+          nome_completo: "",
+          data_nascimento: "",
+          genero_biologico: { opcoes: ["Masculino", "Feminino"], resposta: "" },
+          objetivo_principal: { opcoes: ["Emagrecimento", "Hipertrofia", "Condicionamento/Saúde"], resposta: "" },
+          nivel_atividade_atual: { opcoes: ["Sedentário", "Leve", "Moderado", "Intenso"], resposta: "" }
         },
-        token
-      );
-      form.reset();
-      await applyAdminChange(["assessments"], "Avaliação física registrada.");
-    } catch {
-      setFeedback("Não foi possível registrar a avaliação física.");
+        historico_de_saude_anamnese: {
+          possui_lesao: { descricao: "Joelho, coluna, ombro, etc.", resposta: "" },
+          medicamento_continuo: { descricao: "Se sim, qual?", resposta: "" },
+          restricao_medica_cardiaca: { descricao: "Se sim, qual?", resposta: "" }
+        },
+        composicao_corporal_basica: {
+          instrucao: "Aferir preferencialmente em jejum, pela manhã",
+          peso_atual_kg: null,
+          altura_cm: null
+        },
+        perimetros_corporais_cm: {
+          instrucao: "Use uma fita métrica, sem apertar a pele e sem prender a respiração",
+          pescoço: { detalhe: "Abaixo do pomo de Adão", valor: null },
+          torax: { detalhe: "Na linha dos mamilos", valor: null },
+          cintura: { detalhe: "Na parte mais estreita do tronco", valor: null },
+          abdomen: { detalhe: "Exatamente sobre a linha do umbigo", valor: null },
+          quadril: { detalhe: "Na maior parte dos glúteos", valor: null },
+          braco_direito_relaxado: { detalhe: "Linha média do bíceps", valor: null },
+          braco_esquerdo_relaxado: { detalhe: "Linha média do bíceps", valor: null },
+          coxa_direita: { detalhe: "Na região média da coxa", valor: null },
+          coxa_esquerda: { detalhe: "Na região média da coxa", valor: null },
+          panturrilha_direita: { detalhe: "Na maior porção do músculo", valor: null },
+          panturrilha_esquerda: { detalhe: "Na maior porção do músculo", valor: null }
+        },
+        fotos_analise_visual: {
+          instrucao: "Anexar fotos com roupas leves, postura relaxada e câmera na altura da cintura",
+          arquivos: { foto_frente: "", foto_costas: "", foto_perfil: "" }
+        }
+      }
+    };
+  }
+
+  function updateAdminAssessmentForm(mutate: (draft: PhysicalAssessmentForm) => void) {
+    setAdminAssessmentForm((current) => {
+      const draft = current ? structuredClone(current) : createEmptyAdminAssessmentForm();
+      mutate(draft);
+      return draft;
+    });
+  }
+
+  function handleAdminAssessmentPhotoSelect(key: AssessmentPhotoKey, file: File | undefined) {
+    updateAdminAssessmentForm((draft) => {
+      draft.formulario_avaliacao_fisica.fotos_analise_visual.arquivos[key] = file?.name ?? "";
+    });
+    setAdminAssessmentPhotoFiles((current) => {
+      const next = { ...current };
+      if (!file) {
+        delete next[key];
+      } else {
+        next[key] = file;
+      }
+      return next;
+    });
+    setAdminAssessmentPhotoPreviews((current) => {
+      if (current[key]) {
+        URL.revokeObjectURL(current[key]);
+      }
+      if (!file) {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      }
+      return { ...current, [key]: URL.createObjectURL(file) };
+    });
+  }
+
+  function clearAdminAssessmentForm() {
+    setAdminAssessmentForm(createEmptyAdminAssessmentForm());
+    setAdminAssessmentFormOpen(false);
+    setAdminAssessmentEditingId(null);
+    setAdminAssessmentUserId("");
+    setAdminAssessmentAssessedAt(formatDateTimeLocalInputValue());
+    setExpandedAssessmentId(null);
+    setAdminAssessmentPhotoFiles({});
+    setAdminAssessmentPhotoPreviews((current) => {
+      Object.values(current).forEach((url) => URL.revokeObjectURL(url));
+      return {};
+    });
+  }
+
+  function handleStartAdminAssessment(userId: string) {
+    const student = users.find((item) => item.id === userId);
+    setAdminAssessmentUserId(userId);
+    setAdminAssessmentFormOpen(Boolean(userId));
+    setAdminAssessmentEditingId(null);
+    setAdminAssessmentAssessedAt(formatDateTimeLocalInputValue());
+    setAdminAssessmentForm(() => {
+      const draft = createEmptyAdminAssessmentForm();
+      const section = draft.formulario_avaliacao_fisica.dados_pessoais_e_objetivos;
+      section.nome_completo = student?.name ?? "";
+      section.data_nascimento = student?.profile?.birthDate ?? "";
+      section.genero_biologico.resposta =
+        student?.profile?.gender === "MALE" ? "Masculino" : student?.profile?.gender === "FEMALE" ? "Feminino" : "";
+      return draft;
+    });
+    setAdminAssessmentPhotoFiles({});
+    setAdminAssessmentPhotoPreviews({});
+  }
+
+  function handleEditAdminAssessment(item: PhysicalAssessmentRow) {
+    const existing = item.details ? structuredClone(item.details) : createEmptyAdminAssessmentForm();
+    const section = existing.formulario_avaliacao_fisica.dados_pessoais_e_objetivos;
+    if (!section.nome_completo) section.nome_completo = item.user?.name ?? "";
+    if (!section.data_nascimento && item.user?.profile?.birthDate) section.data_nascimento = item.user.profile.birthDate;
+    setAdminAssessmentForm(existing);
+    setAdminAssessmentFormOpen(true);
+    setAdminAssessmentEditingId(item.id);
+    setAdminAssessmentUserId(item.userId);
+    setAdminAssessmentAssessedAt(formatDateTimeLocalInputValue(item.assessedAt));
+    setAdminAssessmentPhotoFiles({});
+    setAdminAssessmentPhotoPreviews({});
+  }
+
+  async function handleSubmitAdminAssessment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!adminAssessmentUserId) {
+      setFeedback("Selecione o aluno antes de salvar a avaliação.");
+      return;
+    }
+    setAdminSubmittingAssessment(true);
+    const editingId = adminAssessmentEditingId;
+    try {
+      let arquivos = adminAssessmentForm.formulario_avaliacao_fisica.fotos_analise_visual.arquivos;
+      for (const [key] of assessmentPhotoFields) {
+        const file = adminAssessmentPhotoFiles[key];
+        if (!file) continue;
+        const uploadData = new FormData();
+        uploadData.append("file", file);
+        const uploaded = await apiUpload<UploadResponse>("/admin/uploads?group=images", uploadData, token);
+        arquivos = { ...arquivos, [key]: uploaded.file.url };
+      }
+      const submittedAt = adminAssessmentAssessedAt ? new Date(adminAssessmentAssessedAt) : new Date();
+      const payload = {
+        ...adminAssessmentForm,
+        formulario_avaliacao_fisica: {
+          ...adminAssessmentForm.formulario_avaliacao_fisica,
+          fotos_analise_visual: {
+            ...adminAssessmentForm.formulario_avaliacao_fisica.fotos_analise_visual,
+            arquivos
+          }
+        },
+        userId: adminAssessmentUserId,
+        assessedAt: Number.isNaN(submittedAt.getTime()) ? new Date().toISOString() : submittedAt.toISOString()
+      };
+      if (editingId) {
+        const response = await apiPut<{ assessment: PhysicalAssessmentRow }>(
+          `/admin/physical-assessments/${editingId}`,
+          payload,
+          token
+        );
+        setAssessments((current) => current.map((item) => (item.id === response.assessment.id ? response.assessment : item)));
+      } else {
+        const response = await apiPost<{ assessment: PhysicalAssessmentRow }>(
+          "/admin/physical-assessments",
+          payload,
+          token
+        );
+        setAssessments((current) => [response.assessment, ...current]);
+      }
+      clearAdminAssessmentForm();
+      setSuccess(editingId ? "Avaliação física atualizada com sucesso." : "Avaliação física registrada com sucesso.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível salvar a avaliação física."));
+    } finally {
+      setAdminSubmittingAssessment(false);
     }
   }
 
@@ -3279,13 +4223,100 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     }
   }
 
-  async function handleDelete(path: string) {
+  function trashDeleteResources(kind: AdminTrashKind): AdminResource[] {
+    const map: Record<AdminTrashKind, AdminResource[]> = {
+      users: ["users", "summary"],
+      workouts: ["summary"],
+      announcements: ["announcements"],
+      plans: ["plans", "memberships", "payments"],
+      memberships: ["memberships", "users", "summary"],
+      payments: ["payments", "memberships", "summary"],
+      assessments: ["assessments"],
+      events: ["events"],
+      tickets: ["tickets"],
+      aiPlans: ["aiPlans"],
+      products: ["products", "purchases", "favorites", "ratings"],
+      purchases: ["purchases"],
+      cards: ["paymentCards"],
+      favorites: ["favorites", "products"],
+      ratings: ["ratings", "products"],
+      contactMessages: ["contactMessages"],
+      modalities: ["modalities"],
+      locations: ["locations"],
+      exercises: ["exercises", "workoutBlocks"],
+      workoutBlocks: ["workoutBlocks", "programs"],
+      programs: ["programs"]
+    };
+    return map[kind];
+  }
+
+  async function loadAdminTrash() {
+    if (!token) return;
+    setAdminTrashLoading(true);
     try {
-      await apiDelete(path, token);
-      await applyAdminChange(resourcesForDeletePath(path), "Registro excluído com sucesso.");
+      const response = await apiGet<{ trash: AdminTrashData }>("/admin/trash", token);
+      setAdminTrash(response.trash);
+    } catch {
+      setFeedback("Não foi possível carregar a lixeira.");
+    } finally {
+      setAdminTrashLoading(false);
+    }
+  }
+
+  async function confirmCmsDelete() {
+    const target = pendingCmsDelete;
+    if (!target) return;
+    try {
+      const base = trashResourceBase(target.kind);
+      const softBase = trashSoftDeleteBase(target.kind);
+      await apiDelete(target.permanent ? `${base}/${target.id}/permanent` : `${softBase}/${target.id}`, token);
+      setPendingCmsDelete(null);
+      await loadAdminTrash();
+      await applyAdminChange(trashDeleteResources(target.kind), target.permanent ? "Excluído definitivamente da lixeira." : "Movido para a lixeira.");
     } catch {
       setFeedback("Não foi possível excluir o registro.");
     }
+  }
+
+  async function handleRestoreCmsItem(target: CmsDeleteTarget) {
+    try {
+      const base = trashResourceBase(target.kind);
+      await apiPost(`${base}/${target.id}/restore`, {}, token);
+      await loadAdminTrash();
+      await applyAdminChange(trashDeleteResources(target.kind), "Item restaurado com sucesso.");
+    } catch {
+      setFeedback("Não foi possível restaurar o item.");
+    }
+  }
+
+  function renderTrashGroup(kind: AdminTrashKind, label: string, items: TrashDisplayItem[]) {
+    return (
+      <div className="cms-trash-group" key={kind}>
+        <h3>{label}</h3>
+        {items.length === 0 ? (
+          <p className="cms-empty-hint">Nenhum item na lixeira.</p>
+        ) : (
+          items.map((item) => (
+            <div className="cms-data-row cms-trash-item" key={item.id}>
+              <span>
+                <strong>{item.name}</strong>
+                {item.sub ? <small>{item.sub}</small> : null}
+              </span>
+              <div className="cms-row-actions">
+                <button type="button" aria-label={`Restaurar ${label}: ${item.name}`} onClick={() => void handleRestoreCmsItem({ kind, id: item.id, name: item.name })}>
+                  <RotateCcw size={17} />
+                  Restaurar
+                </button>
+                <button type="button" className="danger-button" aria-label={`Excluir em definitivo ${label}: ${item.name}`} onClick={() => setPendingCmsDelete({ kind, id: item.id, name: item.name, permanent: true })}>
+                  <Trash2 size={17} />
+                  Excluir em definitivo
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    );
   }
 
   async function handleCreateProduct(event: FormEvent<HTMLFormElement>) {
@@ -3627,6 +4658,16 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             <span className="sidebar-label">Meus Cartões</span>
           </button>
 
+          <span className="admin-nav-group-label">Avaliação e eventos</span>
+          <button className={adminSection === "assessments" ? "active" : ""} onClick={() => setAdminSection("assessments")}>
+            <Ruler size={18} />
+            <span className="sidebar-label">Avaliações físicas</span>
+          </button>
+          <button className={adminSection === "events" ? "active" : ""} onClick={() => setAdminSection("events")}>
+            <CalendarPlus size={18} />
+            <span className="sidebar-label">Eventos</span>
+          </button>
+
           <span className="admin-nav-group-label">Relacionamento</span>
           <button className={adminSection === "contact" ? "active" : ""} onClick={() => setAdminSection("contact")}>
             <MessageCircle size={18} />
@@ -3643,6 +4684,11 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           </button>
 
           <span className="admin-nav-group-label">Sistema</span>
+          <button className={adminSection === "trash" ? "active" : ""} onClick={() => setAdminSection("trash")}>
+            <Trash2 size={18} />
+            <span className="sidebar-label">Lixeira</span>
+            {adminTrashTotal > 0 && <span className="admin-nav-badge">{adminTrashTotal}</span>}
+          </button>
           <button className={adminSection === "settings" ? "active" : ""} onClick={() => setAdminSection("settings")}>
             <Settings size={18} />
             <span className="sidebar-label">Configurações</span>
@@ -3829,7 +4875,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                             Gerenciar
                           </button>
                         )}
-                        <button aria-label="Excluir usuário" onClick={() => handleDelete(`/admin/users/${item.id}`)}>
+                        <button aria-label="Excluir usuário" onClick={() => setPendingCmsDelete({ kind: "users", id: item.id, name: item.name })}>
                           <Trash2 size={17} />
                         </button>
                       </div>
@@ -4027,7 +5073,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 {selectedAdminStudent.assessments.slice(0, 4).map((assessment) => (
                   <div className="data-row" key={assessment.id}>
                     <span>
-                      <strong>{new Date(assessment.assessedAt).toLocaleDateString("pt-BR")}</strong>
+                      <strong>{formatAssessmentDateTime(assessment.assessedAt)}</strong>
                       {assessment.weightKg ?? "-"}kg - {assessment.bodyFatPct ?? "-"}% gordura
                     </span>
                   </div>
@@ -4174,7 +5220,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             ))}
           </div>
           <div className="cms-admin-grid cms-studio-grid">
-            {cmsStep === "locations" && <section className="cms-studio-card">
+            {!cmsTrashOpen && cmsStep === "locations" && <section className="cms-studio-card">
               <div className="panel-title cms-subtitle">
                 <div>
                   <h2>Localidades</h2>
@@ -4283,7 +5329,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     <button aria-label="Editar localidade" onClick={() => startEditCmsLocation(item)}>
                       <Pencil size={17} />
                     </button>
-                    <button aria-label="Excluir localidade" onClick={() => handleDelete(`/admin/cms/locations/${item.id}`)}>
+                    <button aria-label="Excluir localidade" onClick={() => setPendingCmsDelete({ kind: "locations", id: item.id, name: item.name })}>
                       <Trash2 size={17} />
                     </button>
                   </div>
@@ -4291,7 +5337,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               ))}
             </section>}
 
-            {cmsStep === "modalities" && <section className="cms-studio-card">
+            {!cmsTrashOpen && cmsStep === "modalities" && <section className="cms-studio-card">
               <div className="panel-title cms-subtitle">
                 <div>
                   <h2>Modalidades</h2>
@@ -4364,37 +5410,119 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   </button>
                 )}
               </form>
-              {cmsModalities.slice(0, 10).map((item) => (
-                <div className={`data-row cms-data-row${item.imageUrl ? " with-thumb" : ""}`} key={item.id}>
-                  {item.imageUrl && (
-                    <img className="cms-data-row-thumb" src={mediaUrl(item.imageUrl)} alt={item.name} />
-                  )}
-                  <span>
-                    <strong>{item.name}</strong>
-                    {item.description || item.slug}
-                  </span>
-                  <select
-                    aria-label="Status da modalidade"
-                    value={item.isActive ? "ACTIVE" : "INACTIVE"}
-                    onChange={(event) => handleUpdateCmsModalityStatus(item.id, event.target.value === "ACTIVE")}
+              <div className="cms-sort-toggle">
+                <span>Ordenar por posição:</span>
+                <button
+                  type="button"
+                  className={cmsModalitiesSortDir === "asc" ? "active" : ""}
+                  onClick={() => {
+                    setCmsModalitiesPage(1);
+                    setCmsModalitiesSortDir("asc");
+                  }}
+                >
+                  Crescente
+                </button>
+                <button
+                  type="button"
+                  className={cmsModalitiesSortDir === "desc" ? "active" : ""}
+                  onClick={() => {
+                    setCmsModalitiesPage(1);
+                    setCmsModalitiesSortDir("desc");
+                  }}
+                >
+                  Decrescente
+                </button>
+              </div>
+              {cmsModalitiesPageItems.map((item, index) => {
+                const rowIndex = (cmsModalitiesSafePage - 1) * MODALITIES_PAGE_SIZE + index;
+                const dragging = cmsModalityDragState?.fromIndex === rowIndex;
+                const draggingOver = cmsModalityDragState?.overIndex === rowIndex;
+                return (
+                  <div
+                    className={`data-row cms-data-row cms-sortable-row${item.imageUrl ? " with-thumb" : ""}${dragging ? " is-dragging" : ""}${draggingOver ? " is-drag-over" : ""}`}
+                    key={item.id}
+                    draggable
+                    onDragStart={() => handleCmsModalityDragStart(rowIndex)}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      handleCmsModalityDragOver(rowIndex);
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      handleCmsModalityDrop();
+                    }}
+                    onDragEnd={handleCmsModalityDragEnd}
                   >
-                    <option value="ACTIVE">Ativa</option>
-                    <option value="INACTIVE">Inativa</option>
-                  </select>
-                  <small>ordem {item.sortOrder}</small>
-                  <div className="cms-row-actions">
-                    <button aria-label="Editar modalidade" onClick={() => startEditCmsModality(item)}>
-                      <Pencil size={17} />
+                    <span className="cms-drag-handle" aria-hidden="true">
+                      <GripVertical size={17} />
+                    </span>
+                    {item.imageUrl && (
+                      <img className="cms-data-row-thumb" src={mediaUrl(item.imageUrl)} alt={item.name} />
+                    )}
+                    <span>
+                      <strong>{item.name}</strong>
+                      {item.description || item.slug}
+                    </span>
+                    <select
+                      aria-label="Status da modalidade"
+                      value={item.isActive ? "ACTIVE" : "INACTIVE"}
+                      onChange={(event) => handleUpdateCmsModalityStatus(item.id, event.target.value === "ACTIVE")}
+                    >
+                      <option value="ACTIVE">Ativa</option>
+                      <option value="INACTIVE">Inativa</option>
+                    </select>
+                    <small>ordem {item.sortOrder}</small>
+                    <div className="cms-row-actions">
+                      <button aria-label="Editar modalidade" onClick={() => startEditCmsModality(item)}>
+                        <Pencil size={17} />
+                      </button>
+                      <button aria-label="Excluir modalidade" onClick={() => setPendingCmsDelete({ kind: "modalities", id: item.id, name: item.name })}>
+                        <Trash2 size={17} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              {cmsModalities.length > MODALITIES_PAGE_SIZE && (
+                <div className="admin-users-pagination">
+                  <span>
+                    Página {cmsModalitiesSafePage} de {cmsModalitiesPageCount} • {cmsModalities.length} modalidade(s)
+                  </span>
+                  <div>
+                    <button
+                      type="button"
+                      className={`${cmsModalityNavTarget === "prev" ? "is-nav-target" : ""}`}
+                      onClick={() => setCmsModalitiesPage((page) => Math.max(1, page - 1))}
+                      disabled={cmsModalitiesSafePage <= 1}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        handleCmsModalityNavDragOver("prev");
+                      }}
+                      onDragLeave={() => setCmsModalityNavTarget((prev) => (prev === "prev" ? null : prev))}
+                    >
+                      <ChevronLeft size={17} />
+                      Anterior
                     </button>
-                    <button aria-label="Excluir modalidade" onClick={() => handleDelete(`/admin/cms/modalities/${item.id}`)}>
-                      <Trash2 size={17} />
+                    <button
+                      type="button"
+                      className={`${cmsModalityNavTarget === "next" ? "is-nav-target" : ""}`}
+                      onClick={() => setCmsModalitiesPage((page) => Math.min(cmsModalitiesPageCount, page + 1))}
+                      disabled={cmsModalitiesSafePage >= cmsModalitiesPageCount}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        handleCmsModalityNavDragOver("next");
+                      }}
+                      onDragLeave={() => setCmsModalityNavTarget((prev) => (prev === "next" ? null : prev))}
+                    >
+                      Próxima
+                      <ChevronRight size={17} />
                     </button>
                   </div>
                 </div>
-              ))}
+              )}
             </section>}
 
-            {cmsStep === "lessons" && <section className="cms-studio-card">
+            {!cmsTrashOpen && cmsStep === "lessons" && <section className="cms-studio-card">
               <div className="panel-title cms-subtitle">
                 <div>
                   <h2>Exercícios/Aulas e Materiais</h2>
@@ -4411,14 +5539,66 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   <UploadCloud size={24} />
                   <strong>Upload de aula</strong>
                   <small>Vídeo, imagem ou GIF. Se preferir, cole uma URL pública no campo abaixo.</small>
-                  <input name="lessonFile" type="file" accept="video/*,image/*,.gif" aria-label="Selecionar mídia da aula" ref={cmsLessonFileRef} />
+                  <input name="lessonFile" type="file" accept="video/*,image/*,.gif" aria-label="Selecionar mídia da aula" ref={cmsLessonFileRef} onChange={(event) => handleCmsLessonFileChange(event.target.files?.[0] ?? null)} />
                 </label>
+                {cmsLessonFilePreview ? (
+                  <div className="cms-image-preview wide-field">
+                    {cmsPreviewMedia(cmsLessonFilePreview, "Prévia da aula enviada")}
+                    <button type="button" onClick={handleCmsLessonFileClear}>
+                      <Trash2 size={17} />
+                      Remover arquivo
+                    </button>
+                  </div>
+                ) : editingCmsExercise?.videoUrl && !cmsLessonFileRemove ? (
+                  <div className="cms-image-preview wide-field">
+                    {cmsPreviewMedia(editingCmsExercise.videoUrl, "Mídia atual da aula")}
+                    <small>Mídia atual (envie um novo arquivo para substituir)</small>
+                    <button type="button" onClick={() => setCmsLessonFileRemove(true)}>
+                      <ImageOff size={17} />
+                      Remover mídia
+                    </button>
+                  </div>
+                ) : editingCmsExercise?.videoUrl ? (
+                  <div className="cms-image-preview wide-field">
+                    <small>Mídia marcada para remoção — ela será apagada ao salvar.</small>
+                    <button type="button" onClick={() => setCmsLessonFileRemove(false)}>
+                      <RefreshCw size={17} />
+                      Desfazer remoção
+                    </button>
+                  </div>
+                ) : null}
                 <label className="cms-upload-field">
                   <FileText size={24} />
                   <strong>Arquivo de apoio</strong>
                   <small>PDF, planilha, ficha ou guia complementar para anexar ao conteúdo da aula.</small>
-                  <input name="materialFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,image/*" aria-label="Selecionar material de apoio" ref={cmsMaterialFileRef} />
+                  <input name="materialFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,image/*" aria-label="Selecionar material de apoio" ref={cmsMaterialFileRef} onChange={(event) => handleCmsMaterialFileChange(event.target.files?.[0] ?? null)} />
                 </label>
+                {cmsMaterialFilePreview ? (
+                  <div className="cms-image-preview wide-field">
+                    {cmsPreviewMedia(cmsMaterialFilePreview, "Prévia do material enviado")}
+                    <button type="button" onClick={handleCmsMaterialFileClear}>
+                      <Trash2 size={17} />
+                      Remover material
+                    </button>
+                  </div>
+                ) : editingCmsExercise?.materialUrl && !cmsMaterialFileRemove ? (
+                  <div className="cms-image-preview wide-field">
+                    {cmsPreviewMedia(editingCmsExercise.materialUrl, "Material atual")}
+                    <small>Material atual (envie um novo arquivo para substituir)</small>
+                    <button type="button" onClick={() => setCmsMaterialFileRemove(true)}>
+                      <ImageOff size={17} />
+                      Remover material
+                    </button>
+                  </div>
+                ) : editingCmsExercise?.materialUrl ? (
+                  <div className="cms-image-preview wide-field">
+                    <small>Material marcado para remoção — ele será apagado ao salvar.</small>
+                    <button type="button" onClick={() => setCmsMaterialFileRemove(false)}>
+                      <RefreshCw size={17} />
+                      Desfazer remoção
+                    </button>
+                  </div>
+                ) : null}
                 <label>
                   URL do vídeo, imagem ou GIF
                   <input name="videoUrl" type="text" placeholder="https://.../aula.mp4" defaultValue={editingCmsExercise?.videoUrl ?? ""} />
@@ -4427,6 +5607,11 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   URL do áudio
                   <input name="audioUrl" type="text" placeholder="https://.../orientacao.mp3" defaultValue={editingCmsExercise?.audioUrl ?? ""} />
                 </label>
+                {editingCmsExercise?.audioUrl && (
+                  <div className="cms-image-preview wide-field">
+                    {cmsPreviewMedia(editingCmsExercise.audioUrl, "Áudio atual da aula")}
+                  </div>
+                )}
                 <label className="wide-field">
                   URL do material de apoio
                   <input name="materialUrl" type="text" placeholder="https://.../ficha.pdf" defaultValue={editingCmsExercise?.materialUrl ?? ""} />
@@ -4445,15 +5630,23 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </label>
                 <label className="wide-field">
                   Modalidades
-                  <select name="modalityIds" multiple defaultValue={(editingCmsExercise?.modalityLinks ?? []).map((link) => link.modality.id)}>
-                    {cmsModalities
-                      .filter((item) => item.isActive)
-                      .map((modality) => (
-                        <option value={modality.id} key={modality.id}>
-                          {modality.name}
-                        </option>
-                      ))}
-                  </select>
+                  <div className="cms-chip-group">
+                    {activeCmsModalities.length === 0 && <small className="cms-empty-hint">Cadastre modalidades primeiro.</small>}
+                    {activeCmsModalities.map((modality) => {
+                      const checked = (editingCmsExercise?.modalityLinks ?? []).some((link) => link.modality.id === modality.id);
+                      return (
+                        <label className="cms-chip" key={modality.id}>
+                          <input
+                            type="checkbox"
+                            name="modalityIds"
+                            value={modality.id}
+                            defaultChecked={checked}
+                          />
+                          <span>{modality.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </label>
                 <label className="wide-field">
                   Alternativas
@@ -4475,26 +5668,57 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   </button>
                 )}
               </form>
-              {cmsExercises.slice(0, 8).map((item) => (
-                <div className="data-row cms-data-row" key={item.id}>
-                  <span>
-                    <strong>{item.title ?? item.name ?? "Exercício"}</strong>
-                    {(item.modalityLinks ?? []).map((link) => link.modality.name).join(", ") || "Sem modalidade"}
-                  </span>
-                  <small>{item.materialUrl ? "Material anexado" : item.equipmentTags.join(", ") || "Sem equipamento"}</small>
-                  <div className="cms-row-actions">
-                    <button aria-label="Editar exercício" onClick={() => startEditCmsExercise(item)}>
-                      <Pencil size={17} />
-                    </button>
-                    <button aria-label="Excluir exercício CMS" onClick={() => handleDelete(`/admin/cms/exercises/${item.id}`)}>
-                      <Trash2 size={17} />
-                    </button>
+              <div className="cms-filter-bar wide-field">
+                <label className="cms-filter-label">
+                  <span>Filtrar por modalidade</span>
+                  <select value={cmsLessonsModalityFilter} onChange={(event) => setCmsLessonsModalityFilter(event.target.value)}>
+                    <option value="">Todas as modalidades</option>
+                    {activeCmsModalities.map((modality) => (
+                      <option value={modality.id} key={modality.id}>
+                        {modality.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <span className="cms-filter-count">{filteredCmsExercises.length} aula(s)</span>
+              </div>
+              {filteredCmsExercises.slice(0, 8).map((item) => {
+                const thumbSrc = cmsExerciseThumbSrc(item.videoUrl);
+                const thumbKind = item.videoUrl ? cmsMediaKind(item.videoUrl) : "file";
+                return (
+                  <div className={`data-row cms-data-row cms-lessons-row${thumbSrc ? " with-thumb" : ""}`} key={item.id}>
+                    {thumbSrc && thumbKind === "video" ? (
+                      <video className="cms-data-row-thumb" src={thumbSrc} muted preload="metadata" />
+                    ) : thumbSrc ? (
+                      <img className="cms-data-row-thumb" src={thumbSrc} alt={cmsExerciseLabel(item)} />
+                    ) : null}
+                    <span>
+                      <strong>{item.title ?? item.name ?? "Exercício"}</strong>
+                      <span className="cms-badge-group">
+                        {(item.modalityLinks ?? []).length > 0 ? (
+                          (item.modalityLinks ?? []).map((link) => (
+                            <em className="cms-modality-badge" key={link.id}>{link.modality.name}</em>
+                          ))
+                        ) : (
+                          <em className="cms-modality-badge muted">Sem modalidade</em>
+                        )}
+                      </span>
+                    </span>
+                    <small>{item.materialUrl ? "Material anexado" : item.equipmentTags.join(", ") || "Sem equipamento"}</small>
+                    <div className="cms-row-actions">
+                      <button aria-label="Editar exercício" onClick={() => startEditCmsExercise(item)}>
+                        <Pencil size={17} />
+                      </button>
+                      <button aria-label="Excluir exercício CMS" onClick={() => setPendingCmsDelete({ kind: "exercises", id: item.id, name: item.title ?? item.name ?? "Aula" })}>
+                        <Trash2 size={17} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </section>}
 
-            {cmsStep === "blocks" && <section className="cms-studio-card">
+            {!cmsTrashOpen && cmsStep === "blocks" && <section className="cms-studio-card">
               <div className="panel-title cms-subtitle">
                 <div>
                   <h2>Ficha de treino</h2>
@@ -4502,14 +5726,14 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </div>
                 <span>{cmsWorkoutBlocks.length}</span>
               </div>
-              <form className="crud-form cms-form" onSubmit={handleCreateCmsWorkoutBlock}>
+              <form className="crud-form cms-form" key={editingCmsWorkoutBlock?.id ?? "new"} onSubmit={handleSaveCmsWorkoutBlock}>
                 <label>
                   Nome do bloco
-                  <input name="title" placeholder="Ex.: Treino A - Peito e tríceps" required />
+                  <input name="title" placeholder="Ex.: Treino A - Peito e tríceps" required defaultValue={editingCmsWorkoutBlock?.title ?? ""} />
                 </label>
                 <label>
                   Estrutura
-                  <select name="structureType" defaultValue="NORMAL">
+                  <select name="structureType" defaultValue={editingCmsWorkoutBlock?.structureType ?? "NORMAL"}>
                     <option value="NORMAL">Normal</option>
                     <option value="BI_SET">Bi-set</option>
                     <option value="DROP_SET">Drop-set</option>
@@ -4518,7 +5742,18 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </label>
                 <label>
                   Descanso padrão
-                  <input name="restTime" type="number" min="0" defaultValue="60" placeholder="Segundos" required />
+                  <input name="restTime" type="number" min="0" defaultValue={editingCmsWorkoutBlock?.restTime ?? 60} placeholder="Segundos" required />
+                </label>
+                <label>
+                  Modalidade
+                  <select name="modalityId" value={cmsBlockFormModality} onChange={(event) => setCmsBlockFormModality(event.target.value)}>
+                    <option value="">Sem modalidade</option>
+                    {activeCmsModalities.map((modality) => (
+                      <option value={modality.id} key={modality.id}>
+                        {modality.name}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <div className="cms-builder-list wide-field">
                   <div className="cms-builder-heading">
@@ -4528,32 +5763,64 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   </div>
                   {Array.from({ length: 6 }).map((_, index) => {
                     const row = index + 1;
+                    const editRow = editingCmsWorkoutBlock?.exercises.find((entry) => entry.order === row);
 
                     return (
                       <div className="cms-builder-row" key={`block-exercise-${row}`}>
-                        <select name={`exerciseId${row}`} required={row === 1} defaultValue="">
+                        <select name={`exerciseId${row}`} required={row === 1} defaultValue={editRow?.exercise.id ?? ""}>
                           <option value="">{row === 1 ? "Selecione a primeira aula" : "Aula opcional"}</option>
-                          {cmsExercises.map((exercise) => (
+                          {cmsBlockModalityExercises.map((exercise) => (
                             <option value={exercise.id} key={exercise.id}>
                               {cmsExerciseLabel(exercise)}
                             </option>
                           ))}
+                          {editRow && !cmsBlockModalityExercises.some((exercise) => exercise.id === editRow.exercise.id) && (
+                            <option value={editRow.exercise.id}>
+                              {cmsExerciseLabel(editRow.exercise)}
+                            </option>
+                          )}
                         </select>
-                        <input name={`sets${row}`} type="number" min="1" defaultValue="3" aria-label={`Séries do exercício ${row}`} />
-                        <input name={`repsRange${row}`} defaultValue="10-12" aria-label={`Repetições do exercício ${row}`} />
+                        <input name={`sets${row}`} type="number" min="1" defaultValue={editRow?.sets ?? 3} aria-label={`Séries do exercício ${row}`} />
+                        <input name={`repsRange${row}`} defaultValue={editRow?.repsRange ?? "10-12"} aria-label={`Repetições do exercício ${row}`} />
                       </div>
                     );
                   })}
                 </div>
                 <button className="primary-button">
                   <Save size={18} />
-                  Salvar ficha
+                  {editingCmsWorkoutBlock ? "Salvar alterações" : "Salvar ficha"}
                 </button>
+                {editingCmsWorkoutBlock && (
+                  <button type="button" className="outline-button" onClick={handleCancelCmsWorkoutBlockEdit}>
+                    Cancelar edição
+                  </button>
+                )}
               </form>
-              {cmsWorkoutBlocks.slice(0, 8).map((item) => (
+              <div className="cms-filter-bar wide-field">
+                <label className="cms-filter-label">
+                  <span>Filtrar por modalidade</span>
+                  <select value={cmsBlocksModalityFilter} onChange={(event) => setCmsBlocksModalityFilter(event.target.value)}>
+                    <option value="">Todas as modalidades</option>
+                    {activeCmsModalities.map((modality) => (
+                      <option value={modality.id} key={modality.id}>
+                        {modality.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <span className="cms-filter-count">{filteredCmsWorkoutBlocks.length} ficha(s)</span>
+              </div>
+              {filteredCmsWorkoutBlocks.slice(0, 8).map((item) => (
                 <div className="data-row cms-data-row" key={item.id}>
                   <span>
                     <strong>{item.title}</strong>
+                    <span className="cms-badge-group">
+                      {item.modality ? (
+                        <em className="cms-modality-badge">{item.modality.name}</em>
+                      ) : (
+                        <em className="cms-modality-badge muted">Sem modalidade</em>
+                      )}
+                    </span>
                     {item.exercises.map((row) => row.exercise.title ?? row.exercise.name ?? "Exercício").join(", ") || "Sem exercícios"}
                   </span>
                   <select
@@ -4567,14 +5834,19 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     <option value="120">120s</option>
                   </select>
                   <small>{item.structureType}</small>
-                  <button aria-label="Excluir bloco CMS" onClick={() => handleDelete(`/admin/cms/workout-blocks/${item.id}`)}>
-                    <Trash2 size={17} />
-                  </button>
+                  <div className="cms-row-actions">
+                    <button aria-label="Editar ficha" onClick={() => startEditCmsWorkoutBlock(item)}>
+                      <Pencil size={17} />
+                    </button>
+                    <button aria-label="Excluir bloco CMS" onClick={() => setPendingCmsDelete({ kind: "workoutBlocks", id: item.id, name: item.title })}>
+                      <Trash2 size={17} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </section>}
 
-            {cmsStep === "publish" && <section className="cms-program-section cms-studio-card">
+            {!cmsTrashOpen && cmsStep === "publish" && <section className="cms-program-section cms-studio-card">
               <div className="panel-title cms-subtitle">
                 <div>
                   <h2>Publicar programa</h2>
@@ -4582,34 +5854,33 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </div>
                 <span>{cmsPrograms.length}</span>
               </div>
-              <form className="crud-form cms-form" onSubmit={handleCreateCmsProgram}>
+              <form className="crud-form cms-form" key={editingCmsProgram?.id ?? "new"} onSubmit={handleSaveCmsProgram}>
                 <label>
                   Título do programa
-                  <input name="title" placeholder="Ex.: Hipertrofia 4 semanas" required />
+                  <input name="title" placeholder="Ex.: Hipertrofia 4 semanas" required defaultValue={editingCmsProgram?.title ?? ""} />
                 </label>
                 <label>
                   Modalidade
-                  <select name="modalityId" required defaultValue="">
+                  <select name="modalityId" required defaultValue={editingCmsProgram?.modality?.id ?? ""}>
                     <option value="">Selecione a modalidade</option>
-                    {cmsModalities
-                      .filter((item) => item.isActive)
-                      .map((modality) => (
-                        <option value={modality.id} key={modality.id}>
-                          {modality.name}
-                        </option>
-                      ))}
+                    {cmsProgramFormModalities.map((modality) => (
+                      <option value={modality.id} key={modality.id}>
+                        {modality.name}{modality.isActive ? "" : " (inativa)"}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label>
                   Status inicial
-                  <select name="status" defaultValue="DRAFT">
+                  <select name="status" defaultValue={editingCmsProgram?.status ?? "DRAFT"}>
                     <option value="DRAFT">Salvar como rascunho</option>
                     <option value="PUBLISHED">Publicar agora</option>
+                    {editingCmsProgram?.status === "ARCHIVED" && <option value="ARCHIVED">Manter arquivado</option>}
                   </select>
                 </label>
                 <label>
                   Público por sexo
-                  <select name="targetGender" defaultValue="ALL">
+                  <select name="targetGender" defaultValue={editingCmsProgram?.targetGender ?? "ALL"}>
                     <option value="ALL">Todos</option>
                     <option value="MALE">Masculino</option>
                     <option value="FEMALE">Feminino</option>
@@ -4617,20 +5888,26 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </label>
                 <label>
                   Quantidade de treinos na sequência
-                  <input name="totalWorkouts" type="number" min="1" defaultValue="30" required />
+                  <input name="totalWorkouts" type="number" min="1" defaultValue={editingCmsProgram?.totalWorkouts ?? 30} required />
                 </label>
                 <label className="wide-field">
                   Descrição para o aluno
-                  <textarea name="description" placeholder="Explique objetivo, frequência e como seguir o treino" required />
+                  <textarea
+                    name="description"
+                    placeholder="Explique objetivo, frequência e como seguir o treino"
+                    required
+                    defaultValue={editingCmsProgram ? parseProgramMetadata(editingCmsProgram.description).description : ""}
+                  />
                 </label>
                 <div className="cms-builder-list wide-field">
                   {Array.from({ length: 7 }).map((_, index) => {
                     const dayNumber = index + 1;
+                    const editDay = editingCmsProgram?.days.find((day) => day.dayNumber === dayNumber);
 
                     return (
                       <div className="cms-builder-row program-day-row" key={`program-day-${dayNumber}`}>
                         <span>Dia {dayNumber}</span>
-                        <select name={`workoutBlockId${dayNumber}`} required={dayNumber === 1} defaultValue="">
+                        <select name={`workoutBlockId${dayNumber}`} required={dayNumber === 1} defaultValue={editDay?.workoutBlock.id ?? ""}>
                           <option value="">{dayNumber === 1 ? "Selecione a ficha" : "Ficha opcional"}</option>
                           {cmsWorkoutBlocks.map((block) => (
                             <option value={block.id} key={block.id}>
@@ -4638,94 +5915,239 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                             </option>
                           ))}
                         </select>
-                        <input name={`dayOrder${dayNumber}`} type="number" min="1" defaultValue="1" aria-label={`Ordem do dia ${dayNumber}`} />
+                        <input name={`dayOrder${dayNumber}`} type="number" min="1" defaultValue={editDay?.order ?? 1} aria-label={`Ordem do dia ${dayNumber}`} />
                       </div>
                     );
                   })}
                 </div>
                 <button className="primary-button">
                   <Save size={18} />
-                  Salvar programa
+                  {editingCmsProgram ? "Salvar alterações" : "Salvar programa"}
                 </button>
+                {editingCmsProgram && (
+                  <button type="button" className="outline-button" onClick={handleCancelCmsProgramEdit}>
+                    <X size={18} />
+                    Cancelar edição
+                  </button>
+                )}
               </form>
-              {cmsPrograms.slice(0, 8).map((item) => (
-                <article className="cms-program-card" key={item.id}>
-                  <div className="cms-program-main">
-                    <span className={`cms-status ${item.status.toLowerCase()}`}>{item.status}</span>
-                    <h3>{item.title}</h3>
-                    <p>{parseProgramMetadata(item.description).description}</p>
-                    <small>Modalidade: {item.modality?.name ?? parseProgramMetadata(item.description).modality}</small>
-                    <small>Público: {item.targetGender === "MALE" ? "Masculino" : item.targetGender === "FEMALE" ? "Feminino" : "Todos"}</small>
-                    <small>Meta: {item.totalWorkouts} treino(s) em sequência</small>
-                    <small>{item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.title}`).join(" | ") || "Sem dias cadastrados"}</small>
-                  </div>
-                  <div className="cms-program-actions">
-                    <select
-                      aria-label="Público do programa"
-                      value={item.targetGender}
-                      onChange={(event) => handleUpdateCmsProgramGender(item.id, event.target.value as CmsProgramRow["targetGender"])}
+              <div className="cms-program-list-title">
+                <strong>Programas publicados</strong>
+                <small>Arraste para definir a ordem que aparece para alunos assinantes.</small>
+              </div>
+              <div className="accordion cms-program-accordion" id="cmsProgramsAccordion">
+                {publishedCmsPrograms.map((item, index) => {
+                  const programMetadata = parseProgramMetadata(item.description);
+                  const expanded = expandedCmsProgramId === item.id;
+                  const dragging = cmsProgramDragState?.fromIndex === index;
+                  const draggingOver = cmsProgramDragState?.overIndex === index;
+                  const programOrder = index + 1;
+                  const programCollapseId = `cms-program-collapse-${item.id}`;
+                  const programHeadingId = `cms-program-heading-${item.id}`;
+
+                  return (
+                    <article
+                      className={`accordion-item cms-program-card${dragging ? " is-dragging" : ""}${draggingOver ? " is-drag-over" : ""}`}
+                      key={item.id}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        handleCmsProgramDragOver(index);
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        handleCmsProgramDrop();
+                      }}
+                      onDragEnd={handleCmsProgramDragEnd}
                     >
-                      <option value="ALL">Todos</option>
-                      <option value="MALE">Masculino</option>
-                      <option value="FEMALE">Feminino</option>
-                    </select>
-                    <select
-                      aria-label="Meta de treinos do programa"
-                      value={item.totalWorkouts}
-                      onChange={(event) => handleUpdateCmsProgramTotalWorkouts(item.id, Number(event.target.value))}
-                    >
-                      <option value="12">12 treinos</option>
-                      <option value="18">18 treinos</option>
-                      <option value="24">24 treinos</option>
-                      <option value="30">30 treinos</option>
-                      <option value="36">36 treinos</option>
-                    </select>
-                    <button className="outline-button" onClick={() => handlePublishCmsProgram(item.id)} disabled={item.status === "PUBLISHED"}>
-                      <Check size={17} />
-                      Publicar
-                    </button>
-                    <button className="outline-button" onClick={() => handleArchiveCmsProgram(item.id)} disabled={item.status === "ARCHIVED"}>
-                      <LockKeyhole size={17} />
-                      Arquivar
-                    </button>
-                    <button className="outline-button danger-button" onClick={() => handleDelete(`/admin/cms/programs/${item.id}`)}>
-                      <Trash2 size={17} />
-                      Excluir
-                    </button>
-                  </div>
-                  <form className="cms-assign-form" onSubmit={(event) => handleAssignCmsProgramSubmit(event, item.id)}>
-                    <select name="userId" disabled={item.status !== "PUBLISHED"}>
-                      <option value="">Todos os alunos</option>
-                      {activeStudents.map((user) => (
-                          <option value={user.id} key={user.id}>
-                            {user.name}
-                          </option>
-                        ))}
-                    </select>
-                    <input name="currentDay" type="number" min="1" defaultValue="1" disabled={item.status !== "PUBLISHED"} />
-                    <input name="totalWorkouts" type="number" min="1" defaultValue={item.totalWorkouts ?? 30} disabled={item.status !== "PUBLISHED"} aria-label="Meta de treinos da atribuição" />
-                    <button className="primary-button" disabled={item.status !== "PUBLISHED"}>
-                      <UsersRound size={17} />
-                      Atribuir
-                    </button>
-                  </form>
-                  <div className="cms-assignment-list">
-                    <strong>4. Acompanhamento</strong>
-                    {(item.assignedUsers ?? []).length > 0 ? (
-                      item.assignedUsers?.slice(0, 8).map((assignment) => (
-                        <span key={assignment.id}>
-                          {assignment.user.name} • {assignment.completedWorkouts}/{assignment.totalWorkouts} treino(s) • dia {assignment.currentDay} • {assignment.status}
+                      <h3 className="accordion-header cms-program-header" id={programHeadingId}>
+                        <span
+                          className="cms-drag-handle"
+                          aria-label="Arrastar programa"
+                          title="Arrastar programa"
+                          draggable
+                          onDragStart={(event) => {
+                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.setData("text/plain", item.id);
+                            handleCmsProgramDragStart(index);
+                          }}
+                        >
+                          <GripVertical size={17} />
                         </span>
-                      ))
-                    ) : (
-                      <span>Nenhum aluno atribuído.</span>
-                    )}
+                        <span className="cms-program-order">#{programOrder}</span>
+                        <button
+                          className={`accordion-button cms-program-toggle${expanded ? "" : " collapsed"}`}
+                          type="button"
+                          aria-expanded={expanded}
+                          aria-controls={programCollapseId}
+                          onClick={() => setExpandedCmsProgramId(expanded ? null : item.id)}
+                        >
+                          <span className={`cms-status ${item.status.toLowerCase()}`}>{item.status}</span>
+                          <span className="cms-program-title-group">
+                            <strong>{item.title}</strong>
+                            <small>
+                              {item.modality?.name ?? programMetadata.modality} • {item.totalWorkouts} treino(s) • {item.days.length} dia(s)
+                            </small>
+                          </span>
+                        </button>
+                      </h3>
+                      <div
+                        id={programCollapseId}
+                        className={`accordion-collapse collapse${expanded ? " show" : ""}`}
+                        aria-labelledby={programHeadingId}
+                      >
+                        <div className="accordion-body cms-program-body">
+                          <div className="cms-program-main">
+                            <p>{programMetadata.description}</p>
+                            <small>Público: {item.targetGender === "MALE" ? "Masculino" : item.targetGender === "FEMALE" ? "Feminino" : "Todos"}</small>
+                            <small>{item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.title}`).join(" | ") || "Sem dias cadastrados"}</small>
+                          </div>
+                          <div className="cms-program-actions">
+                            <button className="outline-button" type="button" onClick={() => startEditCmsProgram(item)}>
+                              <Pencil size={17} />
+                              Editar
+                            </button>
+                            <select
+                              aria-label="Público do programa"
+                              value={item.targetGender}
+                              onChange={(event) => handleUpdateCmsProgramGender(item.id, event.target.value as CmsProgramRow["targetGender"])}
+                            >
+                              <option value="ALL">Todos</option>
+                              <option value="MALE">Masculino</option>
+                              <option value="FEMALE">Feminino</option>
+                            </select>
+                            <select
+                              aria-label="Meta de treinos do programa"
+                              value={item.totalWorkouts}
+                              onChange={(event) => handleUpdateCmsProgramTotalWorkouts(item.id, Number(event.target.value))}
+                            >
+                              <option value="12">12 treinos</option>
+                              <option value="18">18 treinos</option>
+                              <option value="24">24 treinos</option>
+                              <option value="30">30 treinos</option>
+                              <option value="36">36 treinos</option>
+                            </select>
+                            <button className="outline-button" type="button" onClick={() => handlePublishCmsProgram(item.id)} disabled={item.status === "PUBLISHED"}>
+                              <Check size={17} />
+                              Publicar
+                            </button>
+                            <button className="outline-button" type="button" onClick={() => handleArchiveCmsProgram(item.id)} disabled={item.status === "ARCHIVED"}>
+                              <LockKeyhole size={17} />
+                              Arquivar
+                            </button>
+                            <button className="outline-button danger-button" type="button" onClick={() => setPendingCmsDelete({ kind: "programs", id: item.id, name: item.title })}>
+                              <Trash2 size={17} />
+                              Excluir
+                            </button>
+                          </div>
+                          <form className="cms-assign-form" onSubmit={(event) => handleAssignCmsProgramSubmit(event, item.id)}>
+                            <select name="userId" disabled={item.status !== "PUBLISHED"}>
+                              <option value="">Todos os alunos</option>
+                              {activeStudents.map((user) => (
+                                <option value={user.id} key={user.id}>
+                                  {user.name}
+                                </option>
+                              ))}
+                            </select>
+                            <input name="currentDay" type="number" min="1" defaultValue="1" disabled={item.status !== "PUBLISHED"} />
+                            <input name="totalWorkouts" type="number" min="1" defaultValue={item.totalWorkouts ?? 30} disabled={item.status !== "PUBLISHED"} aria-label="Meta de treinos da atribuição" />
+                            <button className="primary-button" disabled={item.status !== "PUBLISHED"}>
+                              <UsersRound size={17} />
+                              Atribuir
+                            </button>
+                          </form>
+                          <div className="cms-assignment-list">
+                            <strong>4. Acompanhamento</strong>
+                            {(item.assignedUsers ?? []).length > 0 ? (
+                              item.assignedUsers?.slice(0, 8).map((assignment) => (
+                                <span key={assignment.id}>
+                                  {assignment.user.name} • {assignment.completedWorkouts}/{assignment.totalWorkouts} treino(s) • dia {assignment.currentDay} • {assignment.status}
+                                </span>
+                              ))
+                            ) : (
+                              <span>Nenhum aluno atribuído.</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+                {publishedCmsPrograms.length === 0 && (
+                  <div className="cms-empty-hint">Nenhum programa publicado para ordenar.</div>
+                )}
+              </div>
+              {draftCmsPrograms.length > 0 && (
+                <>
+                  <div className="cms-program-list-title secondary">
+                    <strong>Rascunhos e arquivados</strong>
+                    <small>Publique um programa para incluir no drag & drop dos alunos.</small>
                   </div>
-                </article>
-              ))}
+                  <div className="accordion cms-program-accordion" id="cmsDraftProgramsAccordion">
+                    {draftCmsPrograms.map((item) => {
+                      const programMetadata = parseProgramMetadata(item.description);
+                      const expanded = expandedCmsProgramId === item.id;
+                      const programCollapseId = `cms-program-collapse-${item.id}`;
+                      const programHeadingId = `cms-program-heading-${item.id}`;
+
+                      return (
+                        <article className="accordion-item cms-program-card is-not-sortable" key={item.id}>
+                          <h3 className="accordion-header cms-program-header" id={programHeadingId}>
+                            <span className="cms-drag-handle disabled" aria-hidden="true">
+                              <LockKeyhole size={15} />
+                            </span>
+                            <span className="cms-program-order">-</span>
+                            <button
+                              className={`accordion-button cms-program-toggle${expanded ? "" : " collapsed"}`}
+                              type="button"
+                              aria-expanded={expanded}
+                              aria-controls={programCollapseId}
+                              onClick={() => setExpandedCmsProgramId(expanded ? null : item.id)}
+                            >
+                              <span className={`cms-status ${item.status.toLowerCase()}`}>{item.status}</span>
+                              <span className="cms-program-title-group">
+                                <strong>{item.title}</strong>
+                                <small>
+                                  {item.modality?.name ?? programMetadata.modality} • {item.totalWorkouts} treino(s) • {item.days.length} dia(s)
+                                </small>
+                              </span>
+                            </button>
+                          </h3>
+                          <div
+                            id={programCollapseId}
+                            className={`accordion-collapse collapse${expanded ? " show" : ""}`}
+                            aria-labelledby={programHeadingId}
+                          >
+                            <div className="accordion-body cms-program-body">
+                              <div className="cms-program-main">
+                                <p>{programMetadata.description}</p>
+                                <small>Público: {item.targetGender === "MALE" ? "Masculino" : item.targetGender === "FEMALE" ? "Feminino" : "Todos"}</small>
+                                <small>{item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.title}`).join(" | ") || "Sem dias cadastrados"}</small>
+                              </div>
+                              <div className="cms-program-actions">
+                                <button className="outline-button" type="button" onClick={() => startEditCmsProgram(item)}>
+                                  <Pencil size={17} />
+                                  Editar
+                                </button>
+                                <button className="outline-button" type="button" onClick={() => handlePublishCmsProgram(item.id)}>
+                                  <Check size={17} />
+                                  Publicar
+                                </button>
+                                <button className="outline-button danger-button" type="button" onClick={() => setPendingCmsDelete({ kind: "programs", id: item.id, name: item.title })}>
+                                  <Trash2 size={17} />
+                                  Excluir
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </section>}
 
-            {cmsStep === "publish" && <section className="cms-studio-card">
+            {!cmsTrashOpen && cmsStep === "publish" && <section className="cms-studio-card">
               <div className="panel-title cms-subtitle">
                 <div>
                   <h2>Avisos para alunos</h2>
@@ -4763,11 +6185,26 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   <button aria-label={item.status === "PUBLISHED" ? "Recolher aviso" : "Publicar aviso"} onClick={() => void handleToggleCmsAnnouncement(item)}>
                     {item.status === "PUBLISHED" ? <Megaphone size={17} /> : <Send size={17} />}
                   </button>
-                  <button aria-label="Excluir aviso" onClick={() => handleDelete(`/admin/cms/announcements/${item.id}`)}>
+                  <button aria-label="Excluir aviso" onClick={() => setPendingCmsDelete({ kind: "announcements", id: item.id, name: item.title })}>
                     <Trash2 size={17} />
                   </button>
                 </div>
               ))}
+            </section>}
+
+            {cmsTrashOpen && <section className="cms-studio-card cms-trash-panel">
+              <div className="panel-title cms-subtitle">
+                <div>
+                  <h2>Lixeira</h2>
+                  <p>Itens excluídos ficam aqui. Restaure ou remova em definitivo.</p>
+                </div>
+                <span>{cmsTrashTotal}</span>
+              </div>
+              {adminTrashLoading ? (
+                <div className="cms-empty-hint">Carregando lixeira...</div>
+              ) : (
+                CMS_TRASH_KINDS.map((kind) => renderTrashGroup(kind, trashKindLabel(kind), adminTrash[kind]))
+              )}
             </section>}
           </div>
         </article>
@@ -4807,7 +6244,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 <option value="MONTHLY">Mensal</option>
                 <option value="YEARLY">Anual</option>
               </select>
-              <button aria-label="Excluir plano" onClick={() => handleDelete(`/admin/plans/${item.id}`)}>
+              <button aria-label="Excluir plano" onClick={() => setPendingCmsDelete({ kind: "plans", id: item.id, name: item.name })}>
                 <Trash2 size={17} />
               </button>
             </div>
@@ -4866,7 +6303,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 <option value="OVERDUE">Atrasada</option>
                 <option value="CANCELED">Cancelada</option>
               </select>
-              <button aria-label="Excluir matrícula" onClick={() => handleDelete(`/admin/memberships/${item.id}`)}>
+              <button aria-label="Excluir matrícula" onClick={() => setPendingCmsDelete({ kind: "memberships", id: item.id, name: item.user.name })}>
                 <Trash2 size={17} />
               </button>
             </div>
@@ -4922,7 +6359,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   Abrir
                 </a>
               )}
-              <button aria-label="Excluir pagamento" onClick={() => handleDelete(`/admin/payments/${item.id}`)}>
+              <button aria-label="Excluir pagamento" onClick={() => setPendingCmsDelete({ kind: "payments", id: item.id, name: item.membership?.user?.name ?? "Pagamento" })}>
                 <Trash2 size={17} />
               </button>
             </div>
@@ -4935,84 +6372,48 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         <div className="admin-reports-operations-grid">
         <article className="table-panel">
           <div className="panel-title">
-            <h2>Avaliações físicas</h2>
+            <div>
+              <h2>Avaliações físicas</h2>
+              <p>Registro de avaliações e acompanhamento de evolução.</p>
+            </div>
             <span>{assessments.length}</span>
           </div>
-          <form className="crud-form" onSubmit={handleCreateAssessment}>
-            <select name="userId" required>
-              <option value="">Aluno</option>
-              {users
-                .filter((item) => item.role === "USER")
-                .map((item) => (
-                  <option value={item.id} key={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-            </select>
-            <input name="assessedAt" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
-            <input name="weightKg" type="number" step="0.1" min="1" placeholder="Peso kg" />
-            <input name="heightCm" type="number" step="0.1" min="1" placeholder="Altura cm" />
-            <input name="bodyFatPct" type="number" step="0.1" min="0" max="100" placeholder="Gordura %" />
-            <input name="waistCm" type="number" step="0.1" min="1" placeholder="Cintura cm" />
-            <input name="chestCm" type="number" step="0.1" min="1" placeholder="Tórax cm" />
-            <input name="hipCm" type="number" step="0.1" min="1" placeholder="Quadril cm" />
-            <textarea name="notes" placeholder="Observações da avaliação" />
-            <button className="primary-button">
-              <Ruler size={18} />
-              Salvar avaliação
-            </button>
-          </form>
-          {assessments.slice(0, 8).map((item) => (
+          {assessments.slice(0, 4).map((item) => (
             <div className="data-row" key={item.id}>
               <span>
                 <strong>{item.user?.name ?? "Aluno"}</strong>
-                {new Date(item.assessedAt).toLocaleDateString("pt-BR")} - {item.weightKg ?? "-"} kg
+                {formatAssessmentDateTime(item.assessedAt)} - {item.weightKg ?? "-"} kg
               </span>
               <small>{item.bodyFatPct ? `${item.bodyFatPct}% gordura` : "Sem dobra"}</small>
-              <button aria-label="Excluir avaliação" onClick={() => handleDelete(`/admin/physical-assessments/${item.id}`)}>
-                <Trash2 size={17} />
-              </button>
             </div>
           ))}
+          <button className="dash-link-button" type="button" onClick={() => setAdminSection("assessments")}>
+            Abrir Avaliações físicas
+            <ArrowRight size={15} />
+          </button>
         </article>
 
         <article className="table-panel">
           <div className="panel-title">
-            <h2>Eventos</h2>
+            <div>
+              <h2>Eventos</h2>
+              <p>Eventos, aulas abertas e agenda de inscrição.</p>
+            </div>
             <span>{events.length}</span>
           </div>
-          <form className="crud-form" onSubmit={handleCreateEvent}>
-            <input name="title" placeholder="Título do evento" required />
-            <input name="startsAt" type="datetime-local" required />
-            <input name="location" placeholder="Local" />
-            <input name="capacity" type="number" min="1" placeholder="Vagas" />
-            <textarea name="description" placeholder="Descrição" />
-            <button className="primary-button">
-              <CalendarPlus size={18} />
-              Salvar evento
-            </button>
-          </form>
-          {events.slice(0, 8).map((item) => (
+          {events.slice(0, 4).map((item) => (
             <div className="data-row" key={item.id}>
               <span>
                 <strong>{item.title}</strong>
                 {new Date(item.startsAt).toLocaleString("pt-BR")} - {item.location ?? "Sem local"}
               </span>
-              <select
-                aria-label="Status do evento"
-                value={item.status}
-                onChange={(event) => handleUpdateEventStatus(item.id, event.target.value as EventRow["status"])}
-              >
-                <option value="SCHEDULED">Agendado</option>
-                <option value="CANCELED">Cancelado</option>
-                <option value="FINISHED">Finalizado</option>
-              </select>
               <small>{item.registrations?.length ?? 0}/{item.capacity ?? "sem limite"}</small>
-              <button aria-label="Excluir evento" onClick={() => handleDelete(`/admin/events/${item.id}`)}>
-                <Trash2 size={17} />
-              </button>
             </div>
           ))}
+          <button className="dash-link-button" type="button" onClick={() => setAdminSection("events")}>
+            Abrir Eventos
+            <ArrowRight size={15} />
+          </button>
         </article>
 
         <article className="table-panel">
@@ -5038,7 +6439,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 <option value="CLOSED">Fechado</option>
               </select>
               <small>{item.priority}</small>
-              <button aria-label="Excluir atendimento" onClick={() => handleDelete(`/admin/support-tickets/${item.id}`)}>
+              <button aria-label="Excluir atendimento" onClick={() => setPendingCmsDelete({ kind: "tickets", id: item.id, name: item.subject })}>
                 <Trash2 size={17} />
               </button>
             </div>
@@ -5058,13 +6459,448 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               </span>
               <small>{item.daysPerWeek}x/sem</small>
               <Bot size={18} />
-              <button aria-label="Excluir plano IA" onClick={() => handleDelete(`/admin/ai-workout-plans/${item.id}`)}>
+              <button aria-label="Excluir plano IA" onClick={() => setPendingCmsDelete({ kind: "aiPlans", id: item.id, name: item.objective })}>
                 <Trash2 size={17} />
               </button>
             </div>
           ))}
         </article>
         </div>
+      </section>}
+
+      {adminSection === "assessments" && <section className="admin-grid phase-three-grid" id="admin-assessments">
+        <article className="table-panel wide-panel">
+          <div className="cms-panel">
+            <section className="student-sheet">
+              <div className="student-sheet-heading">
+                <span>Avaliações</span>
+                <h1>Veja a evolução dos alunos</h1>
+                <p>
+                  {adminAssessmentEditingId
+                    ? formatAssessmentDateTime(adminAssessmentAssessedAt)
+                    : assessments.length > 0
+                      ? `${assessments.length} avaliação(ões) cadastrada(s) · Última em ${formatAssessmentDateTime(assessments[0].assessedAt)}`
+                    : "Sem avaliação cadastrada"}
+                </p>
+              </div>
+              {!adminAssessmentFormOpen ? (
+                <>
+                  <article className="student-empty-state">
+                    <Ruler size={34} />
+                    <strong>Avaliações físicas</strong>
+                    <span>Selecione um aluno para registrar uma nova avaliação física.</span>
+                  </article>
+                  <button
+                    className="student-outline-button student-assessment-new-button"
+                    type="button"
+                    onClick={() => {
+                      setAdminAssessmentForm(createEmptyAdminAssessmentForm());
+                      setAdminAssessmentEditingId(null);
+                      setAdminAssessmentUserId("");
+                      setAdminAssessmentAssessedAt(formatDateTimeLocalInputValue());
+                      setAdminAssessmentFormOpen(true);
+                    }}
+                  >
+                    Preencher avaliação física
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="crud-form">
+                    <label className="student-assessment-field">
+                      <span>Aluno</span>
+                      <select
+                        value={adminAssessmentUserId}
+                        onChange={(event) => handleStartAdminAssessment(event.target.value)}
+                      >
+                        <option value="">Selecione o aluno</option>
+                        {users
+                          .filter((item) => item.role === "USER")
+                          .map((item) => (
+                            <option value={item.id} key={item.id}>
+                              {item.name}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <label className="student-assessment-field">
+                      <span>Data e hora da avaliação</span>
+                      <input
+                        type="datetime-local"
+                        value={adminAssessmentAssessedAt}
+                        onChange={(event) => setAdminAssessmentAssessedAt(event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <article className="student-info-card">
+                    <MapPin size={22} />
+                    <div>
+                      <strong>Cadastro do aluno</strong>
+                      <span>{studentLocationLabel(selectedAdminAssessmentStudent?.profile)}</span>
+                    </div>
+                  </article>
+                  {adminAssessmentEditingId ? (
+                    <p className="student-assessment-hint">
+                      Editando a avaliação registrada em {formatAssessmentDateTime(adminAssessmentAssessedAt)}.
+                    </p>
+                  ) : (
+                    <p className="student-assessment-hint">Preencha o formulário abaixo e salve a nova avaliação física.</p>
+                  )}
+                  <PhysicalAssessmentFormView
+                    form={adminAssessmentForm}
+                    photoPreviews={adminAssessmentPhotoPreviews}
+                    submitting={adminSubmittingAssessment}
+                    submitLabel={adminAssessmentEditingId ? "Atualizar avaliação física" : "Salvar avaliação física"}
+                    namePlaceholder="Nome do aluno"
+                    onSubmit={handleSubmitAdminAssessment}
+                    onCancel={clearAdminAssessmentForm}
+                    onUpdate={updateAdminAssessmentForm}
+                    onPhotoSelect={handleAdminAssessmentPhotoSelect}
+                  />
+                </>
+              )}
+            </section>
+          <div className="cms-panel">
+            <div className="assessment-section-heading">
+              <h3>Histórico de avaliações</h3>
+              <span>{filteredAssessments.length}</span>
+            </div>
+          <div className="cms-filter-bar">
+            <Search size={16} />
+            <input
+              value={assessmentSearch}
+              onChange={(event) => setAssessmentSearch(event.target.value)}
+              placeholder="Buscar por aluno, documento, telefone ou local..."
+            />
+            <select
+              className="cms-filter-select"
+              value={assessmentSourceFilter}
+              onChange={(event) => setAssessmentSourceFilter(event.target.value as "ALL" | "STUDENT" | "ADMIN")}
+              aria-label="Filtrar por origem"
+            >
+              <option value="ALL">Todas as origens</option>
+              <option value="STUDENT">Enviadas pelo aluno</option>
+              <option value="ADMIN">Registradas pelo admin</option>
+            </select>
+            <select
+              className="cms-filter-select"
+              value={assessmentStateFilter}
+              onChange={(event) => {
+                setAssessmentStateFilter(event.target.value);
+                setAssessmentCityFilter("");
+              }}
+              aria-label="Filtrar por Estado"
+            >
+              <option value="">Todos os Estados</option>
+              {BRAZILIAN_STATES.map((state) => (
+                <option key={state.uf} value={state.uf}>
+                  {state.name} ({state.uf})
+                </option>
+              ))}
+            </select>
+            <select
+              className="cms-filter-select"
+              value={assessmentCityFilter}
+              onChange={(event) => setAssessmentCityFilter(event.target.value)}
+              aria-label="Filtrar por Município"
+              disabled={!assessmentStateFilter}
+            >
+              <option value="">Todos os municípios</option>
+              {assessmentCityOptions.map((city) => (
+                <option key={city} value={city}>
+                  {city}
+                </option>
+              ))}
+            </select>
+          </div>
+          {filteredAssessments.length > 0 ? (
+            visibleAssessments.map((item) => (
+              <div className="assessment-history-item" key={item.id}>
+                <div className="data-row">
+                  <span>
+                    <strong>{item.user?.name ?? "Aluno"}</strong>
+                    <span className={item.source === "ADMIN" ? "assessment-source-badge admin" : "assessment-source-badge"}>
+                      {item.source === "ADMIN" ? "Registrada pelo admin" : "Enviada pelo aluno"}
+                    </span>
+                    <span className="assessment-source-badge">{studentLocationLabel(item.user?.profile)}</span>
+                    {formatAssessmentDateTime(item.assessedAt)} - {item.weightKg ?? "-"} kg
+                    {item.bodyFatPct != null ? ` · ${item.bodyFatPct}% gordura` : ""}
+                    {item.waistCm != null ? ` · ${item.waistCm} cm` : ""}
+                  </span>
+                  <button
+                    aria-label="Ver detalhes"
+                    onClick={() => setExpandedAssessmentId((current) => (current === item.id ? null : item.id))}
+                  >
+                    <Eye size={17} />
+                  </button>
+                  <button aria-label="Editar avaliação" onClick={() => handleEditAdminAssessment(item)}>
+                    <Pencil size={17} />
+                  </button>
+                  <button aria-label="Excluir avaliação" onClick={() => setPendingCmsDelete({ kind: "assessments", id: item.id, name: item.user.name })}>
+                    <Trash2 size={17} />
+                  </button>
+                </div>
+                {expandedAssessmentId === item.id && (
+                  <div className="assessment-detail">
+                    {item.details ? (
+                      <>
+                        <div className="student-assessment-section">
+                          <h2>Dados pessoais e objetivos</h2>
+                          <div className="student-assessment-summary">
+                            <span><strong>Nome</strong>{item.details.formulario_avaliacao_fisica.dados_pessoais_e_objetivos.nome_completo || "-"}</span>
+                            <span><strong>Nascimento</strong>{item.details.formulario_avaliacao_fisica.dados_pessoais_e_objetivos.data_nascimento || "-"}</span>
+                            <span><strong>Gênero</strong>{item.details.formulario_avaliacao_fisica.dados_pessoais_e_objetivos.genero_biologico.resposta || "-"}</span>
+                            <span><strong>Objetivo</strong>{item.details.formulario_avaliacao_fisica.dados_pessoais_e_objetivos.objetivo_principal.resposta || "-"}</span>
+                            <span><strong>Nível de atividade</strong>{item.details.formulario_avaliacao_fisica.dados_pessoais_e_objetivos.nivel_atividade_atual.resposta || "-"}</span>
+                            <span><strong>Estado/Município</strong>{studentLocationLabel(item.user?.profile)}</span>
+                          </div>
+                        </div>
+                        <div className="student-assessment-section">
+                          <h2>Histórico de saúde</h2>
+                          <div className="student-assessment-summary">
+                            <span><strong>Lesões</strong>{item.details.formulario_avaliacao_fisica.historico_de_saude_anamnese.possui_lesao.resposta || "Nenhuma informada"}</span>
+                            <span><strong>Medicação contínua</strong>{item.details.formulario_avaliacao_fisica.historico_de_saude_anamnese.medicamento_continuo.resposta || "Nenhuma informada"}</span>
+                            <span><strong>Restrição cardíaca</strong>{item.details.formulario_avaliacao_fisica.historico_de_saude_anamnese.restricao_medica_cardiaca.resposta || "Nenhuma informada"}</span>
+                          </div>
+                        </div>
+                        <div className="student-assessment-section">
+                          <h2>Composição corporal</h2>
+                          <div className="student-metric-grid">
+                            <span><strong>{item.details.formulario_avaliacao_fisica.composicao_corporal_basica.peso_atual_kg ?? "-"}</strong>kg</span>
+                            <span><strong>{item.details.formulario_avaliacao_fisica.composicao_corporal_basica.altura_cm ?? "-"}</strong>cm</span>
+                            <span><strong>{item.bodyFatPct ?? "-"}</strong>% gordura</span>
+                          </div>
+                        </div>
+                        <div className="student-assessment-section">
+                          <h2>Perímetros (cm)</h2>
+                          <div className="student-assessment-grid">
+                            {assessmentPerimeterKeys.map((key) => {
+                              const perimeter = item.details!.formulario_avaliacao_fisica.perimetros_corporais_cm[key];
+                              return (
+                                <span className="student-assessment-summary-item" key={key}>
+                                  <strong>{key.replace(/_/g, " ")}</strong>
+                                  {perimeter.valor != null ? `${perimeter.valor} cm` : "-"}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        {assessmentPhotoFields.some(([key]) => item.details!.formulario_avaliacao_fisica.fotos_analise_visual.arquivos[key]) && (
+                          <div className="student-assessment-section">
+                            <h2>Fotos para análise</h2>
+                            <div className="student-assessment-photo-grid">
+                              {assessmentPhotoFields.map(([key, label]) =>
+                                item.details!.formulario_avaliacao_fisica.fotos_analise_visual.arquivos[key] ? (
+                                  <figure className="student-assessment-photo" key={key}>
+                                    <figcaption><strong>{label}</strong></figcaption>
+                                    {/^https?:\/\//i.test(item.details!.formulario_avaliacao_fisica.fotos_analise_visual.arquivos[key]) ? (
+                                      <button
+                                        className="student-assessment-photo-open"
+                                        type="button"
+                                        title="Clique para ampliar"
+                                        onClick={() => {
+                                          const urls = assessmentPhotoFields
+                                            .map(([photoKey]) => photoKey)
+                                            .map((k) => item.details!.formulario_avaliacao_fisica.fotos_analise_visual.arquivos[k])
+                                            .filter((value): value is string => Boolean(value) && /^https?:\/\//i.test(value))
+                                            .map((path) => mediaUrl(path));
+                                          setAssessmentLightbox({
+                                            urls,
+                                            index: urls.indexOf(mediaUrl(item.details!.formulario_avaliacao_fisica.fotos_analise_visual.arquivos[key]))
+                                          });
+                                        }}
+                                      >
+                                        <img src={mediaUrl(item.details!.formulario_avaliacao_fisica.fotos_analise_visual.arquivos[key])} alt={label} />
+                                      </button>
+                                    ) : (
+                                      <span>{item.details!.formulario_avaliacao_fisica.fotos_analise_visual.arquivos[key]}</span>
+                                    )}
+                                  </figure>
+                                ) : null
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="student-assessment-section">
+                        <h2>Resumo</h2>
+                        <div className="student-assessment-summary">
+                          <span><strong>Peso</strong>{item.weightKg ?? "-"} kg</span>
+                          <span><strong>Altura</strong>{item.heightCm ?? "-"} cm</span>
+                          <span><strong>Gordura</strong>{item.bodyFatPct ?? "-"}%</span>
+                          <span><strong>Cintura</strong>{item.waistCm ?? "-"} cm</span>
+                          {item.chestCm != null && <span><strong>Tórax</strong>{item.chestCm} cm</span>}
+                          {item.hipCm != null && <span><strong>Quadril</strong>{item.hipCm} cm</span>}
+                          {item.notes ? <span><strong>Observações</strong>{item.notes}</span> : null}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="dash-empty">
+              <Ruler size={18} />
+              {assessmentSearch || assessmentSourceFilter !== "ALL"
+                ? "Nenhuma avaliação encontrada para os filtros."
+                : "Nenhuma avaliação registrada ainda."}
+            </div>
+          )}
+          {filteredAssessments.length > 0 && (
+            <div className="admin-users-pagination">
+              <span>
+                Página {currentAssessmentsPage} de {assessmentsTotalPages} • {filteredAssessments.length} avaliação(ões)
+              </span>
+              <div>
+                <button type="button" onClick={() => setAssessmentsPage((page) => Math.max(1, page - 1))} disabled={currentAssessmentsPage <= 1}>
+                  <ChevronLeft size={17} />
+                  Anterior
+                </button>
+                <button type="button" onClick={() => setAssessmentsPage((page) => Math.min(assessmentsTotalPages, page + 1))} disabled={currentAssessmentsPage >= assessmentsTotalPages}>
+                  Próxima
+                  <ChevronRight size={17} />
+                </button>
+              </div>
+            </div>
+          )}
+          </div>
+          </div>
+        </article>
+
+        {assessmentLightbox && (
+          <div
+            className="assessment-lightbox"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setAssessmentLightbox(null)}
+          >
+            <div className="assessment-lightbox-content" onClick={(event) => event.stopPropagation()}>
+              <button
+                className="assessment-lightbox-close"
+                type="button"
+                aria-label="Fechar"
+                onClick={() => setAssessmentLightbox(null)}
+              >
+                <X size={22} />
+              </button>
+              {assessmentLightbox.urls.length > 1 && (
+                <button
+                  className="assessment-lightbox-nav prev"
+                  type="button"
+                  aria-label="Foto anterior"
+                  onClick={() =>
+                    setAssessmentLightbox((current) =>
+                      current
+                        ? { ...current, index: (current.index - 1 + current.urls.length) % current.urls.length }
+                        : current
+                    )
+                  }
+                >
+                  <ChevronLeft size={28} />
+                </button>
+              )}
+              <img src={assessmentLightbox.urls[assessmentLightbox.index]} alt="Foto da avaliação física" />
+              {assessmentLightbox.urls.length > 1 && (
+                <button
+                  className="assessment-lightbox-nav next"
+                  type="button"
+                  aria-label="Próxima foto"
+                  onClick={() =>
+                    setAssessmentLightbox((current) =>
+                      current ? { ...current, index: (current.index + 1) % current.urls.length } : current
+                    )
+                  }
+                >
+                  <ChevronRight size={28} />
+                </button>
+              )}
+              <span className="assessment-lightbox-counter">
+                {assessmentLightbox.index + 1} / {assessmentLightbox.urls.length}
+              </span>
+            </div>
+          </div>
+        )}
+      </section>}
+
+      {adminSection === "events" && <section className="admin-grid phase-three-grid" id="admin-events">
+        <article className="table-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Eventos</h2>
+              <p>Crie e gerencie eventos, aulas abertas e agendas para inscrição.</p>
+            </div>
+            <span>{events.length}</span>
+          </div>
+          <form className="crud-form" onSubmit={handleCreateEvent}>
+            <input name="title" placeholder="Título do evento" required />
+            <input name="startsAt" type="datetime-local" required />
+            <input name="location" placeholder="Local" />
+            <input name="capacity" type="number" min="1" placeholder="Vagas" />
+            <textarea name="description" placeholder="Descrição" />
+            <button className="primary-button">
+              <CalendarPlus size={18} />
+              Salvar evento
+            </button>
+          </form>
+        </article>
+
+        <article className="table-panel wide-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Agenda de eventos</h2>
+              <p>Confira os eventos cadastrados, inscrições e status.</p>
+            </div>
+            <span>{filteredEvents.length}</span>
+          </div>
+          <div className="cms-filter-bar">
+            <Search size={16} />
+            <input
+              value={eventSearch}
+              onChange={(event) => setEventSearch(event.target.value)}
+              placeholder="Buscar por título ou local..."
+            />
+            <select
+              aria-label="Filtrar por status"
+              value={eventStatusFilter}
+              onChange={(event) => setEventStatusFilter(event.target.value as "ALL" | EventRow["status"])}
+            >
+              <option value="ALL">Todos os status</option>
+              <option value="SCHEDULED">Agendado</option>
+              <option value="CANCELED">Cancelado</option>
+              <option value="FINISHED">Finalizado</option>
+            </select>
+          </div>
+          {filteredEvents.length > 0 ? (
+            filteredEvents.map((item) => (
+              <div className="data-row" key={item.id}>
+                <span>
+                  <strong>{item.title}</strong>
+                  {new Date(item.startsAt).toLocaleString("pt-BR")} - {item.location ?? "Sem local"}
+                </span>
+                <select
+                  aria-label="Status do evento"
+                  value={item.status}
+                  onChange={(event) => handleUpdateEventStatus(item.id, event.target.value as EventRow["status"])}
+                >
+                  <option value="SCHEDULED">Agendado</option>
+                  <option value="CANCELED">Cancelado</option>
+                  <option value="FINISHED">Finalizado</option>
+                </select>
+                <small>{item.registrations?.length ?? 0}/{item.capacity ?? "sem limite"}</small>
+                <button aria-label="Excluir evento" onClick={() => setPendingCmsDelete({ kind: "events", id: item.id, name: item.title })}>
+                  <Trash2 size={17} />
+                </button>
+              </div>
+            ))
+          ) : (
+            <div className="dash-empty">
+              <CalendarPlus size={18} />
+              {eventSearch || eventStatusFilter !== "ALL" ? "Nenhum evento encontrado para os filtros." : "Nenhum evento cadastrado ainda."}
+            </div>
+          )}
+        </article>
       </section>}
 
       {adminSection === "products" && <section className="admin-grid phase-three-grid" id="admin-products">
@@ -5101,7 +6937,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   <option value="true">Ativo</option>
                   <option value="false">Inativo</option>
                 </select>
-                <button aria-label="Excluir produto" onClick={() => handleDelete(`/admin/products/${product.id}`)}>
+                <button aria-label="Excluir produto" onClick={() => setPendingCmsDelete({ kind: "products", id: product.id, name: product.name })}>
                   <Trash2 size={17} />
                 </button>
               </div>
@@ -5180,7 +7016,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   <option value="CANCELED">Cancelada</option>
                   <option value="REFUNDED">Reembolsada</option>
                 </select>
-                <button aria-label="Excluir compra" onClick={() => handleDelete(`/admin/purchases/${purchase.id}`)}>
+                <button aria-label="Excluir compra" onClick={() => setPendingCmsDelete({ kind: "purchases", id: purchase.id, name: purchase.product?.name ?? "Compra" })}>
                   <Trash2 size={17} />
                 </button>
               </div>
@@ -5260,7 +7096,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 <QrCode size={18} />
                 QR Code desativado.
               </div>
-            )}
+          )}
           </div>
         </article>
       </section>}
@@ -5303,7 +7139,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   {card.brand ?? "Cartão"} •••• {card.lastFour} · {card.user.name}
                 </span>
                 <small className="dash-badge">{card.isDefault ? "Principal" : "Adicional"}</small>
-                <button aria-label="Excluir cartão" onClick={() => handleDelete(`/admin/payment-cards/${card.id}`)}>
+                <button aria-label="Excluir cartão" onClick={() => setPendingCmsDelete({ kind: "cards", id: card.id, name: card.brand ? `${card.brand} •••• ${card.lastFour}` : card.lastFour })}>
                   <Trash2 size={17} />
                 </button>
               </div>
@@ -5464,7 +7300,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </select>
                 <button
                   aria-label="Excluir mensagem"
-                  onClick={() => handleDelete(`/admin/contact-messages/${message.id}`)}
+                  onClick={() => setPendingCmsDelete({ kind: "contactMessages", id: message.id, name: message.name })}
                 >
                   <Trash2 size={17} />
                 </button>
@@ -5534,7 +7370,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   {favorite.user.name} · favoritou em {new Date(favorite.createdAt).toLocaleDateString("pt-BR")}
                 </span>
                 <Star size={18} />
-                <button aria-label="Remover favorito" onClick={() => handleDelete(`/admin/favorites/${favorite.id}`)}>
+                <button aria-label="Remover favorito" onClick={() => setPendingCmsDelete({ kind: "favorites", id: favorite.id, name: favorite.product?.name ?? "Favorito" })}>
                   <Trash2 size={17} />
                 </button>
               </div>
@@ -5566,7 +7402,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   <small>{rating.comment}</small>
                 </span>
                 <small className="dash-badge">{rating.score}/5</small>
-                <button aria-label="Excluir avaliação" onClick={() => handleDelete(`/admin/ratings/${rating.id}`)}>
+                <button aria-label="Excluir avaliação" onClick={() => setPendingCmsDelete({ kind: "ratings", id: rating.id, name: rating.product?.name ?? "Avaliação" })}>
                   <Trash2 size={17} />
                 </button>
               </div>
@@ -5662,7 +7498,65 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         </article>
       </section>}
 
+      {adminSection === "trash" && <section className="admin-grid phase-three-grid" id="admin-trash">
+        <article className="table-panel wide-panel cms-trash-panel admin-trash-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Lixeira</h2>
+              <p>Todos os registros excluídos ficam aqui até serem restaurados ou removidos em definitivo.</p>
+            </div>
+            <span>{adminTrashTotal}</span>
+          </div>
+          {adminTrashLoading ? (
+            <div className="cms-empty-hint">Carregando lixeira...</div>
+          ) : (
+            ALL_TRASH_KINDS.map((kind) => renderTrashGroup(kind, trashKindLabel(kind), adminTrash[kind]))
+          )}
+        </article>
+      </section>}
+
       </section>
+
+      {pendingCmsDelete && (
+        <div className="cms-confirm-overlay" role="presentation" onMouseDown={() => setPendingCmsDelete(null)}>
+          <section
+            className="cms-confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cms-confirm-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="cms-confirm-icon">
+              <Trash2 size={26} />
+            </div>
+            <h2 id="cms-confirm-title">{pendingCmsDelete.permanent ? "Excluir em definitivo" : "Excluir registro"}</h2>
+            <p>
+              {pendingCmsDelete.permanent ? (
+                <>Esta ação é <strong>permanente e irreversível</strong>. O item abaixo será removido do sistema de vez e não poderá ser recuperado.</>
+              ) : (
+                <>O item abaixo será movido para a <strong>Lixeira</strong>. Você poderá restaurá-lo depois se precisar.</>
+              )}
+            </p>
+            <div className="cms-confirm-target">
+              <small>{trashKindLabel(pendingCmsDelete.kind)}</small>
+              <strong>{pendingCmsDelete.name}</strong>
+            </div>
+            <div className="cms-confirm-actions">
+              <button type="button" className="outline-button" onClick={() => setPendingCmsDelete(null)}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={() => void confirmCmsDelete()}
+                autoFocus
+              >
+                {pendingCmsDelete.permanent ? "Excluir em definitivo" : "Mover para a lixeira"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
@@ -5732,8 +7626,12 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     billingType: "UNDEFINED"
   });
   const [assessmentForm, setAssessmentForm] = useState<PhysicalAssessmentForm | null>(null);
+  const [editingAssessmentId, setEditingAssessmentId] = useState<string | null>(null);
   const [submittingAssessment, setSubmittingAssessment] = useState(false);
   const [assessmentPhotoPreviews, setAssessmentPhotoPreviews] = useState<Record<string, string>>({});
+  const [assessmentPhotoFiles, setAssessmentPhotoFiles] = useState<Partial<Record<AssessmentPhotoKey, File>>>({});
+  const [studentExpandedAssessmentId, setStudentExpandedAssessmentId] = useState<string | null>(null);
+  const [studentLightbox, setStudentLightbox] = useState<{ urls: string[]; index: number } | null>(null);
   const [studentProducts, setStudentProducts] = useState<ProductRow[]>([]);
   const [studentPurchases, setStudentPurchases] = useState<PurchaseRow[]>([]);
   const [purchasingProductId, setPurchasingProductId] = useState<string | null>(null);
@@ -5751,6 +7649,25 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     const timer = window.setTimeout(() => setSuccess(null), 2000);
     return () => window.clearTimeout(timer);
   }, [success]);
+
+  useEffect(() => {
+    if (!studentLightbox) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setStudentLightbox(null);
+      if (event.key === "ArrowLeft") {
+        setStudentLightbox((current) =>
+          current ? { ...current, index: (current.index - 1 + current.urls.length) % current.urls.length } : current
+        );
+      }
+      if (event.key === "ArrowRight") {
+        setStudentLightbox((current) =>
+          current ? { ...current, index: (current.index + 1) % current.urls.length } : current
+        );
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [studentLightbox]);
 
   async function loadUserData() {
     if (!token) return;
@@ -6296,9 +8213,18 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     });
   }
 
-  function handleAssessmentPhotoSelect(key: "foto_frente" | "foto_costas" | "foto_perfil", file: File | undefined) {
+  function handleAssessmentPhotoSelect(key: AssessmentPhotoKey, file: File | undefined) {
     updateAssessmentForm((draft) => {
       draft.formulario_avaliacao_fisica.fotos_analise_visual.arquivos[key] = file?.name ?? "";
+    });
+    setAssessmentPhotoFiles((current) => {
+      const next = { ...current };
+      if (!file) {
+        delete next[key];
+      } else {
+        next[key] = file;
+      }
+      return next;
     });
     setAssessmentPhotoPreviews((current) => {
       if (current[key]) {
@@ -6315,25 +8241,36 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
 
   function clearAssessmentForm() {
     setAssessmentForm(null);
+    setEditingAssessmentId(null);
+    setAssessmentPhotoFiles({});
     setAssessmentPhotoPreviews((current) => {
       Object.values(current).forEach((url) => URL.revokeObjectURL(url));
       return {};
     });
   }
 
-  const perimeterKeys = [
-    "pescoço",
-    "torax",
-    "cintura",
-    "abdomen",
-    "quadril",
-    "braco_direito_relaxado",
-    "braco_esquerdo_relaxado",
-    "coxa_direita",
-    "coxa_esquerda",
-    "panturrilha_direita",
-    "panturrilha_esquerda"
-  ] as const;
+  function handleEditStudentAssessment(item: PhysicalAssessmentRow) {
+    const existing = item.details ? structuredClone(item.details) : createEmptyAssessmentForm();
+    const form = existing.formulario_avaliacao_fisica;
+    if (!form.dados_pessoais_e_objetivos.nome_completo) form.dados_pessoais_e_objetivos.nome_completo = profile?.name ?? "";
+    if (!form.dados_pessoais_e_objetivos.data_nascimento && profile?.birthDate) {
+      form.dados_pessoais_e_objetivos.data_nascimento = profile.birthDate;
+    }
+    if (item.weightKg != null) form.composicao_corporal_basica.peso_atual_kg = item.weightKg;
+    if (item.heightCm != null) form.composicao_corporal_basica.altura_cm = item.heightCm;
+    if (item.waistCm != null) form.perimetros_corporais_cm.cintura.valor = item.waistCm;
+    if (item.chestCm != null) form.perimetros_corporais_cm.torax.valor = item.chestCm;
+    if (item.hipCm != null) form.perimetros_corporais_cm.quadril.valor = item.hipCm;
+
+    setAssessmentForm(existing);
+    setEditingAssessmentId(item.id);
+    setStudentExpandedAssessmentId(item.id);
+    setAssessmentPhotoFiles({});
+    setAssessmentPhotoPreviews((current) => {
+      Object.values(current).forEach((url) => URL.revokeObjectURL(url));
+      return {};
+    });
+  }
 
   async function handleSubmitPhysicalAssessment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -6341,14 +8278,44 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     setSubmittingAssessment(true);
     setError(null);
     try {
-      const response = await apiPost<{ assessment: PhysicalAssessmentRow }>(
-        "/user/physical-assessments",
-        assessmentForm,
-        token
+      let arquivos = assessmentForm.formulario_avaliacao_fisica.fotos_analise_visual.arquivos;
+      for (const [key] of assessmentPhotoFields) {
+        const file = assessmentPhotoFiles[key];
+        if (!file) continue;
+        const uploadData = new FormData();
+        uploadData.append("file", file);
+        const uploaded = await apiUpload<UploadResponse>("/user/uploads?group=images", uploadData, token);
+        arquivos = { ...arquivos, [key]: uploaded.file.url };
+      }
+      const payload: PhysicalAssessmentForm = {
+        ...assessmentForm,
+        formulario_avaliacao_fisica: {
+          ...assessmentForm.formulario_avaliacao_fisica,
+          fotos_analise_visual: {
+            ...assessmentForm.formulario_avaliacao_fisica.fotos_analise_visual,
+            arquivos
+          }
+        }
+      };
+      const editingId = editingAssessmentId;
+      const response = editingId
+        ? await apiPut<{ assessment: PhysicalAssessmentRow }>(
+            `/user/physical-assessments/${editingId}`,
+            payload,
+            token
+          )
+        : await apiPost<{ assessment: PhysicalAssessmentRow }>(
+            "/user/physical-assessments",
+            payload,
+            token
+          );
+      setAssessments((current) =>
+        editingId
+          ? current.map((item) => (item.id === response.assessment.id ? response.assessment : item))
+          : [response.assessment, ...current.filter((item) => item.id !== response.assessment.id)]
       );
-      setAssessments([response.assessment, ...assessments.filter((item) => item.id !== response.assessment.id)]);
       clearAssessmentForm();
-      setSuccess("Avaliação física salva com sucesso.");
+      setSuccess(editingId ? "Avaliação física atualizada com sucesso." : "Avaliação física salva com sucesso.");
     } catch (submitError) {
       setError(
         submitError instanceof ApiError ? submitError.message : "Não foi possível salvar a avaliação física."
@@ -7559,7 +9526,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
             <div className="student-sheet-heading">
               <span>Avaliações</span>
               <h1>Veja sua evolução</h1>
-              <p>{latestAssessment ? new Date(latestAssessment.assessedAt).toLocaleDateString("pt-BR") : "Sem avaliação cadastrada"}</p>
+              <p>{latestAssessment ? formatAssessmentDateTime(latestAssessment.assessedAt) : "Sem avaliação cadastrada"}</p>
             </div>
             {latestAssessment ? (
               <div className="student-metric-grid">
@@ -7576,301 +9543,199 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
               </article>
             )}
 
-            {latestAssessmentForm && (
+            {assessmentForm ? (
               <>
                 <article className="student-info-card">
-                  <Ruler size={22} />
+                  <MapPin size={22} />
                   <div>
-                    <strong>Formulário de avaliação física</strong>
-                    <span>Preenchido em {new Date(latestAssessment.assessedAt).toLocaleDateString("pt-BR")}</span>
+                    <strong>Seu cadastro</strong>
+                    <span>{studentLocationLabel(profile)}</span>
                   </div>
                 </article>
-                <div className="student-assessment-section">
-                  <h2>Dados pessoais e objetivos</h2>
-                  <div className="student-assessment-summary">
-                    <span><strong>Nome</strong>{latestAssessmentForm.dados_pessoais_e_objetivos.nome_completo || "-"}</span>
-                    <span><strong>Nascimento</strong>{latestAssessmentForm.dados_pessoais_e_objetivos.data_nascimento || "-"}</span>
-                    <span><strong>Gênero</strong>{latestAssessmentForm.dados_pessoais_e_objetivos.genero_biologico.resposta || "-"}</span>
-                    <span><strong>Objetivo</strong>{latestAssessmentForm.dados_pessoais_e_objetivos.objetivo_principal.resposta || "-"}</span>
-                    <span><strong>Nível de atividade</strong>{latestAssessmentForm.dados_pessoais_e_objetivos.nivel_atividade_atual.resposta || "-"}</span>
-                  </div>
-                </div>
-                <div className="student-assessment-section">
-                  <h2>Histórico de saúde</h2>
-                  <div className="student-assessment-summary">
-                    <span><strong>Lesões</strong>{latestAssessmentForm.historico_de_saude_anamnese.possui_lesao.resposta || "Nenhuma informada"}</span>
-                    <span><strong>Medicação contínua</strong>{latestAssessmentForm.historico_de_saude_anamnese.medicamento_continuo.resposta || "Nenhuma informada"}</span>
-                    <span><strong>Restrição cardíaca</strong>{latestAssessmentForm.historico_de_saude_anamnese.restricao_medica_cardiaca.resposta || "Nenhuma informada"}</span>
-                  </div>
-                </div>
-                <div className="student-assessment-section">
-                  <h2>Composição corporal</h2>
-                  <div className="student-metric-grid">
-                    <span><strong>{latestAssessmentForm.composicao_corporal_basica.peso_atual_kg ?? "-"}</strong>kg</span>
-                    <span><strong>{latestAssessmentForm.composicao_corporal_basica.altura_cm ?? "-"}</strong>cm</span>
-                    <span>
-                      <strong>{computedBodyFatPct ?? "-"}</strong>% gordura
-                      {computedBodyFat && <small>estimado pelo método {computedBodyFat.method === "Navy" ? "Navy" : "IMC"}</small>}
-                    </span>
-                  </div>
-                </div>
-                <div className="student-assessment-section">
-                  <h2>Perímetros (cm)</h2>
-                  <div className="student-assessment-grid">
-                    {perimeterKeys.map((key) => {
-                      const item = latestAssessmentForm.perimetros_corporais_cm[key];
-                      return (
-                        <span className="student-assessment-summary-item" key={key}>
-                          <strong>{key.replace(/_/g, " ")}</strong>
-                          {item.valor != null ? `${item.valor} cm` : "-"}
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-                {(
-                  [
-                    ["foto_frente", "Foto de frente"],
-                    ["foto_costas", "Foto de costas"],
-                    ["foto_perfil", "Foto de perfil"]
-                  ] as const
-                ).some(([key]) => latestAssessmentForm.fotos_analise_visual.arquivos[key]) && (
-                  <div className="student-assessment-section">
-                    <h2>Fotos anexadas</h2>
-                    <div className="student-assessment-summary">
-                      {(
-                        [
-                          ["foto_frente", "Foto de frente"],
-                          ["foto_costas", "Foto de costas"],
-                          ["foto_perfil", "Foto de perfil"]
-                        ] as const
-                      ).map(([key, label]) =>
-                        latestAssessmentForm.fotos_analise_visual.arquivos[key] ? (
-                          <span key={key}><strong>{label}</strong>{latestAssessmentForm.fotos_analise_visual.arquivos[key]}</span>
-                        ) : null
-                      )}
-                    </div>
-                  </div>
-                )}
+                <PhysicalAssessmentFormView
+                  form={assessmentForm}
+                  photoPreviews={assessmentPhotoPreviews}
+                  submitting={submittingAssessment}
+                  submitLabel={editingAssessmentId ? "Atualizar avaliação física" : "Salvar avaliação física"}
+                  namePlaceholder="Seu nome"
+                  onSubmit={handleSubmitPhysicalAssessment}
+                  onCancel={clearAssessmentForm}
+                  onUpdate={updateAssessmentForm}
+                  onPhotoSelect={handleAssessmentPhotoSelect}
+                />
               </>
+            ) : (
+              <button
+                className="student-outline-button student-assessment-new-button"
+                onClick={() => {
+                  setEditingAssessmentId(null);
+                  setAssessmentPhotoFiles({});
+                  setAssessmentPhotoPreviews((current) => {
+                    Object.values(current).forEach((url) => URL.revokeObjectURL(url));
+                    return {};
+                  });
+                  setAssessmentForm(createEmptyAssessmentForm());
+                }}
+              >
+                Preencher avaliação física
+              </button>
             )}
 
-            {assessmentForm ? (
-              <form className="student-assessment-form" onSubmit={handleSubmitPhysicalAssessment}>
-                <div className="student-assessment-section">
-                  <h2>Dados pessoais e objetivos</h2>
-                  <div className="student-assessment-field">
-                    <label>Nome completo</label>
-                    <input
-                      type="text"
-                      placeholder="Seu nome"
-                      value={assessmentForm.formulario_avaliacao_fisica.dados_pessoais_e_objetivos.nome_completo}
-                      onChange={(event) =>
-                        updateAssessmentForm((draft) => {
-                          draft.formulario_avaliacao_fisica.dados_pessoais_e_objetivos.nome_completo = event.target.value;
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="student-assessment-field">
-                    <label>Data de nascimento</label>
-                    <input
-                      type="date"
-                      value={assessmentForm.formulario_avaliacao_fisica.dados_pessoais_e_objetivos.data_nascimento}
-                      onChange={(event) =>
-                        updateAssessmentForm((draft) => {
-                          draft.formulario_avaliacao_fisica.dados_pessoais_e_objetivos.data_nascimento = event.target.value;
-                        })
-                      }
-                    />
-                  </div>
-                  {(
-                    [
-                      ["genero_biologico", "Gênero biológico"],
-                      ["objetivo_principal", "Objetivo principal"],
-                      ["nivel_atividade_atual", "Nível de atividade atual"]
-                    ] as const
-                  ).map(([key, label]) => {
-                    const section = assessmentForm.formulario_avaliacao_fisica.dados_pessoais_e_objetivos[key];
-                    return (
-                      <div className="student-assessment-field" key={key}>
-                        <label>{label}</label>
-                        <select
-                          value={section.resposta}
-                          onChange={(event) =>
-                            updateAssessmentForm((draft) => {
-                              draft.formulario_avaliacao_fisica.dados_pessoais_e_objetivos[key].resposta = event.target.value;
-                            })
-                          }
+            {assessments.length > 0 && (
+              <div className="student-assessment-section">
+                <div className="assessment-section-heading">
+                  <h3>Histórico de avaliações</h3>
+                  <span>{assessments.length}</span>
+                </div>
+                {assessments.map((item) => {
+                  const form = item.details?.formulario_avaliacao_fisica ?? null;
+                  const bodyFat = form
+                    ? calculateBodyFatEstimate({
+                        gender: form.dados_pessoais_e_objetivos.genero_biologico.resposta,
+                        heightCm: form.composicao_corporal_basica.altura_cm,
+                        neckCm: form.perimetros_corporais_cm.pescoço.valor,
+                        waistCm: form.perimetros_corporais_cm.cintura.valor,
+                        hipCm: form.perimetros_corporais_cm.quadril.valor,
+                        weightKg: form.composicao_corporal_basica.peso_atual_kg,
+                        birthDate: form.dados_pessoais_e_objetivos.data_nascimento
+                      })
+                    : null;
+                  const bodyFatPct = item.bodyFatPct ?? bodyFat?.value ?? null;
+                  const waistCm = item.waistCm ?? form?.perimetros_corporais_cm.cintura.valor ?? null;
+
+                  return (
+                    <div className="assessment-history-item" key={item.id}>
+                      <div className="data-row">
+                        <span>
+                          <strong>{formatAssessmentDateTime(item.assessedAt)}</strong>
+                          <span className={item.source === "ADMIN" ? "assessment-source-badge admin" : "assessment-source-badge"}>
+                            {item.source === "ADMIN" ? "Registrada pelo admin" : "Enviada pelo aluno"}
+                          </span>
+                          <span className="assessment-source-badge">{studentLocationLabel(profile)}</span>
+                          {item.weightKg ?? form?.composicao_corporal_basica.peso_atual_kg ?? "-"} kg
+                          {bodyFatPct != null ? ` · ${bodyFatPct}% gordura` : ""}
+                          {waistCm != null ? ` · ${waistCm} cm cintura` : ""}
+                        </span>
+                        <button
+                          aria-label="Ver detalhes da avaliação"
+                          type="button"
+                          onClick={() => setStudentExpandedAssessmentId((current) => (current === item.id ? null : item.id))}
                         >
-                          <option value="">Selecione</option>
-                          {section.opcoes.map((opcao) => (
-                            <option key={opcao} value={opcao}>{opcao}</option>
-                          ))}
-                        </select>
+                          <Eye size={17} />
+                        </button>
+                        {item.source !== "ADMIN" && (
+                          <button
+                            aria-label="Editar avaliação"
+                            type="button"
+                            onClick={() => handleEditStudentAssessment(item)}
+                          >
+                            <Pencil size={17} />
+                          </button>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
 
-                <div className="student-assessment-section">
-                  <h2>Histórico de saúde (anamnese)</h2>
-                  {(
-                    [
-                      ["possui_lesao", "Você possui alguma lesão?"],
-                      ["medicamento_continuo", "Usa algum medicamento contínuo?"],
-                      ["restricao_medica_cardiaca", "Alguma restrição médica cardíaca?"]
-                    ] as const
-                  ).map(([key, label]) => {
-                    const field = assessmentForm.formulario_avaliacao_fisica.historico_de_saude_anamnese[key];
-                    return (
-                      <div className="student-assessment-field" key={key}>
-                        <label>{label}</label>
-                        <input
-                          type="text"
-                          placeholder={field.descricao}
-                          value={field.resposta}
-                          onChange={(event) =>
-                            updateAssessmentForm((draft) => {
-                              draft.formulario_avaliacao_fisica.historico_de_saude_anamnese[key].resposta = event.target.value;
-                            })
-                          }
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="student-assessment-section">
-                  <h2>Composição corporal básica</h2>
-                  <p className="student-assessment-hint">
-                    {assessmentForm.formulario_avaliacao_fisica.composicao_corporal_basica.instrucao}
-                  </p>
-                  <div className="student-assessment-inline">
-                    <div className="student-assessment-field">
-                      <label>Peso atual (kg)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        placeholder="Ex.: 72,5"
-                        value={assessmentForm.formulario_avaliacao_fisica.composicao_corporal_basica.peso_atual_kg ?? ""}
-                        onChange={(event) =>
-                          updateAssessmentForm((draft) => {
-                            draft.formulario_avaliacao_fisica.composicao_corporal_basica.peso_atual_kg =
-                              event.target.value === "" ? null : Number(event.target.value);
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="student-assessment-field">
-                      <label>Altura (cm)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        placeholder="Ex.: 175"
-                        value={assessmentForm.formulario_avaliacao_fisica.composicao_corporal_basica.altura_cm ?? ""}
-                        onChange={(event) =>
-                          updateAssessmentForm((draft) => {
-                            draft.formulario_avaliacao_fisica.composicao_corporal_basica.altura_cm =
-                              event.target.value === "" ? null : Number(event.target.value);
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="student-assessment-section">
-                  <h2>Perímetros corporais (cm)</h2>
-                  <p className="student-assessment-hint">
-                    {assessmentForm.formulario_avaliacao_fisica.perimetros_corporais_cm.instrucao}
-                  </p>
-                  <div className="student-assessment-grid">
-                    {perimeterKeys.map((key) => {
-                      const item = assessmentForm.formulario_avaliacao_fisica.perimetros_corporais_cm[key];
-                      return (
-                        <div className="student-assessment-field" key={key}>
-                          <label>{key.replace(/_/g, " ")}</label>
-                          <input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            placeholder={item.detalhe}
-                            value={item.valor ?? ""}
-                            onChange={(event) =>
-                              updateAssessmentForm((draft) => {
-                                draft.formulario_avaliacao_fisica.perimetros_corporais_cm[key].valor =
-                                  event.target.value === "" ? null : Number(event.target.value);
-                              })
-                            }
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="student-assessment-section">
-                  <h2>Fotos para análise visual</h2>
-                  <p className="student-assessment-hint">
-                    {assessmentForm.formulario_avaliacao_fisica.fotos_analise_visual.instrucao}
-                  </p>
-                  <div className="student-assessment-grid">
-                    {(
-                      [
-                        ["foto_frente", "Foto de frente"],
-                        ["foto_costas", "Foto de costas"],
-                        ["foto_perfil", "Foto de perfil"]
-                      ] as const
-                    ).map(([key, label]) => {
-                      const preview = assessmentPhotoPreviews[key];
-                      const fileName = assessmentForm.formulario_avaliacao_fisica.fotos_analise_visual.arquivos[key];
-                      return (
-                        <div className="student-assessment-field" key={key}>
-                          <label>{label}</label>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(event) => handleAssessmentPhotoSelect(key, event.target.files?.[0])}
-                          />
-                          {preview && (
-                            <div className="student-assessment-photo-confirm">
-                              <img src={preview} alt={label} />
-                              <div>
-                                <strong><Check size={16} /> Foto enviada</strong>
-                                <span>{fileName}</span>
-                                <button type="button" onClick={() => handleAssessmentPhotoSelect(key, undefined)}>
-                                  Remover
-                                </button>
+                      {studentExpandedAssessmentId === item.id && (
+                        <div className="assessment-detail">
+                          {form ? (
+                            <>
+                              <div className="student-assessment-section">
+                                <h2>Dados pessoais e objetivos</h2>
+                                <div className="student-assessment-summary">
+                                  <span><strong>Nome</strong>{form.dados_pessoais_e_objetivos.nome_completo || "-"}</span>
+                                  <span><strong>Nascimento</strong>{form.dados_pessoais_e_objetivos.data_nascimento || "-"}</span>
+                                  <span><strong>Gênero</strong>{form.dados_pessoais_e_objetivos.genero_biologico.resposta || "-"}</span>
+                                  <span><strong>Objetivo</strong>{form.dados_pessoais_e_objetivos.objetivo_principal.resposta || "-"}</span>
+                                  <span><strong>Nível de atividade</strong>{form.dados_pessoais_e_objetivos.nivel_atividade_atual.resposta || "-"}</span>
+                                  <span><strong>Estado/Município</strong>{studentLocationLabel(profile)}</span>
+                                </div>
+                              </div>
+                              <div className="student-assessment-section">
+                                <h2>Histórico de saúde</h2>
+                                <div className="student-assessment-summary">
+                                  <span><strong>Lesões</strong>{form.historico_de_saude_anamnese.possui_lesao.resposta || "Nenhuma informada"}</span>
+                                  <span><strong>Medicação contínua</strong>{form.historico_de_saude_anamnese.medicamento_continuo.resposta || "Nenhuma informada"}</span>
+                                  <span><strong>Restrição cardíaca</strong>{form.historico_de_saude_anamnese.restricao_medica_cardiaca.resposta || "Nenhuma informada"}</span>
+                                </div>
+                              </div>
+                              <div className="student-assessment-section">
+                                <h2>Composição corporal</h2>
+                                <div className="student-metric-grid">
+                                  <span><strong>{form.composicao_corporal_basica.peso_atual_kg ?? "-"}</strong>kg</span>
+                                  <span><strong>{form.composicao_corporal_basica.altura_cm ?? "-"}</strong>cm</span>
+                                  <span><strong>{bodyFatPct ?? "-"}</strong>% gordura</span>
+                                </div>
+                              </div>
+                              <div className="student-assessment-section">
+                                <h2>Perímetros (cm)</h2>
+                                <div className="student-assessment-grid">
+                                  {assessmentPerimeterKeys.map((key) => {
+                                    const perimeter = form.perimetros_corporais_cm[key];
+                                    return (
+                                      <span className="student-assessment-summary-item" key={key}>
+                                        <strong>{key.replace(/_/g, " ")}</strong>
+                                        {perimeter.valor != null ? `${perimeter.valor} cm` : "-"}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                              {assessmentPhotoFields.some(([key]) => form.fotos_analise_visual.arquivos[key]) && (
+                                <div className="student-assessment-section">
+                                  <h2>Fotos anexadas</h2>
+                                  <div className="student-assessment-summary">
+                                    {assessmentPhotoFields.map(([key, label]) =>
+                                      form.fotos_analise_visual.arquivos[key] ? (
+                                        <span className="student-assessment-photo" key={key}>
+                                          <strong>{label}</strong>
+                                          {/^https?:\/\//i.test(form.fotos_analise_visual.arquivos[key]) ? (
+                                            <button
+                                              className="student-assessment-photo-open"
+                                              type="button"
+                                              title="Clique para ampliar"
+                                              onClick={() => {
+                                                const urls = assessmentPhotoFields
+                                                  .map(([photoKey]) => photoKey)
+                                                  .map((k) => form.fotos_analise_visual.arquivos[k])
+                                                  .filter((value): value is string => Boolean(value) && /^https?:\/\//i.test(value))
+                                                  .map((path) => mediaUrl(path));
+                                                setStudentLightbox({
+                                                  urls,
+                                                  index: urls.indexOf(mediaUrl(form.fotos_analise_visual.arquivos[key]))
+                                                });
+                                              }}
+                                            >
+                                              <img src={mediaUrl(form.fotos_analise_visual.arquivos[key])} alt={label} />
+                                            </button>
+                                          ) : (
+                                            <small>{form.fotos_analise_visual.arquivos[key]}</small>
+                                          )}
+                                        </span>
+                                      ) : null
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="student-assessment-section">
+                              <h2>Resumo</h2>
+                              <div className="student-assessment-summary">
+                                <span><strong>Peso</strong>{item.weightKg ?? "-"} kg</span>
+                                <span><strong>Altura</strong>{item.heightCm ?? "-"} cm</span>
+                                <span><strong>Gordura</strong>{item.bodyFatPct ?? "-"}%</span>
+                                <span><strong>Cintura</strong>{item.waistCm ?? "-"} cm</span>
+                                {item.chestCm != null && <span><strong>Tórax</strong>{item.chestCm} cm</span>}
+                                {item.hipCm != null && <span><strong>Quadril</strong>{item.hipCm} cm</span>}
+                                {item.notes ? <span><strong>Observações</strong>{item.notes}</span> : null}
                               </div>
                             </div>
                           )}
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="student-assessment-actions">
-                  <button className="student-green-button" type="submit" disabled={submittingAssessment}>
-                    {submittingAssessment ? "Salvando..." : "Salvar avaliação física"}
-                  </button>
-                  <button
-                    className="student-outline-button"
-                    type="button"
-                    disabled={submittingAssessment}
-                    onClick={clearAssessmentForm}
-                  >
-                    Cancelar avaliação
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <button className="student-outline-button student-assessment-new-button" onClick={() => setAssessmentForm(createEmptyAssessmentForm())}>
-                Preencher avaliação física
-              </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </section>
         )}
@@ -8449,6 +10314,60 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
               <p>Dias marcados representam treinos concluídos em {currentYear}. O calendário mostra o mês atual e meses anteriores.</p>
             </div>
           </section>
+        </div>
+      )}
+
+      {studentLightbox && (
+        <div
+          className="assessment-lightbox"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setStudentLightbox(null)}
+        >
+          <div className="assessment-lightbox-content" onClick={(event) => event.stopPropagation()}>
+            <button
+              className="assessment-lightbox-close"
+              type="button"
+              aria-label="Fechar"
+              onClick={() => setStudentLightbox(null)}
+            >
+              <X size={22} />
+            </button>
+            {studentLightbox.urls.length > 1 && (
+              <button
+                className="assessment-lightbox-nav prev"
+                type="button"
+                aria-label="Foto anterior"
+                onClick={() =>
+                  setStudentLightbox((current) =>
+                    current
+                      ? { ...current, index: (current.index - 1 + current.urls.length) % current.urls.length }
+                      : current
+                  )
+                }
+              >
+                <ChevronLeft size={28} />
+              </button>
+            )}
+            <img src={studentLightbox.urls[studentLightbox.index]} alt="Foto da avaliação física" />
+            {studentLightbox.urls.length > 1 && (
+              <button
+                className="assessment-lightbox-nav next"
+                type="button"
+                aria-label="Próxima foto"
+                onClick={() =>
+                  setStudentLightbox((current) =>
+                    current ? { ...current, index: (current.index + 1) % current.urls.length } : current
+                  )
+                }
+              >
+                <ChevronRight size={28} />
+              </button>
+            )}
+            <span className="assessment-lightbox-counter">
+              {studentLightbox.index + 1} / {studentLightbox.urls.length}
+            </span>
+          </div>
         </div>
       )}
 

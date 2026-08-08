@@ -129,7 +129,8 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     const activeMembership = await prisma.membership.findFirst({
       where: {
         userId: authUser.id,
-        status: "ACTIVE"
+        status: "ACTIVE",
+        deletedAt: null
       },
       include: {
         plan: true,
@@ -156,6 +157,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     const pendingMembership = await prisma.membership.findFirst({
       where: {
         userId: authUser.id,
+        deletedAt: null,
         status: {
           in: ["PENDING", "OVERDUE"]
         }
