@@ -1653,6 +1653,17 @@ summary:focus-visible {
   align-items: center;
 }
 
+.cms-builder-heading.exercise-execution-row,
+.cms-builder-row.exercise-execution-row {
+  grid-template-columns:
+    minmax(190px, 1.4fr)
+    minmax(70px, 0.35fr)
+    minmax(110px, 0.55fr)
+    minmax(110px, 0.55fr)
+    minmax(90px, 0.4fr)
+    minmax(150px, 0.9fr);
+}
+
 .cms-builder-row.program-day-row {
   grid-template-columns: 72px minmax(220px, 1fr) minmax(82px, 0.25fr);
 }
@@ -6570,6 +6581,8 @@ summary:focus-visible {
 
   .cms-builder-row,
   .cms-builder-heading,
+  .cms-builder-row.exercise-execution-row,
+  .cms-builder-heading.exercise-execution-row,
   .cms-builder-row.program-day-row,
   .cms-program-actions,
   .cms-assign-form {

@@ -209,6 +209,9 @@ model ExerciseModality {
 model WorkoutBlock {
   id              String                 @id @default(cuid())
   title           String
+  identifier      String?
+  focus           String?
+  weeklyFrequency Int                    @default(1) @map("weekly_frequency")
   structureType   StructureType          @default(NORMAL) @map("structure_type")
   restTime        Int                    @map("rest_time")
   modalityId      String?                @map("modality_id")
@@ -230,7 +233,10 @@ model WorkoutBlockExercise {
   exercise       Exercise     @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
   sets           Int
   repsRange      String       @map("reps_range")
-  order          Int
+  initialLoad        String?      @map("initial_load")
+  restSeconds        Int?         @map("rest_seconds")
+  supportMaterialUrl String?      @map("support_material_url")
+  order              Int
 
   @@map("workout_block_exercises")
 }
@@ -241,6 +247,10 @@ model Program {
   modality        Modality?           @relation(fields: [modalityId], references: [id], onDelete: SetNull)
   title           String
   description     String
+  durationYears   Int                 @default(0) @map("duration_years")
+  durationMonths  Int                 @default(0) @map("duration_months")
+  durationWeeks   Int                 @default(4) @map("duration_weeks")
+  durationDays    Int                 @default(28) @map("duration_days")
   targetGender    ProgramTargetGender @default(ALL) @map("target_gender")
   totalWorkouts   Int                 @default(30) @map("total_workouts")
   status          ProgramStatus       @default(DRAFT)

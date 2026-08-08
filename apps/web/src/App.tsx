@@ -389,6 +389,9 @@ interface StudentLocationRow {
 interface CmsWorkoutBlockRow {
   id: string;
   title: string;
+  identifier?: string | null;
+  focus?: string | null;
+  weeklyFrequency: number;
   structureType: "NORMAL" | "BI_SET" | "DROP_SET" | "REST_PAUSE";
   restTime: number;
   modality?: CmsModalityRow | null;
@@ -396,6 +399,9 @@ interface CmsWorkoutBlockRow {
     id: string;
     sets: number;
     repsRange: string;
+    initialLoad?: string | null;
+    restSeconds?: number | null;
+    supportMaterialUrl?: string | null;
     order: number;
     exercise: CmsExerciseRow;
   }>;
@@ -408,6 +414,10 @@ interface CmsProgramRow {
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   isActive: boolean;
   targetGender: "ALL" | "MALE" | "FEMALE";
+  durationYears: number;
+  durationMonths: number;
+  durationWeeks: number;
+  durationDays: number;
   totalWorkouts: number;
   sortOrder: number;
   modality?: CmsModalityRow | null;
@@ -1149,6 +1159,9 @@ interface TodayWorkoutResponse {
       completed?: boolean;
       block: {
         title: string;
+        identifier?: string | null;
+        focus?: string | null;
+        weeklyFrequency?: number;
         structureType: "NORMAL" | "BI_SET" | "DROP_SET" | "REST_PAUSE";
         restTime: number;
         exercises: WorkoutPlayerExercise[];
@@ -1156,6 +1169,9 @@ interface TodayWorkoutResponse {
     }>;
     block: {
       title: string;
+      identifier?: string | null;
+      focus?: string | null;
+      weeklyFrequency?: number;
       structureType: "NORMAL" | "BI_SET" | "DROP_SET" | "REST_PAUSE";
       restTime: number;
       exercises: WorkoutPlayerExercise[];
@@ -2700,6 +2716,9 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const [cmsBlocksModalityFilter, setCmsBlocksModalityFilter] = useState("");
   const [cmsBlockFormModality, setCmsBlockFormModality] = useState("");
   const [editingCmsProgram, setEditingCmsProgram] = useState<CmsProgramRow | null>(null);
+  const [cmsProgramDurationYears, setCmsProgramDurationYears] = useState(0);
+  const [cmsProgramDurationMonths, setCmsProgramDurationMonths] = useState(0);
+  const [cmsProgramDurationWeeks, setCmsProgramDurationWeeks] = useState(4);
   const [expandedCmsProgramId, setExpandedCmsProgramId] = useState<string | null>(null);
   const cmsProgramDragRef = useRef<{ fromIndex: number; overIndex: number } | null>(null);
   const [cmsProgramDragState, setCmsProgramDragState] = useState<{ fromIndex: number; overIndex: number } | null>(null);
@@ -3563,10 +3582,21 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           exerciseId,
           sets: Number(data.get(`sets${row}`) ?? 3),
           repsRange: String(data.get(`repsRange${row}`) ?? "10-12").trim(),
+          initialLoad: String(data.get(`initialLoad${row}`) ?? "").trim(),
+          restSeconds: String(data.get(`restSeconds${row}`) ?? "").trim() === "" ? undefined : Number(data.get(`restSeconds${row}`)),
+          supportMaterialUrl: String(data.get(`supportMaterialUrl${row}`) ?? "").trim(),
           order: row
         };
       })
-      .filter((exercise): exercise is { exerciseId: string; sets: number; repsRange: string; order: number } => Boolean(exercise));
+      .filter((exercise): exercise is {
+        exerciseId: string;
+        sets: number;
+        repsRange: string;
+        initialLoad: string;
+        restSeconds: number | undefined;
+        supportMaterialUrl: string;
+        order: number;
+      } => Boolean(exercise));
   }
 
   function parseCmsProgramDays(data: FormData) {
@@ -3671,6 +3701,9 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       const selectedModalityId = String(data.get("modalityId") ?? "").trim();
       const payload = {
         title: String(data.get("title") ?? ""),
+        identifier: String(data.get("identifier") || data.get("title") || ""),
+        focus: String(data.get("focus") ?? ""),
+        weeklyFrequency: Number(data.get("weeklyFrequency") ?? 1),
         structureType: String(data.get("structureType") ?? "NORMAL"),
         restTime: Number(data.get("restTime") ?? 60),
         modalityId: selectedModalityId ? selectedModalityId : null,
@@ -3710,12 +3743,18 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     const form = event.currentTarget;
     const data = new FormData(form);
     const status = String(data.get("status") ?? "DRAFT");
+    const durationWeeks = Math.max(1, Number(data.get("durationWeeks") ?? cmsProgramDurationWeeks) || 1);
+    const durationDays = durationWeeks * 7;
     const payload = {
       title: String(data.get("title") ?? ""),
       description: String(data.get("description") ?? ""),
       modalityId: String(data.get("modalityId") ?? ""),
+      durationYears: Math.max(0, Number(data.get("durationYears") ?? 0) || 0),
+      durationMonths: Math.max(0, Number(data.get("durationMonths") ?? 0) || 0),
+      durationWeeks,
+      durationDays,
       targetGender: String(data.get("targetGender") ?? "ALL"),
-      totalWorkouts: Number(data.get("totalWorkouts") ?? 30),
+      totalWorkouts: Number(data.get("totalWorkouts") ?? durationDays),
       status,
       isActive: status === "PUBLISHED",
       days: parseCmsProgramDays(data)
@@ -3726,12 +3765,18 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         await apiPut(`/admin/cms/programs/${editingCmsProgram.id}`, payload, token);
         form.reset();
         setEditingCmsProgram(null);
+        setCmsProgramDurationYears(0);
+        setCmsProgramDurationMonths(0);
+        setCmsProgramDurationWeeks(4);
         await applyAdminChange(["programs"], "Programa atualizado com sucesso.");
         return;
       }
 
       await apiPost("/admin/cms/programs", payload, token);
       form.reset();
+      setCmsProgramDurationYears(0);
+      setCmsProgramDurationMonths(0);
+      setCmsProgramDurationWeeks(4);
       await applyAdminChange(["programs"], "Programa cadastrado com sucesso.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível salvar o programa CMS."));
@@ -3740,11 +3785,17 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
   function startEditCmsProgram(item: CmsProgramRow) {
     setEditingCmsProgram(item);
+    setCmsProgramDurationYears(item.durationYears ?? 0);
+    setCmsProgramDurationMonths(item.durationMonths ?? 0);
+    setCmsProgramDurationWeeks(item.durationWeeks ?? 4);
     setExpandedCmsProgramId(item.id);
   }
 
   function handleCancelCmsProgramEdit() {
     setEditingCmsProgram(null);
+    setCmsProgramDurationYears(0);
+    setCmsProgramDurationMonths(0);
+    setCmsProgramDurationWeeks(4);
   }
 
   async function handleReorderCmsPrograms(nextPrograms: CmsProgramRow[]) {
@@ -5733,8 +5784,16 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               </div>
               <form className="crud-form cms-form" key={editingCmsWorkoutBlock?.id ?? "new"} onSubmit={handleSaveCmsWorkoutBlock}>
                 <label>
-                  Nome do bloco
-                  <input name="title" placeholder="Ex.: Treino A - Peito e tríceps" required defaultValue={editingCmsWorkoutBlock?.title ?? ""} />
+                  Identificador
+                  <input name="title" placeholder="Ex.: Treino A" required defaultValue={editingCmsWorkoutBlock?.identifier ?? editingCmsWorkoutBlock?.title ?? ""} />
+                </label>
+                <label>
+                  Foco/Grupo muscular
+                  <input name="focus" placeholder="Ex.: Costas + bíceps" defaultValue={editingCmsWorkoutBlock?.focus ?? ""} />
+                </label>
+                <label>
+                  Frequência semanal recomendada
+                  <input name="weeklyFrequency" type="number" min="1" max="7" defaultValue={editingCmsWorkoutBlock?.weeklyFrequency ?? 1} />
                 </label>
                 <label>
                   Estrutura
@@ -5761,17 +5820,20 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   </select>
                 </label>
                 <div className="cms-builder-list wide-field">
-                  <div className="cms-builder-heading">
+                  <div className="cms-builder-heading exercise-execution-row">
                     <span>Aula</span>
                     <span>Séries</span>
                     <span>Repetições</span>
+                    <span>Carga inicial</span>
+                    <span>Descanso</span>
+                    <span>Material</span>
                   </div>
                   {Array.from({ length: 6 }).map((_, index) => {
                     const row = index + 1;
                     const editRow = editingCmsWorkoutBlock?.exercises.find((entry) => entry.order === row);
 
                     return (
-                      <div className="cms-builder-row" key={`block-exercise-${row}`}>
+                      <div className="cms-builder-row exercise-execution-row" key={`block-exercise-${row}`}>
                         <select name={`exerciseId${row}`} required={row === 1} defaultValue={editRow?.exercise.id ?? ""}>
                           <option value="">{row === 1 ? "Selecione a primeira aula" : "Aula opcional"}</option>
                           {cmsBlockModalityExercises.map((exercise) => (
@@ -5786,7 +5848,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                           )}
                         </select>
                         <input name={`sets${row}`} type="number" min="1" defaultValue={editRow?.sets ?? 3} aria-label={`Séries do exercício ${row}`} />
-                        <input name={`repsRange${row}`} defaultValue={editRow?.repsRange ?? "10-12"} aria-label={`Repetições do exercício ${row}`} />
+                        <input name={`repsRange${row}`} placeholder="10-12 ou falha" defaultValue={editRow?.repsRange ?? "10-12"} aria-label={`Repetições do exercício ${row}`} />
+                        <input name={`initialLoad${row}`} placeholder="Ex.: 20kg" defaultValue={editRow?.initialLoad ?? ""} aria-label={`Carga inicial do exercício ${row}`} />
+                        <input name={`restSeconds${row}`} type="number" min="0" placeholder="60" defaultValue={editRow?.restSeconds ?? ""} aria-label={`Descanso do exercício ${row}`} />
+                        <input name={`supportMaterialUrl${row}`} type="text" placeholder={editRow?.exercise.materialUrl ? "Usar material da aula" : "https://..."} defaultValue={editRow?.supportMaterialUrl ?? ""} aria-label={`Material de apoio do exercício ${row}`} />
                       </div>
                     );
                   })}
@@ -5818,7 +5883,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               {filteredCmsWorkoutBlocks.slice(0, 8).map((item) => (
                 <div className="data-row cms-data-row" key={item.id}>
                   <span>
-                    <strong>{item.title}</strong>
+                    <strong>{item.identifier ?? item.title}</strong>
                     <span className="cms-badge-group">
                       {item.modality ? (
                         <em className="cms-modality-badge">{item.modality.name}</em>
@@ -5826,6 +5891,8 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                         <em className="cms-modality-badge muted">Sem modalidade</em>
                       )}
                     </span>
+                    {item.focus ? `${item.focus} - ` : ""}
+                    {item.weeklyFrequency}x/semana -{" "}
                     {item.exercises.map((row) => row.exercise.title ?? row.exercise.name ?? "Exercício").join(", ") || "Sem exercícios"}
                   </span>
                   <select
@@ -5862,7 +5929,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               <form className="crud-form cms-form" key={editingCmsProgram?.id ?? "new"} onSubmit={handleSaveCmsProgram}>
                 <label>
                   Título do programa
-                  <input name="title" placeholder="Ex.: Hipertrofia 4 semanas" required defaultValue={editingCmsProgram?.title ?? ""} />
+                  <input name="title" placeholder="Ex.: Treino Iniciante ABC - Academia" required defaultValue={editingCmsProgram?.title ?? ""} />
                 </label>
                 <label>
                   Modalidade
@@ -5892,8 +5959,39 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   </select>
                 </label>
                 <label>
-                  Quantidade de treinos na sequência
-                  <input name="totalWorkouts" type="number" min="1" defaultValue={editingCmsProgram?.totalWorkouts ?? 30} required />
+                  Anos
+                  <input
+                    name="durationYears"
+                    type="number"
+                    min="0"
+                    value={cmsProgramDurationYears}
+                    onChange={(event) => setCmsProgramDurationYears(Math.max(0, Number(event.target.value) || 0))}
+                  />
+                </label>
+                <label>
+                  Meses
+                  <input
+                    name="durationMonths"
+                    type="number"
+                    min="0"
+                    value={cmsProgramDurationMonths}
+                    onChange={(event) => setCmsProgramDurationMonths(Math.max(0, Number(event.target.value) || 0))}
+                  />
+                </label>
+                <label>
+                  Semanas
+                  <input
+                    name="durationWeeks"
+                    type="number"
+                    min="1"
+                    required
+                    value={cmsProgramDurationWeeks}
+                    onChange={(event) => setCmsProgramDurationWeeks(Math.max(1, Number(event.target.value) || 1))}
+                  />
+                </label>
+                <label>
+                  Dias de treino
+                  <input name="totalWorkouts" type="number" min="1" value={cmsProgramDurationWeeks * 7} readOnly />
                 </label>
                 <label className="wide-field">
                   Descrição para o aluno
@@ -5990,7 +6088,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                           <span className="cms-program-title-group">
                             <strong>{item.title}</strong>
                             <small>
-                              {item.modality?.name ?? programMetadata.modality} • {item.totalWorkouts} treino(s) • {item.days.length} dia(s)
+                              {item.modality?.name ?? programMetadata.modality} • {item.durationDays ?? item.totalWorkouts} dia(s) • {item.days.length} bloco(s)
                             </small>
                           </span>
                         </button>
@@ -6004,7 +6102,8 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                           <div className="cms-program-main">
                             <p>{programMetadata.description}</p>
                             <small>Público: {item.targetGender === "MALE" ? "Masculino" : item.targetGender === "FEMALE" ? "Feminino" : "Todos"}</small>
-                            <small>{item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.title}`).join(" | ") || "Sem dias cadastrados"}</small>
+                            <small>Duração: {item.durationYears ?? 0} ano(s), {item.durationMonths ?? 0} mês(es), {item.durationWeeks ?? 0} semana(s)</small>
+                            <small>{item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.identifier ?? day.workoutBlock.title}${day.workoutBlock.focus ? ` (${day.workoutBlock.focus})` : ""}`).join(" | ") || "Sem dias cadastrados"}</small>
                           </div>
                           <div className="cms-program-actions">
                             <button className="outline-button" type="button" onClick={() => startEditCmsProgram(item)}>
@@ -6112,7 +6211,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                               <span className="cms-program-title-group">
                                 <strong>{item.title}</strong>
                                 <small>
-                                  {item.modality?.name ?? programMetadata.modality} • {item.totalWorkouts} treino(s) • {item.days.length} dia(s)
+                                  {item.modality?.name ?? programMetadata.modality} • {item.durationDays ?? item.totalWorkouts} dia(s) • {item.days.length} bloco(s)
                                 </small>
                               </span>
                             </button>
@@ -6126,7 +6225,8 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                               <div className="cms-program-main">
                                 <p>{programMetadata.description}</p>
                                 <small>Público: {item.targetGender === "MALE" ? "Masculino" : item.targetGender === "FEMALE" ? "Feminino" : "Todos"}</small>
-                                <small>{item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.title}`).join(" | ") || "Sem dias cadastrados"}</small>
+                                <small>Duração: {item.durationYears ?? 0} ano(s), {item.durationMonths ?? 0} mês(es), {item.durationWeeks ?? 0} semana(s)</small>
+                                <small>{item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.identifier ?? day.workoutBlock.title}${day.workoutBlock.focus ? ` (${day.workoutBlock.focus})` : ""}`).join(" | ") || "Sem dias cadastrados"}</small>
                               </div>
                               <div className="cms-program-actions">
                                 <button className="outline-button" type="button" onClick={() => startEditCmsProgram(item)}>
@@ -9103,7 +9203,11 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                 <div className="student-training-sheet-meta">
                   <span>
                     <small>Treino de hoje</small>
-                    <strong>{currentSequenceWorkout?.block.title ?? workoutSheet.block.title}</strong>
+                    <strong>{currentSequenceWorkout?.block.identifier ?? currentSequenceWorkout?.block.title ?? workoutSheet.block.identifier ?? workoutSheet.block.title}</strong>
+                  </span>
+                  <span>
+                    <small>Foco</small>
+                    <strong>{currentSequenceWorkout?.block.focus ?? workoutSheet.block.focus ?? "Ficha de exercícios"}</strong>
                   </span>
                   <span>
                     <small>Treinos realizados</small>
@@ -9120,6 +9224,8 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                       new Set(programWorkout.block.exercises.flatMap((exercise) => exercise.targetMuscles ?? []))
                     );
                     const isCurrent = programWorkout.dayNumber === workoutSheet.dayNumber;
+                    const blockLabel = programWorkout.block.identifier ?? programWorkout.block.title;
+                    const blockFocus = programWorkout.block.focus || programMuscles.join(", ") || "Exercícios do CMS Fitness";
 
                     return (
                       <article className="student-program-card" key={`${programWorkout.programId}-${programWorkout.dayNumber}`}>
@@ -9128,8 +9234,8 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                             <Dumbbell size={24} />
                           </div>
                           <div>
-                            <h2>{programWorkout.block.title}</h2>
-                            <p>{programMuscles.join(", ") || "Exercícios do CMS Fitness"}</p>
+                            <h2>{blockLabel}</h2>
+                            <p>{blockFocus} • {programWorkout.block.weeklyFrequency ?? 1}x/semana • descanso {programWorkout.block.restTime}s</p>
                           </div>
                           <button onClick={() => void handleStartWorkoutSession(programWorkout)}>
                             {programWorkout.completed ? "Concluído" : "Iniciar"}
@@ -9178,7 +9284,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
           <section className="student-player-mobile">
             <WorkoutPlayer
               programTitle={todayWorkout.programTitle}
-              blockTitle={todayWorkout.block.title}
+              blockTitle={todayWorkout.block.identifier ?? todayWorkout.block.title}
               exercises={todayWorkout.block.exercises}
               restTimeDefault={todayWorkout.block.restTime}
               structureType={todayWorkout.block.structureType}

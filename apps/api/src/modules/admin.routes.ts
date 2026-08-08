@@ -103,6 +103,9 @@ const cmsExerciseSchema = z.object({
 
 const cmsWorkoutBlockSchema = z.object({
   title: z.string().min(2),
+  identifier: z.string().optional(),
+  focus: z.string().optional(),
+  weeklyFrequency: z.coerce.number().int().min(1).max(7).default(1),
   structureType: z.enum(["NORMAL", "BI_SET", "DROP_SET", "REST_PAUSE"]).default("NORMAL"),
   restTime: z.coerce.number().int().min(0),
   modalityId: z.string().min(1).nullable().optional(),
@@ -112,6 +115,9 @@ const cmsWorkoutBlockSchema = z.object({
         exerciseId: z.string().min(1),
         sets: z.coerce.number().int().min(1),
         repsRange: z.string().min(1),
+        initialLoad: z.string().optional(),
+        restSeconds: z.coerce.number().int().min(0).optional(),
+        supportMaterialUrl: urlOrRelative.optional(),
         order: z.coerce.number().int().min(1)
       })
     )
@@ -122,6 +128,10 @@ const cmsProgramSchema = z.object({
   title: z.string().min(2),
   description: z.string().min(2),
   modalityId: z.string().min(1),
+  durationYears: z.coerce.number().int().min(0).default(0),
+  durationMonths: z.coerce.number().int().min(0).default(0),
+  durationWeeks: z.coerce.number().int().min(1).default(4),
+  durationDays: z.coerce.number().int().min(1).default(28),
   targetGender: z.enum(["ALL", "MALE", "FEMALE"]).default("ALL"),
   totalWorkouts: z.coerce.number().int().min(1).default(30),
   sortOrder: z.coerce.number().int().min(0).optional(),
@@ -1680,6 +1690,9 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     const workoutBlock = await prisma.workoutBlock.create({
       data: {
         title: body.title,
+        identifier: body.identifier || null,
+        focus: body.focus || null,
+        weeklyFrequency: body.weeklyFrequency,
         structureType: body.structureType,
         restTime: body.restTime,
         modalityId: body.modalityId ?? null,
@@ -1688,6 +1701,9 @@ export async function registerAdminRoutes(app: FastifyInstance) {
             exerciseId: exercise.exerciseId,
             sets: exercise.sets,
             repsRange: exercise.repsRange,
+            initialLoad: exercise.initialLoad || null,
+            restSeconds: exercise.restSeconds ?? null,
+            supportMaterialUrl: exercise.supportMaterialUrl || null,
             order: exercise.order
           }))
         }
@@ -1725,6 +1741,9 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         where: { id },
         data: {
           ...(body.title !== undefined ? { title: body.title } : {}),
+          ...(body.identifier !== undefined ? { identifier: body.identifier || null } : {}),
+          ...(body.focus !== undefined ? { focus: body.focus || null } : {}),
+          ...(body.weeklyFrequency !== undefined ? { weeklyFrequency: body.weeklyFrequency } : {}),
           ...(body.structureType !== undefined ? { structureType: body.structureType } : {}),
           ...(body.restTime !== undefined ? { restTime: body.restTime } : {}),
           ...(body.modalityId !== undefined ? { modalityId: body.modalityId ?? null } : {}),
@@ -1735,6 +1754,9 @@ export async function registerAdminRoutes(app: FastifyInstance) {
                     exerciseId: exercise.exerciseId,
                     sets: exercise.sets,
                     repsRange: exercise.repsRange,
+                    initialLoad: exercise.initialLoad || null,
+                    restSeconds: exercise.restSeconds ?? null,
+                    supportMaterialUrl: exercise.supportMaterialUrl || null,
                     order: exercise.order
                   }))
                 }
@@ -1840,6 +1862,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         modalityId: body.modalityId,
         title: body.title,
         description: buildProgramDescription(body.description, modality.name),
+        durationYears: body.durationYears,
+        durationMonths: body.durationMonths,
+        durationWeeks: body.durationWeeks,
+        durationDays: body.durationDays,
         targetGender: body.targetGender,
         totalWorkouts: body.totalWorkouts,
         sortOrder: body.sortOrder ?? (maxSortOrder._max.sortOrder ?? 0) + 1,
@@ -1925,6 +1951,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           modalityId: nextModalityId,
           title: body.title ?? currentProgram.title,
           description: descriptionText,
+          durationYears: body.durationYears ?? currentProgram.durationYears,
+          durationMonths: body.durationMonths ?? currentProgram.durationMonths,
+          durationWeeks: body.durationWeeks ?? currentProgram.durationWeeks,
+          durationDays: body.durationDays ?? currentProgram.durationDays,
           targetGender: body.targetGender ?? currentProgram.targetGender,
           totalWorkouts: body.totalWorkouts ?? currentProgram.totalWorkouts,
           sortOrder: body.sortOrder ?? nextPublishedSortOrder ?? currentProgram.sortOrder,

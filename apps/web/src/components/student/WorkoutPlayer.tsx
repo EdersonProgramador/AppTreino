@@ -32,6 +32,7 @@ export interface WorkoutPlayerExercise {
   equipmentTags?: string[];
   sets: number;
   repsRange: string;
+  initialLoad?: string;
   restSeconds?: number;
   latestWeightUsed?: number;
   order: number;
@@ -238,7 +239,7 @@ export function WorkoutPlayer({
   const [completedIds, setCompletedIds] = useState<Set<string>>(() => new Set());
   const [dayCompleted, setDayCompleted] = useState(false);
   const [loads, setLoads] = useState<Record<string, string>>(() =>
-    Object.fromEntries(exercises.map((exercise) => [exerciseInstanceKey(exercise), exercise.latestWeightUsed ? String(exercise.latestWeightUsed) : ""]))
+    Object.fromEntries(exercises.map((exercise) => [exerciseInstanceKey(exercise), exercise.latestWeightUsed ? String(exercise.latestWeightUsed) : exercise.initialLoad ?? ""]))
   );
   const [substitutions, setSubstitutions] = useState<Record<string, WorkoutSubstituteOption>>({});
   const [substituteOpen, setSubstituteOpen] = useState(false);
@@ -299,7 +300,7 @@ export function WorkoutPlayer({
 
   useEffect(() => {
     setLoads(
-      Object.fromEntries(exercises.map((exercise) => [exerciseInstanceKey(exercise), exercise.latestWeightUsed ? String(exercise.latestWeightUsed) : ""]))
+      Object.fromEntries(exercises.map((exercise) => [exerciseInstanceKey(exercise), exercise.latestWeightUsed ? String(exercise.latestWeightUsed) : exercise.initialLoad ?? ""]))
     );
     setCurrentExerciseIndex(0);
     setCurrentSet(1);

@@ -191,6 +191,9 @@ async function requireActiveEnrollment(app: FastifyInstance, request: FastifyReq
 function mapWorkoutExercise(item: {
   sets: number;
   repsRange: string;
+  initialLoad: string | null;
+  restSeconds: number | null;
+  supportMaterialUrl: string | null;
   order: number;
   exercise: {
     id: string;
@@ -217,13 +220,14 @@ function mapWorkoutExercise(item: {
     title: item.exercise.title ?? item.exercise.name ?? "Exercício",
     videoUrl: item.exercise.videoUrl ?? "",
     audioUrl: item.exercise.audioUrl ?? "",
-    materialUrl: item.exercise.materialUrl ?? "",
+    materialUrl: item.supportMaterialUrl ?? item.exercise.materialUrl ?? "",
     description: item.exercise.notes ?? "",
     targetMuscles: item.exercise.targetMuscles,
     equipmentTags: item.exercise.equipmentTags,
     sets: item.sets,
     repsRange: item.repsRange,
-    restSeconds,
+    initialLoad: item.initialLoad ?? "",
+    restSeconds: item.restSeconds ?? restSeconds,
     latestWeightUsed,
     order: item.order,
     alternatives: item.exercise.alternatives.map((alternative) => ({
@@ -496,6 +500,9 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
         completed: index < completedInCurrentCycle,
         block: {
           title: day.workoutBlock.title,
+          identifier: day.workoutBlock.identifier,
+          focus: day.workoutBlock.focus,
+          weeklyFrequency: day.workoutBlock.weeklyFrequency,
           structureType: day.workoutBlock.structureType,
           restTime: day.workoutBlock.restTime,
           exercises: day.workoutBlock.exercises.map((exercise) =>
@@ -522,6 +529,9 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
         sequence,
         block: {
           title: programDay.workoutBlock.title,
+          identifier: programDay.workoutBlock.identifier,
+          focus: programDay.workoutBlock.focus,
+          weeklyFrequency: programDay.workoutBlock.weeklyFrequency,
           structureType: programDay.workoutBlock.structureType,
           restTime: programDay.workoutBlock.restTime,
           exercises: programDay.workoutBlock.exercises.map((exercise) =>
