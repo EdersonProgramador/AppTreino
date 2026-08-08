@@ -433,6 +433,7 @@ async function main() {
       id: "seed-annual-women-ex-supino-inclinado-barra",
       title: "Supino inclinado com barra",
       materialUrl: "https://www.strengthlog.com/incline-bench-press/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/03/Incline-Bench-Press.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Peitoral", "Ombro", "Triceps"],
       equipmentTags: ["Barra", "Banco Inclinado"]
     },
@@ -440,6 +441,7 @@ async function main() {
       id: "seed-annual-women-ex-supino-inclinado-halteres",
       title: "Supino inclinado com halteres",
       materialUrl: "https://www.strengthlog.com/dumbbell-incline-press/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/03/Dumbbell-Incline-Press.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Peitoral", "Ombro", "Triceps"],
       equipmentTags: ["Halter", "Banco Inclinado"]
     },
@@ -447,6 +449,7 @@ async function main() {
       id: "seed-annual-women-ex-supino-reto-barra",
       title: "Supino reto com barra",
       materialUrl: "https://www.strengthlog.com/bench-press/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2021/09/bench-press.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Peitoral", "Ombro", "Triceps"],
       equipmentTags: ["Barra", "Banco Reto"]
     },
@@ -454,6 +457,7 @@ async function main() {
       id: "seed-annual-women-ex-supino-reto-halteres",
       title: "Supino reto com halteres",
       materialUrl: "https://www.strengthlog.com/dumbbell-chest-press/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/03/Dumbbell-Chest-Press.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Peitoral", "Ombro", "Triceps"],
       equipmentTags: ["Halter", "Banco Reto"]
     },
@@ -461,6 +465,7 @@ async function main() {
       id: "seed-annual-women-ex-mergulho-assistido",
       title: "Mergulho assistido",
       materialUrl: "https://www.strengthlog.com/assisted-dips/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2024/11/assisted.dip_.gif?resize=600%2C589&ssl=1",
       targetMuscles: ["Peitoral", "Triceps"],
       equipmentTags: ["Maquina", "Peso Corporal"]
     },
@@ -468,6 +473,7 @@ async function main() {
       id: "seed-annual-women-ex-levantamento-terra",
       title: "Levantamento terra",
       materialUrl: "https://www.strengthlog.com/deadlift/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/11/Deadlift.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Costas", "Gluteos", "Posterior"],
       equipmentTags: ["Barra"]
     },
@@ -475,6 +481,7 @@ async function main() {
       id: "seed-annual-women-ex-remada-curvada",
       title: "Remada curvada",
       materialUrl: "https://www.strengthlog.com/barbell-row/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2022/03/Barbell-Row.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Costas", "Biceps"],
       equipmentTags: ["Barra"]
     },
@@ -482,6 +489,7 @@ async function main() {
       id: "seed-annual-women-ex-remada-unilateral",
       title: "Remada unilateral",
       materialUrl: "https://www.strengthlog.com/dumbbell-row/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/03/Dumbbell-Row.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Costas", "Biceps"],
       equipmentTags: ["Halter", "Banco"]
     },
@@ -489,6 +497,7 @@ async function main() {
       id: "seed-annual-women-ex-remada-baixa",
       title: "Remada baixa",
       materialUrl: "https://www.strengthlog.com/cable-close-grip-seated-row/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/03/cable-row-seated-narrow-grip.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Costas", "Biceps"],
       equipmentTags: ["Cabo", "Remada"]
     },
@@ -496,6 +505,7 @@ async function main() {
       id: "seed-annual-women-ex-puxada-frente",
       title: "Puxada pela frente",
       materialUrl: "https://www.strengthlog.com/lat-pulldown-with-pronated-grip/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/03/lat-pulldown-with-pronated-grip.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Costas", "Biceps"],
       equipmentTags: ["Puxador", "Cabo"]
     },
@@ -503,6 +513,7 @@ async function main() {
       id: "seed-annual-women-ex-barra-fixa-supinada",
       title: "Barra fixa supinada",
       materialUrl: "https://www.strengthlog.com/chin-up/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/03/chin-up.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Costas", "Biceps"],
       equipmentTags: ["Peso Corporal", "Barra Fixa"]
     },
@@ -510,6 +521,7 @@ async function main() {
       id: "seed-annual-women-ex-desenvolvimento-barra",
       title: "Desenvolvimento com barra",
       materialUrl: "https://www.strengthlog.com/overhead-press/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/12/Overhead-press-exercise.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Ombro", "Triceps"],
       equipmentTags: ["Barra"]
     },
@@ -517,6 +529,7 @@ async function main() {
       id: "seed-annual-women-ex-desenvolvimento-halteres",
       title: "Desenvolvimento com halteres",
       materialUrl: "https://www.strengthlog.com/dumbbell-shoulder-press/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/02/Dumbbell-shoulder-press.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Ombro", "Triceps"],
       equipmentTags: ["Halter"]
     },
@@ -524,6 +537,7 @@ async function main() {
       id: "seed-annual-women-ex-desenvolvimento-arnold",
       title: "Desenvolvimento Arnold",
       materialUrl: "https://www.strengthlog.com/arnold-press/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2024/10/arnold-press.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Ombro", "Triceps"],
       equipmentTags: ["Halter"]
     },
@@ -531,6 +545,7 @@ async function main() {
       id: "seed-annual-women-ex-elevacao-lateral",
       title: "Elevacao lateral",
       materialUrl: "https://www.strengthlog.com/dumbbell-lateral-raise/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/12/Dumbbell-Lateral-Raise.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Ombro"],
       equipmentTags: ["Halter"]
     },
@@ -538,6 +553,7 @@ async function main() {
       id: "seed-annual-women-ex-face-pull",
       title: "Face pull",
       materialUrl: "https://www.strengthlog.com/face-pull/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/05/face-pull.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Ombro", "Costas"],
       equipmentTags: ["Cabo", "Corda"]
     },
@@ -545,6 +561,7 @@ async function main() {
       id: "seed-annual-women-ex-agachamento-livre",
       title: "Agachamento livre",
       materialUrl: "https://www.strengthlog.com/squat/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2021/11/squat.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Quadriceps", "Gluteos", "Posterior"],
       equipmentTags: ["Barra"]
     },
@@ -552,6 +569,7 @@ async function main() {
       id: "seed-annual-women-ex-agachamento-frontal",
       title: "Agachamento frontal",
       materialUrl: "https://www.strengthlog.com/front-squat/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2021/09/Front-squat.gif?resize=600%2C595&ssl=1",
       targetMuscles: ["Quadriceps", "Gluteos", "Core"],
       equipmentTags: ["Barra"]
     },
@@ -559,6 +577,7 @@ async function main() {
       id: "seed-annual-women-ex-agachamento-hack",
       title: "Agachamento hack",
       materialUrl: "https://www.strengthlog.com/hack-squat-machine/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/04/hack-squat-machine.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Quadriceps", "Gluteos"],
       equipmentTags: ["Maquina Hack"]
     },
@@ -566,6 +585,7 @@ async function main() {
       id: "seed-annual-women-ex-leg-press",
       title: "Leg press",
       materialUrl: "https://www.strengthlog.com/leg-press/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2025/11/leg-press.gif?resize=700%2C700&ssl=1",
       targetMuscles: ["Quadriceps", "Gluteos", "Posterior"],
       equipmentTags: ["Leg Press"]
     },
@@ -573,6 +593,7 @@ async function main() {
       id: "seed-annual-women-ex-passada",
       title: "Passada",
       materialUrl: "https://www.strengthlog.com/dumbbell-walking-lunge/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2025/06/walking-dumbbell-lunges.gif?resize=700%2C700&ssl=1",
       targetMuscles: ["Quadriceps", "Gluteos"],
       equipmentTags: ["Halter"]
     },
@@ -580,6 +601,7 @@ async function main() {
       id: "seed-annual-women-ex-terra-romeno",
       title: "Terra romeno",
       materialUrl: "https://www.strengthlog.com/romanian-deadlift/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2022/01/Romanian-deadlift.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Posterior", "Gluteos", "Costas"],
       equipmentTags: ["Barra", "Halter"]
     },
@@ -587,6 +609,7 @@ async function main() {
       id: "seed-annual-women-ex-mesa-flexora",
       title: "Mesa flexora",
       materialUrl: "https://www.strengthlog.com/lying-leg-curl/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2023/09/lying-leg-curl.gif?resize=700%2C700&ssl=1",
       targetMuscles: ["Posterior"],
       equipmentTags: ["Mesa Flexora"]
     },
@@ -594,6 +617,7 @@ async function main() {
       id: "seed-annual-women-ex-panturrilhas",
       title: "Panturrilhas",
       materialUrl: "https://www.strengthlog.com/standing-calf-raise/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/03/calf-raise-standing.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Panturrilhas"],
       equipmentTags: ["Maquina", "Peso Corporal"]
     },
@@ -601,6 +625,7 @@ async function main() {
       id: "seed-annual-women-ex-elevacao-quadril",
       title: "Elevacao de quadril",
       materialUrl: "https://www.strengthlog.com/hip-thrust/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/02/Hip-thrust.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Gluteos", "Posterior"],
       equipmentTags: ["Barra", "Banco"]
     },
@@ -608,6 +633,7 @@ async function main() {
       id: "seed-annual-women-ex-agachamento-bulgaro",
       title: "Agachamento bulgaro",
       materialUrl: "https://www.strengthlog.com/bulgarian-split-squat/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2023/02/Bulgarian-split-squat-barbell.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Quadriceps", "Gluteos"],
       equipmentTags: ["Halter", "Banco"]
     },
@@ -615,6 +641,7 @@ async function main() {
       id: "seed-annual-women-ex-ponte-gluteos",
       title: "Ponte de gluteos",
       materialUrl: "https://www.strengthlog.com/glute-bridge/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2025/09/glutebridge.gif?resize=700%2C700&ssl=1",
       targetMuscles: ["Gluteos", "Posterior"],
       equipmentTags: ["Peso Corporal", "Barra"]
     },
@@ -622,6 +649,7 @@ async function main() {
       id: "seed-annual-women-ex-coice-cabo",
       title: "Coice no cabo",
       materialUrl: "https://www.strengthlog.com/cable-glute-kickback/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2025/09/cable-glute-kickback.gif?resize=700%2C700&ssl=1",
       targetMuscles: ["Gluteos"],
       equipmentTags: ["Cabo"]
     },
@@ -629,6 +657,7 @@ async function main() {
       id: "seed-annual-women-ex-rosca-direta",
       title: "Rosca direta",
       materialUrl: "https://www.strengthlog.com/barbell-curl/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/12/Barbell-biceps-curl.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Biceps"],
       equipmentTags: ["Barra"]
     },
@@ -636,6 +665,7 @@ async function main() {
       id: "seed-annual-women-ex-rosca-ez",
       title: "Rosca com barra EZ",
       materialUrl: "https://www.strengthlog.com/ez-curl/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2024/11/EZ-curl.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Biceps"],
       equipmentTags: ["Barra EZ"]
     },
@@ -643,6 +673,7 @@ async function main() {
       id: "seed-annual-women-ex-rosca-alternada",
       title: "Rosca alternada",
       materialUrl: "https://www.strengthlog.com/dumbbell-curl/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/02/Hantelcurl.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Biceps"],
       equipmentTags: ["Halter"]
     },
@@ -650,6 +681,7 @@ async function main() {
       id: "seed-annual-women-ex-rosca-martelo",
       title: "Rosca martelo",
       materialUrl: "https://www.strengthlog.com/hammer-curl/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/02/Hammer-curl.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Biceps", "Antebraco"],
       equipmentTags: ["Halter"]
     },
@@ -657,6 +689,7 @@ async function main() {
       id: "seed-annual-women-ex-extensao-triceps",
       title: "Extensao de triceps",
       materialUrl: "https://www.strengthlog.com/overhead-cable-triceps-extension/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2025/11/overhead-tricep-extension-lower-position.gif?resize=700%2C700&ssl=1",
       targetMuscles: ["Triceps"],
       equipmentTags: ["Cabo", "Corda"]
     },
@@ -664,6 +697,7 @@ async function main() {
       id: "seed-annual-women-ex-triceps-testa",
       title: "Triceps testa",
       materialUrl: "https://www.strengthlog.com/lying-triceps-extension-ez-bar/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2025/10/lying-triceps-extension-with-ez-bar.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Triceps"],
       equipmentTags: ["Barra EZ", "Banco"]
     },
@@ -671,6 +705,7 @@ async function main() {
       id: "seed-annual-women-ex-triceps-cabo",
       title: "Triceps no cabo",
       materialUrl: "https://www.strengthlog.com/tricep-pushdown-with-bar/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/03/triceps-pushdown-with-straight-handle.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Triceps"],
       equipmentTags: ["Cabo", "Barra"]
     },
@@ -678,6 +713,7 @@ async function main() {
       id: "seed-annual-women-ex-abdominal-corda",
       title: "Abdominal com corda",
       materialUrl: "https://www.strengthlog.com/cable-crunch/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/03/cable-crunch.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Abdomen"],
       equipmentTags: ["Cabo", "Corda"]
     },
@@ -685,6 +721,7 @@ async function main() {
       id: "seed-annual-women-ex-elevacao-pernas-cadeira",
       title: "Elevacao de pernas em cadeira",
       materialUrl: "https://www.strengthlog.com/captains-chair-leg-raise/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2025/10/captains-chair-leg-raises.gif?resize=700%2C700&ssl=1",
       targetMuscles: ["Abdomen"],
       equipmentTags: ["Cadeira Romana"]
     },
@@ -692,6 +729,7 @@ async function main() {
       id: "seed-annual-women-ex-roda-abdominal",
       title: "Roda abdominal",
       materialUrl: "https://www.strengthlog.com/kneeling-ab-wheel-roll-out/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/05/kneeling-ab-wheel.gif?resize=600%2C600&ssl=1",
       targetMuscles: ["Abdomen", "Core"],
       equipmentTags: ["Roda Abdominal"]
     },
@@ -699,6 +737,7 @@ async function main() {
       id: "seed-annual-women-ex-bicicleta",
       title: "Bicicleta abdominal",
       materialUrl: "https://www.strengthlog.com/bicycle-crunch/",
+      videoUrl: "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2025/06/bicycle.crunch-.gif?resize=700%2C700&ssl=1",
       targetMuscles: ["Abdomen"],
       equipmentTags: ["Peso Corporal"]
     },
@@ -706,6 +745,7 @@ async function main() {
       id: "seed-annual-women-ex-prancha-inclinada",
       title: "Prancha inclinada",
       materialUrl: "https://www.strengthlog.com/plank/",
+      videoUrl: "https://i2.wp.com/www.strengthlog.com/wp-content/uploads/2020/03/Plank.jpg?fit=1024%2C1024&ssl=1",
       targetMuscles: ["Abdomen", "Core"],
       equipmentTags: ["Peso Corporal", "Banco"]
     }
@@ -718,6 +758,7 @@ async function main() {
         id: exercise.id,
         title: exercise.title,
         name: exercise.title,
+        videoUrl: exercise.videoUrl,
         materialUrl: exercise.materialUrl,
         notes: annualWomenExerciseNotes,
         targetMuscles: exercise.targetMuscles,
@@ -732,6 +773,7 @@ async function main() {
       update: {
         title: exercise.title,
         name: exercise.title,
+        videoUrl: exercise.videoUrl,
         materialUrl: exercise.materialUrl,
         notes: annualWomenExerciseNotes,
         targetMuscles: exercise.targetMuscles,
@@ -900,6 +942,15 @@ async function main() {
     workoutBlockId: block.id,
     dayNumber: index + 1
   }));
+
+  await prisma.programDayWorkout.deleteMany({
+    where: {
+      programId: annualWomenProgram.id,
+      id: {
+        notIn: annualWomenProgramDays.map((day) => day.id)
+      }
+    }
+  });
 
   for (const day of annualWomenProgramDays) {
     await prisma.programDayWorkout.upsert({
