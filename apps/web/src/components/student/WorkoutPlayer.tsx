@@ -19,9 +19,23 @@ import {
   X
 } from "lucide-react";
 
-export type WorkoutStructureType = "NORMAL" | "BI_SET" | "DROP_SET" | "REST_PAUSE";
+export type WorkoutStructureType =
+  | "NORMAL"
+  | "BI_SET"
+  | "DROP_SET"
+  | "REST_PAUSE"
+  | "CIRCUIT"
+  | "AMRAP"
+  | "EMOM"
+  | "FOR_TIME"
+  | "TABATA"
+  | "INTERVAL"
+  | "CLASS";
+export type WorkoutPrescriptionType = "REPETITIONS" | "DURATION" | "DISTANCE" | "INTERVAL" | "ROUNDS" | "HOLD" | "FREE";
+export type WorkoutIntensityType = "NONE" | "LOAD" | "RPE" | "RIR" | "PERCENT_1RM" | "HEART_RATE_ZONE" | "PACE" | "SPEED";
 
 export interface WorkoutPlayerExercise {
+  prescriptionId: string;
   id: string;
   title: string;
   videoUrl: string;
@@ -32,6 +46,18 @@ export interface WorkoutPlayerExercise {
   equipmentTags?: string[];
   sets: number;
   repsRange: string;
+  prescriptionType: WorkoutPrescriptionType;
+  repsMin?: number | null;
+  repsMax?: number | null;
+  durationSeconds?: number | null;
+  distanceMeters?: number | null;
+  rounds?: number | null;
+  workSeconds?: number | null;
+  intensityType?: WorkoutIntensityType;
+  intensityValue?: string;
+  tempo?: string;
+  side?: string;
+  executionNotes?: string;
   initialLoad?: string;
   restSeconds?: number;
   latestWeightUsed?: number;
@@ -59,6 +85,10 @@ interface WorkoutPlayerProps {
   exercises: WorkoutPlayerExercise[];
   restTimeDefault: number;
   structureType?: WorkoutStructureType;
+  protocolRounds?: number | null;
+  workSeconds?: number | null;
+  timeCapSeconds?: number | null;
+  instructions?: string | null;
   sessionId?: string | null;
   onBack: () => void;
   onWorkoutStart?: () => Promise<{ id: string } | void> | { id: string } | void;
@@ -66,10 +96,16 @@ interface WorkoutPlayerProps {
   onExerciseProgressChange?: (input: {
     sessionId?: string | null;
     exerciseId: string;
+    prescriptionId: string;
     completed: boolean;
     weightUsed: number;
     repsCompleted: number;
     sets: number;
+    durationSeconds?: number;
+    distanceMeters?: number;
+    roundsCompleted?: number;
+    perceivedExertion?: number;
+    notes?: string;
   }) => Promise<void> | void;
   onRequestSubstitutes?: (exerciseId: string) => Promise<WorkoutPlayerExercise["alternatives"] | void> | WorkoutPlayerExercise["alternatives"] | void;
   onWorkoutComplete?: () => Promise<void> | void;
@@ -82,7 +118,14 @@ const structureTypeLabels: Record<WorkoutStructureType, string> = {
   NORMAL: "Normal",
   BI_SET: "Bi-set",
   DROP_SET: "Drop-set",
-  REST_PAUSE: "Rest-pause"
+  REST_PAUSE: "Rest-pause",
+  CIRCUIT: "Circuito",
+  AMRAP: "AMRAP",
+  EMOM: "EMOM",
+  FOR_TIME: "For time",
+  TABATA: "Tabata",
+  INTERVAL: "Intervalado",
+  CLASS: "Aula guiada"
 };
 
 const dropSetMax = 2;
@@ -97,13 +140,47 @@ function formatElapsedTime(totalSeconds: number) {
   return [hours, minutes, seconds].map((item) => String(item).padStart(2, "0")).join(":");
 }
 
-function parseReps(repsRange: string) {
-  const match = repsRange.match(/\d+/);
+function prescribedReps(exercise: WorkoutPlayerExercise) {
+  if (exercise.repsMax) return exercise.repsMax;
+  if (exercise.repsMin) return exercise.repsMin;
+  const fixed = exercise.repsRange.trim().match(/^\d+$/);
+  const range = exercise.repsRange.trim().match(/^\d+\s*[-–]\s*(\d+)$/);
+
+  return fixed ? Number(fixed[0]) : range ? Number(range[1]) : 0;
+}
+
+function restPauseTargetReps(exercise: WorkoutPlayerExercise) {
+  return Math.max(2, prescribedReps(exercise) * 2);
+}
+
+function parseLoad(value: string) {
+  const match = value.replace(",", ".").match(/\d+(?:\.\d+)?/);
   return match ? Number(match[0]) : 0;
 }
 
-function restPauseTargetReps(repsRange: string) {
-  return Math.max(2, parseReps(repsRange) * 2);
+function prescriptionLabel(exercise: WorkoutPlayerExercise) {
+  if (exercise.prescriptionType === "DURATION") return `${exercise.durationSeconds ?? 0}s`;
+  if (exercise.prescriptionType === "DISTANCE") return `${exercise.distanceMeters ?? 0} m`;
+  if (exercise.prescriptionType === "INTERVAL") return `${exercise.sets}x ${exercise.workSeconds ?? 0}s`;
+  if (exercise.prescriptionType === "ROUNDS") return `${exercise.rounds ?? exercise.sets} round(s)`;
+  if (exercise.prescriptionType === "HOLD") return `${exercise.durationSeconds ?? 0}s${exercise.side ? ` - ${exercise.side}` : ""}`;
+
+  return exercise.repsRange;
+}
+
+function intensityLabel(exercise: WorkoutPlayerExercise) {
+  if (!exercise.intensityType || exercise.intensityType === "NONE") return exercise.initialLoad || "Livre";
+  const labels: Record<Exclude<WorkoutIntensityType, "NONE">, string> = {
+    LOAD: "Carga",
+    RPE: "RPE",
+    RIR: "RIR",
+    PERCENT_1RM: "% de 1RM",
+    HEART_RATE_ZONE: "Zona cardíaca",
+    PACE: "Ritmo",
+    SPEED: "Velocidade"
+  };
+
+  return `${labels[exercise.intensityType]}${exercise.intensityValue ? ` ${exercise.intensityValue}` : ""}`;
 }
 
 function resolveMediaUrl(path?: string | null) {
@@ -161,7 +238,8 @@ function instructionSteps(exercise: WorkoutPlayerExercise) {
   return [
     `Prepare a posição inicial para ${exercise.title}${equipment ? ` usando ${equipment}` : ""}.`,
     "Mantenha controle do movimento, postura firme e respiração constante.",
-    `Execute ${exercise.repsRange} repetição(ões) ou tempo conforme prescrito no treino.`,
+    `Execute ${prescriptionLabel(exercise)} conforme prescrito no treino.`,
+    ...(exercise.executionNotes ? [exercise.executionNotes] : []),
     "Finalize a série sem soltar a carga bruscamente e aguarde o descanso configurado."
   ];
 }
@@ -212,6 +290,10 @@ export function WorkoutPlayer({
   exercises,
   restTimeDefault,
   structureType = "NORMAL",
+  protocolRounds,
+  workSeconds,
+  timeCapSeconds,
+  instructions,
   sessionId,
   onBack,
   onWorkoutStart,
@@ -241,6 +323,10 @@ export function WorkoutPlayer({
   const [loads, setLoads] = useState<Record<string, string>>(() =>
     Object.fromEntries(exercises.map((exercise) => [exerciseInstanceKey(exercise), exercise.latestWeightUsed ? String(exercise.latestWeightUsed) : exercise.initialLoad ?? ""]))
   );
+  const [actualReps, setActualReps] = useState<Record<string, string>>(() =>
+    Object.fromEntries(exercises.map((exercise) => [exerciseInstanceKey(exercise), prescribedReps(exercise) ? String(prescribedReps(exercise)) : ""]))
+  );
+  const [perceivedEffort, setPerceivedEffort] = useState<Record<string, string>>({});
   const [substitutions, setSubstitutions] = useState<Record<string, WorkoutSubstituteOption>>({});
   const [substituteOpen, setSubstituteOpen] = useState(false);
   const [substituteLoading, setSubstituteLoading] = useState(false);
@@ -264,8 +350,8 @@ export function WorkoutPlayer({
       : isRestPause
         ? restPauseRestSeconds
         : (currentExercise?.restSeconds ?? restTimeDefault);
-  const clusterReps = Math.max(1, parseReps(currentExercise?.repsRange ?? ""));
-  const clusterCount = Math.max(1, Math.ceil(restPauseTargetReps(currentExercise?.repsRange ?? "") / clusterReps));
+  const clusterReps = Math.max(1, currentExercise ? prescribedReps(currentExercise) : 0);
+  const clusterCount = Math.max(1, Math.ceil((currentExercise ? restPauseTargetReps(currentExercise) : 0) / clusterReps));
   const completedClusters = Math.min(clusterCount, Math.floor(restPauseAccum / clusterReps));
   const completedExerciseCount = completedIds.size;
   const allCompleted = exercises.length > 0 && completedExerciseCount === exercises.length;
@@ -302,6 +388,10 @@ export function WorkoutPlayer({
     setLoads(
       Object.fromEntries(exercises.map((exercise) => [exerciseInstanceKey(exercise), exercise.latestWeightUsed ? String(exercise.latestWeightUsed) : exercise.initialLoad ?? ""]))
     );
+    setActualReps(
+      Object.fromEntries(exercises.map((exercise) => [exerciseInstanceKey(exercise), prescribedReps(exercise) ? String(prescribedReps(exercise)) : ""]))
+    );
+    setPerceivedEffort({});
     setCurrentExerciseIndex(0);
     setCurrentSet(1);
     setRestRemaining(0);
@@ -390,7 +480,7 @@ export function WorkoutPlayer({
   }
 
   if (isRestPause) {
-      if (restPauseAccum >= restPauseTargetReps(currentExercise.repsRange)) {
+      if (restPauseAccum >= restPauseTargetReps(currentExercise)) {
         setRestPauseAccum(0);
         setCurrentSet((set) => Math.min(set + 1, currentExercise.sets));
       }
@@ -454,13 +544,20 @@ export function WorkoutPlayer({
   }
 
   async function saveExerciseProgress(exercise: WorkoutPlayerExercise, completedSets: number, sessionIdForProgress?: string | null) {
+    const instanceKey = exerciseInstanceKey(exercise);
     await onExerciseProgressChange?.({
       sessionId: sessionIdForProgress ?? activeSessionId,
       exerciseId: exercise.id,
+      prescriptionId: exercise.prescriptionId,
       completed: true,
-      weightUsed: Number(loads[exerciseInstanceKey(exercise)] || 0),
-      repsCompleted: parseReps(exercise.repsRange),
-      sets: Math.max(1, completedSets)
+      weightUsed: parseLoad(loads[instanceKey] || ""),
+      repsCompleted: Math.max(0, Number(actualReps[instanceKey]) || 0),
+      sets: Math.max(1, completedSets),
+      durationSeconds: exercise.durationSeconds ?? exercise.workSeconds ?? undefined,
+      distanceMeters: exercise.distanceMeters ?? undefined,
+      roundsCompleted: exercise.rounds ?? undefined,
+      perceivedExertion: perceivedEffort[instanceKey] ? Number(perceivedEffort[instanceKey]) : undefined,
+      notes: exercise.executionNotes || undefined
     });
   }
 
@@ -494,10 +591,16 @@ export function WorkoutPlayer({
       await onExerciseProgressChange?.({
         sessionId: sessionIdForProgress ?? activeSessionId,
         exerciseId: exercise.id,
+        prescriptionId: exercise.prescriptionId,
         completed: nextCompleted,
-        weightUsed: Number(loads[instanceKey] || 0),
-        repsCompleted: parseReps(exercise.repsRange),
-        sets: exercise.sets
+        weightUsed: parseLoad(loads[instanceKey] || ""),
+        repsCompleted: Math.max(0, Number(actualReps[instanceKey]) || 0),
+        sets: exercise.sets,
+        durationSeconds: exercise.durationSeconds ?? exercise.workSeconds ?? undefined,
+        distanceMeters: exercise.distanceMeters ?? undefined,
+        roundsCompleted: exercise.rounds ?? undefined,
+        perceivedExertion: perceivedEffort[instanceKey] ? Number(perceivedEffort[instanceKey]) : undefined,
+        notes: exercise.executionNotes || undefined
       });
     } catch {
       setCompletedIds(completedIds);
@@ -584,9 +687,9 @@ export function WorkoutPlayer({
     }
 
     if (isRestPause) {
-      const nextAccum = restPauseAccum + parseReps(currentExercise.repsRange);
+      const nextAccum = restPauseAccum + prescribedReps(currentExercise);
       setRestPauseAccum(nextAccum);
-      const setComplete = nextAccum >= restPauseTargetReps(currentExercise.repsRange);
+      const setComplete = nextAccum >= restPauseTargetReps(currentExercise);
       setAdvanceAfterRest(setComplete && currentSet >= exerciseSets);
       setPhase("rest");
       setRestRemaining(currentRestSeconds);
@@ -776,6 +879,15 @@ export function WorkoutPlayer({
               <span>{programTitle}</span>
               <strong>{exercises.length} exercício(s)</strong>
               {structureType !== "NORMAL" && <small className="runner-mode-badge">{structureTypeLabels[structureType]}</small>}
+              {(protocolRounds || workSeconds || timeCapSeconds) && (
+                <small>
+                  {[
+                    protocolRounds ? `${protocolRounds} round(s)` : "",
+                    workSeconds ? `${workSeconds}s de trabalho` : "",
+                    timeCapSeconds ? `limite ${formatElapsedTime(timeCapSeconds)}` : ""
+                  ].filter(Boolean).join(" | ")}
+                </small>
+              )}
             </div>
             {exercises.map((exercise, index) => {
               const resolvedExercise = resolveExercise(exercise);
@@ -808,7 +920,7 @@ export function WorkoutPlayer({
                       </button>
                       <span>{musclesText}</span>
                       <small>
-                        {resolvedExercise.sets} série(s) | {resolvedExercise.repsRange} | {resolvedExercise.restSeconds ?? restTimeDefault}s
+                        {resolvedExercise.sets} série(s)/ciclo(s) | {prescriptionLabel(resolvedExercise)} | {resolvedExercise.restSeconds ?? restTimeDefault}s
                       </small>
                     </div>
                     <button
@@ -833,7 +945,7 @@ export function WorkoutPlayer({
           <article className="runner-focus-card">
             <h1>{resolvedCurrentExercise.title}</h1>
             <div className="runner-set-pill">
-              <span>Séries: <strong>{currentExercise.sets}</strong></span>
+              <span>Séries/ciclos: <strong>{currentExercise.sets}</strong></span>
               {isBiSet && <span>Bi-set <strong>1A + 1B</strong></span>}
               {isDropRound && <span>Drop <strong>{dropCount}/{dropSetMax}</strong></span>}
               {isRestPause && <span>Clusters <strong>{completedClusters}/{clusterCount}</strong></span>}
@@ -886,12 +998,12 @@ export function WorkoutPlayer({
             </div>
             <div className="runner-current-metrics">
               <div>
-                <strong>{resolvedCurrentExercise.repsRange}</strong>
-                <span>{isRestPause ? "Repetições por cluster" : isDropRound ? "Repetições até a falha" : "Repetições ou tempo"}</span>
+                <strong>{prescriptionLabel(resolvedCurrentExercise)}</strong>
+                <span>{isRestPause ? "Repetições por cluster" : isDropRound ? "Repetições até a falha" : "Alvo prescrito"}</span>
               </div>
               <div>
-                <strong>{currentLoad || "-"}</strong>
-                <span>{isDropRound ? "Carga reduzida" : "Carga ou velocidade"}</span>
+                <strong>{currentLoad || intensityLabel(resolvedCurrentExercise)}</strong>
+                <span>{isDropRound ? "Carga reduzida" : "Intensidade"}</span>
               </div>
             </div>
             <div className="runner-action-grid">
@@ -926,7 +1038,7 @@ export function WorkoutPlayer({
             </div>
             <button className="runner-load-button" onClick={() => setPanel("load")}>
               <Wrench size={18} />
-              Alterar carga
+              Registrar execução
             </button>
           </article>
         )}
@@ -956,6 +1068,12 @@ export function WorkoutPlayer({
                 ))}
               </ol>
             </section>
+            {instructions && (
+              <section>
+                <h2>Orientação da sessão</h2>
+                <p>{instructions}</p>
+              </section>
+            )}
             {resolvedCurrentExercise.videoUrl && (
               <section>
                 <h2>Vídeo explicativo</h2>
@@ -1067,22 +1185,47 @@ export function WorkoutPlayer({
               <ChevronLeft size={20} />
               Voltar
             </button>
-            <h1>Alterar carga</h1>
+            <h1>Registrar execução</h1>
             <p>{resolvedCurrentExercise.title}</p>
             <label>
-              {isDropRound ? "Carga reduzida no drop" : "Carga ou velocidade"}
+              {isDropRound ? "Carga reduzida no drop" : "Carga utilizada"}
               <input
-                type="number"
-                min="0"
+                type="text"
                 inputMode="decimal"
                 value={currentLoad}
                 onChange={(event) => setLoads((current) => ({ ...current, [currentExerciseKey]: event.target.value }))}
-                placeholder="0"
+                placeholder="Ex.: 20 kg"
+              />
+            </label>
+            {resolvedCurrentExercise.prescriptionType === "REPETITIONS" && (
+              <label>
+                Repetições realizadas
+                <input
+                  type="number"
+                  min="0"
+                  inputMode="numeric"
+                  value={actualReps[currentExerciseKey] ?? ""}
+                  onChange={(event) => setActualReps((current) => ({ ...current, [currentExerciseKey]: event.target.value }))}
+                  placeholder="0"
+                />
+              </label>
+            )}
+            <label>
+              Esforço percebido (0 a 10)
+              <input
+                type="number"
+                min="0"
+                max="10"
+                step="0.5"
+                inputMode="decimal"
+                value={perceivedEffort[currentExerciseKey] ?? ""}
+                onChange={(event) => setPerceivedEffort((current) => ({ ...current, [currentExerciseKey]: event.target.value }))}
+                placeholder="Opcional"
               />
             </label>
             <button className="runner-save-load" onClick={() => void saveLoad()}>
               <Wrench size={18} />
-              Salvar carga
+              Salvar execução
             </button>
           </article>
         )}

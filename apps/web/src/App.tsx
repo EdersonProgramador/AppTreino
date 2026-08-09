@@ -65,13 +65,23 @@ import {
   X
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { formatPriceInBRL, initialPlans, type AuthUser } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "./api";
 import { BRAZILIAN_STATES, CITIES_BY_STATE } from "./brazil-data";
 import { StateCityFields } from "./components/admin/StateCityFields";
 import { LockedOverlay } from "./components/student/LockedOverlay";
-import { WorkoutPlayer, type WorkoutPlayerExercise } from "./components/student/WorkoutPlayer";
+import type {
+  WorkoutIntensityType,
+  WorkoutPlayerExercise,
+  WorkoutPrescriptionType,
+  WorkoutStructureType
+} from "./components/student/WorkoutPlayer";
+
+const WorkoutPlayer = lazy(async () => {
+  const module = await import("./components/student/WorkoutPlayer");
+  return { default: module.WorkoutPlayer };
+});
 
 type View = "home" | "login" | "admin" | "user";
 type AuthMode = "login" | "register";
@@ -393,13 +403,29 @@ interface CmsWorkoutBlockRow {
   identifier?: string | null;
   focus?: string | null;
   weeklyFrequency: number;
-  structureType: "NORMAL" | "BI_SET" | "DROP_SET" | "REST_PAUSE";
+  structureType: WorkoutStructureType;
   restTime: number;
+  protocolRounds?: number | null;
+  workSeconds?: number | null;
+  timeCapSeconds?: number | null;
+  instructions?: string | null;
   modality?: CmsModalityRow | null;
   exercises: Array<{
     id: string;
     sets: number;
     repsRange: string;
+    prescriptionType: WorkoutPrescriptionType;
+    repsMin?: number | null;
+    repsMax?: number | null;
+    durationSeconds?: number | null;
+    distanceMeters?: number | null;
+    rounds?: number | null;
+    workSeconds?: number | null;
+    intensityType?: WorkoutIntensityType;
+    intensityValue?: string | null;
+    tempo?: string | null;
+    side?: string | null;
+    executionNotes?: string | null;
     initialLoad?: string | null;
     restSeconds?: number | null;
     supportMaterialUrl?: string | null;
@@ -419,6 +445,12 @@ interface CmsProgramRow {
   durationMonths: number;
   durationWeeks: number;
   durationDays: number;
+  durationExtraDays: number;
+  plannedSessions: number;
+  completionMode: "BY_SESSIONS" | "BY_DATE" | "BOTH" | "MANUAL";
+  scheduleType: "ROTATING_CYCLE" | "WEEKLY" | "ON_DEMAND";
+  audienceMode: "ALL_ACTIVE" | "SELECTED";
+  cycleLengthDays: number;
   totalWorkouts: number;
   sortOrder: number;
   modality?: CmsModalityRow | null;
@@ -570,6 +602,22 @@ function parseProgramMetadata(description: string) {
       modality: "Hipertrofia"
     };
   }
+}
+
+function estimateProgramCalendarDays(years: number, months: number, weeks: number, days: number) {
+  return Math.max(0, years) * 365 + Math.max(0, months) * 30 + Math.max(0, weeks) * 7 + Math.max(0, days);
+}
+
+function formatProgramDuration(duration?: TodayWorkoutResponse["workout"]["duration"]) {
+  if (!duration) return "Duração não informada";
+  const parts = [
+    duration.years ? `${duration.years} ano(s)` : "",
+    duration.months ? `${duration.months} mês(es)` : "",
+    duration.weeks ? `${duration.weeks} semana(s)` : "",
+    duration.days ? `${duration.days} dia(s)` : ""
+  ].filter(Boolean);
+
+  return parts.join(", ") || `${duration.estimatedCalendarDays} dia(s)`;
 }
 
 interface MembershipRow {
@@ -1147,6 +1195,19 @@ interface TodayWorkoutResponse {
     unitName?: string;
     membershipStartsAt?: string | null;
     membershipEndsAt?: string | null;
+    duration?: {
+      years: number;
+      months: number;
+      weeks: number;
+      days: number;
+      estimatedCalendarDays: number;
+      plannedSessions: number;
+      completionMode: "BY_SESSIONS" | "BY_DATE" | "BOTH" | "MANUAL";
+      scheduleType: "ROTATING_CYCLE" | "WEEKLY" | "ON_DEMAND";
+      cycleLengthDays: number;
+      startedAt: string;
+      plannedEndsAt?: string | null;
+    };
     favoritedByMe?: boolean;
     ratedByMe?: boolean;
     sequence?: Array<{
@@ -1163,8 +1224,12 @@ interface TodayWorkoutResponse {
         identifier?: string | null;
         focus?: string | null;
         weeklyFrequency?: number;
-        structureType: "NORMAL" | "BI_SET" | "DROP_SET" | "REST_PAUSE";
+        structureType: WorkoutStructureType;
         restTime: number;
+        protocolRounds?: number | null;
+        workSeconds?: number | null;
+        timeCapSeconds?: number | null;
+        instructions?: string | null;
         exercises: WorkoutPlayerExercise[];
       };
     }>;
@@ -1173,8 +1238,12 @@ interface TodayWorkoutResponse {
       identifier?: string | null;
       focus?: string | null;
       weeklyFrequency?: number;
-      structureType: "NORMAL" | "BI_SET" | "DROP_SET" | "REST_PAUSE";
+      structureType: WorkoutStructureType;
       restTime: number;
+      protocolRounds?: number | null;
+      workSeconds?: number | null;
+      timeCapSeconds?: number | null;
+      instructions?: string | null;
       exercises: WorkoutPlayerExercise[];
     };
   };
@@ -1214,7 +1283,7 @@ export function App() {
   const [view, setView] = useState<View>("home");
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState(() => window.localStorage.getItem("app-treino-token"));
-  const [loginState, setLoginState] = useState<"idle" | "submitting" | "admin" | "user">("idle");
+  const [loginState, setLoginState] = useState<"idle" | "submitting">("idle");
   const [loginError, setLoginError] = useState<string | null>(null);
   const [selectedPlanCode, setSelectedPlanCode] = useState<PlanCode | null>(null);
 
@@ -1248,25 +1317,6 @@ export function App() {
     setToken(response.token);
     setUser(response.user);
     setView(response.user.role === "ADMIN" ? "admin" : "user");
-  }
-
-  async function handleDemoLogin(role: "ADMIN" | "USER") {
-    setLoginError(null);
-    setLoginState(role === "ADMIN" ? "admin" : "user");
-
-    try {
-      const email = role === "ADMIN" ? "admin@app-treino.local" : "aluno@app-treino.local";
-      const response = await apiPost<{ user: AuthUser; token: string }>("/auth/login", {
-        email,
-        password: "123456"
-      });
-
-      applySession(response);
-    } catch {
-      setLoginError("Não foi possível entrar agora. Verifique se a API e o banco estáo rodando.");
-    } finally {
-      setLoginState("idle");
-    }
   }
 
   function handleStart(planCode?: string) {
@@ -1404,8 +1454,6 @@ export function App() {
           selectedPlanCode={selectedPlanCode}
           onSubmit={handleAuthSubmit}
           onForgotPassword={handleForgotPassword}
-          onAdmin={() => handleDemoLogin("ADMIN")}
-          onUser={() => handleDemoLogin("USER")}
         />
       )}
       {view === "admin" && <AdminView token={token} onLogout={handleLogout} />}
@@ -1613,17 +1661,13 @@ function LoginView({
   error,
   selectedPlanCode,
   onSubmit,
-  onForgotPassword,
-  onAdmin,
-  onUser
+  onForgotPassword
 }: {
-  loading: "idle" | "submitting" | "admin" | "user";
+  loading: "idle" | "submitting";
   error: string | null;
   selectedPlanCode: PlanCode | null;
   onSubmit: (mode: AuthMode, formData: FormData, provider?: "EMAIL" | "GOOGLE") => Promise<void>;
   onForgotPassword: (formData: FormData) => Promise<void>;
-  onAdmin: () => Promise<void>;
-  onUser: () => Promise<void>;
 }) {
   const [mode, setMode] = useState<AuthMode>(selectedPlanCode ? "register" : "login");
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -1798,16 +1842,6 @@ function LoginView({
           </button>
         </form>
         {error && <div className="error-box">{error}</div>}
-        <div className="auth-actions">
-          <button className="outline-button" onClick={onAdmin} disabled={isSubmitting}>
-            {loading === "admin" ? <Loader2 className="spin" size={18} /> : <ShieldCheck size={18} />}
-            Demo admin
-          </button>
-          <button className="outline-button" onClick={onUser} disabled={isSubmitting}>
-            {loading === "user" ? <Loader2 className="spin" size={18} /> : <UserRound size={18} />}
-            Demo aluno
-          </button>
-        </div>
       </section>
     </main>
   );
@@ -2660,6 +2694,36 @@ function AdminReports({
   );
 }
 
+function AdminPaginationBar({
+  page,
+  pageCount,
+  totalLabel,
+  onPageChange
+}: {
+  page: number;
+  pageCount: number;
+  totalLabel: string;
+  onPageChange: (page: number) => void;
+}) {
+  return (
+    <div className="admin-users-pagination">
+      <span>
+        Página {page} de {pageCount} • {totalLabel}
+      </span>
+      <div>
+        <button type="button" onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page <= 1}>
+          <ChevronLeft size={17} />
+          Anterior
+        </button>
+        <button type="button" onClick={() => onPageChange(Math.min(pageCount, page + 1))} disabled={page >= pageCount}>
+          Próxima
+          <ChevronRight size={17} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AdminView({ token, onLogout }: { token: string | null; onLogout: () => void }) {
   const [adminSection, setAdminSection] = useState<
     | "overview"
@@ -2723,6 +2787,15 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const [cmsProgramDurationYears, setCmsProgramDurationYears] = useState(0);
   const [cmsProgramDurationMonths, setCmsProgramDurationMonths] = useState(0);
   const [cmsProgramDurationWeeks, setCmsProgramDurationWeeks] = useState(4);
+  const [cmsProgramDurationExtraDays, setCmsProgramDurationExtraDays] = useState(0);
+  const [cmsProgramPlannedSessions, setCmsProgramPlannedSessions] = useState(12);
+  const [cmsProgramCycleLengthDays, setCmsProgramCycleLengthDays] = useState(7);
+  const cmsProgramEstimatedDays = estimateProgramCalendarDays(
+    cmsProgramDurationYears,
+    cmsProgramDurationMonths,
+    cmsProgramDurationWeeks,
+    cmsProgramDurationExtraDays
+  );
   const [expandedCmsProgramId, setExpandedCmsProgramId] = useState<string | null>(null);
   const cmsProgramDragRef = useRef<{ fromIndex: number; overIndex: number } | null>(null);
   const [cmsProgramDragState, setCmsProgramDragState] = useState<{ fromIndex: number; overIndex: number } | null>(null);
@@ -2801,6 +2874,14 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const [userRoleFilter, setUserRoleFilter] = useState<"ALL" | AdminUser["role"]>("ALL");
   const [userStatusFilter, setUserStatusFilter] = useState<"ALL" | AdminUser["status"]>("ALL");
   const [usersPage, setUsersPage] = useState(1);
+  const [membershipsPage, setMembershipsPage] = useState(1);
+  const [paymentsPage, setPaymentsPage] = useState(1);
+  const [productsPage, setProductsPage] = useState(1);
+  const [purchasesPage, setPurchasesPage] = useState(1);
+  const [favoritesPage, setFavoritesPage] = useState(1);
+  const [ratingsPage, setRatingsPage] = useState(1);
+  const [contactPage, setContactPage] = useState(1);
+  const [cardsPage, setCardsPage] = useState(1);
   const [assessmentSearch, setAssessmentSearch] = useState("");
   const [assessmentSourceFilter, setAssessmentSourceFilter] = useState<"ALL" | "STUDENT" | "ADMIN">("ALL");
   const [assessmentStateFilter, setAssessmentStateFilter] = useState("");
@@ -2849,6 +2930,64 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     (currentAssessmentsPage - 1) * assessmentsPageSize,
     currentAssessmentsPage * assessmentsPageSize
   );
+
+  const FINANCE_MEMBERSHIPS_PAGE_SIZE = 8;
+  const membershipsTotalPages = Math.max(1, Math.ceil(memberships.length / FINANCE_MEMBERSHIPS_PAGE_SIZE));
+  const currentMembershipsPage = Math.min(membershipsPage, membershipsTotalPages);
+  const visibleFinanceMemberships = memberships.slice(
+    (currentMembershipsPage - 1) * FINANCE_MEMBERSHIPS_PAGE_SIZE,
+    currentMembershipsPage * FINANCE_MEMBERSHIPS_PAGE_SIZE
+  );
+  const FINANCE_PAYMENTS_PAGE_SIZE = 10;
+  const paymentsTotalPages = Math.max(1, Math.ceil(payments.length / FINANCE_PAYMENTS_PAGE_SIZE));
+  const currentPaymentsPage = Math.min(paymentsPage, paymentsTotalPages);
+  const visibleFinancePayments = payments.slice(
+    (currentPaymentsPage - 1) * FINANCE_PAYMENTS_PAGE_SIZE,
+    currentPaymentsPage * FINANCE_PAYMENTS_PAGE_SIZE
+  );
+  const PRODUCTS_PAGE_SIZE = 10;
+  const productsTotalPages = Math.max(1, Math.ceil(products.length / PRODUCTS_PAGE_SIZE));
+  const currentProductsPage = Math.min(productsPage, productsTotalPages);
+  const visibleProducts = products.slice(
+    (currentProductsPage - 1) * PRODUCTS_PAGE_SIZE,
+    currentProductsPage * PRODUCTS_PAGE_SIZE
+  );
+  const PURCHASES_PAGE_SIZE = 15;
+  const purchasesTotalPages = Math.max(1, Math.ceil(purchases.length / PURCHASES_PAGE_SIZE));
+  const currentPurchasesPage = Math.min(purchasesPage, purchasesTotalPages);
+  const visiblePurchases = purchases.slice(
+    (currentPurchasesPage - 1) * PURCHASES_PAGE_SIZE,
+    currentPurchasesPage * PURCHASES_PAGE_SIZE
+  );
+  const CONTACT_PAGE_SIZE = 10;
+  const contactTotalPages = Math.max(1, Math.ceil(contactMessages.length / CONTACT_PAGE_SIZE));
+  const currentContactPage = Math.min(contactPage, contactTotalPages);
+  const visibleContactMessages = contactMessages.slice(
+    (currentContactPage - 1) * CONTACT_PAGE_SIZE,
+    currentContactPage * CONTACT_PAGE_SIZE
+  );
+  const FAVORITES_PAGE_SIZE = 10;
+  const favoritesTotalPages = Math.max(1, Math.ceil(favorites.length / FAVORITES_PAGE_SIZE));
+  const currentFavoritesPage = Math.min(favoritesPage, favoritesTotalPages);
+  const visibleFavorites = favorites.slice(
+    (currentFavoritesPage - 1) * FAVORITES_PAGE_SIZE,
+    currentFavoritesPage * FAVORITES_PAGE_SIZE
+  );
+  const RATINGS_PAGE_SIZE = 10;
+  const ratingsTotalPages = Math.max(1, Math.ceil(ratings.length / RATINGS_PAGE_SIZE));
+  const currentRatingsPage = Math.min(ratingsPage, ratingsTotalPages);
+  const visibleRatings = ratings.slice(
+    (currentRatingsPage - 1) * RATINGS_PAGE_SIZE,
+    currentRatingsPage * RATINGS_PAGE_SIZE
+  );
+  const CARDS_PAGE_SIZE = 10;
+  const cardsTotalPages = Math.max(1, Math.ceil(paymentCards.length / CARDS_PAGE_SIZE));
+  const currentCardsPage = Math.min(cardsPage, cardsTotalPages);
+  const visiblePaymentCards = paymentCards.slice(
+    (currentCardsPage - 1) * CARDS_PAGE_SIZE,
+    currentCardsPage * CARDS_PAGE_SIZE
+  );
+
   const selectedAdminAssessmentStudent = users.find((item) => item.id === adminAssessmentUserId);
   const assessmentCityOptions = useMemo(
     () => (assessmentStateFilter ? CITIES_BY_STATE[assessmentStateFilter] ?? [] : []),
@@ -3589,6 +3728,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
   function parseCmsWorkoutBlockExercises(data: FormData) {
     const rowCount = Math.max(1, Number(data.get("exerciseRowCount") ?? 1));
+    const optionalNumber = (name: string) => {
+      const value = String(data.get(name) ?? "").trim();
+      return value === "" ? undefined : Number(value);
+    };
 
     return Array.from({ length: rowCount })
       .map((_, index) => {
@@ -3603,6 +3746,18 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
           exerciseId,
           sets: Number(data.get(`sets${row}`) ?? 3),
           repsRange: String(data.get(`repsRange${row}`) ?? "10-12").trim(),
+          prescriptionType: String(data.get(`prescriptionType${row}`) ?? "REPETITIONS") as WorkoutPrescriptionType,
+          repsMin: optionalNumber(`repsMin${row}`),
+          repsMax: optionalNumber(`repsMax${row}`),
+          durationSeconds: optionalNumber(`durationSeconds${row}`),
+          distanceMeters: optionalNumber(`distanceMeters${row}`),
+          rounds: optionalNumber(`rounds${row}`),
+          workSeconds: optionalNumber(`workSeconds${row}`),
+          intensityType: String(data.get(`intensityType${row}`) ?? "NONE") as WorkoutIntensityType,
+          intensityValue: String(data.get(`intensityValue${row}`) ?? "").trim(),
+          tempo: String(data.get(`tempo${row}`) ?? "").trim(),
+          side: String(data.get(`side${row}`) ?? "").trim(),
+          executionNotes: String(data.get(`executionNotes${row}`) ?? "").trim(),
           initialLoad: String(data.get(`initialLoad${row}`) ?? "").trim(),
           restSeconds: String(data.get(`restSeconds${row}`) ?? "").trim() === "" ? undefined : Number(data.get(`restSeconds${row}`)),
           supportMaterialUrl: String(data.get(`supportMaterialUrl${row}`) ?? "").trim(),
@@ -3613,6 +3768,18 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         exerciseId: string;
         sets: number;
         repsRange: string;
+        prescriptionType: WorkoutPrescriptionType;
+        repsMin: number | undefined;
+        repsMax: number | undefined;
+        durationSeconds: number | undefined;
+        distanceMeters: number | undefined;
+        rounds: number | undefined;
+        workSeconds: number | undefined;
+        intensityType: WorkoutIntensityType;
+        intensityValue: string;
+        tempo: string;
+        side: string;
+        executionNotes: string;
         initialLoad: string;
         restSeconds: number | undefined;
         supportMaterialUrl: string;
@@ -3621,7 +3788,8 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   }
 
   function parseCmsProgramDays(data: FormData) {
-    return Array.from({ length: 7 })
+    const cycleLengthDays = Math.max(1, Math.min(56, Number(data.get("cycleLengthDays") ?? cmsProgramCycleLengthDays) || 7));
+    return Array.from({ length: cycleLengthDays })
       .map((_, index) => {
         const dayNumber = index + 1;
         const workoutBlockId = String(data.get(`workoutBlockId${dayNumber}`) ?? "").trim();
@@ -3727,6 +3895,10 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         weeklyFrequency: Number(data.get("weeklyFrequency") ?? 1),
         structureType: String(data.get("structureType") ?? "NORMAL"),
         restTime: Number(data.get("restTime") ?? 60),
+        protocolRounds: String(data.get("protocolRounds") ?? "").trim() === "" ? undefined : Number(data.get("protocolRounds")),
+        workSeconds: String(data.get("workSeconds") ?? "").trim() === "" ? undefined : Number(data.get("workSeconds")),
+        timeCapSeconds: String(data.get("timeCapSeconds") ?? "").trim() === "" ? undefined : Number(data.get("timeCapSeconds")),
+        instructions: String(data.get("instructions") ?? "").trim(),
         modalityId: selectedModalityId ? selectedModalityId : null,
         exercises: parseCmsWorkoutBlockExercises(data)
       };
@@ -3768,18 +3940,28 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     const form = event.currentTarget;
     const data = new FormData(form);
     const status = String(data.get("status") ?? "DRAFT");
-    const durationWeeks = Math.max(1, Number(data.get("durationWeeks") ?? cmsProgramDurationWeeks) || 1);
-    const durationDays = durationWeeks * 7;
+    const durationYears = Math.max(0, Number(data.get("durationYears") ?? cmsProgramDurationYears) || 0);
+    const durationMonths = Math.max(0, Number(data.get("durationMonths") ?? cmsProgramDurationMonths) || 0);
+    const durationWeeks = Math.max(0, Number(data.get("durationWeeks") ?? cmsProgramDurationWeeks) || 0);
+    const durationExtraDays = Math.max(0, Number(data.get("durationExtraDays") ?? cmsProgramDurationExtraDays) || 0);
+    const durationDays = estimateProgramCalendarDays(durationYears, durationMonths, durationWeeks, durationExtraDays);
+    const plannedSessions = Math.max(1, Number(data.get("plannedSessions") ?? cmsProgramPlannedSessions) || 1);
     const payload = {
       title: String(data.get("title") ?? ""),
       description: String(data.get("description") ?? ""),
       modalityId: String(data.get("modalityId") ?? ""),
-      durationYears: Math.max(0, Number(data.get("durationYears") ?? 0) || 0),
-      durationMonths: Math.max(0, Number(data.get("durationMonths") ?? 0) || 0),
+      durationYears,
+      durationMonths,
       durationWeeks,
+      durationExtraDays,
       durationDays,
+      plannedSessions,
+      completionMode: String(data.get("completionMode") ?? "BY_SESSIONS"),
+      scheduleType: String(data.get("scheduleType") ?? "ROTATING_CYCLE"),
+      audienceMode: String(data.get("audienceMode") ?? "ALL_ACTIVE"),
+      cycleLengthDays: Math.max(1, Number(data.get("cycleLengthDays") ?? cmsProgramCycleLengthDays) || 7),
       targetGender: String(data.get("targetGender") ?? "ALL"),
-      totalWorkouts: Number(data.get("totalWorkouts") ?? durationDays),
+      totalWorkouts: plannedSessions,
       status,
       isActive: status === "PUBLISHED",
       days: parseCmsProgramDays(data)
@@ -3793,6 +3975,9 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         setCmsProgramDurationYears(0);
         setCmsProgramDurationMonths(0);
         setCmsProgramDurationWeeks(4);
+        setCmsProgramDurationExtraDays(0);
+        setCmsProgramPlannedSessions(12);
+        setCmsProgramCycleLengthDays(7);
         await applyAdminChange(["programs"], "Programa atualizado com sucesso.");
         return;
       }
@@ -3802,6 +3987,9 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       setCmsProgramDurationYears(0);
       setCmsProgramDurationMonths(0);
       setCmsProgramDurationWeeks(4);
+      setCmsProgramDurationExtraDays(0);
+      setCmsProgramPlannedSessions(12);
+      setCmsProgramCycleLengthDays(7);
       await applyAdminChange(["programs"], "Programa cadastrado com sucesso.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível salvar o programa CMS."));
@@ -3813,6 +4001,9 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     setCmsProgramDurationYears(item.durationYears ?? 0);
     setCmsProgramDurationMonths(item.durationMonths ?? 0);
     setCmsProgramDurationWeeks(item.durationWeeks ?? 4);
+    setCmsProgramDurationExtraDays(item.durationExtraDays ?? 0);
+    setCmsProgramPlannedSessions(item.plannedSessions ?? item.totalWorkouts ?? 1);
+    setCmsProgramCycleLengthDays(item.cycleLengthDays ?? 7);
     setExpandedCmsProgramId(item.id);
   }
 
@@ -3821,6 +4012,9 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     setCmsProgramDurationYears(0);
     setCmsProgramDurationMonths(0);
     setCmsProgramDurationWeeks(4);
+    setCmsProgramDurationExtraDays(0);
+    setCmsProgramPlannedSessions(12);
+    setCmsProgramCycleLengthDays(7);
   }
 
   async function handleReorderCmsPrograms(nextPrograms: CmsProgramRow[]) {
@@ -5862,15 +6056,38 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   Estrutura
                   <select name="structureType" defaultValue={editingCmsWorkoutBlock?.structureType ?? "NORMAL"}>
                     <option value="NORMAL">Normal</option>
-                    <option value="BI_SET">Bi-set</option>
-                    <option value="DROP_SET">Drop-set</option>
-                    <option value="REST_PAUSE">Rest-pause</option>
-                  </select>
-                </label>
+                     <option value="BI_SET">Bi-set</option>
+                     <option value="DROP_SET">Drop-set</option>
+                     <option value="REST_PAUSE">Rest-pause</option>
+                     <option value="CIRCUIT">Circuito</option>
+                     <option value="AMRAP">AMRAP</option>
+                     <option value="EMOM">EMOM</option>
+                     <option value="FOR_TIME">For time</option>
+                     <option value="TABATA">Tabata</option>
+                     <option value="INTERVAL">Intervalado</option>
+                     <option value="CLASS">Aula guiada</option>
+                   </select>
+                 </label>
                 <label>
                   Descanso padrão
-                  <input name="restTime" type="number" min="0" defaultValue={editingCmsWorkoutBlock?.restTime ?? 60} placeholder="Segundos" required />
-                </label>
+                   <input name="restTime" type="number" min="0" defaultValue={editingCmsWorkoutBlock?.restTime ?? 60} placeholder="Segundos" required />
+                 </label>
+                 <label>
+                   Rounds do protocolo
+                   <input name="protocolRounds" type="number" min="1" defaultValue={editingCmsWorkoutBlock?.protocolRounds ?? ""} placeholder="Opcional" />
+                 </label>
+                 <label>
+                   Trabalho por ciclo (segundos)
+                   <input name="workSeconds" type="number" min="1" defaultValue={editingCmsWorkoutBlock?.workSeconds ?? ""} placeholder="Opcional" />
+                 </label>
+                 <label>
+                   Limite da sessão (segundos)
+                   <input name="timeCapSeconds" type="number" min="1" defaultValue={editingCmsWorkoutBlock?.timeCapSeconds ?? ""} placeholder="Opcional" />
+                 </label>
+                 <label className="wide-field">
+                   Orientações do protocolo
+                   <textarea name="instructions" defaultValue={editingCmsWorkoutBlock?.instructions ?? ""} placeholder="Sequência, regras, transições e critérios de conclusão" />
+                 </label>
                 <label className="wide-field">
                   Modalidade da ficha
                   <div className="cms-chip-group">
@@ -5961,24 +6178,89 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                               )}
                             </select>
                           </label>
-                          <div className="cms-exercise-prescription-grid">
-                            <label>
-                              Séries
-                              <input name={`sets${row}`} type="number" min="1" defaultValue={editRow?.sets ?? 3} />
-                            </label>
-                            <label>
-                              Repetições
-                              <input name={`repsRange${row}`} placeholder="10-12 ou até a falha" defaultValue={editRow?.repsRange ?? "10-12"} />
-                            </label>
-                            <label>
-                              Carga inicial (opcional)
-                              <input name={`initialLoad${row}`} placeholder="Ex.: 20kg" defaultValue={editRow?.initialLoad ?? ""} />
+                           <div className="cms-exercise-prescription-grid">
+                             <label>
+                               Tipo de prescrição
+                               <select name={`prescriptionType${row}`} defaultValue={editRow?.prescriptionType ?? "REPETITIONS"}>
+                                 <option value="REPETITIONS">Repetições</option>
+                                 <option value="DURATION">Duração</option>
+                                 <option value="DISTANCE">Distância</option>
+                                 <option value="INTERVAL">Intervalos</option>
+                                 <option value="ROUNDS">Rounds</option>
+                                 <option value="HOLD">Permanência/isometria</option>
+                                 <option value="FREE">Livre/aula</option>
+                               </select>
+                             </label>
+                             <label>
+                               Séries/ciclos
+                               <input name={`sets${row}`} type="number" min="1" defaultValue={editRow?.sets ?? 3} />
+                             </label>
+                             <label>
+                               Alvo exibido ao aluno
+                               <input name={`repsRange${row}`} placeholder="10-12, até a falha ou execução livre" defaultValue={editRow?.repsRange ?? "10-12"} />
+                             </label>
+                             <label>
+                               Repetições mínimas
+                               <input name={`repsMin${row}`} type="number" min="1" defaultValue={editRow?.repsMin ?? ""} placeholder="Opcional" />
+                             </label>
+                             <label>
+                               Repetições máximas
+                               <input name={`repsMax${row}`} type="number" min="1" defaultValue={editRow?.repsMax ?? ""} placeholder="Opcional" />
+                             </label>
+                             <label>
+                               Duração/permanência (segundos)
+                               <input name={`durationSeconds${row}`} type="number" min="1" defaultValue={editRow?.durationSeconds ?? ""} placeholder="Tempo-alvo" />
+                             </label>
+                             <label>
+                               Distância (metros)
+                               <input name={`distanceMeters${row}`} type="number" min="0" step="0.01" defaultValue={editRow?.distanceMeters ?? ""} placeholder="Distância-alvo" />
+                             </label>
+                             <label>
+                               Rounds
+                               <input name={`rounds${row}`} type="number" min="1" defaultValue={editRow?.rounds ?? ""} placeholder="Quantidade" />
+                             </label>
+                             <label>
+                               Trabalho do intervalo (segundos)
+                               <input name={`workSeconds${row}`} type="number" min="1" defaultValue={editRow?.workSeconds ?? ""} placeholder="Tempo ativo" />
+                             </label>
+                             <label>
+                               Carga inicial (opcional)
+                               <input name={`initialLoad${row}`} placeholder="Ex.: 20kg" defaultValue={editRow?.initialLoad ?? ""} />
                             </label>
                             <label>
                               Descanso (segundos)
-                              <input name={`restSeconds${row}`} type="number" min="0" placeholder="Ex.: 60" defaultValue={editRow?.restSeconds ?? ""} />
-                            </label>
-                          </div>
+                               <input name={`restSeconds${row}`} type="number" min="0" placeholder="Ex.: 60" defaultValue={editRow?.restSeconds ?? ""} />
+                             </label>
+                             <label>
+                               Controle de intensidade
+                               <select name={`intensityType${row}`} defaultValue={editRow?.intensityType ?? "NONE"}>
+                                 <option value="NONE">Não informado</option>
+                                 <option value="LOAD">Carga</option>
+                                 <option value="RPE">RPE</option>
+                                 <option value="RIR">RIR</option>
+                                 <option value="PERCENT_1RM">% de 1RM</option>
+                                 <option value="HEART_RATE_ZONE">Zona cardíaca</option>
+                                 <option value="PACE">Ritmo</option>
+                                 <option value="SPEED">Velocidade</option>
+                               </select>
+                             </label>
+                             <label>
+                               Intensidade-alvo
+                               <input name={`intensityValue${row}`} defaultValue={editRow?.intensityValue ?? ""} placeholder="Ex.: RPE 8, Z2, 5:30/km" />
+                             </label>
+                             <label>
+                               Tempo do movimento
+                               <input name={`tempo${row}`} defaultValue={editRow?.tempo ?? ""} placeholder="Ex.: 3-1-1-0" />
+                             </label>
+                             <label>
+                               Lado
+                               <input name={`side${row}`} defaultValue={editRow?.side ?? ""} placeholder="Ex.: bilateral ou cada lado" />
+                             </label>
+                           </div>
+                           <label>
+                             Orientação específica (opcional)
+                             <textarea name={`executionNotes${row}`} defaultValue={editRow?.executionNotes ?? ""} placeholder="Técnica, respiração, progressão ou critério de interrupção" />
+                           </label>
                           <label>
                             Material de apoio (opcional)
                             <input
@@ -6148,6 +6430,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     name="durationYears"
                     type="number"
                     min="0"
+                    max="10"
                     value={cmsProgramDurationYears}
                     onChange={(event) => setCmsProgramDurationYears(Math.max(0, Number(event.target.value) || 0))}
                   />
@@ -6158,6 +6441,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                     name="durationMonths"
                     type="number"
                     min="0"
+                    max="11"
                     value={cmsProgramDurationMonths}
                     onChange={(event) => setCmsProgramDurationMonths(Math.max(0, Number(event.target.value) || 0))}
                   />
@@ -6167,18 +6451,63 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   <input
                     name="durationWeeks"
                     type="number"
-                    min="1"
-                    required
+                    min="0"
                     value={cmsProgramDurationWeeks}
-                    onChange={(event) => setCmsProgramDurationWeeks(Math.max(1, Number(event.target.value) || 1))}
+                    onChange={(event) => setCmsProgramDurationWeeks(Math.max(0, Number(event.target.value) || 0))}
                   />
                 </label>
                 <label>
-                  Dias de treino
+                  Dias adicionais
+                  <input
+                    name="durationExtraDays"
+                    type="number"
+                    min="0"
+                    max="6"
+                    value={cmsProgramDurationExtraDays}
+                    onChange={(event) => setCmsProgramDurationExtraDays(Math.max(0, Math.min(6, Number(event.target.value) || 0)))}
+                  />
+                </label>
+                <label>
+                  Duração estimada
                   <div className="cms-readonly-duration">
-                    <input name="totalWorkouts" type="number" min="1" value={cmsProgramDurationWeeks * 7} readOnly />
-                    <span>{cmsProgramDurationWeeks * 7} dias de duração</span>
+                    <input name="durationDays" type="number" min="1" value={cmsProgramEstimatedDays} readOnly />
+                    <span>{cmsProgramEstimatedDays} dias corridos</span>
                   </div>
+                </label>
+                <label>
+                  Sessões planejadas
+                  <input
+                    name="plannedSessions"
+                    type="number"
+                    min="1"
+                    required
+                    value={cmsProgramPlannedSessions}
+                    onChange={(event) => setCmsProgramPlannedSessions(Math.max(1, Number(event.target.value) || 1))}
+                  />
+                </label>
+                <label>
+                  Conclusão do programa
+                  <select name="completionMode" defaultValue={editingCmsProgram?.completionMode ?? "BY_SESSIONS"}>
+                    <option value="BY_SESSIONS">Ao concluir as sessões</option>
+                    <option value="BY_DATE">Ao chegar à data final</option>
+                    <option value="BOTH">Data final e sessões concluídas</option>
+                    <option value="MANUAL">Encerramento pelo profissional</option>
+                  </select>
+                </label>
+                <label>
+                  Organização da agenda
+                  <select name="scheduleType" defaultValue={editingCmsProgram?.scheduleType ?? "ROTATING_CYCLE"}>
+                    <option value="ROTATING_CYCLE">Ciclo rotativo</option>
+                    <option value="WEEKLY">Grade semanal</option>
+                    <option value="ON_DEMAND">Sequência flexível</option>
+                  </select>
+                </label>
+                <label>
+                  Distribuição
+                  <select name="audienceMode" defaultValue={editingCmsProgram?.audienceMode ?? "ALL_ACTIVE"}>
+                    <option value="ALL_ACTIVE">Todos os alunos ativos</option>
+                    <option value="SELECTED">Somente alunos atribuídos</option>
+                  </select>
                 </label>
                 <label className="wide-field">
                   Descrição para o aluno
@@ -6193,26 +6522,37 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   <span>Montagem</span>
                   <div>
                     <h3>Divisões da ficha</h3>
-                    <p>Vincule os Treinos A, B e C já configurados na etapa anterior.</p>
+                    <p>Monte o ciclo na ordem em que as sessões deverão aparecer para o aluno.</p>
                   </div>
                 </div>
+                <label className="wide-field">
+                  Tamanho do ciclo (dias/posições)
+                  <input
+                    name="cycleLengthDays"
+                    type="number"
+                    min="1"
+                    max="56"
+                    value={cmsProgramCycleLengthDays}
+                    onChange={(event) => setCmsProgramCycleLengthDays(Math.max(1, Math.min(56, Number(event.target.value) || 1)))}
+                  />
+                </label>
                 <div className="cms-builder-list wide-field">
-                  {Array.from({ length: 7 }).map((_, index) => {
+                  {Array.from({ length: cmsProgramCycleLengthDays }).map((_, index) => {
                     const dayNumber = index + 1;
                     const editDay = editingCmsProgram?.days.find((day) => day.dayNumber === dayNumber);
 
                     return (
                       <div className="cms-builder-row program-day-row" key={`program-day-${dayNumber}`}>
-                        <span>Dia {dayNumber}</span>
+                        <span>{dayNumber}</span>
                         <select name={`workoutBlockId${dayNumber}`} required={dayNumber === 1} defaultValue={editDay?.workoutBlock.id ?? ""}>
-                          <option value="">{dayNumber === 1 ? "Selecione a ficha" : "Ficha opcional"}</option>
+                          <option value="">{dayNumber === 1 ? "Selecione a primeira sessão" : "Sessão opcional"}</option>
                           {cmsWorkoutBlocks.map((block) => (
                             <option value={block.id} key={block.id}>
                               {block.identifier ?? block.title}{block.focus ? ` - ${block.focus}` : ""} ({block.weeklyFrequency ?? 1}x/semana)
                             </option>
                           ))}
                         </select>
-                        <input name={`dayOrder${dayNumber}`} type="number" min="1" defaultValue={editDay?.order ?? 1} aria-label={`Ordem do dia ${dayNumber}`} />
+                        <input name={`dayOrder${dayNumber}`} type="number" min="1" defaultValue={editDay?.order ?? 1} aria-label={`Ordem da sessão ${dayNumber}`} />
                       </div>
                     );
                   })}
@@ -6296,7 +6636,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                           <div className="cms-program-main">
                             <p>{programMetadata.description}</p>
                             <small>Público: {item.targetGender === "MALE" ? "Masculino" : item.targetGender === "FEMALE" ? "Feminino" : "Todos"}</small>
-                            <small>Duração: {item.durationYears ?? 0} ano(s), {item.durationMonths ?? 0} mês(es), {item.durationWeeks ?? 0} semana(s)</small>
+                            <small>Duração: {item.durationYears ?? 0} ano(s), {item.durationMonths ?? 0} mês(es), {item.durationWeeks ?? 0} semana(s), {item.durationExtraDays ?? 0} dia(s) | {item.plannedSessions ?? item.totalWorkouts} sessão(ões)</small>
                             <small>{item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.identifier ?? day.workoutBlock.title}${day.workoutBlock.focus ? ` (${day.workoutBlock.focus})` : ""}`).join(" | ") || "Sem dias cadastrados"}</small>
                           </div>
                           <div className="cms-program-actions">
@@ -6419,7 +6759,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                               <div className="cms-program-main">
                                 <p>{programMetadata.description}</p>
                                 <small>Público: {item.targetGender === "MALE" ? "Masculino" : item.targetGender === "FEMALE" ? "Feminino" : "Todos"}</small>
-                                <small>Duração: {item.durationYears ?? 0} ano(s), {item.durationMonths ?? 0} mês(es), {item.durationWeeks ?? 0} semana(s)</small>
+                                <small>Duração: {item.durationYears ?? 0} ano(s), {item.durationMonths ?? 0} mês(es), {item.durationWeeks ?? 0} semana(s), {item.durationExtraDays ?? 0} dia(s) | {item.plannedSessions ?? item.totalWorkouts} sessão(ões)</small>
                                 <small>{item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.identifier ?? day.workoutBlock.title}${day.workoutBlock.focus ? ` (${day.workoutBlock.focus})` : ""}`).join(" | ") || "Sem dias cadastrados"}</small>
                               </div>
                               <div className="cms-program-actions">
@@ -6586,7 +6926,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               Salvar matrícula
             </button>
           </form>
-          {memberships.slice(0, 8).map((item) => (
+          {visibleFinanceMemberships.map((item) => (
             <div className="data-row" key={item.id}>
               <span>
                 <strong>{item.user.name}</strong>
@@ -6607,6 +6947,12 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               </button>
             </div>
           ))}
+          <AdminPaginationBar
+            page={currentMembershipsPage}
+            pageCount={membershipsTotalPages}
+            totalLabel={`${memberships.length} matrícula(s)`}
+            onPageChange={setMembershipsPage}
+          />
         </article>
 
         <article className="table-panel wide-panel" id="admin-payments">
@@ -6636,7 +6982,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               Gerar cobranca
             </button>
           </form>
-          {payments.slice(0, 10).map((item) => (
+          {visibleFinancePayments.map((item) => (
             <div className="data-row" key={item.id}>
               <span>
                 <strong>{formatPriceInBRL(item.amountInCents)}</strong>
@@ -6663,6 +7009,12 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               </button>
             </div>
           ))}
+          <AdminPaginationBar
+            page={currentPaymentsPage}
+            pageCount={paymentsTotalPages}
+            totalLabel={`${payments.length} pagamento(s)`}
+            onPageChange={setPaymentsPage}
+          />
         </article>
       </section>}
 
@@ -7222,7 +7574,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             </button>
           </form>
           {products.length > 0 ? (
-            products.map((product) => (
+            visibleProducts.map((product) => (
               <div className="data-row" key={product.id}>
                 <span>
                   <strong>{product.name}</strong>
@@ -7246,6 +7598,14 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               <Package size={18} />
               Nenhum produto cadastrado ainda.
             </div>
+          )}
+          {products.length > 0 && (
+            <AdminPaginationBar
+              page={currentProductsPage}
+              pageCount={productsTotalPages}
+              totalLabel={`${products.length} produto(s)`}
+              onPageChange={setProductsPage}
+            />
           )}
         </article>
       </section>}
@@ -7296,7 +7656,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             <span>{purchases.length}</span>
           </div>
           {purchases.length > 0 ? (
-            purchases.slice(0, 30).map((purchase) => (
+            visiblePurchases.map((purchase) => (
               <div className="data-row" key={purchase.id}>
                 <span>
                   <strong>{purchase.product.name}</strong>
@@ -7325,6 +7685,14 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               <ShoppingCart size={18} />
               Nenhuma compra registrada.
             </div>
+          )}
+          {purchases.length > 0 && (
+            <AdminPaginationBar
+              page={currentPurchasesPage}
+              pageCount={purchasesTotalPages}
+              totalLabel={`${purchases.length} compra(s)`}
+              onPageChange={setPurchasesPage}
+            />
           )}
         </article>
       </section>}
@@ -7431,7 +7799,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             </button>
           </form>
           {paymentCards.length > 0 ? (
-            paymentCards.map((card) => (
+            visiblePaymentCards.map((card) => (
               <div className="data-row" key={card.id}>
                 <span>
                   <strong>{card.holderName ?? card.user.name}</strong>
@@ -7448,6 +7816,14 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               <CreditCard size={18} />
               Nenhum cartão salvo.
             </div>
+          )}
+          {paymentCards.length > 0 && (
+            <AdminPaginationBar
+              page={currentCardsPage}
+              pageCount={cardsTotalPages}
+              totalLabel={`${paymentCards.length} cartão(ões)`}
+              onPageChange={setCardsPage}
+            />
           )}
         </article>
       </section>}
@@ -7579,7 +7955,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             <span>{contactMessages.filter((item) => item.status === "OPEN").length} abertas</span>
           </div>
           {contactMessages.length > 0 ? (
-            contactMessages.slice(0, 30).map((message) => (
+            visibleContactMessages.map((message) => (
               <div className="data-row" key={message.id}>
                 <span>
                   <strong>{message.subject ?? message.name}</strong>
@@ -7610,6 +7986,14 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               <MessageCircle size={18} />
               Nenhuma mensagem recebida.
             </div>
+          )}
+          {contactMessages.length > 0 && (
+            <AdminPaginationBar
+              page={currentContactPage}
+              pageCount={contactTotalPages}
+              totalLabel={`${contactMessages.length} mensagem(ns)`}
+              onPageChange={setContactPage}
+            />
           )}
         </article>
 
@@ -7662,7 +8046,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             <span>{favorites.length}</span>
           </div>
           {favorites.length > 0 ? (
-            favorites.slice(0, 30).map((favorite) => (
+            visibleFavorites.map((favorite) => (
               <div className="data-row" key={favorite.id}>
                 <span>
                   <strong>{favorite.product.name}</strong>
@@ -7680,6 +8064,14 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               Nenhum favorito registrado.
             </div>
           )}
+          {favorites.length > 0 && (
+            <AdminPaginationBar
+              page={currentFavoritesPage}
+              pageCount={favoritesTotalPages}
+              totalLabel={`${favorites.length} favorito(s)`}
+              onPageChange={setFavoritesPage}
+            />
+          )}
         </article>
       </section>}
 
@@ -7693,7 +8085,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             <span>{ratings.length}</span>
           </div>
           {ratings.length > 0 ? (
-            ratings.slice(0, 30).map((rating) => (
+            visibleRatings.map((rating) => (
               <div className="data-row" key={rating.id}>
                 <span>
                   <strong>{rating.product?.name ?? rating.targetType}</strong>
@@ -7711,6 +8103,14 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               <Sparkles size={18} />
               Nenhuma avaliação recebida.
             </div>
+          )}
+          {ratings.length > 0 && (
+            <AdminPaginationBar
+              page={currentRatingsPage}
+              pageCount={ratingsTotalPages}
+              totalLabel={`${ratings.length} avaliação(ões)`}
+              onPageChange={setRatingsPage}
+            />
           )}
         </article>
       </section>}
@@ -8463,10 +8863,16 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
   async function handleExerciseProgressChange(input: {
     sessionId?: string | null;
     exerciseId: string;
+    prescriptionId: string;
     completed: boolean;
     weightUsed: number;
     repsCompleted: number;
     sets: number;
+    durationSeconds?: number;
+    distanceMeters?: number;
+    roundsCompleted?: number;
+    perceivedExertion?: number;
+    notes?: string;
   }) {
     await apiPost(
       "/student/workout/exercise-progress",
@@ -9453,13 +9859,21 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                     <span><strong>Unidade:</strong>{workoutSheet.unitName || "Não informada"}</span>
                   </div>
                   <div>
-                    <CalendarDays size={24} />
-                    <span><strong>Início:</strong>{formatStudentDate(sheetMembershipStartsAt)}</span>
-                  </div>
-                  <div>
-                    <CalendarDays size={24} />
-                    <span><strong>Vencimento:</strong>{formatStudentDate(sheetMembershipEndsAt)}</span>
-                  </div>
+                     <CalendarDays size={24} />
+                     <span><strong>Início da matrícula:</strong>{formatStudentDate(sheetMembershipStartsAt)}</span>
+                   </div>
+                   <div>
+                     <CalendarDays size={24} />
+                     <span><strong>Vencimento da matrícula:</strong>{formatStudentDate(sheetMembershipEndsAt)}</span>
+                   </div>
+                   <div>
+                     <CalendarDays size={24} />
+                     <span><strong>Duração do programa:</strong>{formatProgramDuration(workoutSheet.duration)}</span>
+                   </div>
+                   <div>
+                     <CalendarDays size={24} />
+                     <span><strong>Término previsto:</strong>{formatStudentDate(workoutSheet.duration?.plannedEndsAt)}</span>
+                   </div>
                 </div>
               </article>
             ) : selectedWorkoutModality ? (
@@ -9474,24 +9888,30 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
           </section>
         )}
 
-        {studentSection === "player" && todayWorkout && (
-          <section className="student-player-mobile">
-            <WorkoutPlayer
-              programTitle={todayWorkout.programTitle}
-              blockTitle={todayWorkout.block.identifier ?? todayWorkout.block.title}
-              exercises={todayWorkout.block.exercises}
-              restTimeDefault={todayWorkout.block.restTime}
-              structureType={todayWorkout.block.structureType}
-              sessionId={workoutSession?.id ?? null}
-              onBack={() => setStudentSection("training")}
-              onWorkoutStart={handleBeginWorkoutSession}
-              onCancelSession={handleCancelWorkoutSession}
-              onExerciseProgressChange={handleExerciseProgressChange}
-              onRequestSubstitutes={handleRequestSubstitutes}
-              onWorkoutComplete={handleCompleteWorkoutDay}
-            />
-          </section>
-        )}
+         {studentSection === "player" && todayWorkout && (
+           <section className="student-player-mobile">
+             <Suspense fallback={<div className="workout-player-empty">Carregando execução...</div>}>
+               <WorkoutPlayer
+                 programTitle={todayWorkout.programTitle}
+                 blockTitle={todayWorkout.block.identifier ?? todayWorkout.block.title}
+                 exercises={todayWorkout.block.exercises}
+                 restTimeDefault={todayWorkout.block.restTime}
+                 structureType={todayWorkout.block.structureType}
+                 protocolRounds={todayWorkout.block.protocolRounds}
+                 workSeconds={todayWorkout.block.workSeconds}
+                 timeCapSeconds={todayWorkout.block.timeCapSeconds}
+                 instructions={todayWorkout.block.instructions}
+                 sessionId={workoutSession?.id ?? null}
+                 onBack={() => setStudentSection("training")}
+                 onWorkoutStart={handleBeginWorkoutSession}
+                 onCancelSession={handleCancelWorkoutSession}
+                 onExerciseProgressChange={handleExerciseProgressChange}
+                 onRequestSubstitutes={handleRequestSubstitutes}
+                 onWorkoutComplete={handleCompleteWorkoutDay}
+               />
+             </Suspense>
+           </section>
+         )}
 
         {studentSection === "membership" && (
           <section className="student-sheet">

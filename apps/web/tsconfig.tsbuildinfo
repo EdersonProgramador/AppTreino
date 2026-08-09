@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/api.ts","./src/brazil-data.ts","./src/main.tsx","./src/components/admin/statecityfields.tsx","./src/components/student/lockedoverlay.tsx","./src/components/student/workoutplayer.tsx"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/api.ts","./src/brazil-data.ts","./src/main.tsx","./src/components/errorboundary.tsx","./src/components/admin/statecityfields.tsx","./src/components/student/lockedoverlay.tsx","./src/components/student/workoutplayer.tsx"],"version":"5.9.3"}

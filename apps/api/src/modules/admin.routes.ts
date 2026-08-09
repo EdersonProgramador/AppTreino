@@ -9,7 +9,13 @@ import { hashPassword, requireRole } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { autoCloseStaleTickets, FINALIZE_PROMPT, ticketInclude } from "./ticket.utils.js";
+import { buildPaginationMeta, parsePagination } from "./pagination.js";
 import { calculateBodyFatEstimate, physicalAssessmentFormSchema } from "./physical-assessment.utils.js";
+import {
+  calculateProgramEndDate,
+  estimateProgramDurationDays,
+  parseRepetitionRange
+} from "./workout-program.utils.js";
 
 export const uploadsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../uploads");
 const uploadGroups = ["lessons", "materials", "images", "audio"] as const;
@@ -101,55 +107,121 @@ const cmsExerciseSchema = z.object({
   alternativeIds: z.array(z.string().min(1)).default([])
 });
 
+const workoutStructureTypes = [
+  "NORMAL",
+  "BI_SET",
+  "DROP_SET",
+  "REST_PAUSE",
+  "CIRCUIT",
+  "AMRAP",
+  "EMOM",
+  "FOR_TIME",
+  "TABATA",
+  "INTERVAL",
+  "CLASS"
+] as const;
+const prescriptionTypes = ["REPETITIONS", "DURATION", "DISTANCE", "INTERVAL", "ROUNDS", "HOLD", "FREE"] as const;
+const intensityTypes = ["NONE", "LOAD", "RPE", "RIR", "PERCENT_1RM", "HEART_RATE_ZONE", "PACE", "SPEED"] as const;
+
+const cmsWorkoutExerciseSchema = z
+  .object({
+    exerciseId: z.string().min(1),
+    sets: z.coerce.number().int().min(1).default(1),
+    repsRange: z.string().min(1).default("Livre"),
+    prescriptionType: z.enum(prescriptionTypes).default("REPETITIONS"),
+    repsMin: z.coerce.number().int().min(1).nullable().optional(),
+    repsMax: z.coerce.number().int().min(1).nullable().optional(),
+    durationSeconds: z.coerce.number().int().min(1).nullable().optional(),
+    distanceMeters: z.coerce.number().positive().nullable().optional(),
+    rounds: z.coerce.number().int().min(1).nullable().optional(),
+    workSeconds: z.coerce.number().int().min(1).nullable().optional(),
+    intensityType: z.enum(intensityTypes).default("NONE"),
+    intensityValue: z.string().optional(),
+    tempo: z.string().optional(),
+    side: z.string().optional(),
+    executionNotes: z.string().max(1000).optional(),
+    initialLoad: z.string().optional(),
+    restSeconds: z.coerce.number().int().min(0).optional(),
+    supportMaterialUrl: urlOrRelative.optional(),
+    order: z.coerce.number().int().min(1)
+  })
+  .superRefine((value, context) => {
+    if (["DURATION", "HOLD"].includes(value.prescriptionType) && !value.durationSeconds) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["durationSeconds"], message: "Informe a duração em segundos." });
+    }
+    if (value.prescriptionType === "DISTANCE" && !value.distanceMeters) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["distanceMeters"], message: "Informe a distância em metros." });
+    }
+    if (value.prescriptionType === "INTERVAL" && !value.workSeconds) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["workSeconds"], message: "Informe o tempo de trabalho do intervalo." });
+    }
+    if (value.prescriptionType === "ROUNDS" && !value.rounds) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["rounds"], message: "Informe a quantidade de rounds." });
+    }
+    if (value.repsMin && value.repsMax && value.repsMax < value.repsMin) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["repsMax"], message: "A repetição máxima deve ser maior ou igual à mínima." });
+    }
+  });
+
 const cmsWorkoutBlockSchema = z.object({
   title: z.string().min(2),
   identifier: z.string().optional(),
   focus: z.string().optional(),
   weeklyFrequency: z.coerce.number().int().min(1).max(7).default(1),
-  structureType: z.enum(["NORMAL", "BI_SET", "DROP_SET", "REST_PAUSE"]).default("NORMAL"),
+  structureType: z.enum(workoutStructureTypes).default("NORMAL"),
   restTime: z.coerce.number().int().min(0),
+  protocolRounds: z.coerce.number().int().min(1).nullable().optional(),
+  workSeconds: z.coerce.number().int().min(1).nullable().optional(),
+  timeCapSeconds: z.coerce.number().int().min(1).nullable().optional(),
+  instructions: z.string().max(2000).optional(),
   modalityId: z.string().min(1).nullable().optional(),
-  exercises: z
-    .array(
-      z.object({
-        exerciseId: z.string().min(1),
-        sets: z.coerce.number().int().min(1),
-        repsRange: z.string().min(1),
-        initialLoad: z.string().optional(),
-        restSeconds: z.coerce.number().int().min(0).optional(),
-        supportMaterialUrl: urlOrRelative.optional(),
-        order: z.coerce.number().int().min(1)
-      })
-    )
-    .min(1, "Cadastre ao menos um exercício no bloco.")
+  exercises: z.array(cmsWorkoutExerciseSchema).min(1, "Cadastre ao menos um exercício no bloco.")
 });
 
-const cmsProgramSchema = z.object({
-  title: z.string().min(2),
-  description: z.string().min(2),
-  modalityId: z.string().min(1),
-  durationYears: z.coerce.number().int().min(0).default(0),
-  durationMonths: z.coerce.number().int().min(0).default(0),
-  durationWeeks: z.coerce.number().int().min(1).default(4),
-  durationDays: z.coerce.number().int().min(1).default(28),
-  targetGender: z.enum(["ALL", "MALE", "FEMALE"]).default("ALL"),
-  totalWorkouts: z.coerce.number().int().min(1).default(30),
-  sortOrder: z.coerce.number().int().min(0).optional(),
-  status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).default("DRAFT"),
-  isActive: z.coerce.boolean().default(true),
-  days: z
-    .array(
-      z.object({
-        workoutBlockId: z.string().min(1),
-        dayNumber: z.coerce.number().int().min(1),
-        order: z.coerce.number().int().min(1)
-      })
-    )
-    .min(1, "Cadastre ao menos um dia no programa.")
-});
+const cmsProgramObjectSchema = z.object({
+    title: z.string().min(2),
+    description: z.string().min(2),
+    modalityId: z.string().min(1),
+    durationYears: z.coerce.number().int().min(0).max(10).default(0),
+    durationMonths: z.coerce.number().int().min(0).max(11).default(0),
+    durationWeeks: z.coerce.number().int().min(0).max(520).default(0),
+    durationExtraDays: z.coerce.number().int().min(0).max(6).default(0),
+    durationDays: z.coerce.number().int().min(1).optional(),
+    plannedSessions: z.coerce.number().int().min(1).max(10000).optional(),
+    totalWorkouts: z.coerce.number().int().min(1).max(10000).optional(),
+    completionMode: z.enum(["BY_SESSIONS", "BY_DATE", "BOTH", "MANUAL"]).default("BY_SESSIONS"),
+    scheduleType: z.enum(["ROTATING_CYCLE", "WEEKLY", "ON_DEMAND"]).default("ROTATING_CYCLE"),
+    audienceMode: z.enum(["ALL_ACTIVE", "SELECTED"]).default("ALL_ACTIVE"),
+    cycleLengthDays: z.coerce.number().int().min(1).max(56).default(7),
+    targetGender: z.enum(["ALL", "MALE", "FEMALE"]).default("ALL"),
+    sortOrder: z.coerce.number().int().min(0).optional(),
+    status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).default("DRAFT"),
+    isActive: z.coerce.boolean().default(true),
+    days: z
+      .array(
+        z.object({
+          workoutBlockId: z.string().min(1),
+          dayNumber: z.coerce.number().int().min(1).max(56),
+          order: z.coerce.number().int().min(1)
+        })
+      )
+      .min(1, "Cadastre ao menos uma sessão no programa.")
+  });
 
-const cmsProgramUpdateSchema = cmsProgramSchema.partial().extend({
-  days: cmsProgramSchema.shape.days.optional()
+const cmsProgramSchema = cmsProgramObjectSchema.superRefine((value, context) => {
+    if (value.durationYears + value.durationMonths + value.durationWeeks + value.durationExtraDays === 0) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["durationWeeks"], message: "Informe uma duração maior que zero." });
+    }
+    if (value.days.some((day) => day.dayNumber > value.cycleLengthDays)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["days"], message: "Existe uma sessão fora do tamanho do ciclo configurado." });
+    }
+    if (value.scheduleType === "WEEKLY" && value.cycleLengthDays !== 7) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["cycleLengthDays"], message: "A grade semanal deve ter exatamente 7 posições." });
+    }
+  });
+
+const cmsProgramUpdateSchema = cmsProgramObjectSchema.partial().extend({
+  days: cmsProgramObjectSchema.shape.days.optional()
 });
 
 const cmsExerciseUpdateSchema = cmsExerciseSchema.partial();
@@ -170,8 +242,56 @@ const cmsModalitySchema = z.object({
 const cmsProgramAssignSchema = z.object({
   userIds: z.array(z.string().min(1)).optional(),
   currentDay: z.coerce.number().int().min(1).default(1),
-  totalWorkouts: z.coerce.number().int().min(1).optional()
+  totalWorkouts: z.coerce.number().int().min(1).optional(),
+  resetProgress: z.coerce.boolean().default(false)
 });
+
+type CmsWorkoutExerciseInput = z.infer<typeof cmsWorkoutExerciseSchema>;
+
+function buildWorkoutExerciseData(exercise: CmsWorkoutExerciseInput) {
+  const parsedRange = parseRepetitionRange(exercise.repsRange);
+
+  return {
+    exerciseId: exercise.exerciseId,
+    sets: exercise.sets,
+    repsRange: exercise.repsRange,
+    prescriptionType: exercise.prescriptionType,
+    repsMin: exercise.repsMin ?? parsedRange.min,
+    repsMax: exercise.repsMax ?? parsedRange.max,
+    durationSeconds: exercise.durationSeconds ?? null,
+    distanceMeters: exercise.distanceMeters ?? null,
+    rounds: exercise.rounds ?? null,
+    workSeconds: exercise.workSeconds ?? null,
+    intensityType: exercise.intensityType,
+    intensityValue: exercise.intensityValue || null,
+    tempo: exercise.tempo || null,
+    side: exercise.side || null,
+    executionNotes: exercise.executionNotes || null,
+    initialLoad: exercise.initialLoad || null,
+    restSeconds: exercise.restSeconds ?? null,
+    supportMaterialUrl: exercise.supportMaterialUrl || null,
+    order: exercise.order
+  };
+}
+
+function programDurationFields(input: {
+  durationYears: number;
+  durationMonths: number;
+  durationWeeks: number;
+  durationExtraDays: number;
+}) {
+  const duration = {
+    years: input.durationYears,
+    months: input.durationMonths,
+    weeks: input.durationWeeks,
+    days: input.durationExtraDays
+  };
+
+  return {
+    duration,
+    estimatedDays: estimateProgramDurationDays(duration)
+  };
+}
 
 const cmsLocationSchema = z.object({
   name: z.string().min(2),
@@ -318,6 +438,7 @@ async function createAsaasCheckout(input: {
       "Content-Type": "application/json",
       access_token: env.ASAAS_API_KEY
     },
+    signal: AbortSignal.timeout(10000),
     body: JSON.stringify({
       billingTypes,
       chargeTypes: ["DETACHED"],
@@ -541,6 +662,54 @@ async function assertWorkoutBlocksExist(workoutBlockIds: string[]) {
   }
 }
 
+async function assertWorkoutBlocksMatchModality(workoutBlockIds: string[], modalityId: string) {
+  const blocks = await prisma.workoutBlock.findMany({
+    where: {
+      id: { in: uniqueValues(workoutBlockIds) },
+      deletedAt: null
+    },
+    select: {
+      id: true,
+      title: true,
+      modalityId: true
+    }
+  });
+  const incompatible = blocks.filter((block) => block.modalityId && block.modalityId !== modalityId);
+
+  if (incompatible.length > 0) {
+    throw httpError(
+      400,
+      `A modalidade do programa não corresponde à ficha: ${incompatible.map((block) => block.title).join(", ")}.`
+    );
+  }
+}
+
+async function assertExercisesMatchModality(exerciseIds: string[], modalityId: string) {
+  const exercises = await prisma.exercise.findMany({
+    where: {
+      id: { in: uniqueValues(exerciseIds) },
+      deletedAt: null
+    },
+    select: {
+      id: true,
+      title: true,
+      name: true,
+      modalityLinks: {
+        where: { modalityId },
+        select: { id: true }
+      }
+    }
+  });
+  const incompatible = exercises.filter((exercise) => exercise.modalityLinks.length === 0);
+
+  if (incompatible.length > 0) {
+    throw httpError(
+      400,
+      `Exercício sem vínculo com a modalidade da ficha: ${incompatible.map((exercise) => exercise.title ?? exercise.name ?? exercise.id).join(", ")}.`
+    );
+  }
+}
+
 async function assignProgramToStudents(programId: string, currentDay = 1, totalWorkouts?: number) {
   return assignProgramToActiveStudents(programId, currentDay, totalWorkouts);
 }
@@ -588,13 +757,19 @@ async function assignProgramToActiveStudents(
   currentDay = 1,
   totalWorkouts?: number,
   userIds?: string[],
-  targetGenderOverride?: "ALL" | "MALE" | "FEMALE"
+  targetGenderOverride?: "ALL" | "MALE" | "FEMALE",
+  resetProgress = false,
+  reactivateCanceled = false
 ) {
   const program = await prisma.program.findUniqueOrThrow({
     where: { id: programId },
     select: {
       targetGender: true,
-      totalWorkouts: true
+      totalWorkouts: true,
+      durationYears: true,
+      durationMonths: true,
+      durationWeeks: true,
+      durationExtraDays: true
     }
   });
   const workoutGoal = totalWorkouts ?? program.totalWorkouts;
@@ -604,31 +779,54 @@ async function assignProgramToActiveStudents(
     return [];
   }
 
+  const existingAssignments = await prisma.userProgram.findMany({
+    where: {
+      programId,
+      userId: { in: activeStudentIds }
+    }
+  });
+  const existingByUserId = new Map(existingAssignments.map((assignment) => [assignment.userId, assignment]));
+  const startedAt = new Date();
+  const plannedEndsAt = calculateProgramEndDate(startedAt, {
+    years: program.durationYears,
+    months: program.durationMonths,
+    weeks: program.durationWeeks,
+    days: program.durationExtraDays
+  });
+
   return prisma.$transaction(
-    activeStudentIds.map((userId) =>
-      prisma.userProgram.upsert({
-        where: {
-          userId_programId: {
+    activeStudentIds.map((userId) => {
+      const existing = existingByUserId.get(userId);
+
+      if (!existing) {
+        return prisma.userProgram.create({
+          data: {
             userId,
-            programId
+            programId,
+            currentDay,
+            totalWorkouts: workoutGoal,
+            completedWorkouts: 0,
+            status: "ACTIVE",
+            startedAt,
+            plannedEndsAt
           }
-        },
-        create: {
-          userId,
-          programId,
-          currentDay,
+        });
+      }
+
+      const shouldReactivateCanceled = reactivateCanceled && existing.status === "CANCELED";
+      return prisma.userProgram.update({
+        where: { id: existing.id },
+        data: {
           totalWorkouts: workoutGoal,
-          completedWorkouts: 0,
-          status: "ACTIVE"
-        },
-        update: {
-          currentDay,
-          totalWorkouts: workoutGoal,
-          status: "ACTIVE",
-          completedAt: null
+          completedWorkouts: resetProgress ? 0 : existing.completedWorkouts,
+          currentDay: resetProgress ? currentDay : existing.currentDay,
+          startedAt: resetProgress ? startedAt : existing.startedAt,
+          plannedEndsAt: resetProgress || !existing.plannedEndsAt ? plannedEndsAt : existing.plannedEndsAt,
+          status: resetProgress || shouldReactivateCanceled ? "ACTIVE" : existing.status,
+          completedAt: resetProgress || shouldReactivateCanceled ? null : existing.completedAt
         }
-      })
-    )
+      });
+    })
   );
 }
 
@@ -799,27 +997,34 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { users, activeMemberships, pendingPayments, todayAttendance };
   });
 
-  app.get("/admin/users", async () => {
+  app.get("/admin/users", async (request) => {
     requireDatabase();
-    const users = await prisma.user.findMany({
-      where: { deletedAt: null },
-      include: {
-        profile: true,
-        memberships: {
-          include: {
-            plan: true
-          },
-          orderBy: {
-            createdAt: "desc"
+    const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
+    const where = { deletedAt: null };
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        include: {
+          profile: true,
+          memberships: {
+            include: {
+              plan: true
+            },
+            orderBy: {
+              createdAt: "desc"
+            }
           }
-        }
-      },
-      orderBy: {
-        createdAt: "desc"
-      }
-    });
+        },
+        orderBy: {
+          createdAt: "desc"
+        },
+        skip,
+        take
+      }),
+      prisma.user.count({ where })
+    ]);
 
-    return { users };
+    return { users, meta: buildPaginationMeta(total, page, perPage) };
   });
 
   app.get("/admin/students/:id/overview", async (request) => {
@@ -1687,6 +1892,9 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     const body = cmsWorkoutBlockSchema.parse(request.body);
     await assertCmsExercisesExist(body.exercises.map((exercise) => exercise.exerciseId));
+    if (body.modalityId) {
+      await assertExercisesMatchModality(body.exercises.map((exercise) => exercise.exerciseId), body.modalityId);
+    }
     const workoutBlock = await prisma.workoutBlock.create({
       data: {
         title: body.title,
@@ -1695,17 +1903,13 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         weeklyFrequency: body.weeklyFrequency,
         structureType: body.structureType,
         restTime: body.restTime,
+        protocolRounds: body.protocolRounds ?? null,
+        workSeconds: body.workSeconds ?? null,
+        timeCapSeconds: body.timeCapSeconds ?? null,
+        instructions: body.instructions || null,
         modalityId: body.modalityId ?? null,
         exercises: {
-          create: body.exercises.map((exercise) => ({
-            exerciseId: exercise.exerciseId,
-            sets: exercise.sets,
-            repsRange: exercise.repsRange,
-            initialLoad: exercise.initialLoad || null,
-            restSeconds: exercise.restSeconds ?? null,
-            supportMaterialUrl: exercise.supportMaterialUrl || null,
-            order: exercise.order
-          }))
+          create: body.exercises.map(buildWorkoutExerciseData)
         }
       },
       include: {
@@ -1728,9 +1932,24 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
     const body = cmsWorkoutBlockUpdateSchema.parse(request.body);
+    const currentWorkoutBlock = await prisma.workoutBlock.findUniqueOrThrow({
+      where: { id },
+      include: {
+        exercises: {
+          select: { exerciseId: true }
+        }
+      }
+    });
 
     if (body.exercises !== undefined) {
       await assertCmsExercisesExist(body.exercises.map((exercise) => exercise.exerciseId));
+    }
+    const nextBlockModalityId = body.modalityId === undefined ? currentWorkoutBlock.modalityId : body.modalityId;
+    if (nextBlockModalityId && (body.exercises !== undefined || body.modalityId !== undefined)) {
+      await assertExercisesMatchModality(
+        body.exercises?.map((exercise) => exercise.exerciseId) ?? currentWorkoutBlock.exercises.map((exercise) => exercise.exerciseId),
+        nextBlockModalityId
+      );
     }
 
     await prisma.$transaction([
@@ -1746,19 +1965,15 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           ...(body.weeklyFrequency !== undefined ? { weeklyFrequency: body.weeklyFrequency } : {}),
           ...(body.structureType !== undefined ? { structureType: body.structureType } : {}),
           ...(body.restTime !== undefined ? { restTime: body.restTime } : {}),
+          ...(body.protocolRounds !== undefined ? { protocolRounds: body.protocolRounds } : {}),
+          ...(body.workSeconds !== undefined ? { workSeconds: body.workSeconds } : {}),
+          ...(body.timeCapSeconds !== undefined ? { timeCapSeconds: body.timeCapSeconds } : {}),
+          ...(body.instructions !== undefined ? { instructions: body.instructions || null } : {}),
           ...(body.modalityId !== undefined ? { modalityId: body.modalityId ?? null } : {}),
           ...(body.exercises !== undefined
             ? {
                 exercises: {
-                  create: body.exercises.map((exercise) => ({
-                    exerciseId: exercise.exerciseId,
-                    sets: exercise.sets,
-                    repsRange: exercise.repsRange,
-                    initialLoad: exercise.initialLoad || null,
-                    restSeconds: exercise.restSeconds ?? null,
-                    supportMaterialUrl: exercise.supportMaterialUrl || null,
-                    order: exercise.order
-                  }))
+                  create: body.exercises.map(buildWorkoutExerciseData)
                 }
               }
             : {})
@@ -1851,6 +2066,12 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     await assertModalitiesExist([body.modalityId]);
     const modality = await prisma.modality.findUniqueOrThrow({ where: { id: body.modalityId } });
     await assertWorkoutBlocksExist(body.days.map((day) => day.workoutBlockId));
+    await assertWorkoutBlocksMatchModality(body.days.map((day) => day.workoutBlockId), body.modalityId);
+    const { estimatedDays } = programDurationFields(body);
+    const plannedSessions =
+      body.plannedSessions ??
+      body.totalWorkouts ??
+      Math.max(1, body.days.length * Math.ceil(estimatedDays / body.cycleLengthDays));
     const maxSortOrder = await prisma.program.aggregate({
       where: { deletedAt: null },
       _max: {
@@ -1865,9 +2086,15 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         durationYears: body.durationYears,
         durationMonths: body.durationMonths,
         durationWeeks: body.durationWeeks,
-        durationDays: body.durationDays,
+        durationDays: estimatedDays,
+        durationExtraDays: body.durationExtraDays,
+        plannedSessions,
+        completionMode: body.completionMode,
+        scheduleType: body.scheduleType,
+        audienceMode: body.audienceMode,
+        cycleLengthDays: body.cycleLengthDays,
         targetGender: body.targetGender,
-        totalWorkouts: body.totalWorkouts,
+        totalWorkouts: plannedSessions,
         sortOrder: body.sortOrder ?? (maxSortOrder._max.sortOrder ?? 0) + 1,
         status: body.status,
         isActive: body.isActive,
@@ -1896,8 +2123,8 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       }
     });
 
-    if (program.status === "PUBLISHED" && program.isActive) {
-      await assignProgramToStudents(program.id, 1, program.totalWorkouts);
+    if (program.status === "PUBLISHED" && program.isActive && program.audienceMode === "ALL_ACTIVE") {
+      await assignProgramToStudents(program.id, 1, program.plannedSessions);
     }
 
     return reply.code(201).send({ program });
@@ -1910,7 +2137,8 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     const currentProgram = await prisma.program.findUniqueOrThrow({
       where: { id },
       include: {
-        modality: true
+        modality: true,
+        days: true
       }
     });
     const nextModalityId = body.modalityId ?? currentProgram.modalityId;
@@ -1920,9 +2148,32 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       await assertModalitiesExist([body.modalityId]);
     }
 
+    const nextProgramDays = body.days ?? currentProgram.days;
+    const nextCycleLengthDays = body.cycleLengthDays ?? currentProgram.cycleLengthDays;
+    if (nextProgramDays.some((day) => day.dayNumber > nextCycleLengthDays)) {
+      throw httpError(400, "Existe uma sessão fora do tamanho do ciclo configurado.");
+    }
+    if ((body.scheduleType ?? currentProgram.scheduleType) === "WEEKLY" && nextCycleLengthDays !== 7) {
+      throw httpError(400, "A grade semanal deve ter exatamente 7 posições.");
+    }
     if (body.days) {
       await assertWorkoutBlocksExist(body.days.map((day) => day.workoutBlockId));
     }
+    if (nextModalityId && (body.days || body.modalityId)) {
+      await assertWorkoutBlocksMatchModality(nextProgramDays.map((day) => day.workoutBlockId), nextModalityId);
+    }
+
+    const nextDuration = {
+      durationYears: body.durationYears ?? currentProgram.durationYears,
+      durationMonths: body.durationMonths ?? currentProgram.durationMonths,
+      durationWeeks: body.durationWeeks ?? currentProgram.durationWeeks,
+      durationExtraDays: body.durationExtraDays ?? currentProgram.durationExtraDays
+    };
+    const { estimatedDays } = programDurationFields(nextDuration);
+    if (estimatedDays < 1) {
+      throw httpError(400, "Informe uma duração maior que zero.");
+    }
+    const plannedSessions = body.plannedSessions ?? body.totalWorkouts ?? currentProgram.plannedSessions;
 
     const descriptionText = body.description
       ? buildProgramDescription(body.description, modality?.name ?? currentProgram.modality?.name ?? "Hipertrofia")
@@ -1954,9 +2205,15 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           durationYears: body.durationYears ?? currentProgram.durationYears,
           durationMonths: body.durationMonths ?? currentProgram.durationMonths,
           durationWeeks: body.durationWeeks ?? currentProgram.durationWeeks,
-          durationDays: body.durationDays ?? currentProgram.durationDays,
+          durationDays: estimatedDays,
+          durationExtraDays: nextDuration.durationExtraDays,
+          plannedSessions,
+          completionMode: body.completionMode ?? currentProgram.completionMode,
+          scheduleType: body.scheduleType ?? currentProgram.scheduleType,
+          audienceMode: body.audienceMode ?? currentProgram.audienceMode,
+          cycleLengthDays: body.cycleLengthDays ?? currentProgram.cycleLengthDays,
           targetGender: body.targetGender ?? currentProgram.targetGender,
-          totalWorkouts: body.totalWorkouts ?? currentProgram.totalWorkouts,
+          totalWorkouts: plannedSessions,
           sortOrder: body.sortOrder ?? nextPublishedSortOrder ?? currentProgram.sortOrder,
           status: body.status ?? currentProgram.status,
           isActive: body.isActive ?? currentProgram.isActive,
@@ -1994,8 +2251,16 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       }
     });
 
-    if (program.status === "PUBLISHED" && program.isActive) {
-      await assignProgramToStudents(program.id, 1, program.totalWorkouts);
+    if (program.status === "PUBLISHED" && program.isActive && program.audienceMode === "ALL_ACTIVE") {
+      await assignProgramToStudents(program.id, 1, program.plannedSessions);
+    } else if (program.assignedUsers.length > 0) {
+      await assignProgramToActiveStudents(
+        program.id,
+        1,
+        program.plannedSessions,
+        program.assignedUsers.map((assignment) => assignment.userId),
+        "ALL"
+      );
     }
 
     return { program };
@@ -2115,7 +2380,9 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         }
       }
     });
-    await assignProgramToStudents(program.id, 1, program.totalWorkouts);
+    if (program.audienceMode === "ALL_ACTIVE") {
+      await assignProgramToStudents(program.id, 1, program.plannedSessions);
+    }
 
     return { program };
   });
@@ -2161,7 +2428,15 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       });
     }
 
-    const assignments = await assignProgramToActiveStudents(id, body.currentDay, body.totalWorkouts ?? program.totalWorkouts, body.userIds, "ALL");
+    const assignments = await assignProgramToActiveStudents(
+      id,
+      body.currentDay,
+      body.totalWorkouts ?? program.plannedSessions,
+      body.userIds,
+      "ALL",
+      body.resetProgress,
+      true
+    );
 
     if (assignments.length === 0) {
       return reply.code(409).send({
@@ -2696,24 +2971,31 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/admin/memberships", async () => {
+  app.get("/admin/memberships", async (request) => {
     requireDatabase();
-    const memberships = await prisma.membership.findMany({
-      where: { deletedAt: null },
-      include: {
-        user: true,
-        plan: true,
-        payments: {
-          orderBy: {
-            dueDate: "desc"
+    const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
+    const where = { deletedAt: null };
+    const [memberships, total] = await Promise.all([
+      prisma.membership.findMany({
+        where,
+        include: {
+          user: true,
+          plan: true,
+          payments: {
+            orderBy: {
+              dueDate: "desc"
+            }
           }
-        }
-      },
-      orderBy: {
-        createdAt: "desc"
-      }
-    });
-    return { memberships };
+        },
+        orderBy: {
+          createdAt: "desc"
+        },
+        skip,
+        take
+      }),
+      prisma.membership.count({ where })
+    ]);
+    return { memberships, meta: buildPaginationMeta(total, page, perPage) };
   });
 
   app.post("/admin/memberships", async (request, reply) => {
@@ -2776,23 +3058,30 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/admin/payments", async () => {
+  app.get("/admin/payments", async (request) => {
     requireDatabase();
-    const payments = await prisma.payment.findMany({
-      where: { deletedAt: null },
-      include: {
-        membership: {
-          include: {
-            user: true,
-            plan: true
+    const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
+    const where = { deletedAt: null };
+    const [payments, total] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        include: {
+          membership: {
+            include: {
+              user: true,
+              plan: true
+            }
           }
-        }
-      },
-      orderBy: {
-        dueDate: "desc"
-      }
-    });
-    return { payments };
+        },
+        orderBy: {
+          dueDate: "desc"
+        },
+        skip,
+        take
+      }),
+      prisma.payment.count({ where })
+    ]);
+    return { payments, meta: buildPaginationMeta(total, page, perPage) };
   });
 
   app.post("/admin/payments", async (request, reply) => {
@@ -2859,23 +3148,30 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/admin/physical-assessments", async () => {
+  app.get("/admin/physical-assessments", async (request) => {
     requireDatabase();
-    const assessments = await prisma.physicalAssessment.findMany({
-      where: { deletedAt: null },
-      include: {
-        user: {
-          include: {
-            profile: true
+    const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
+    const where = { deletedAt: null };
+    const [assessments, total] = await Promise.all([
+      prisma.physicalAssessment.findMany({
+        where,
+        include: {
+          user: {
+            include: {
+              profile: true
+            }
           }
-        }
-      },
-      orderBy: {
-        assessedAt: "desc"
-      }
-    });
+        },
+        orderBy: {
+          assessedAt: "desc"
+        },
+        skip,
+        take
+      }),
+      prisma.physicalAssessment.count({ where })
+    ]);
 
-    return { assessments };
+    return { assessments, meta: buildPaginationMeta(total, page, perPage) };
   });
 
   app.post("/admin/physical-assessments", async (request, reply) => {
@@ -2966,26 +3262,33 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/admin/events", async () => {
+  app.get("/admin/events", async (request) => {
     requireDatabase();
-    const events = await prisma.event.findMany({
-      where: { deletedAt: null },
-      include: {
-        registrations: {
-          include: {
-            user: true
-          },
-          orderBy: {
-            createdAt: "desc"
+    const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
+    const where = { deletedAt: null };
+    const [events, total] = await Promise.all([
+      prisma.event.findMany({
+        where,
+        include: {
+          registrations: {
+            include: {
+              user: true
+            },
+            orderBy: {
+              createdAt: "desc"
+            }
           }
-        }
-      },
-      orderBy: {
-        startsAt: "asc"
-      }
-    });
+        },
+        orderBy: {
+          startsAt: "asc"
+        },
+        skip,
+        take
+      }),
+      prisma.event.count({ where })
+    ]);
 
-    return { events };
+    return { events, meta: buildPaginationMeta(total, page, perPage) };
   });
 
   app.post("/admin/events", async (request, reply) => {
@@ -3026,15 +3329,22 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/admin/support-tickets", async () => {
+  app.get("/admin/support-tickets", async (request) => {
     requireDatabase();
-    const tickets = await prisma.supportTicket.findMany({
-      where: { deletedAt: null },
-      include: ticketInclude,
-      orderBy: {
-        updatedAt: "desc"
-      }
-    });
+    const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
+    const where = { deletedAt: null };
+    const [tickets, total] = await Promise.all([
+      prisma.supportTicket.findMany({
+        where,
+        include: ticketInclude,
+        orderBy: {
+          updatedAt: "desc"
+        },
+        skip,
+        take
+      }),
+      prisma.supportTicket.count({ where })
+    ]);
 
     await autoCloseStaleTickets(prisma, tickets.map((ticket) => ticket.id));
 
@@ -3044,16 +3354,18 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       )
     ) {
       const refreshed = await prisma.supportTicket.findMany({
-        where: { deletedAt: null },
+        where,
         include: ticketInclude,
         orderBy: {
           updatedAt: "desc"
-        }
+        },
+        skip,
+        take
       });
-      return { tickets: refreshed };
+      return { tickets: refreshed, meta: buildPaginationMeta(total, page, perPage) };
     }
 
-    return { tickets };
+    return { tickets, meta: buildPaginationMeta(total, page, perPage) };
   });
 
   app.put("/admin/support-tickets/:id", async (request) => {
@@ -3145,20 +3457,26 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/admin/ai-workout-plans", async () => {
+  app.get("/admin/ai-workout-plans", async (request) => {
     requireDatabase();
-    const plans = await prisma.aiWorkoutPlan.findMany({
-      where: { deletedAt: null },
-      include: {
-        user: true
-      },
-      orderBy: {
-        createdAt: "desc"
-      },
-      take: 50
-    });
+    const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
+    const where = { deletedAt: null };
+    const [plans, total] = await Promise.all([
+      prisma.aiWorkoutPlan.findMany({
+        where,
+        include: {
+          user: true
+        },
+        orderBy: {
+          createdAt: "desc"
+        },
+        skip,
+        take
+      }),
+      prisma.aiWorkoutPlan.count({ where })
+    ]);
 
-    return { plans };
+    return { plans, meta: buildPaginationMeta(total, page, perPage) };
   });
 
   app.delete("/admin/ai-workout-plans/:id", async (request) => {
@@ -3203,17 +3521,24 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     status: z.enum(["OPEN", "RESOLVED", "CLOSED"]).optional()
   });
 
-  app.get("/admin/products", async () => {
+  app.get("/admin/products", async (request) => {
     requireDatabase();
-    const products = await prisma.product.findMany({
-      where: { deletedAt: null },
-      include: {
-        _count: { select: { purchases: true, favorites: true, ratings: true } }
-      },
-      orderBy: { createdAt: "desc" }
-    });
+    const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
+    const where = { deletedAt: null };
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        include: {
+          _count: { select: { purchases: true, favorites: true, ratings: true } }
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take
+      }),
+      prisma.product.count({ where })
+    ]);
 
-    return { products };
+    return { products, meta: buildPaginationMeta(total, page, perPage) };
   });
 
   app.post("/admin/products", async (request, reply) => {
@@ -3244,15 +3569,22 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/admin/purchases", async () => {
+  app.get("/admin/purchases", async (request) => {
     requireDatabase();
-    const purchases = await prisma.purchase.findMany({
-      where: { deletedAt: null },
-      include: { user: true, product: true },
-      orderBy: { createdAt: "desc" }
-    });
+    const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
+    const where = { deletedAt: null };
+    const [purchases, total] = await Promise.all([
+      prisma.purchase.findMany({
+        where,
+        include: { user: true, product: true },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take
+      }),
+      prisma.purchase.count({ where })
+    ]);
 
-    return { purchases };
+    return { purchases, meta: buildPaginationMeta(total, page, perPage) };
   });
 
   app.post("/admin/purchases", async (request, reply) => {
@@ -3293,15 +3625,22 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/admin/payment-cards", async () => {
+  app.get("/admin/payment-cards", async (request) => {
     requireDatabase();
-    const paymentCards = await prisma.paymentCard.findMany({
-      where: { deletedAt: null },
-      include: { user: true },
-      orderBy: { createdAt: "desc" }
-    });
+    const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
+    const where = { deletedAt: null };
+    const [paymentCards, total] = await Promise.all([
+      prisma.paymentCard.findMany({
+        where,
+        include: { user: true },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take
+      }),
+      prisma.paymentCard.count({ where })
+    ]);
 
-    return { paymentCards };
+    return { paymentCards, meta: buildPaginationMeta(total, page, perPage) };
   });
 
   app.post("/admin/payment-cards", async (request, reply) => {
@@ -3332,15 +3671,22 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/admin/favorites", async () => {
+  app.get("/admin/favorites", async (request) => {
     requireDatabase();
-    const favorites = await prisma.favorite.findMany({
-      where: { deletedAt: null },
-      include: { user: true, product: true },
-      orderBy: { createdAt: "desc" }
-    });
+    const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
+    const where = { deletedAt: null };
+    const [favorites, total] = await Promise.all([
+      prisma.favorite.findMany({
+        where,
+        include: { user: true, product: true },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take
+      }),
+      prisma.favorite.count({ where })
+    ]);
 
-    return { favorites };
+    return { favorites, meta: buildPaginationMeta(total, page, perPage) };
   });
 
   app.delete("/admin/favorites/:id", async (request) => {
@@ -3354,15 +3700,22 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/admin/ratings", async () => {
+  app.get("/admin/ratings", async (request) => {
     requireDatabase();
-    const ratings = await prisma.rating.findMany({
-      where: { deletedAt: null },
-      include: { user: true, product: true },
-      orderBy: { createdAt: "desc" }
-    });
+    const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
+    const where = { deletedAt: null };
+    const [ratings, total] = await Promise.all([
+      prisma.rating.findMany({
+        where,
+        include: { user: true, product: true },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take
+      }),
+      prisma.rating.count({ where })
+    ]);
 
-    return { ratings };
+    return { ratings, meta: buildPaginationMeta(total, page, perPage) };
   });
 
   app.delete("/admin/ratings/:id", async (request) => {
@@ -3376,14 +3729,21 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/admin/contact-messages", async () => {
+  app.get("/admin/contact-messages", async (request) => {
     requireDatabase();
-    const contactMessages = await prisma.contactMessage.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: "desc" }
-    });
+    const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
+    const where = { deletedAt: null };
+    const [contactMessages, total] = await Promise.all([
+      prisma.contactMessage.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take
+      }),
+      prisma.contactMessage.count({ where })
+    ]);
 
-    return { contactMessages };
+    return { contactMessages, meta: buildPaginationMeta(total, page, perPage) };
   });
 
   app.put("/admin/contact-messages/:id", async (request) => {

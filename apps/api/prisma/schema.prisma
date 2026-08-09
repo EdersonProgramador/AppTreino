@@ -104,6 +104,7 @@ model Membership {
   createdAt DateTime         @default(now()) @map("created_at")
   updatedAt DateTime         @updatedAt @map("updated_at")
 
+  @@index([userId])
   @@map("memberships")
 }
 
@@ -121,6 +122,7 @@ model Payment {
   createdAt      DateTime      @default(now()) @map("created_at")
   updatedAt      DateTime      @updatedAt @map("updated_at")
 
+  @@index([membershipId])
   @@map("payments")
 }
 
@@ -187,9 +189,9 @@ model Modality {
   programs      Program[]
   exerciseLinks ExerciseModality[]
   workoutBlocks WorkoutBlock[]
-  deletedAt     DateTime?              @map("deleted_at")
-  createdAt     DateTime               @default(now()) @map("created_at")
-  updatedAt     DateTime               @updatedAt @map("updated_at")
+  deletedAt     DateTime?          @map("deleted_at")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
 
   @@map("modalities")
 }
@@ -214,6 +216,10 @@ model WorkoutBlock {
   weeklyFrequency Int                    @default(1) @map("weekly_frequency")
   structureType   StructureType          @default(NORMAL) @map("structure_type")
   restTime        Int                    @map("rest_time")
+  protocolRounds  Int?                   @map("protocol_rounds")
+  workSeconds     Int?                   @map("work_seconds")
+  timeCapSeconds  Int?                   @map("time_cap_seconds")
+  instructions    String?
   modalityId      String?                @map("modality_id")
   modality        Modality?              @relation(fields: [modalityId], references: [id], onDelete: SetNull)
   deletedAt       DateTime?              @map("deleted_at")
@@ -226,58 +232,78 @@ model WorkoutBlock {
 }
 
 model WorkoutBlockExercise {
-  id             String       @id @default(cuid())
-  workoutBlockId String       @map("workout_block_id")
-  exerciseId     String       @map("exercise_id")
-  workoutBlock   WorkoutBlock @relation(fields: [workoutBlockId], references: [id], onDelete: Cascade)
-  exercise       Exercise     @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
-  sets           Int
-  repsRange      String       @map("reps_range")
-  initialLoad        String?      @map("initial_load")
-  restSeconds        Int?         @map("rest_seconds")
-  supportMaterialUrl String?      @map("support_material_url")
+  id                 String           @id @default(cuid())
+  workoutBlockId     String           @map("workout_block_id")
+  exerciseId         String           @map("exercise_id")
+  workoutBlock       WorkoutBlock     @relation(fields: [workoutBlockId], references: [id], onDelete: Cascade)
+  exercise           Exercise         @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  sets               Int
+  repsRange          String           @map("reps_range")
+  prescriptionType   PrescriptionType @default(REPETITIONS) @map("prescription_type")
+  repsMin            Int?             @map("reps_min")
+  repsMax            Int?             @map("reps_max")
+  durationSeconds    Int?             @map("duration_seconds")
+  distanceMeters     Float?           @map("distance_meters")
+  rounds             Int?
+  workSeconds        Int?             @map("work_seconds")
+  intensityType      IntensityType    @default(NONE) @map("intensity_type")
+  intensityValue     String?          @map("intensity_value")
+  tempo              String?
+  side               String?
+  executionNotes     String?          @map("execution_notes")
+  initialLoad        String?          @map("initial_load")
+  restSeconds        Int?             @map("rest_seconds")
+  supportMaterialUrl String?          @map("support_material_url")
   order              Int
+  userProgress       UserProgress[]
 
   @@map("workout_block_exercises")
 }
 
 model Program {
-  id              String              @id @default(cuid())
-  modalityId      String?             @map("modality_id")
-  modality        Modality?           @relation(fields: [modalityId], references: [id], onDelete: SetNull)
-  title           String
-  description     String
-  durationYears   Int                 @default(0) @map("duration_years")
-  durationMonths  Int                 @default(0) @map("duration_months")
-  durationWeeks   Int                 @default(4) @map("duration_weeks")
-  durationDays    Int                 @default(28) @map("duration_days")
-  targetGender    ProgramTargetGender @default(ALL) @map("target_gender")
-  totalWorkouts   Int                 @default(30) @map("total_workouts")
-  status          ProgramStatus       @default(DRAFT)
-  isActive        Boolean             @default(true) @map("is_active")
-  sortOrder       Int                 @default(1) @map("sort_order")
-  deletedAt       DateTime?           @map("deleted_at")
-  publishedAt     DateTime?           @map("published_at")
-  createdAt       DateTime            @default(now()) @map("created_at")
-  days            ProgramDayWorkout[]
-  assignedUsers   UserProgram[]
-  workoutSessions WorkoutSession[]
-  favorites       WorkoutFavorite[]
+  id                String                @id @default(cuid())
+  modalityId        String?               @map("modality_id")
+  modality          Modality?             @relation(fields: [modalityId], references: [id], onDelete: SetNull)
+  title             String
+  description       String
+  durationYears     Int                   @default(0) @map("duration_years")
+  durationMonths    Int                   @default(0) @map("duration_months")
+  durationWeeks     Int                   @default(4) @map("duration_weeks")
+  durationDays      Int                   @default(28) @map("duration_days")
+  durationExtraDays Int                   @default(0) @map("duration_extra_days")
+  plannedSessions   Int                   @default(12) @map("planned_sessions")
+  completionMode    ProgramCompletionMode @default(BY_SESSIONS) @map("completion_mode")
+  scheduleType      ProgramScheduleType   @default(ROTATING_CYCLE) @map("schedule_type")
+  audienceMode      ProgramAudienceMode   @default(ALL_ACTIVE) @map("audience_mode")
+  cycleLengthDays   Int                   @default(7) @map("cycle_length_days")
+  targetGender      ProgramTargetGender   @default(ALL) @map("target_gender")
+  totalWorkouts     Int                   @default(30) @map("total_workouts")
+  status            ProgramStatus         @default(DRAFT)
+  isActive          Boolean               @default(true) @map("is_active")
+  sortOrder         Int                   @default(1) @map("sort_order")
+  deletedAt         DateTime?             @map("deleted_at")
+  publishedAt       DateTime?             @map("published_at")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  days              ProgramDayWorkout[]
+  assignedUsers     UserProgram[]
+  workoutSessions   WorkoutSession[]
+  favorites         WorkoutFavorite[]
 
   @@map("programs")
 }
 
 model UserProgram {
-  id              String            @id @default(cuid())
-  userId          String            @map("user_id")
-  programId       String            @map("program_id")
-  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  program         Program           @relation(fields: [programId], references: [id], onDelete: Cascade)
-  status          UserProgramStatus @default(ACTIVE)
+  id                String            @id @default(cuid())
+  userId            String            @map("user_id")
+  programId         String            @map("program_id")
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  program           Program           @relation(fields: [programId], references: [id], onDelete: Cascade)
+  status            UserProgramStatus @default(ACTIVE)
   currentDay        Int               @default(1) @map("current_day")
   totalWorkouts     Int               @default(30) @map("total_workouts")
   completedWorkouts Int               @default(0) @map("completed_workouts")
   startedAt         DateTime          @default(now()) @map("started_at")
+  plannedEndsAt     DateTime?         @map("planned_ends_at")
   completedAt       DateTime?         @map("completed_at")
   updatedAt         DateTime          @updatedAt @map("updated_at")
   workoutSessions   WorkoutSession[]
@@ -299,36 +325,48 @@ model ProgramDayWorkout {
 }
 
 model UserProgress {
-  id            String   @id @default(cuid())
-  userId        String   @map("user_id")
-  exerciseId    String   @map("exercise_id")
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  exercise      Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
-  weightUsed    Float    @map("weight_used")
-  repsCompleted Int      @map("reps_completed")
-  seriesIndex   Int      @map("series_index")
-  completedAt   DateTime @default(now()) @map("completed_at")
+  id                     String                @id @default(cuid())
+  userId                 String                @map("user_id")
+  exerciseId             String                @map("exercise_id")
+  sessionId              String?               @map("session_id")
+  workoutBlockExerciseId String?               @map("workout_block_exercise_id")
+  user                   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercise               Exercise              @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  session                WorkoutSession?       @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  workoutBlockExercise   WorkoutBlockExercise? @relation(fields: [workoutBlockExerciseId], references: [id], onDelete: SetNull)
+  weightUsed             Float                 @map("weight_used")
+  repsCompleted          Int                   @map("reps_completed")
+  durationSeconds        Int?                  @map("duration_seconds")
+  distanceMeters         Float?                @map("distance_meters")
+  roundsCompleted        Int?                  @map("rounds_completed")
+  perceivedExertion      Float?                @map("perceived_exertion")
+  notes                  String?
+  seriesIndex            Int                   @map("series_index")
+  completedAt            DateTime              @default(now()) @map("completed_at")
 
+  @@index([sessionId, workoutBlockExerciseId])
   @@map("user_progress")
 }
 
 model WorkoutSession {
-  id              String               @id @default(cuid())
-  userId          String               @map("user_id")
-  assignmentId    String?              @map("assignment_id")
-  programId       String?              @map("program_id")
-  workoutBlockId  String?              @map("workout_block_id")
-  dayNumber       Int                  @map("day_number")
-  startedAt       DateTime             @default(now()) @map("started_at")
-  finishedAt      DateTime?            @map("finished_at")
-  durationSeconds Int?                 @map("duration_seconds")
-  status          WorkoutSessionStatus @default(IN_PROGRESS)
-  createdAt       DateTime             @default(now()) @map("created_at")
-  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assignment      UserProgram?         @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
-  program         Program?             @relation(fields: [programId], references: [id], onDelete: SetNull)
-  workoutBlock    WorkoutBlock?        @relation(fields: [workoutBlockId], references: [id], onDelete: SetNull)
+  id               String               @id @default(cuid())
+  userId           String               @map("user_id")
+  assignmentId     String?              @map("assignment_id")
+  programId        String?              @map("program_id")
+  workoutBlockId   String?              @map("workout_block_id")
+  dayNumber        Int                  @map("day_number")
+  startedAt        DateTime             @default(now()) @map("started_at")
+  finishedAt       DateTime?            @map("finished_at")
+  durationSeconds  Int?                 @map("duration_seconds")
+  status           WorkoutSessionStatus @default(IN_PROGRESS)
+  createdAt        DateTime             @default(now()) @map("created_at")
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignment       UserProgram?         @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  program          Program?             @relation(fields: [programId], references: [id], onDelete: SetNull)
+  workoutBlock     WorkoutBlock?        @relation(fields: [workoutBlockId], references: [id], onDelete: SetNull)
+  exerciseProgress UserProgress[]
 
+  @@index([userId])
   @@map("workout_sessions")
 }
 
@@ -344,23 +382,24 @@ model AttendanceRecord {
 }
 
 model PhysicalAssessment {
-  id         String   @id @default(cuid())
-  userId     String   @map("user_id")
-  user       User     @relation(fields: [userId], references: [id])
-  assessedAt DateTime @map("assessed_at")
-  weightKg   Float?   @map("weight_kg")
-  heightCm   Float?   @map("height_cm")
-  bodyFatPct Float?   @map("body_fat_pct")
-  waistCm    Float?   @map("waist_cm")
-  chestCm    Float?   @map("chest_cm")
-  hipCm      Float?   @map("hip_cm")
+  id         String    @id @default(cuid())
+  userId     String    @map("user_id")
+  user       User      @relation(fields: [userId], references: [id])
+  assessedAt DateTime  @map("assessed_at")
+  weightKg   Float?    @map("weight_kg")
+  heightCm   Float?    @map("height_cm")
+  bodyFatPct Float?    @map("body_fat_pct")
+  waistCm    Float?    @map("waist_cm")
+  chestCm    Float?    @map("chest_cm")
+  hipCm      Float?    @map("hip_cm")
   notes      String?
-  source     String   @default("STUDENT")
+  source     String    @default("STUDENT")
   details    Json?
   deletedAt  DateTime? @map("deleted_at")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
 
+  @@index([userId])
   @@map("physical_assessments")
 }
 
@@ -390,52 +429,56 @@ model EventRegistration {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
   @@map("event_registrations")
 }
 
 model SupportTicket {
-  id           String         @id @default(cuid())
-  userId       String         @map("user_id")
-  assignedToId String?        @map("assigned_to_id")
-  user         User           @relation("SupportTicketStudent", fields: [userId], references: [id])
-  assignedTo   User?          @relation("SupportTicketAssignee", fields: [assignedToId], references: [id])
+  id           String          @id @default(cuid())
+  userId       String          @map("user_id")
+  assignedToId String?         @map("assigned_to_id")
+  user         User            @relation("SupportTicketStudent", fields: [userId], references: [id])
+  assignedTo   User?           @relation("SupportTicketAssignee", fields: [assignedToId], references: [id])
   subject      String
   message      String
-  category     TicketCategory @default(GENERAL)
-  status       TicketStatus   @default(OPEN)
-  priority     TicketPriority @default(NORMAL)
-  deletedAt    DateTime?      @map("deleted_at")
-  createdAt    DateTime       @default(now()) @map("created_at")
-  updatedAt    DateTime       @updatedAt @map("updated_at")
+  category     TicketCategory  @default(GENERAL)
+  status       TicketStatus    @default(OPEN)
+  priority     TicketPriority  @default(NORMAL)
+  deletedAt    DateTime?       @map("deleted_at")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
   messages     TicketMessage[]
 
+  @@index([userId])
+  @@index([assignedToId])
   @@map("support_tickets")
 }
 
 model TicketMessage {
-  id         String         @id @default(cuid())
-  ticketId   String         @map("ticket_id")
-  senderId   String?        @map("sender_id")
-  senderType String         @map("sender_type")
+  id         String        @id @default(cuid())
+  ticketId   String        @map("ticket_id")
+  senderId   String?       @map("sender_id")
+  senderType String        @map("sender_type")
   body       String
-  createdAt  DateTime       @default(now()) @map("created_at")
-  ticket     SupportTicket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  createdAt  DateTime      @default(now()) @map("created_at")
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
   @@index([ticketId, createdAt])
   @@map("ticket_messages")
 }
 
 model AiWorkoutPlan {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  user        User     @relation(fields: [userId], references: [id])
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id])
   objective   String
   level       String
-  daysPerWeek Int      @map("days_per_week")
+  daysPerWeek Int       @map("days_per_week")
   focus       String?
   plan        Json
   deletedAt   DateTime? @map("deleted_at")
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
 
   @@map("ai_workout_plans")
 }
@@ -483,8 +526,64 @@ enum StructureType {
   BI_SET
   DROP_SET
   REST_PAUSE
+  CIRCUIT
+  AMRAP
+  EMOM
+  FOR_TIME
+  TABATA
+  INTERVAL
+  CLASS
 
   @@map("structure_type")
+}
+
+enum PrescriptionType {
+  REPETITIONS
+  DURATION
+  DISTANCE
+  INTERVAL
+  ROUNDS
+  HOLD
+  FREE
+
+  @@map("prescription_type")
+}
+
+enum IntensityType {
+  NONE
+  LOAD
+  RPE
+  RIR
+  PERCENT_1RM
+  HEART_RATE_ZONE
+  PACE
+  SPEED
+
+  @@map("intensity_type")
+}
+
+enum ProgramCompletionMode {
+  BY_SESSIONS
+  BY_DATE
+  BOTH
+  MANUAL
+
+  @@map("program_completion_mode")
+}
+
+enum ProgramScheduleType {
+  ROTATING_CYCLE
+  WEEKLY
+  ON_DEMAND
+
+  @@map("program_schedule_type")
+}
+
+enum ProgramAudienceMode {
+  ALL_ACTIVE
+  SELECTED
+
+  @@map("program_audience_mode")
 }
 
 enum ProgramStatus {
@@ -572,20 +671,20 @@ enum TicketPriority {
 }
 
 model Product {
-  id           String     @id @default(cuid())
+  id           String    @id @default(cuid())
   name         String
   description  String?
-  priceInCents Int        @default(0) @map("price_in_cents")
-  imageUrl     String?    @map("image_url")
+  priceInCents Int       @default(0) @map("price_in_cents")
+  imageUrl     String?   @map("image_url")
   category     String?
-  isActive     Boolean    @default(true) @map("is_active")
-  deletedAt    DateTime?  @map("deleted_at")
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
+  isActive     Boolean   @default(true) @map("is_active")
+  deletedAt    DateTime? @map("deleted_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  purchases    Purchase[]
-  favorites    Favorite[]
-  ratings      Rating[]
+  purchases Purchase[]
+  favorites Favorite[]
+  ratings   Rating[]
 
   @@map("products")
 }
@@ -610,36 +709,36 @@ model Purchase {
   createdAt     DateTime       @default(now()) @map("created_at")
   paidAt        DateTime?      @map("paid_at")
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product       Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   @@map("purchases")
 }
 
 model PaymentCard {
-  id         String   @id @default(cuid())
-  userId     String   @map("user_id")
+  id         String    @id @default(cuid())
+  userId     String    @map("user_id")
   brand      String?
   lastFour   String
-  holderName String?  @map("holder_name")
-  isDefault  Boolean  @default(false) @map("is_default")
+  holderName String?   @map("holder_name")
+  isDefault  Boolean   @default(false) @map("is_default")
   deletedAt  DateTime? @map("deleted_at")
-  createdAt  DateTime @default(now()) @map("created_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
 
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("payment_cards")
 }
 
 model Favorite {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  productId String   @map("product_id")
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  productId String    @map("product_id")
   deletedAt DateTime? @map("deleted_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([userId, productId])
   @@map("favorites")
@@ -651,26 +750,26 @@ model WorkoutFavorite {
   programId String   @map("program_id")
   createdAt DateTime @default(now()) @map("created_at")
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  program   Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
 
   @@unique([userId, programId])
   @@map("workout_favorites")
 }
 
 model Rating {
-  id         String   @id @default(cuid())
-  userId     String   @map("user_id")
-  productId  String?  @map("product_id")
-  targetType String   @map("target_type")
-  targetId   String?  @map("target_id")
+  id         String    @id @default(cuid())
+  userId     String    @map("user_id")
+  productId  String?   @map("product_id")
+  targetType String    @map("target_type")
+  targetId   String?   @map("target_id")
   score      Int
   comment    String?
   deletedAt  DateTime? @map("deleted_at")
-  createdAt  DateTime @default(now()) @map("created_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
 
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product    Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@map("ratings")
 }

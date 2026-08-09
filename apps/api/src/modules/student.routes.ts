@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
+import { calculateProgramEndDate, isProgramComplete } from "./workout-program.utils.js";
 
 const substituteSchema = z.object({
   exerciseId: z.string().min(1)
@@ -25,10 +26,16 @@ const cancelWorkoutSessionSchema = z.object({
 const exerciseProgressSchema = z.object({
   sessionId: z.string().min(1),
   exerciseId: z.string().min(1),
+  prescriptionId: z.string().min(1).optional(),
   completed: z.coerce.boolean(),
   weightUsed: z.coerce.number().min(0).default(0),
   repsCompleted: z.coerce.number().int().min(0).default(0),
-  sets: z.coerce.number().int().min(1).default(1)
+  sets: z.coerce.number().int().min(1).default(1),
+  durationSeconds: z.coerce.number().int().min(0).optional(),
+  distanceMeters: z.coerce.number().min(0).optional(),
+  roundsCompleted: z.coerce.number().int().min(0).optional(),
+  perceivedExertion: z.coerce.number().min(0).max(10).optional(),
+  notes: z.string().max(1000).optional()
 });
 
 const consistencyQuerySchema = z.object({
@@ -189,8 +196,21 @@ async function requireActiveEnrollment(app: FastifyInstance, request: FastifyReq
 }
 
 function mapWorkoutExercise(item: {
+  id: string;
   sets: number;
   repsRange: string;
+  prescriptionType: "REPETITIONS" | "DURATION" | "DISTANCE" | "INTERVAL" | "ROUNDS" | "HOLD" | "FREE";
+  repsMin: number | null;
+  repsMax: number | null;
+  durationSeconds: number | null;
+  distanceMeters: number | null;
+  rounds: number | null;
+  workSeconds: number | null;
+  intensityType: "NONE" | "LOAD" | "RPE" | "RIR" | "PERCENT_1RM" | "HEART_RATE_ZONE" | "PACE" | "SPEED";
+  intensityValue: string | null;
+  tempo: string | null;
+  side: string | null;
+  executionNotes: string | null;
   initialLoad: string | null;
   restSeconds: number | null;
   supportMaterialUrl: string | null;
@@ -216,6 +236,7 @@ function mapWorkoutExercise(item: {
   };
 }, latestWeightUsed = 0, restSeconds = 0) {
   return {
+    prescriptionId: item.id,
     id: item.exercise.id,
     title: item.exercise.title ?? item.exercise.name ?? "Exercício",
     videoUrl: item.exercise.videoUrl ?? "",
@@ -226,6 +247,18 @@ function mapWorkoutExercise(item: {
     equipmentTags: item.exercise.equipmentTags,
     sets: item.sets,
     repsRange: item.repsRange,
+    prescriptionType: item.prescriptionType,
+    repsMin: item.repsMin,
+    repsMax: item.repsMax,
+    durationSeconds: item.durationSeconds,
+    distanceMeters: item.distanceMeters,
+    rounds: item.rounds,
+    workSeconds: item.workSeconds,
+    intensityType: item.intensityType,
+    intensityValue: item.intensityValue ?? "",
+    tempo: item.tempo ?? "",
+    side: item.side ?? "",
+    executionNotes: item.executionNotes ?? "",
     initialLoad: item.initialLoad ?? "",
     restSeconds: item.restSeconds ?? restSeconds,
     latestWeightUsed,
@@ -282,7 +315,18 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
       deletedAt: null,
       days: {
         some: {}
-      }
+      },
+      OR: [
+        { audienceMode: "ALL_ACTIVE" },
+        {
+          assignedUsers: {
+            some: {
+              userId,
+              status: "ACTIVE"
+            }
+          }
+        }
+      ]
     },
     include: {
       days: true
@@ -325,7 +369,7 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
     return [];
   }
 
-  const [membership, teachers] = await Promise.all([
+  const [membership, teachers, studentLocation] = await Promise.all([
     getCurrentStudentMembership(userId),
     prisma.user.findMany({
       where: {
@@ -336,6 +380,18 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
         name: true
       },
       take: 3
+    }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        profile: {
+          select: {
+            location: {
+              select: { name: true }
+            }
+          }
+        }
+      }
     })
   ]);
 
@@ -352,12 +408,18 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
           userId,
           programId: publishedProgram.id,
           currentDay: dayNumber,
-          totalWorkouts: publishedProgram.totalWorkouts,
+          totalWorkouts: publishedProgram.plannedSessions,
           completedWorkouts: 0,
-          status: "ACTIVE"
+          status: "ACTIVE",
+          plannedEndsAt: calculateProgramEndDate(new Date(), {
+            years: publishedProgram.durationYears,
+            months: publishedProgram.durationMonths,
+            weeks: publishedProgram.durationWeeks,
+            days: publishedProgram.durationExtraDays
+          })
         },
         update: {
-          totalWorkouts: publishedProgram.totalWorkouts
+          totalWorkouts: publishedProgram.plannedSessions
         },
         include: {
           program: {
@@ -374,13 +436,19 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
       }
 
       if (assignment.status !== "ACTIVE") {
+        return null;
+      }
+
+      if (!assignment.plannedEndsAt) {
         assignment = await prisma.userProgram.update({
-          where: {
-            id: assignment.id
-          },
+          where: { id: assignment.id },
           data: {
-            status: "ACTIVE",
-            completedAt: null
+            plannedEndsAt: calculateProgramEndDate(assignment.startedAt, {
+              years: assignment.program.durationYears,
+              months: assignment.program.durationMonths,
+              weeks: assignment.program.durationWeeks,
+              days: assignment.program.durationExtraDays
+            })
           },
           include: {
             program: {
@@ -391,6 +459,19 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
             }
           }
         });
+      }
+
+      if (isProgramComplete({
+        completionMode: assignment.program.completionMode,
+        completedSessions: assignment.completedWorkouts,
+        plannedSessions: assignment.totalWorkouts,
+        plannedEndsAt: assignment.plannedEndsAt
+      })) {
+        await prisma.userProgram.update({
+          where: { id: assignment.id },
+          data: { status: "COMPLETED", completedAt: new Date() }
+        });
+        return null;
       }
 
       if (!assignment.program.days.some((day) => day.dayNumber === assignment.currentDay)) {
@@ -482,11 +563,11 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
           dayNumber: true
         }
       });
-      const completedWorkoutCount = Math.min(
-        Math.max(assignment.completedWorkouts, completedSessions.length),
-        assignment.totalWorkouts
-      );
-      const completedInCurrentCycle = completedWorkoutCount >= assignment.totalWorkouts ? programDays.length : completedWorkoutCount % programDays.length;
+      const completedWorkoutCount = Math.max(assignment.completedWorkouts, completedSessions.length);
+      const completedInCurrentCycle =
+        assignment.program.completionMode === "BY_SESSIONS" && completedWorkoutCount >= assignment.totalWorkouts
+          ? programDays.length
+          : completedWorkoutCount % programDays.length;
       const metadata = parseProgramMetadata(programDay.program.description);
       const modalityName = programDay.program.modality?.name ?? metadata.modality;
       const sequence = programDays.map((day, index) => ({
@@ -505,6 +586,10 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
           weeklyFrequency: day.workoutBlock.weeklyFrequency,
           structureType: day.workoutBlock.structureType,
           restTime: day.workoutBlock.restTime,
+          protocolRounds: day.workoutBlock.protocolRounds,
+          workSeconds: day.workoutBlock.workSeconds,
+          timeCapSeconds: day.workoutBlock.timeCapSeconds,
+          instructions: day.workoutBlock.instructions,
           exercises: day.workoutBlock.exercises.map((exercise) =>
             mapWorkoutExercise(exercise, latestWeightByExercise.get(exercise.exerciseId) ?? 0, day.workoutBlock.restTime)
           )
@@ -522,8 +607,21 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
         modalityImageUrl: programDay.program.modality?.imageUrl ?? null,
         description: metadata.description,
         completedWorkouts: completedWorkoutCount,
+        duration: {
+          years: assignment.program.durationYears,
+          months: assignment.program.durationMonths,
+          weeks: assignment.program.durationWeeks,
+          days: assignment.program.durationExtraDays,
+          estimatedCalendarDays: assignment.program.durationDays,
+          plannedSessions: assignment.totalWorkouts,
+          completionMode: assignment.program.completionMode,
+          scheduleType: assignment.program.scheduleType,
+          cycleLengthDays: assignment.program.cycleLengthDays,
+          startedAt: assignment.startedAt,
+          plannedEndsAt: assignment.plannedEndsAt
+        },
         teacherNames: teachers.map((teacher) => teacher.name),
-        unitName: "Unidade não informada",
+        unitName: studentLocation?.profile?.location?.name ?? "Não informada",
         membershipStartsAt: membership ? resolveMembershipStartsAt(membership) : null,
         membershipEndsAt: membership ? resolveMembershipEndsAt(membership) : null,
         sequence,
@@ -534,6 +632,10 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
           weeklyFrequency: programDay.workoutBlock.weeklyFrequency,
           structureType: programDay.workoutBlock.structureType,
           restTime: programDay.workoutBlock.restTime,
+          protocolRounds: programDay.workoutBlock.protocolRounds,
+          workSeconds: programDay.workoutBlock.workSeconds,
+          timeCapSeconds: programDay.workoutBlock.timeCapSeconds,
+          instructions: programDay.workoutBlock.instructions,
           exercises: programDay.workoutBlock.exercises.map((exercise) =>
             mapWorkoutExercise(exercise, latestWeightByExercise.get(exercise.exerciseId) ?? 0, programDay.workoutBlock.restTime)
           )
@@ -815,6 +917,7 @@ export async function registerStudentRoutes(app: FastifyInstance) {
           include: {
             exercises: {
               select: {
+                id: true,
                 exerciseId: true
               }
             }
@@ -827,21 +930,19 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       throw httpError(409, "Inicie o treino antes de registrar exercícios concluídos.");
     }
 
-    const exerciseBelongsToWorkout = session.workoutBlock?.exercises.some(
-      (workoutExercise) => workoutExercise.exerciseId === body.exerciseId
+    const workoutExercise = session.workoutBlock?.exercises.find(
+      (item) => item.exerciseId === body.exerciseId && (!body.prescriptionId || item.id === body.prescriptionId)
     );
 
-    if (!exerciseBelongsToWorkout) {
+    if (!workoutExercise) {
       throw httpError(400, "Este exercício não pertence ao bloco de treino iniciado.");
     }
 
     await prisma.userProgress.deleteMany({
       where: {
         userId: authUser.id,
-        exerciseId: body.exerciseId,
-        completedAt: {
-          gte: session.startedAt
-        }
+        sessionId: session.id,
+        workoutBlockExerciseId: workoutExercise.id
       }
     });
 
@@ -858,8 +959,15 @@ export async function registerStudentRoutes(app: FastifyInstance) {
           data: {
             userId: authUser.id,
             exerciseId: body.exerciseId,
+            sessionId: session.id,
+            workoutBlockExerciseId: workoutExercise.id,
             weightUsed: body.weightUsed,
             repsCompleted: body.repsCompleted,
+            durationSeconds: body.durationSeconds,
+            distanceMeters: body.distanceMeters,
+            roundsCompleted: body.roundsCompleted,
+            perceivedExertion: body.perceivedExertion,
+            notes: body.notes,
             seriesIndex: index + 1
           }
         })
@@ -1060,8 +1168,17 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       programDays.findIndex((day) => day.dayNumber === completedDayNumber)
     );
     const nextDayNumber = programDays[(currentIndex + 1) % totalDays]?.dayNumber ?? completedDayNumber;
-    const completedWorkouts = Math.min(assignment.completedWorkouts + 1, assignment.totalWorkouts);
-    const isLastWorkout = completedWorkouts >= assignment.totalWorkouts;
+    const countCanExceedTarget = assignment.program.completionMode === "BY_DATE" || assignment.program.completionMode === "MANUAL";
+    const completedWorkouts = countCanExceedTarget
+      ? assignment.completedWorkouts + 1
+      : Math.min(assignment.completedWorkouts + 1, assignment.totalWorkouts);
+    const isLastWorkout = isProgramComplete({
+      completionMode: assignment.program.completionMode,
+      completedSessions: completedWorkouts,
+      plannedSessions: assignment.totalWorkouts,
+      plannedEndsAt: assignment.plannedEndsAt,
+      now: finishedAt
+    });
     const updatedAssignment = await prisma.userProgram.update({
       where: {
         id: assignment.id

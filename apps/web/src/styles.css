@@ -6817,6 +6817,29 @@ summary:focus-visible {
     gap: 12px;
   }
 
+  .admin-workspace-shell .admin-nav-group-label {
+    display: none;
+  }
+
+  .admin-workspace-shell .workspace-nav {
+    margin-inline: -4px;
+    padding: 0 4px 6px;
+  }
+
+  .admin-workspace-shell .workspace-logout {
+    position: absolute;
+    top: 18px;
+    right: clamp(16px, 4vw, 24px);
+    display: grid;
+    width: 42px;
+    height: 42px;
+    min-height: 42px;
+    overflow: hidden;
+    padding: 0;
+    place-items: center;
+    font-size: 0;
+  }
+
   .admin-workspace-shell .workspace-logout,
   .admin-workspace-shell .workspace-sidebar-user {
     grid-row: auto;
@@ -6909,6 +6932,92 @@ summary:focus-visible {
 
   .footer-brand {
     grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 600px) {
+  .admin-workspace-shell .workspace-sidebar {
+    grid-template-rows: auto auto;
+    max-height: none;
+    gap: 8px;
+    overflow: visible;
+    padding-block: 10px;
+  }
+
+  .admin-workspace-shell .workspace-sidebar-brand {
+    min-height: 48px;
+    padding: 0;
+  }
+
+  .admin-workspace-shell .workspace-sidebar-brand img {
+    width: 42px;
+    height: 42px;
+  }
+
+  .admin-workspace-shell .workspace-sidebar-brand strong {
+    font-size: 15px;
+  }
+
+  .admin-workspace-shell .workspace-nav a,
+  .admin-workspace-shell .workspace-nav button {
+    min-height: 40px;
+    padding: 8px 11px;
+    font-size: 12px;
+  }
+
+  .admin-workspace-content {
+    padding: 16px;
+  }
+
+  .admin-workspace-shell .dashboard-heading {
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .admin-workspace-shell .dashboard-heading h1 {
+    font-size: 27px;
+  }
+
+  .admin-workspace-shell .dashboard-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-workspace-shell .dashboard-actions button {
+    min-width: 0;
+    padding-inline: 10px;
+    font-size: 12px;
+  }
+
+  .admin-workspace-shell .cms-panel {
+    padding: 12px;
+  }
+
+  .admin-workspace-shell .cms-hero {
+    display: none;
+  }
+
+  .admin-workspace-shell .cms-workflow {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+  }
+
+  .admin-workspace-shell .cms-workflow button,
+  .admin-workspace-shell .cms-workflow button:last-child {
+    min-height: 72px;
+    flex: 0 0 152px;
+    border-right: 1px solid rgba(255, 255, 255, 0.14);
+    border-bottom: 0;
+    scroll-snap-align: start;
+  }
+
+  .admin-workspace-shell .cms-workflow small {
+    display: none;
+  }
+
+  .cms-exercise-prescription-grid {
+    grid-template-columns: 1fr;
   }
 }
 
