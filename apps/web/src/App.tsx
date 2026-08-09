@@ -2742,6 +2742,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
   const activeCmsModalities = cmsModalities.filter((item) => item.isActive);
   const cmsProgramFormModalities = cmsModalities.filter((item) => item.isActive || item.id === editingCmsProgram?.modality?.id);
+  const cmsBlockFormModalities = cmsModalities.filter((item) => item.isActive || item.id === editingCmsWorkoutBlock?.modality?.id);
   const filteredCmsExercises = cmsLessonsModalityFilter
     ? cmsExercises.filter((item) => (item.modalityLinks ?? []).some((link) => link.modality.id === cmsLessonsModalityFilter))
     : cmsExercises;
@@ -5854,16 +5855,32 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   Descanso padrão
                   <input name="restTime" type="number" min="0" defaultValue={editingCmsWorkoutBlock?.restTime ?? 60} placeholder="Segundos" required />
                 </label>
-                <label>
-                  Modalidade
-                  <select name="modalityId" value={cmsBlockFormModality} onChange={(event) => setCmsBlockFormModality(event.target.value)}>
-                    <option value="">Sem modalidade</option>
-                    {activeCmsModalities.map((modality) => (
-                      <option value={modality.id} key={modality.id}>
-                        {modality.name}
-                      </option>
+                <label className="wide-field">
+                  Modalidade da ficha
+                  <div className="cms-chip-group">
+                    <label className="cms-chip">
+                      <input
+                        type="radio"
+                        name="modalityId"
+                        value=""
+                        checked={!cmsBlockFormModality}
+                        onChange={(event) => setCmsBlockFormModality(event.target.value)}
+                      />
+                      <span>Sem modalidade</span>
+                    </label>
+                    {cmsBlockFormModalities.map((modality) => (
+                      <label className="cms-chip" key={modality.id}>
+                        <input
+                          type="radio"
+                          name="modalityId"
+                          value={modality.id}
+                          checked={cmsBlockFormModality === modality.id}
+                          onChange={(event) => setCmsBlockFormModality(event.target.value)}
+                        />
+                        <span>{modality.name}{modality.isActive ? "" : " (inativa)"}</span>
+                      </label>
                     ))}
-                  </select>
+                  </div>
                 </label>
                 <div className="cms-form-section-title wide-field">
                   <span>Bloco 3</span>
