@@ -39,6 +39,7 @@ import {
   Pencil,
   Phone,
   Play,
+  Plus,
   QrCode,
   RefreshCw,
   RotateCcw,
@@ -2717,6 +2718,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const [cmsBlocksModalityFilter, setCmsBlocksModalityFilter] = useState("");
   const [cmsBlocksPage, setCmsBlocksPage] = useState(1);
   const [cmsBlockFormModality, setCmsBlockFormModality] = useState("");
+  const [cmsWorkoutExerciseRows, setCmsWorkoutExerciseRows] = useState(1);
   const [editingCmsProgram, setEditingCmsProgram] = useState<CmsProgramRow | null>(null);
   const [cmsProgramDurationYears, setCmsProgramDurationYears] = useState(0);
   const [cmsProgramDurationMonths, setCmsProgramDurationMonths] = useState(0);
@@ -3586,7 +3588,9 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   }
 
   function parseCmsWorkoutBlockExercises(data: FormData) {
-    return Array.from({ length: 6 })
+    const rowCount = Math.max(1, Number(data.get("exerciseRowCount") ?? 1));
+
+    return Array.from({ length: rowCount })
       .map((_, index) => {
         const row = index + 1;
         const exerciseId = String(data.get(`exerciseId${row}`) ?? "").trim();
@@ -3732,6 +3736,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         form.reset();
         setEditingCmsWorkoutBlock(null);
         setCmsBlockFormModality("");
+        setCmsWorkoutExerciseRows(1);
         await applyAdminChange(["workoutBlocks", "programs"], "Ficha atualizada com sucesso.");
         return;
       }
@@ -3739,6 +3744,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       await apiPost("/admin/cms/workout-blocks", payload, token);
       form.reset();
       setCmsBlockFormModality("");
+      setCmsWorkoutExerciseRows(1);
       await applyAdminChange(["workoutBlocks", "programs"], "Ficha cadastrada com sucesso.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível salvar o bloco CMS."));
@@ -3748,11 +3754,13 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   function startEditCmsWorkoutBlock(item: CmsWorkoutBlockRow) {
     setEditingCmsWorkoutBlock(item);
     setCmsBlockFormModality(item.modality?.id ?? "");
+    setCmsWorkoutExerciseRows(Math.max(1, item.exercises.length));
   }
 
   function handleCancelCmsWorkoutBlockEdit() {
     setEditingCmsWorkoutBlock(null);
     setCmsBlockFormModality("");
+    setCmsWorkoutExerciseRows(1);
   }
 
   async function handleSaveCmsProgram(event: FormEvent<HTMLFormElement>) {
@@ -5898,48 +5906,93 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   </div>
                 </div>
                 <div className="cms-builder-list wide-field">
-                  <div className="cms-builder-heading exercise-execution-row">
-                    <span>Aula</span>
-                    <span>Séries</span>
-                    <span>Repetições</span>
-                    <span>Carga inicial</span>
-                    <span>Descanso</span>
-                    <span>Material</span>
+                  <input type="hidden" name="exerciseRowCount" value={cmsWorkoutExerciseRows} readOnly />
+                  <div className="cms-execution-toolbar">
+                    <div>
+                      <strong>{cmsWorkoutExerciseRows} exercício(s) na ficha</strong>
+                      <span>Adicione somente as linhas necessárias para esta divisão.</span>
+                    </div>
+                    <div className="cms-execution-actions">
+                      <button
+                        type="button"
+                        onClick={() => setCmsWorkoutExerciseRows((count) => Math.min(20, count + 1))}
+                        disabled={cmsWorkoutExerciseRows >= 20}
+                      >
+                        <Plus size={17} />
+                        Adicionar exercício
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCmsWorkoutExerciseRows((count) => Math.max(1, count - 1))}
+                        disabled={cmsWorkoutExerciseRows <= 1}
+                      >
+                        <Trash2 size={17} />
+                        Remover último
+                      </button>
+                    </div>
                   </div>
-                  {Array.from({ length: 6 }).map((_, index) => {
-                    const row = index + 1;
-                    const editRow = editingCmsWorkoutBlock?.exercises.find((entry) => entry.order === row);
+                  <div className="cms-exercise-editor-list">
+                    {Array.from({ length: cmsWorkoutExerciseRows }).map((_, index) => {
+                      const row = index + 1;
+                      const editRow = editingCmsWorkoutBlock?.exercises.find((entry) => entry.order === row);
 
-                    return (
-                      <div className="cms-builder-row exercise-execution-row" key={`block-exercise-${row}`}>
-                        <select name={`exerciseId${row}`} required={row === 1} defaultValue={editRow?.exercise.id ?? ""}>
-                          <option value="">{row === 1 ? "Selecione a primeira aula" : "Aula opcional"}</option>
-                          {cmsBlockModalityExercises.map((exercise) => (
-                            <option value={exercise.id} key={exercise.id}>
-                              {cmsExerciseLabel(exercise)}
-                            </option>
-                          ))}
-                          {editRow && !cmsBlockModalityExercises.some((exercise) => exercise.id === editRow.exercise.id) && (
-                            <option value={editRow.exercise.id}>
-                              {cmsExerciseLabel(editRow.exercise)}
-                            </option>
-                          )}
-                        </select>
-                        <input name={`sets${row}`} type="number" min="1" defaultValue={editRow?.sets ?? 3} aria-label={`Séries do exercício ${row}`} />
-                        <input name={`repsRange${row}`} placeholder="10-12 ou falha" defaultValue={editRow?.repsRange ?? "10-12"} aria-label={`Repetições do exercício ${row}`} />
-                        <input name={`initialLoad${row}`} placeholder="Ex.: 20kg" defaultValue={editRow?.initialLoad ?? ""} aria-label={`Carga inicial do exercício ${row}`} />
-                        <input name={`restSeconds${row}`} type="number" min="0" placeholder="60" defaultValue={editRow?.restSeconds ?? ""} aria-label={`Descanso do exercício ${row}`} />
-                        <input
-                          name={`supportMaterialUrl${row}`}
-                          type="text"
-                          list="cms-support-materials"
-                          placeholder={editRow?.exercise.materialUrl ? "Material da aula ou URL" : "Selecione ou informe a URL"}
-                          defaultValue={editRow?.supportMaterialUrl ?? ""}
-                          aria-label={`Material de apoio do exercício ${row}`}
-                        />
-                      </div>
-                    );
-                  })}
+                      return (
+                        <div className="cms-exercise-editor" key={`block-exercise-${row}`}>
+                          <div className="cms-exercise-editor-heading">
+                            <span>{row}</span>
+                            <div>
+                              <strong>Exercício {row}</strong>
+                              <small>{row === 1 ? "Obrigatório" : "Opcional"}</small>
+                            </div>
+                          </div>
+                          <label className="cms-exercise-main-field">
+                            Exercício/Aula
+                            <select name={`exerciseId${row}`} required={row === 1} defaultValue={editRow?.exercise.id ?? ""}>
+                              <option value="">{row === 1 ? "Selecione a primeira aula" : "Selecione uma aula"}</option>
+                              {cmsBlockModalityExercises.map((exercise) => (
+                                <option value={exercise.id} key={exercise.id}>
+                                  {cmsExerciseLabel(exercise)}
+                                </option>
+                              ))}
+                              {editRow && !cmsBlockModalityExercises.some((exercise) => exercise.id === editRow.exercise.id) && (
+                                <option value={editRow.exercise.id}>
+                                  {cmsExerciseLabel(editRow.exercise)}
+                                </option>
+                              )}
+                            </select>
+                          </label>
+                          <div className="cms-exercise-prescription-grid">
+                            <label>
+                              Séries
+                              <input name={`sets${row}`} type="number" min="1" defaultValue={editRow?.sets ?? 3} />
+                            </label>
+                            <label>
+                              Repetições
+                              <input name={`repsRange${row}`} placeholder="10-12 ou até a falha" defaultValue={editRow?.repsRange ?? "10-12"} />
+                            </label>
+                            <label>
+                              Carga inicial (opcional)
+                              <input name={`initialLoad${row}`} placeholder="Ex.: 20kg" defaultValue={editRow?.initialLoad ?? ""} />
+                            </label>
+                            <label>
+                              Descanso (segundos)
+                              <input name={`restSeconds${row}`} type="number" min="0" placeholder="Ex.: 60" defaultValue={editRow?.restSeconds ?? ""} />
+                            </label>
+                          </div>
+                          <label>
+                            Material de apoio (opcional)
+                            <input
+                              name={`supportMaterialUrl${row}`}
+                              type="text"
+                              list="cms-support-materials"
+                              placeholder={editRow?.exercise.materialUrl ? "Material da aula ou outra URL" : "Selecione um material ou informe a URL"}
+                              defaultValue={editRow?.supportMaterialUrl ?? ""}
+                            />
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
                   <datalist id="cms-support-materials">
                     {cmsExercises.map((exercise) => exercise.materialUrl && (
                       <option value={exercise.materialUrl} label={`${cmsExerciseLabel(exercise)} - material`} key={`${exercise.id}-material`} />
