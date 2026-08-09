@@ -67,13 +67,6 @@ const registerSchema = z
         message: "Informe uma senha para continuar."
       });
     }
-
-    if (data.provider === "GOOGLE" && !data.email) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Informe um e-mail para entrar com o Google."
-      });
-    }
   });
 
 const googleSchema = z.object({
@@ -99,22 +92,14 @@ const forgotPasswordSchema = z
     }
   });
 
-const devUsers = new Map<
-  string,
-  {
-    id: string;
-    name: string;
-    email?: string | null;
-    phone?: string | null;
-    passwordHash?: string | null;
-    role: "ADMIN" | "USER";
-    status: "ACTIVE";
-    provider: AuthProvider;
+function requireDatabase() {
+  if (!env.DATABASE_URL) {
+    const error = new Error("Banco de dados não configurado para esta operação.") as Error & {
+      statusCode: number;
+    };
+    error.statusCode = 503;
+    throw error;
   }
->();
-
-function roleForDemoEmail(email: string) {
-  return email.includes("admin") ? "ADMIN" : "USER";
 }
 
 function todayUtcOnly() {
@@ -136,10 +121,12 @@ function buildSyntheticEmail(phone: string) {
 
 async function verifyGoogleIdToken(idToken?: string | null) {
   if (!idToken) {
-    return null;
+    throw new Error("Credencial do Google não recebida.");
   }
 
-  const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+  const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`, {
+    signal: AbortSignal.timeout(5000)
+  });
 
   if (!response.ok) {
     throw new Error("Token do Google inválido.");
@@ -171,8 +158,6 @@ async function verifyGoogleIdToken(idToken?: string | null) {
 async function recordDailyAttendance(userId: string, role: "ADMIN" | "USER") {
   if (role !== "USER") return;
 
-  if (!env.DATABASE_URL) return;
-
   try {
     await prisma.attendanceRecord.upsert({
       where: {
@@ -192,159 +177,27 @@ async function recordDailyAttendance(userId: string, role: "ADMIN" | "USER") {
   }
 }
 
-async function findOrCreateDevUser(email: string | null, phone: string | null, password: string | null, provider: AuthProvider) {
-  const lookupKeys = [email, phone].filter(Boolean) as string[];
-
-  for (const key of lookupKeys) {
-    const user = devUsers.get(key);
-    if (user) {
-      return user;
-    }
-  }
-
-  if (email?.endsWith("@app-treino.local") || provider === "GOOGLE") {
-    const role = email ? roleForDemoEmail(email) : "USER";
-    const user = {
-      id: `dev-${role.toLowerCase()}-1`,
-      name: provider === "GOOGLE" ? "Usuário Google" : role === "ADMIN" ? "Administrador" : "Aluno App Treino",
-      email,
-      phone,
-      passwordHash: await hashPassword(password ?? "123456"),
-      role: role as "ADMIN" | "USER",
-      status: "ACTIVE" as const,
-      provider
-    };
-
-    if (email) {
-      devUsers.set(email, user);
-    }
-    if (phone) {
-      devUsers.set(phone, user);
-    }
-
-    return user;
-  }
-
-  return null;
-}
-
-async function resolveUserFromIdentifier(email: string | null, phone: string | null) {
-  if (email) {
-    try {
-      const existing = await prisma.user.findUnique({ where: { email } });
-      if (existing) {
-        return existing;
-      }
-    } catch (error) {
-      console.warn("Falling back to in-memory auth because the database is unavailable.", error);
-    }
-  }
-
-  if (phone) {
-    try {
-      const existing = await prisma.user.findUnique({ where: { phone } });
-      if (existing) {
-        return existing;
-      }
-    } catch (error) {
-      console.warn("Falling back to in-memory auth because the database is unavailable.", error);
-    }
-  }
-
-  const lookupKeys = [email, phone].filter(Boolean) as string[];
-
-  for (const key of lookupKeys) {
-    const cached = devUsers.get(key);
-    if (cached) {
-      return cached;
-    }
-  }
-
-  return null;
-}
-
 export async function registerAuthRoutes(app: FastifyInstance) {
-  app.post("/auth/login", async (request, reply) => {
+  app.post(
+    "/auth/login",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+    requireDatabase();
     const credentials = loginSchema.parse(request.body);
     const email = normalizeEmail(credentials.email);
     const phone = normalizePhone(credentials.phone);
-    const provider = credentials.provider as AuthProvider;
 
-    if (!env.DATABASE_URL) {
-      const user = await findOrCreateDevUser(email, phone, credentials.password ?? null, provider);
-
-      if (!user) {
-        return reply.code(401).send({
-          message: "E-mail ou senha inválidos."
-        });
-      }
-
-      if (provider === "EMAIL" && !(await verifyPassword(credentials.password ?? "", user.passwordHash))) {
-        return reply.code(401).send({
-          message: "E-mail ou senha inválidos."
-        });
-      }
-
-      const authUser = toAuthUser(user);
-      const token = app.jwt.sign(authUser);
-
-      return reply.send({
-        token,
-        user: authUser
+    if (credentials.provider !== "EMAIL") {
+      return reply.code(400).send({
+        message: "Para entrar com o Google, utilize o botão de login do Google."
       });
     }
 
-    let user = await resolveUserFromIdentifier(email, phone);
-
-    if (!user && email?.endsWith("@app-treino.local")) {
-      try {
-        user = await prisma.user.create({
-            data: {
-              name: roleForDemoEmail(email) === "ADMIN" ? "Administrador" : "Aluno App Treino",
-              email,
-              phone,
-              passwordHash: await hashPassword(credentials.password ?? "123456"),
-              provider,
-              role: roleForDemoEmail(email),
-              profile: {
-                create: {
-                  phone,
-                  objective: "Ganhar massa muscular",
-                  level: "Intermediário"
-                }
-              }
-          }
-        });
-      } catch (error) {
-        console.warn("Database create failed; using in-memory fallback.", error);
-        user = await findOrCreateDevUser(email, phone, credentials.password ?? null, provider);
-      }
-    }
-
-    if (!user && provider === "GOOGLE") {
-      const fallbackEmail = email ?? (phone ? buildSyntheticEmail(phone) : null);
-
-      if (fallbackEmail) {
-        try {
-          user = await prisma.user.create({
-            data: {
-              name: "Usuário Google",
-              email: fallbackEmail ?? "google-user@app-treino.local",
-              phone,
-              passwordHash: await hashPassword("google-signin"),
-              provider: "GOOGLE",
-              role: "USER",
-              profile: {
-                create: { phone }
-              }
-            }
-          });
-        } catch (error) {
-          console.warn("Database create failed; using in-memory fallback.", error);
-          user = await findOrCreateDevUser(email, phone, null, "GOOGLE");
-        }
-      }
-    }
+    const user = email
+      ? await prisma.user.findUnique({ where: { email } })
+      : phone
+        ? await prisma.user.findUnique({ where: { phone } })
+        : null;
 
     if (!user) {
       return reply.code(401).send({
@@ -352,12 +205,10 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       });
     }
 
-    if (provider === "EMAIL") {
-      if (!(await verifyPassword(credentials.password ?? "", user.passwordHash))) {
-        return reply.code(401).send({
-          message: "E-mail ou senha inválidos."
-        });
-      }
+    if (!(await verifyPassword(credentials.password ?? "", user.passwordHash))) {
+      return reply.code(401).send({
+        message: "E-mail ou senha inválidos."
+      });
     }
 
     if (user.status !== "ACTIVE") {
@@ -375,51 +226,29 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       token,
       user: authUser
     });
-  });
+    }
+  );
 
-  app.post("/auth/register", async (request, reply) => {
+  app.post(
+    "/auth/register",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+    requireDatabase();
     const body = registerSchema.parse(request.body);
     const email = normalizeEmail(body.email);
     const phone = normalizePhone(body.phone);
-    const provider = body.provider as AuthProvider;
-    const fallbackEmail = email ?? (phone ? buildSyntheticEmail(phone) : null);
 
-    if (!env.DATABASE_URL) {
-      const existingKey = email ?? phone;
-
-      if (existingKey && devUsers.has(existingKey)) {
-        return reply.code(409).send({
-          message: "E-mail ou telefone já cadastrado."
-        });
-      }
-
-      const user = {
-        id: `dev-user-${devUsers.size + 1}`,
-        name: body.name,
-        email,
-        phone,
-        passwordHash: provider === "EMAIL" ? await hashPassword(body.password ?? "123456") : null,
-        role: "USER" as const,
-        status: "ACTIVE" as const,
-        provider
-      };
-      if (email) {
-        devUsers.set(email, user);
-      }
-      if (phone) {
-        devUsers.set(phone, user);
-      }
-
-      const authUser = toAuthUser(user);
-      const token = app.jwt.sign(authUser);
-
-      return reply.code(201).send({
-        token,
-        user: authUser
+    if (body.provider !== "EMAIL") {
+      return reply.code(400).send({
+        message: "Crie a conta do Google pelo botão de login do Google."
       });
     }
 
-    const existingUser = await resolveUserFromIdentifier(email, phone);
+    const existingUser = email
+      ? await prisma.user.findUnique({ where: { email } })
+      : phone
+        ? await prisma.user.findUnique({ where: { phone } })
+        : null;
 
     if (existingUser) {
       return reply.code(409).send({
@@ -427,45 +256,24 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       });
     }
 
-    let user;
+    const fallbackEmail = email ?? (phone ? buildSyntheticEmail(phone) : null);
 
-    try {
-      user = await prisma.user.create({
-        data: {
-          name: body.name,
-          email: fallbackEmail ?? `user-${Date.now()}@app-treino.local`,
-          phone,
-          passwordHash: provider === "EMAIL" ? await hashPassword(body.password ?? "123456") : await hashPassword("google-signin"),
-          provider,
-          role: "USER",
-          profile: {
-            create: {
-              phone,
-              gender: body.gender || null
-            }
+    const user = await prisma.user.create({
+      data: {
+        name: body.name,
+        email: fallbackEmail ?? `user-${Date.now()}@app-treino.local`,
+        phone,
+        passwordHash: await hashPassword(body.password ?? "123456"),
+        provider: "EMAIL",
+        role: "USER",
+        profile: {
+          create: {
+            phone,
+            gender: body.gender || null
           }
         }
-      });
-    } catch (error) {
-      console.warn("Database create failed; using in-memory fallback.", error);
-      const fallbackUser = {
-        id: `dev-user-${devUsers.size + 1}`,
-        name: body.name,
-        email,
-        phone,
-        passwordHash: provider === "EMAIL" ? await hashPassword(body.password ?? "123456") : await hashPassword("google-signin"),
-        role: "USER" as const,
-        status: "ACTIVE" as const,
-        provider
-      };
-      if (email) {
-        devUsers.set(email, fallbackUser);
       }
-      if (phone) {
-        devUsers.set(phone, fallbackUser);
-      }
-      user = fallbackUser;
-    }
+    });
 
     await recordDailyAttendance(user.id, user.role);
     const authUser = toAuthUser(user);
@@ -475,122 +283,83 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       token,
       user: authUser
     });
-  });
+    }
+  );
 
-  app.post("/auth/google", async (request, reply) => {
+  app.post(
+    "/auth/google",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+    requireDatabase();
     const body = googleSchema.parse(request.body);
-    let email = normalizeEmail(body.email);
-    const phone = normalizePhone(body.phone);
     const idToken = body.idToken || body.credential || null;
-    let googleId: string | null = null;
-    let name = body.name?.trim() || "Usuário Google";
 
-    if (!idToken && !email && !phone) {
+    if (!idToken) {
       return reply.code(401).send({
         message: "Credencial do Google não recebida. Recarregue a página e tente novamente."
       });
     }
 
-    try {
-      const googleProfile = await verifyGoogleIdToken(idToken);
+    let googleProfile: { googleId: string; email: string | null; name: string };
 
-      if (googleProfile) {
-        email = googleProfile.email;
-        googleId = googleProfile.googleId;
-        name = googleProfile.name;
+    try {
+      const profile = await verifyGoogleIdToken(idToken);
+
+      if (!profile) {
+        return reply.code(401).send({
+          message: "Token do Google inválido."
+        });
       }
+
+      googleProfile = profile;
     } catch (error) {
       return reply.code(401).send({
         message: error instanceof Error ? error.message : "Token do Google inválido."
       });
     }
 
-    if (!env.DATABASE_URL) {
-      const user = await findOrCreateDevUser(email, phone, null, "GOOGLE");
+    const email = googleProfile.email;
+    const googleId = googleProfile.googleId;
+    const phone = normalizePhone(body.phone);
 
-      if (!user) {
-        return reply.code(401).send({
-          message: "Não foi possível entrar com o Google neste momento."
-        });
-      }
-
-      const authUser = toAuthUser(user);
-      const token = app.jwt.sign(authUser);
-
-      return reply.send({
-        token,
-        user: authUser
-      });
-    }
-
-    let user: AuthRouteUser | null = null;
-
-    try {
-      user = googleId
-        ? await prisma.user.findUnique({
-            where: { googleId }
-          })
-        : null;
-
-      user ??= await resolveUserFromIdentifier(email, phone);
-    } catch (error) {
-      console.warn("Falling back to in-memory Google auth because the database is unavailable.", error);
-      user = await findOrCreateDevUser(email, phone, null, "GOOGLE");
-    }
-    const fallbackEmail = email ?? (phone ? buildSyntheticEmail(phone) : null);
-
-    if (!user && fallbackEmail) {
-      try {
-        user = await prisma.user.create({
-          data: {
-            name,
-            email: fallbackEmail ?? `google-${Date.now()}@app-treino.local`,
-            phone,
-            passwordHash: await hashPassword("google-signin"),
-            provider: "GOOGLE",
-            googleId,
-            role: "USER",
-            profile: {
-              create: {
-                phone,
-                gender: body.gender || null
-              }
-            }
-          }
-        });
-      } catch (error) {
-        console.warn("Database create failed; using in-memory fallback.", error);
-        user = await findOrCreateDevUser(email, phone, null, "GOOGLE");
-      }
-    }
+    let user: AuthRouteUser | null =
+      (await prisma.user.findUnique({ where: { googleId } })) ??
+      (email ? await prisma.user.findUnique({ where: { email } }) : null);
 
     if (!user) {
-      return reply.code(401).send({
-        message: "Não foi possível entrar com o Google neste momento."
-      });
-    }
-
-    if (googleId && (!user.googleId || user.provider !== "GOOGLE") && env.DATABASE_URL && !user.id.startsWith("dev-")) {
-      try {
-        user = await prisma.user.update({
-          where: { id: user.id },
-          data: {
-            googleId,
-            provider: "GOOGLE",
-            phone: user.phone ?? phone ?? undefined,
-            profile: phone
-              ? {
-                  upsert: {
-                    create: { phone },
-                    update: { phone }
-                  }
-                }
-              : undefined
+      user = await prisma.user.create({
+        data: {
+          name: googleProfile.name,
+          email: email ?? `google-${Date.now()}@app-treino.local`,
+          phone,
+          passwordHash: await hashPassword("google-signin"),
+          provider: "GOOGLE",
+          googleId,
+          role: "USER",
+          profile: {
+            create: {
+              phone
+            }
           }
-        });
-      } catch (error) {
-        console.warn("Google account link skipped because the database is unavailable.", error);
-      }
+        }
+      });
+    } else if (!user.googleId) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          googleId,
+          provider: "GOOGLE",
+          phone: user.phone ?? phone ?? undefined,
+          profile: phone
+            ? {
+                upsert: {
+                  create: { phone },
+                  update: { phone }
+                }
+              }
+            : undefined
+        }
+      });
     }
 
     const authUser = toAuthUser(user);
@@ -600,15 +369,20 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       token,
       user: authUser
     });
-  });
+    }
+  );
 
-  app.post("/auth/forgot-password", async (request, reply) => {
+  app.post(
+    "/auth/forgot-password",
+    { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
+    async (request, reply) => {
     const body = forgotPasswordSchema.parse(request.body);
 
     return reply.send({
       message: "Se o e-mail ou telefone estiver cadastrado, as instruções de recuperação foram preparadas."
     });
-  });
+    }
+  );
 
   app.post("/auth/logout", async () => ({
     ok: true

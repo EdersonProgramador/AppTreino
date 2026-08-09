@@ -108,6 +108,7 @@ jobs:
           JWT_SECRET: ${{ secrets.PRODUCTION_JWT_SECRET }}
           WEB_ORIGIN: ${{ vars.PRODUCTION_WEB_ORIGIN }}
           ASAAS_API_KEY: ${{ secrets.PRODUCTION_ASAAS_API_KEY }}
+          ASAAS_API_URL: ${{ secrets.PRODUCTION_ASAAS_API_URL }}
           ASAAS_WEBHOOK_TOKEN: ${{ secrets.PRODUCTION_ASAAS_WEBHOOK_TOKEN }}
           GOOGLE_CLIENT_ID: ${{ vars.PRODUCTION_GOOGLE_CLIENT_ID }}
         with:
@@ -115,7 +116,7 @@ jobs:
           username: ${{ secrets.HOSTGATOR_USER }}
           key: ${{ secrets.HOSTGATOR_SSH_KEY }}
           port: ${{ secrets.HOSTGATOR_PORT || 22 }}
-          envs: HOSTGATOR_APP_DIR,DATABASE_URL,JWT_SECRET,WEB_ORIGIN,ASAAS_API_KEY,ASAAS_WEBHOOK_TOKEN,GOOGLE_CLIENT_ID
+          envs: HOSTGATOR_APP_DIR,DATABASE_URL,JWT_SECRET,WEB_ORIGIN,ASAAS_API_KEY,ASAAS_API_URL,ASAAS_WEBHOOK_TOKEN,GOOGLE_CLIENT_ID
           script: |
             set -e
 
@@ -139,6 +140,10 @@ jobs:
             ASAAS_WEBHOOK_TOKEN=$ASAAS_WEBHOOK_TOKEN
             GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
             EOF
+
+            if [ -n "$ASAAS_API_URL" ]; then
+              echo "ASAAS_API_URL=$ASAAS_API_URL" >> .env
+            fi
 
             npm ci --omit=dev
             npx prisma migrate deploy --schema apps/api/prisma/schema.prisma

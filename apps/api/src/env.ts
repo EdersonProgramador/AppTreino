@@ -10,6 +10,7 @@ for (const envPath of [resolve(process.cwd(), "../../.env"), resolve(process.cwd
 }
 
 const envSchema = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_PORT: z.preprocess((value) => value ?? process.env.PORT, z.coerce.number().default(3333)),
   DATABASE_URL: z.string().optional(),
   WEB_ORIGIN: z.string().default("http://localhost:5173"),
@@ -23,3 +24,23 @@ const envSchema = z.object({
 });
 
 export const env = envSchema.parse(process.env);
+
+if (env.NODE_ENV === "production") {
+  if (env.JWT_SECRET === "change-me-in-local-development") {
+    throw new Error("JWT_SECRET must be configured in production.");
+  }
+
+  if (!env.GOOGLE_CLIENT_ID) {
+    throw new Error("GOOGLE_CLIENT_ID must be configured in production.");
+  }
+
+  if (env.ASAAS_API_KEY) {
+    if (!env.ASAAS_WEBHOOK_TOKEN) {
+      throw new Error("ASAAS_WEBHOOK_TOKEN must be configured in production when Asaas is enabled.");
+    }
+
+    if (env.ASAAS_API_URL.includes("sandbox")) {
+      throw new Error("ASAAS_API_URL must point to the production Asaas API in production.");
+    }
+  }
+}

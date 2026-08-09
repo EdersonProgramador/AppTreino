@@ -10,3 +10,4 @@ coverage/
 .turbo/
 .vite/
 apps/api/uploads/
+.tmp-*

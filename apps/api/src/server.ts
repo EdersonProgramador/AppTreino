@@ -1,6 +1,8 @@
+import { Prisma } from "@prisma/client";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import multipart from "@fastify/multipart";
+import rateLimit from "@fastify/rate-limit";
 import staticFiles from "@fastify/static";
 import Fastify from "fastify";
 import { mkdirSync } from "node:fs";
@@ -42,7 +44,33 @@ app.setErrorHandler((error, _request, reply) => {
     });
   }
 
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === "P2025") {
+      return reply.code(404).send({
+        message: "Registro não encontrado."
+      });
+    }
+
+    if (error.code === "P2003") {
+      return reply.code(400).send({
+        message: "Registro referenciado não existe."
+      });
+    }
+
+    if (error.code === "P2002") {
+      return reply.code(409).send({
+        message: "Registro já cadastrado."
+      });
+    }
+  }
+
   const statusCode = "statusCode" in error && typeof error.statusCode === "number" ? error.statusCode : 500;
+
+  if (statusCode >= 500) {
+    return reply.code(statusCode).send({
+      message: "Erro interno do servidor."
+    });
+  }
 
   return reply.code(statusCode).send({
     message: error.message || "Erro interno do servidor."
@@ -61,8 +89,21 @@ await app.register(cors, {
   credentials: true
 });
 
+await app.register(rateLimit, {
+  max: 300,
+  timeWindow: "1 minute",
+  errorResponseBuilder: (_request, context) => ({
+    statusCode: 429,
+    error: "Too Many Requests",
+    message: `Muitas requisições. Tente novamente em ${context.after}.`
+  })
+});
+
 await app.register(jwt, {
-  secret: env.JWT_SECRET
+  secret: env.JWT_SECRET,
+  sign: {
+    expiresIn: "7d"
+  }
 });
 
 await app.register(multipart, {

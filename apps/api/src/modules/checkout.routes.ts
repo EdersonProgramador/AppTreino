@@ -100,6 +100,7 @@ async function createAsaasCheckout(input: {
       "Content-Type": "application/json",
       access_token: env.ASAAS_API_KEY
     },
+    signal: AbortSignal.timeout(10000),
     body: JSON.stringify({
       billingTypes: asaasBillingTypes(input.billingType),
       chargeTypes: ["DETACHED"],
@@ -314,6 +315,13 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
 
   app.post("/checkout/confirm-sandbox", async (request, reply) => {
     requireDatabase();
+
+    if (env.NODE_ENV === "production") {
+      return reply.code(404).send({
+        message: "Recurso não encontrado."
+      });
+    }
+
     const authUser = await requireAuth(app, request);
     const body = checkoutSandboxConfirmationSchema.parse(request.body);
 
@@ -371,7 +379,10 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     });
   });
 
-  app.post("/checkout/register", async (request, reply) => {
+  app.post(
+    "/checkout/register",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (request, reply) => {
     requireDatabase();
     const body = checkoutRegisterSchema.parse(request.body);
     const email = body.email ? body.email.toLowerCase() : null;
@@ -474,5 +485,6 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       user: authUser,
       payment: updatedPayment
     });
-  });
+    }
+  );
 }

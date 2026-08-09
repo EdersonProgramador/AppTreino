@@ -14,6 +14,7 @@
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run build --workspace @app-treino/shared && npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
     "prisma:generate": "npm run prisma:generate --workspace @app-treino/api",
     "prisma:migrate": "npm run prisma:migrate --workspace @app-treino/api"
   },
