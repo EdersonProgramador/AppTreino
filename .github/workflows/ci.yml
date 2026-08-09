@@ -7,20 +7,14 @@ on:
   pull_request:
     branches:
       - main
-  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  build:
-    name: Build and Typecheck
+  ci:
+    name: CI Pipeline
     runs-on: ubuntu-latest
-
-    env:
-      DATABASE_URL: postgresql://user:password@localhost:5432/app_treino?schema=public
-      JWT_SECRET: change-me-in-github-actions
-      WEB_ORIGIN: http://localhost:5173
 
     steps:
       - name: Checkout
@@ -41,5 +35,8 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Build
+      - name: Build all packages
         run: npm run build
+
+      - name: CI Success
+        run: echo "CI pipeline completed successfully!"

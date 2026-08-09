@@ -8,6 +8,7 @@ Base inicial do projeto criada a partir do `pdr.md`.
 apps/
   web/      Landing page, login, painel administrativo e area do usuario
   api/      API Node.js, banco, autenticacao, pagamentos e webhooks
+  mobile/   App React Native (em desenvolvimento)
 packages/
   shared/   Tipos e contratos compartilhados
 docs/       Documentacao de apoio
@@ -15,17 +16,47 @@ docs/       Documentacao de apoio
 
 ## Primeiros comandos
 
+### Opção 1: Com Docker (Recomendado)
+
+```bash
+# Copiar arquivo de ambiente
+cp .env.docker .env
+
+# Subir todos os serviços (API + Banco de Dados)
+npm run docker:up
+
+# Ver logs
+npm run docker:logs
+
+# Acessar API em http://localhost:3000
+```
+
+Para mais detalhes, consulte [DOCKER.md](./DOCKER.md).
+
+### Opção 2: Local (Sem Docker)
+
 ```bash
 npm install
 npm run dev:web
 npm run dev:api
 ```
 
+## Deploy
+
+O projeto está configurado para deploy automático na seguinte infraestrutura:
+
+- **Banco de Dados**: Neon Tech (PostgreSQL serverless)
+- **Backend API**: Render (Node.js/Fastify)
+- **Frontend Web**: Vercel (React + Vite)
+- **Pagamentos**: Asaas (assinaturas e webhooks)
+
+Consulte o guia completo em [DEPLOY.md](./DEPLOY.md).
+
 ## GitHub Actions
 
 O projeto possui CI em `.github/workflows/ci.yml` para pushes e pull requests na branch `main`.
-O deploy da web para GitHub Pages fica em `.github/workflows/deploy-pages.yml`.
-O deploy da API/backend para HostGator/cPanel fica em `.github/workflows/deploy-hostgator.yml`.
+O deploy do frontend para Vercel fica em `.github/workflows/deploy-vercel.yml`.
+O deploy da API/backend para Render fica em `.github/workflows/deploy-render.yml`.
 
 Para reproduzir localmente as principais checagens:
 
@@ -35,54 +66,40 @@ npm run typecheck
 npm run build
 ```
 
-### Deploy da API/backend na HostGator
-
-O workflow `Deploy API to HostGator` faz:
-
-- build da API e do pacote compartilhado no GitHub Actions;
-- envio dos arquivos de produção por SSH/SCP para o cPanel;
-- criação do `.env` remoto;
-- instalação com `npm ci --omit=dev`;
-- execução de `prisma migrate deploy`;
-- restart por `touch tmp/restart.txt`, compatível com aplicações Node.js gerenciadas por Passenger/cPanel.
-
-Configure estes secrets no GitHub:
-
-```txt
-HOSTGATOR_HOST
-HOSTGATOR_USER
-HOSTGATOR_SSH_KEY
-HOSTGATOR_PORT
-PRODUCTION_DATABASE_URL
-PRODUCTION_JWT_SECRET
-PRODUCTION_ASAAS_API_KEY
-PRODUCTION_ASAAS_WEBHOOK_TOKEN
-```
-
-Configure estas variables no GitHub quando aplicável:
-
-```txt
-VITE_API_URL
-HOSTGATOR_APP_DIR
-PRODUCTION_WEB_ORIGIN
-PRODUCTION_GOOGLE_CLIENT_ID
-```
-
-Para GitHub Pages, `VITE_API_URL` deve apontar para a API publica em HTTPS, por exemplo `https://api.seudominio.com`.
-Para o CORS da API, `PRODUCTION_WEB_ORIGIN` deve incluir a origem do Pages: `https://edersonprogramador.github.io`.
-Se precisar liberar mais de uma origem, separe por virgula, por exemplo `https://edersonprogramador.github.io,http://localhost:5173`.
-
-No cPanel da HostGator, crie uma aplicacao Node.js apontando para a mesma pasta de `HOSTGATOR_APP_DIR`, com `app.js` como arquivo inicial.
-Se `HOSTGATOR_APP_DIR` nao for configurado, o workflow usa `app-treino-api`.
-
 ## Ambiente
 
 Copie `.env.example` para `.env` na raiz e ajuste as credenciais. Para a API, tambem crie `apps/api/.env` se preferir manter variaveis especificas no app.
 
 ## Proximos passos tecnicos
 
-- Instalar dependencias com `npm install`.
-- Configurar o PostgreSQL e atualizar `DATABASE_URL`.
+- **Com Docker**: Configure `.env` e rode `npm run docker:up`
+- **Local**: Instalar dependencias com `npm install`.
+- Configurar o PostgreSQL (Neon Tech ou Docker) e atualizar `DATABASE_URL`.
 - Rodar `npm run prisma:generate`.
 - Rodar `npm run prisma:migrate` apos revisar o schema.
 - Implementar persistencia real nas rotas que hoje estao estruturadas como base inicial.
+
+---
+
+## 🐳 Docker
+
+O projeto agora suporta Docker Compose para desenvolvimento local rápido!
+
+```bash
+# Subir API + Banco de Dados
+npm run docker:up
+
+# Subir com frontend também
+docker compose --profile with-frontend up -d
+
+# Parar serviços
+npm run docker:down
+
+# Ver logs
+npm run docker:logs
+
+# Reset completo (remove volumes)
+npm run docker:clean
+```
+
+📖 Consulte o guia completo em [DOCKER.md](./DOCKER.md).

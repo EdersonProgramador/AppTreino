@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: app-treino-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-app_treino}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-treino123}
+      POSTGRES_DB: ${DB_NAME:-app_treino}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-treino-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-app_treino}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Service
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: app-treino-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: postgresql://${DB_USER:-app_treino}:${DB_PASSWORD:-treino123}@db:5432/${DB_NAME:-app_treino}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      API_PORT: ${API_PORT:-3000}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173,http://localhost:3000}
+      ASAAS_API_KEY: ${ASAAS_API_KEY:-}
+      ASAAS_WEBHOOK_TOKEN: ${ASAAS_WEBHOOK_TOKEN:-}
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - api_uploads:/app/uploads
+    networks:
+      - app-treino-network
+    command: >
+      sh -c "npx prisma migrate deploy && npx prisma db seed && node dist/server.js"
+
+  # Frontend Web (Optional - for local development)
+  web:
+    image: node:20-alpine
+    container_name: app-treino-web
+    working_dir: /app
+    command: npm run dev -- --host 0.0.0.0
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    volumes:
+      - ./apps/web:/app/apps/web
+      - ./packages/shared:/app/packages/shared
+      - /app/node_modules
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+      VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+    depends_on:
+      - api
+    networks:
+      - app-treino-network
+    profiles:
+      - with-frontend
+
+volumes:
+  postgres_data:
+    driver: local
+  api_uploads:
+    driver: local
+
+networks:
+  app-treino-network:
+    driver: bridge

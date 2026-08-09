@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "buildCommand": "cd ../.. && npm ci && npm run build --workspace @app-treino/shared && npm run build --workspace @app-treino/web",
+  "outputDirectory": "apps/web/dist",
+  "devCommand": "npm run dev:web",
+  "installCommand": "npm install",
+  "framework": "vite",
+  "env": {
+    "VITE_API_URL": "@vite_api_url"
+  }
+}

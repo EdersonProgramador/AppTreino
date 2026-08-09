@@ -15,7 +15,12 @@
     "typecheck": "npm run build --workspace @app-treino/shared && npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "prisma:generate": "npm run prisma:generate --workspace @app-treino/api",
-    "prisma:migrate": "npm run prisma:migrate --workspace @app-treino/api"
+    "prisma:migrate": "npm run prisma:migrate --workspace @app-treino/api",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "docker:restart": "docker compose restart",
+    "docker:clean": "docker compose down -v"
   },
   "engines": {
     "node": ">=20"

@@ -1,12 +1,85 @@
+```
+# Dependencies
 node_modules/
+.pnpm-store/
+
+# Build outputs
 dist/
 build/
-.env
+.next/
+.nuxt/
+.unbuild/
+
+# Environment variables
 .env.local
 .env.*.local
+
+# Logs
 *.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS generated files
 .DS_Store
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# IDE specific
+.vscode/
+.idea/
+
+# Python related (if applicable)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.mypy_cache/
+
+# Node.js related
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Coverage
 coverage/
-.turbo/
-.vite/
-apps/api/uploads/
+htmlcov/
+
+# Compiled files
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+*.out
+
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
+```

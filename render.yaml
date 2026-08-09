@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: app-treino-api
+    env: node
+    region: sao-paulo
+    plan: free
+    branch: main
+    rootDir: .
+    buildCommand: npm ci && npm run prisma:generate && npm run build --workspace @app-treino/shared && npm run build --workspace @app-treino/api
+    startCommand: npm run start --workspace @app-treino/api
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: WEB_ORIGIN
+        sync: false
+      - key: ASAAS_API_KEY
+        sync: false
+      - key: ASAAS_WEBHOOK_TOKEN
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: PORT
+        value: 3333

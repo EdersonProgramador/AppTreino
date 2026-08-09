@@ -2,10 +2,14 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  base: process.env.GITHUB_PAGES === "true" ? "/AppTreino/" : "/",
+  base: "/",
   envDir: "../..",
   plugins: [react()],
   server: {
     port: 5173
+  },
+  build: {
+    outDir: "dist",
+    emptyOutDir: true
   }
 });
