@@ -19,6 +19,11 @@ import { registerUserRoutes } from "./modules/user.routes.js";
 const app = Fastify({
   logger: true
 });
+
+console.log("[Env Check] ASAAS_API_KEY present:", Boolean(env.ASAAS_API_KEY));
+console.log("[Env Check] ASAAS_API_URL:", env.ASAAS_API_URL);
+console.log("[Env Check] WEB_ORIGIN:", env.WEB_ORIGIN);
+
 const uploadsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../uploads");
 const allowedOrigins = env.WEB_ORIGIN.split(",")
   .map((origin) => origin.trim())

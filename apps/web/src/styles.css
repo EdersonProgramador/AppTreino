@@ -958,28 +958,24 @@ summary:focus-visible {
   max-width: 960px;
 }
 
-.flow-steps {
+.pending-payment-note {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.flow-steps span {
-  min-height: 42px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  gap: 4px;
+  margin-top: 16px;
+  border: 1px solid rgba(242, 180, 97, 0.4);
   border-radius: 8px;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #b8afa5;
-  font-size: 13px;
-  font-weight: 900;
-  text-align: center;
+  padding: 12px 14px;
+  background: rgba(242, 180, 97, 0.1);
 }
 
-.flow-steps span.active {
-  border-color: rgba(242, 180, 97, 0.44);
-  background: rgba(242, 180, 97, 0.12);
+.pending-payment-note strong {
   color: #f2b461;
+  font-size: 14px;
+}
+
+.pending-payment-note span {
+  color: #c9c0b5;
+  font-size: 13px;
 }
 
 .checkout-panel {
@@ -6756,7 +6752,6 @@ summary:focus-visible {
   .cms-data-row.with-thumb,
   .ticket-row,
   .metric-grid,
-  .flow-steps,
   .checkout-plan-grid,
   .checkout-actions,
   .player-input-row {

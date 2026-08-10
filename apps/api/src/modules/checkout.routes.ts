@@ -62,44 +62,80 @@ function todayUtcOnly() {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
-async function createAsaasPaymentLink(input: {
+function asaasBillingTypes(billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED") {
+  if (billingType === "PIX") return ["PIX"] as const;
+  if (billingType === "CREDIT_CARD") return ["CREDIT_CARD"] as const;
+  return ["PIX", "CREDIT_CARD"] as const;
+}
+
+async function createAsaasCheckout(input: {
   paymentId: string;
+  planName: string;
   customerName: string;
   amountInCents: number;
-  dueDate: Date;
   billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED";
 }) {
+  console.log("[Asaas Checkout] createAsaasCheckout called", {
+    hasApiKey: Boolean(env.ASAAS_API_KEY),
+    apiUrl: env.ASAAS_API_URL,
+    webOrigin: env.WEB_ORIGIN
+  });
+
   if (!env.ASAAS_API_KEY) {
     return null;
   }
 
-  const response = await fetch(`${env.ASAAS_API_URL}/paymentLinks`, {
+  const webOrigin = env.ASAAS_CALLBACK_URL?.split(",")[0]?.trim() ?? env.WEB_ORIGIN.split(",")[0]?.trim() ?? env.WEB_ORIGIN;
+  const isHttps = webOrigin.startsWith("https://");
+  const callbackBase = isHttps ? webOrigin : "https://example.com";
+  const callback = {
+    successUrl: `${callbackBase}/`,
+    cancelUrl: `${callbackBase}/`,
+    expiredUrl: `${callbackBase}/`
+  };
+
+  const response = await fetch(`${env.ASAAS_API_URL}/checkouts`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       access_token: env.ASAAS_API_KEY
     },
     body: JSON.stringify({
-      name: `App Treino - ${input.customerName}`,
-      description: `Pagamento App Treino - ${input.customerName}`,
-      billingType: input.billingType,
-      chargeType: "DETACHED",
-      value: input.amountInCents / 100,
-      dueDateLimitDays: 10,
-      endDate: input.dueDate.toISOString().slice(0, 10),
-      externalReference: input.paymentId
+      billingTypes: asaasBillingTypes(input.billingType),
+      chargeTypes: ["DETACHED"],
+      minutesToExpire: 120,
+      externalReference: input.paymentId,
+      callback,
+      items: [
+        {
+          externalReference: input.paymentId,
+          name: `App Treino - ${input.planName}`,
+          description: `Assinatura App Treino - ${input.customerName}`,
+          quantity: 1,
+          value: input.amountInCents / 100
+        }
+      ]
     })
   });
 
   if (!response.ok) {
     const message = await response.text();
-    throw new Error(`Falha ao criar link de pagamento no Asaas: ${message}`);
+    console.error("[Asaas Checkout] Erro ao criar checkout:", message);
+    throw new Error(`Falha ao criar checkout no Asaas: ${message}`);
   }
 
-  return (await response.json()) as {
+  const data = (await response.json()) as {
     id?: string;
-    url?: string;
+    link?: string;
     status?: string;
+  };
+
+  console.log("[Asaas Checkout] Checkout criado:", { id: data.id, link: data.link, status: data.status });
+
+  return {
+    id: data.id,
+    url: data.link,
+    status: data.status
   };
 }
 
@@ -182,9 +218,32 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     });
 
     if (pendingMembership?.payments[0]) {
+      let payment = pendingMembership.payments[0];
+
+      if (!payment.paymentUrl) {
+        const asaasPayment = await createAsaasCheckout({
+          paymentId: payment.id,
+          planName: pendingMembership.plan?.name ?? planSeed.name,
+          customerName: authUser.name,
+          amountInCents: payment.amountInCents,
+          billingType: body.billingType
+        });
+
+        if (asaasPayment) {
+          payment = await prisma.payment.update({
+            where: { id: payment.id },
+            data: {
+              asaasPaymentId: asaasPayment.id,
+              paymentUrl: asaasPayment.url,
+              status: asaasStatusToPaymentStatus(asaasPayment.status)
+            }
+          });
+        }
+      }
+
       return reply.send({
         membership: pendingMembership,
-        payment: pendingMembership.payments[0],
+        payment,
         alreadyActive: false
       });
     }
@@ -227,11 +286,11 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       return { user, membership, payment };
     });
 
-    const asaasPayment = await createAsaasPaymentLink({
+    const asaasPayment = await createAsaasCheckout({
       paymentId: payment.id,
+      planName: planSeed.name,
       customerName: user.name,
       amountInCents: payment.amountInCents,
-      dueDate: payment.dueDate,
       billingType: body.billingType
     });
 
@@ -258,7 +317,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     const authUser = await requireAuth(app, request);
     const body = checkoutSandboxConfirmationSchema.parse(request.body);
 
-    if (env.ASAAS_API_KEY) {
+    if (env.ASAAS_API_KEY && env.ALLOW_MANUAL_PAYMENT_CONFIRMATION !== "true") {
       return reply.code(403).send({
         message: "Confirmação manual disponível apenas no sandbox local sem Asaas configurado."
       });
@@ -388,11 +447,11 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       return { user, payment };
     });
 
-    const asaasPayment = await createAsaasPaymentLink({
+    const asaasPayment = await createAsaasCheckout({
       paymentId: payment.id,
+      planName: planSeed.name,
       customerName: user.name,
       amountInCents: payment.amountInCents,
-      dueDate: payment.dueDate,
       billingType: body.billingType
     });
 

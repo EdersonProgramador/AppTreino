@@ -1310,8 +1310,14 @@ export function App() {
         throw new ApiError(401, "Credencial do Google não recebida. Recarregue a página e tente novamente.");
       }
 
-      const response = await apiPost<{ user: AuthUser; token: string }>(endpoint, payload);
+      const response = await apiPost<{ user: AuthUser; token: string; payment?: { paymentUrl?: string | null } }>(
+        endpoint,
+        payload
+      );
       applySession(response);
+      if (isCheckoutRegister && response.payment?.paymentUrl) {
+        window.open(response.payment.paymentUrl, "_blank");
+      }
       setSelectedPlanCode(null);
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;
@@ -1486,7 +1492,7 @@ function HomeView({ onStart }: { onStart: (planCode?: string) => void }) {
               <strong>{formatPriceInBRL(plan.priceInCents)}</strong>
               <span>{plan.billingCycle === "MONTHLY" ? "por mês" : "por ano"}</span>
               <button onClick={() => onStart(plan.code)}>
-                Comece a treinar
+                Assinar agora
                 <ArrowRight size={18} />
               </button>
             </article>
@@ -1754,7 +1760,6 @@ function LoginView({
               <select name="billingType" defaultValue="UNDEFINED">
                 <option value="UNDEFINED">Escolher no checkout</option>
                 <option value="PIX">Pix</option>
-                <option value="BOLETO">Boleto</option>
                 <option value="CREDIT_CARD">Cartão</option>
               </select>
             </label>
@@ -7614,7 +7619,6 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
   const [studentPaymentCards, setStudentPaymentCards] = useState<PaymentCardRow[]>([]);
   const [showAddCardForm, setShowAddCardForm] = useState(false);
   const [checkoutPayment, setCheckoutPayment] = useState<PaymentRow | null>(null);
-  const [checkoutStep, setCheckoutStep] = useState<"plans" | "checkout" | "thanks">("plans");
   const [checkoutLoading, setCheckoutLoading] = useState<PlanCode | "sandbox" | null>(null);
   const [streakCalendarOpen, setStreakCalendarOpen] = useState(false);
   const [streakCalendarMonth, setStreakCalendarMonth] = useState(() => new Date().getMonth() + 1);
@@ -7691,9 +7695,6 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
       setCheckoutPayment(paymentsResponse.payments.find((item) => item.status === "PENDING") ?? null);
 
       if (!activeMembership) {
-        if (paymentsResponse.payments.some((item) => item.status === "PENDING")) {
-          setCheckoutStep("checkout");
-        }
         setWorkout(null);
         setTodayWorkout(null);
         setPublishedWorkouts([]);
@@ -7708,8 +7709,6 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
         setAiPlans([]);
         return;
       }
-
-      setCheckoutStep("plans");
 
       const [
         workoutResponse,
@@ -7773,6 +7772,28 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     setSelectedWorkoutModality(null);
     setSelectedWorkoutProgramId(null);
   }, [publishedWorkouts]);
+
+  useEffect(() => {
+    if (!token) return;
+    if (membership?.status === "ACTIVE") return;
+
+    const pending = checkoutPayment ?? payments.find((item) => item.status === "PENDING");
+    if (!pending) return;
+
+    const interval = window.setInterval(async () => {
+      try {
+        const response = await apiGet<{ membership: StudentMembershipRow | null }>("/user/membership", token);
+        if (response.membership?.status === "ACTIVE") {
+          setMembership(response.membership);
+          await loadUserData();
+        }
+      } catch {
+        // Ignora falhas transitórias enquanto aguarda a confirmação do pagamento.
+      }
+    }, 4000);
+
+    return () => window.clearInterval(interval);
+  }, [token, membership?.status, checkoutPayment, payments]);
 
   useEffect(() => {
     if (studentSection !== "support" || !token) return;
@@ -7902,9 +7923,14 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
           return [response.payment, ...others].filter(Boolean) as PaymentRow[];
         });
       }
-      setCheckoutStep(response.alreadyActive ? "thanks" : "checkout");
+
       if (response.alreadyActive) {
         await loadUserData();
+        return;
+      }
+
+      if (response.payment?.paymentUrl) {
+        window.location.href = response.payment.paymentUrl;
       }
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;
@@ -7912,6 +7938,10 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
     } finally {
       setCheckoutLoading(null);
     }
+  }
+
+  function openAsaasCheckout(url: string) {
+    window.location.href = url;
   }
 
   async function handleConfirmSandboxPayment() {
@@ -8680,140 +8710,89 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
         {error && <div className="error-box">{error}</div>}
         {success && <div className="success-box">{success}</div>}
         {(studentSection === "subscription" || !["subscription", "locked"].includes(studentSection)) && <section className="subscription-flow">
-          <div className="flow-steps" aria-label="Fluxo de assinatura">
-            {["Login", "Assinatura", "Checkout", "Obrigado", "Acesso liberado"].map((step, index) => (
-              <span
-                className={
-                  index === 0 ||
-                  (checkoutStep !== "plans" && index <= 2) ||
-                  (checkoutStep === "thanks" && index <= 4)
-                    ? "active"
-                    : ""
-                }
-                key={step}
-              >
-                {step}
-              </span>
-            ))}
-          </div>
-
-          {checkoutStep === "thanks" ? (
-            <article className="table-panel checkout-panel">
-              <div className="auth-visual" aria-hidden="true">
-                <Check size={22} />
+          <article className="table-panel checkout-panel">
+            <span className="eyebrow">Assinatura</span>
+            <h2>Assine agora e comece a treinar.</h2>
+            <p>
+              Escolha seu plano e finalize o pagamento com Pix ou cartão no checkout seguro do Asaas.
+              O acesso é liberado automaticamente assim que o pagamento for confirmado.
+            </p>
+            {currentCheckoutPayment && (
+              <div className="pending-payment-note">
+                <strong>Pagamento pendente de {formatPriceInBRL(currentCheckoutPayment.amountInCents)}</strong>
+                <span>Continue no checkout do Asaas para concluir sua assinatura.</span>
               </div>
-              <span className="eyebrow">Obrigado</span>
-              <h2>{membership?.status === "ACTIVE" ? "Seu acesso está liberado." : "Pagamento em processamenão."}</h2>
-              <p>
-                {membership?.status === "ACTIVE"
-                  ? "A assinatura foi confirmada e as funcionalidades do aluno já estáo disponíveis."
-                  : "Assim que o Asaas confirmar a assinatura, sua área de treino será liberada automaticamente."}
-              </p>
-              <div className="checkout-actions">
-                <button className="primary-button" onClick={() => void loadUserData()}>
-                  <RefreshCw size={18} />
-                  Atualizar acesso
-                </button>
-                <button className="outline-button" onClick={() => setCheckoutStep("checkout")}>
-                  Voltar ao checkout
-                </button>
-                <button className="outline-button" onClick={() => setCheckoutStep("plans")}>
-                  Voltar para assinatura
-                </button>
+            )}
+            <form className="checkout-form" onSubmit={handleCreateCheckout}>
+              <div className="checkout-plan-grid">
+                {initialPlans.map((plan) => (
+                  <label className="checkout-plan-option" key={plan.code}>
+                    <input
+                      name="planCode"
+                      type="radio"
+                      value={plan.code}
+                      checked={checkoutDraft.planCode === plan.code}
+                      onChange={() =>
+                        setCheckoutDraft((current) => ({
+                          ...current,
+                          planCode: plan.code
+                        }))
+                      }
+                    />
+                    <span>
+                      <strong>{plan.name}</strong>
+                      {formatPriceInBRL(plan.priceInCents)}
+                    </span>
+                  </label>
+                ))}
               </div>
-            </article>
-          ) : checkoutStep === "checkout" && currentCheckoutPayment ? (
-            <article className="table-panel checkout-panel">
-              <span className="eyebrow">Tela de checkout</span>
-              <h2>Finalize sua assinatura.</h2>
-              <p>
-                Pagamento pendente de {formatPriceInBRL(currentCheckoutPayment.amountInCents)}. Depois da confirmação,
-                você será levado para a etapa de obrigado e o acesso será liberado.
-              </p>
-              <div className="checkout-actions">
-                {currentCheckoutPayment.paymentUrl && (
-                  <a className="primary-button" href={currentCheckoutPayment.paymentUrl} target="_blank" rel="noreferrer">
-                    Abrir checkout
-                    <ArrowRight size={18} />
-                  </a>
-                )}
-                {!currentCheckoutPayment.paymentUrl && (
-                  <button
-                    className="primary-button"
-                    onClick={handleConfirmSandboxPayment}
-                    disabled={checkoutLoading === "sandbox"}
-                  >
-                    {checkoutLoading === "sandbox" ? <Loader2 className="spin" size={18} /> : <CreditCard size={18} />}
-                    Finalizar checkout sandbox
-                  </button>
-                )}
-                <button className="outline-button" onClick={() => setCheckoutStep("plans")}>
-                  Voltar para assinatura
+              <label>
+                Pagamento
+                <select
+                  name="billingType"
+                  value={checkoutDraft.billingType}
+                  onChange={(event) =>
+                    setCheckoutDraft((current) => ({
+                      ...current,
+                      billingType: event.target.value as typeof current.billingType
+                    }))
+                  }
+                >
+                  <option value="UNDEFINED">Escolher no checkout</option>
+                  <option value="PIX">Pix</option>
+                  <option value="CREDIT_CARD">Cartão</option>
+                </select>
+              </label>
+              {currentCheckoutPayment?.paymentUrl && (
+                <button
+                  className="outline-button"
+                  type="button"
+                  onClick={() => openAsaasCheckout(currentCheckoutPayment.paymentUrl as string)}
+                >
+                  <ArrowUpRight size={18} />
+                  Abrir checkout do Asaas
                 </button>
-                <button className="outline-button" onClick={() => setCheckoutStep("thanks")}>
-                  J? concluí o pagamento
+              )}
+              {currentCheckoutPayment && !currentCheckoutPayment.paymentUrl && (
+                <button
+                  className="outline-button"
+                  type="button"
+                  onClick={handleConfirmSandboxPayment}
+                  disabled={checkoutLoading === "sandbox"}
+                >
+                  {checkoutLoading === "sandbox" ? <Loader2 className="spin" size={18} /> : <CreditCard size={18} />}
+                  Finalizar checkout sandbox
                 </button>
-              </div>
-            </article>
-          ) : (
-            <article className="table-panel checkout-panel">
-              <span className="eyebrow">Assinatura</span>
-              <h2>Comece a treinar com acesso completo.</h2>
-              <p>
-                Escolha uma assinatura para ir ao checkout. As fichas, eventos, avaliações, atendimento
-                e agente IA ficam liberados depois da confirmação do pagamento.
-              </p>
-              <form className="checkout-form" onSubmit={handleCreateCheckout}>
-                <div className="checkout-plan-grid">
-                  {initialPlans.map((plan) => (
-                    <label className="checkout-planãoption" key={plan.code}>
-                      <input
-                        name="planCode"
-                        type="radio"
-                        value={plan.code}
-                        checked={checkoutDraft.planCode === plan.code}
-                        onChange={() =>
-                          setCheckoutDraft((current) => ({
-                            ...current,
-                            planCode: plan.code
-                          }))
-                        }
-                      />
-                      <span>
-                        <strong>{plan.name}</strong>
-                        {formatPriceInBRL(plan.priceInCents)}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-                <label>
-                  Pagamento
-                  <select
-                    name="billingType"
-                    value={checkoutDraft.billingType}
-                    onChange={(event) =>
-                      setCheckoutDraft((current) => ({
-                        ...current,
-                        billingType: event.target.value as typeof current.billingType
-                      }))
-                    }
-                  >
-                    <option value="UNDEFINED">Escolher no checkout</option>
-                    <option value="PIX">Pix</option>
-                    <option value="BOLETO">Boleto</option>
-                    <option value="CREDIT_CARD">Cartão</option>
-                  </select>
-                </label>
-                <button className="primary-button" disabled={Boolean(checkoutLoading)}>
-                  {checkoutLoading ? <Loader2 className="spin" size={18} /> : <Play size={18} />}
-                  Comece a treinar
-                </button>
-              </form>
-            </article>
-          )}
+              )}
+              <button className="primary-button" disabled={Boolean(checkoutLoading)}>
+                {checkoutLoading ? <Loader2 className="spin" size={18} /> : <CreditCard size={18} />}
+                Assinar agora
+              </button>
+            </form>
+          </article>
         </section>}
         {studentSection === "locked" && <section className="locked-content" aria-label="Funcionalidades bloqueadas">
-          <LockedOverlay onCheckout={() => setCheckoutStep("checkout")} />
+          <LockedOverlay onCheckout={() => setStudentSection("subscription")} />
           <div className="section-heading locked-heading">
             <span className="eyebrow">Acesso apos pagamento</span>
             <h2>Conteúdos bloqueados enquando sua assinatura não for confirmada.</h2>

@@ -17,7 +17,9 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   ASAAS_API_KEY: z.string().optional(),
   ASAAS_API_URL: z.string().url().default("https://api-sandbox.asaas.com/v3"),
-  ASAAS_WEBHOOK_TOKEN: z.string().optional()
+  ASAAS_WEBHOOK_TOKEN: z.string().optional(),
+  ASAAS_CALLBACK_URL: z.string().url().optional(),
+  ALLOW_MANUAL_PAYMENT_CONFIRMATION: z.enum(["true", "false"]).default("false")
 });
 
 export const env = envSchema.parse(process.env);
