@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["omitApi"]
 }
 
 datasource db {
@@ -36,10 +37,24 @@ model User {
   favorites           Favorite[]
   workoutFavorites    WorkoutFavorite[]
   ratings             Rating[]
+  passwordResetTokens PasswordResetToken[]
   createdAt           DateTime             @default(now()) @map("created_at")
   updatedAt           DateTime             @updatedAt @map("updated_at")
 
   @@map("users")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 model Enrollment {
@@ -105,6 +120,7 @@ model Membership {
   updatedAt DateTime         @updatedAt @map("updated_at")
 
   @@index([userId])
+  @@index([userId, status])
   @@map("memberships")
 }
 
@@ -289,6 +305,8 @@ model Program {
   workoutSessions   WorkoutSession[]
   favorites         WorkoutFavorite[]
 
+  @@index([status, isActive, deletedAt])
+  @@index([modalityId])
   @@map("programs")
 }
 
@@ -321,6 +339,7 @@ model ProgramDayWorkout {
   dayNumber      Int          @map("day_number")
   order          Int
 
+  @@index([programId])
   @@map("program_day_workouts")
 }
 

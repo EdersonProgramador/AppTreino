@@ -67,7 +67,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { lazy, Suspense, type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { formatPriceInBRL, initialPlans, type AuthUser } from "@app-treino/shared";
-import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "./api";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload, getApiBaseUrl, setUnauthorizedHandler } from "./api";
 import { BRAZILIAN_STATES, CITIES_BY_STATE } from "./brazil-data";
 import { StateCityFields } from "./components/admin/StateCityFields";
 import { LockedOverlay } from "./components/student/LockedOverlay";
@@ -84,7 +84,7 @@ const WorkoutPlayer = lazy(async () => {
 });
 
 type View = "home" | "login" | "admin" | "user";
-type AuthMode = "login" | "register";
+type AuthMode = "login" | "register" | "forgot" | "reset";
 type PlanCode = "monthly" | "annual";
 
 declare global {
@@ -118,7 +118,12 @@ const mediaUrl = (path?: string | null) => {
   if (!path) return "";
   if (/^https?:\/\//i.test(path)) return path;
 
-  return assetUrl(path.replace(/^\/+/, ""));
+  const trimmed = path.replace(/^\/+/, "");
+  if (trimmed.startsWith("uploads/")) {
+    return `${getApiBaseUrl().replace(/\/+$/, "")}/${trimmed}`;
+  }
+
+  return assetUrl(trimmed);
 };
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
@@ -1285,12 +1290,41 @@ export function App() {
   const [token, setToken] = useState(() => window.localStorage.getItem("app-treino-token"));
   const [loginState, setLoginState] = useState<"idle" | "submitting">("idle");
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginSuccess, setLoginSuccess] = useState<string | null>(null);
+  const [resetToken, setResetToken] = useState<string | null>(null);
   const [selectedPlanCode, setSelectedPlanCode] = useState<PlanCode | null>(null);
 
   const currentArea = useMemo(() => {
     if (!user) return "Visitante";
     return user.role === "ADMIN" ? "Administrador" : "Aluno";
   }, [user]);
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      window.localStorage.removeItem("app-treino-token");
+      setToken(null);
+      setUser(null);
+      setView("home");
+    });
+
+    return () => setUnauthorizedHandler(null);
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenFromUrl = params.get("reset");
+
+    if (!tokenFromUrl) {
+      return;
+    }
+
+    setResetToken(tokenFromUrl);
+    setView("login");
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete("reset");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
 
   useEffect(() => {
     if (!token) return;
@@ -1330,6 +1364,7 @@ export function App() {
     provider: "EMAIL" | "GOOGLE" = "EMAIL"
   ) {
     setLoginError(null);
+    setLoginSuccess(null);
     setLoginState("submitting");
 
     const name = String(formData.get("name") ?? "").trim();
@@ -1404,14 +1439,60 @@ export function App() {
     const phone = String(formData.get("phone") ?? "").trim();
     const identifier = String(formData.get("identifier") ?? "").trim();
 
+    setLoginError(null);
+    setLoginSuccess(null);
+    setLoginState("submitting");
+
     try {
-      await apiPost("/auth/forgot-password", {
+      const response = await apiPost<{ message: string }>("/auth/forgot-password", {
         email: email || (identifier.includes("@") ? identifier : undefined),
         phone: phone || (!identifier.includes("@") ? identifier : undefined)
       });
-      setLoginError("Se o e-mail ou telefone estiver cadastrado, as instruções de recuperação foram preparadas.");
-    } catch {
-      setLoginError("Não foi possível processar a recuperação de senha neste momento.");
+      setLoginSuccess(
+        response.message ??
+          "Se o e-mail ou telefone estiver cadastrado, você receberá instruções para redefinir sua senha."
+      );
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : null;
+      setLoginError(message ?? "Não foi possível processar a recuperação de senha neste momento.");
+    } finally {
+      setLoginState("idle");
+    }
+  }
+
+  async function handleResetPassword(formData: FormData) {
+    const password = String(formData.get("password") ?? "");
+    const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
+    setLoginError(null);
+    setLoginSuccess(null);
+
+    if (!resetToken) {
+      setLoginError("Link de redefinição inválido ou expirado.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setLoginError("As senhas informadas não coincidem.");
+      return;
+    }
+
+    setLoginState("submitting");
+
+    try {
+      const response = await apiPost<{ message: string }>("/auth/reset-password", {
+        token: resetToken,
+        password
+      });
+      setResetToken(null);
+      setLoginSuccess(
+        response.message ?? "Senha redefinida com sucesso. Você já pode entrar com a nova senha."
+      );
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : null;
+      setLoginError(message ?? "Não foi possível redefinir a senha neste momento.");
+    } finally {
+      setLoginState("idle");
     }
   }
 
@@ -1451,9 +1532,13 @@ export function App() {
         <LoginView
           loading={loginState}
           error={loginError}
+          success={loginSuccess}
           selectedPlanCode={selectedPlanCode}
+          resetToken={resetToken}
           onSubmit={handleAuthSubmit}
           onForgotPassword={handleForgotPassword}
+          onResetPassword={handleResetPassword}
+          onClearResetToken={() => setResetToken(null)}
         />
       )}
       {view === "admin" && <AdminView token={token} onLogout={handleLogout} />}
@@ -1659,20 +1744,27 @@ function PhonePreview() {
 function LoginView({
   loading,
   error,
+  success,
   selectedPlanCode,
+  resetToken,
   onSubmit,
-  onForgotPassword
+  onForgotPassword,
+  onResetPassword,
+  onClearResetToken
 }: {
   loading: "idle" | "submitting";
   error: string | null;
+  success: string | null;
   selectedPlanCode: PlanCode | null;
+  resetToken: string | null;
   onSubmit: (mode: AuthMode, formData: FormData, provider?: "EMAIL" | "GOOGLE") => Promise<void>;
   onForgotPassword: (formData: FormData) => Promise<void>;
+  onResetPassword: (formData: FormData) => Promise<void>;
+  onClearResetToken: () => void;
 }) {
-  const [mode, setMode] = useState<AuthMode>(selectedPlanCode ? "register" : "login");
+  const [mode, setMode] = useState<AuthMode>(resetToken ? "reset" : selectedPlanCode ? "register" : "login");
   const formRef = useRef<HTMLFormElement | null>(null);
   const googleButtonRef = useRef<HTMLDivElement | null>(null);
-  const isSubmitting = loading !== "idle";
   const selectedPlan = initialPlans.find((plan) => plan.code === selectedPlanCode);
 
   useEffect(() => {
@@ -1682,7 +1774,19 @@ function LoginView({
   }, [selectedPlanCode]);
 
   useEffect(() => {
-    if (!googleClientId || !googleButtonRef.current) return;
+    if (resetToken) {
+      setMode("reset");
+    }
+  }, [resetToken]);
+
+  useEffect(() => {
+    if (success && mode === "reset") {
+      setMode("login");
+    }
+  }, [success, mode]);
+
+  useEffect(() => {
+    if (!googleClientId || !googleButtonRef.current || mode === "forgot" || mode === "reset") return;
 
     const renderGoogleButton = () => {
       if (!window.google || !googleButtonRef.current) return;
@@ -1736,18 +1840,47 @@ function LoginView({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (mode === "forgot") {
+      void onForgotPassword(new FormData(event.currentTarget));
+      return;
+    }
+
+    if (mode === "reset") {
+      void onResetPassword(new FormData(event.currentTarget));
+      return;
+    }
+
     void onSubmit(mode, new FormData(event.currentTarget), "EMAIL");
   }
 
   function handleGoogleSubmit() {
     if (!formRef.current) return;
-    void onSubmit(mode, new FormData(formRef.current), "GOOGLE");
+    void onSubmit(mode === "register" ? "register" : "login", new FormData(formRef.current), "GOOGLE");
   }
 
   function handleForgotPasswordClick() {
-    if (!formRef.current) return;
-    void onForgotPassword(new FormData(formRef.current));
+    setMode("forgot");
   }
+
+  function handleBackToLogin() {
+    onClearResetToken();
+    setMode("login");
+  }
+
+  const isSubmitting = loading !== "idle";
+  const title =
+    mode === "reset"
+      ? "Redefinir senha"
+      : mode === "forgot"
+        ? "Recuperar acesso"
+        : "Entrar no App Treino";
+  const description =
+    mode === "reset"
+      ? "Escolha uma nova senha para voltar a acessar sua conta."
+      : mode === "forgot"
+        ? "Informe o e-mail ou telefone cadastrado para receber o link de redefinição."
+        : "Entre com e-mail, telefone ou Google para acesso sua área de aluno com o mesmo fluxo de autenticação.";
 
   return (
     <main className="auth-layout">
@@ -1756,11 +1889,9 @@ function LoginView({
           <Play size={22} />
         </div>
         <span className="eyebrow">Acesso de desenãolvimenão</span>
-        <h1>Entrar no App Treino</h1>
-        <p>
-          Entre com e-mail, telefone ou Google para acesso sua área de aluno com o mesmo fluxo de autenticação.
-        </p>
-        {selectedPlan && (
+        <h1>{title}</h1>
+        <p>{description}</p>
+        {selectedPlan && mode === "register" && (
           <div className="selected-plan-box">
             <span>Plano selecionado</span>
             <strong>
@@ -1768,17 +1899,19 @@ function LoginView({
             </strong>
           </div>
         )}
-        <div className="auth-tabs" role="tablist" aria-label="Modo de acesso">
-          <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>
-            Login
-          </button>
-          <button
-            className={mode === "register" ? "active" : ""}
-            onClick={() => setMode("register")}
-          >
-            Cadastro
-          </button>
-        </div>
+        {(mode === "login" || mode === "register") && (
+          <div className="auth-tabs" role="tablist" aria-label="Modo de acesso">
+            <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>
+              Login
+            </button>
+            <button
+              className={mode === "register" ? "active" : ""}
+              onClick={() => setMode("register")}
+            >
+              Cadastro
+            </button>
+          </div>
+        )}
         <form ref={formRef} className="auth-form" onSubmit={handleSubmit}>
           {mode === "register" && (
             <label>
@@ -1786,12 +1919,17 @@ function LoginView({
               <input name="name" minLength={2} placeholder="Seu nome" required />
             </label>
           )}
-          {mode === "login" ? (
+          {mode === "login" || mode === "forgot" ? (
             <label>
               E-mail ou telefone
-              <input name="identifier" type="text" placeholder="Seu e-mail ou telefone" required />
+              <input
+                name="identifier"
+                type="text"
+                placeholder="Seu e-mail ou telefone"
+                required
+              />
             </label>
-          ) : (
+          ) : mode === "register" ? (
             <>
               <label>
                 E-mail
@@ -1810,11 +1948,43 @@ function LoginView({
                 </select>
               </label>
             </>
+          ) : null}
+          {mode === "reset" && (
+            <>
+              <label>
+                Nova senha
+                <input
+                  name="password"
+                  type="password"
+                  minLength={6}
+                  placeholder="Minimo 6 caracteres"
+                  required
+                />
+              </label>
+              <label>
+                Confirmar nova senha
+                <input
+                  name="confirmPassword"
+                  type="password"
+                  minLength={6}
+                  placeholder="Repita a nova senha"
+                  required
+                />
+              </label>
+            </>
           )}
-          <label>
-            Senha
-            <input name="password" type="password" minLength={6} placeholder="Minimo 6 caracteres" required />
-          </label>
+          {(mode === "login" || mode === "register") && (
+            <label>
+              Senha
+              <input
+                name="password"
+                type="password"
+                minLength={6}
+                placeholder="Minimo 6 caracteres"
+                required
+              />
+            </label>
+          )}
           {mode === "register" && selectedPlan && (
             <label>
               Pagamento
@@ -1825,23 +1995,38 @@ function LoginView({
               </select>
             </label>
           )}
-          {googleClientId ? (
-            <div className="google-signin-button" ref={googleButtonRef} />
-          ) : (
-            <button className="outline-button" type="button" onClick={handleGoogleSubmit} disabled={isSubmitting}>
-              {loading === "submitting" ? <Loader2 className="spin" size={18} /> : <UserRound size={18} />}
-              {mode === "login" ? "Entrar com Google" : "Criar conta com Google"}
-            </button>
-          )}
+          {(mode === "login" || mode === "register") &&
+            (googleClientId ? (
+              <div className="google-signin-button" ref={googleButtonRef} />
+            ) : (
+              <button className="outline-button" type="button" onClick={handleGoogleSubmit} disabled={isSubmitting}>
+                {loading === "submitting" ? <Loader2 className="spin" size={18} /> : <UserRound size={18} />}
+                {mode === "login" ? "Entrar com Google" : "Criar conta com Google"}
+              </button>
+            ))}
           <button className="primary-button" type="submit" disabled={isSubmitting}>
             {loading === "submitting" ? <Loader2 className="spin" size={18} /> : <LogIn size={18} />}
-            {mode === "login" ? "Entrar" : "Criar conta"}
+            {mode === "reset"
+              ? "Salvar nova senha"
+              : mode === "forgot"
+                ? "Enviar link de recuperação"
+                : mode === "login"
+                  ? "Entrar"
+                  : "Criar conta"}
           </button>
-          <button className="link-button" type="button" onClick={handleForgotPasswordClick}>
-            Esqueci minha senha
-          </button>
+          {mode === "login" && (
+            <button className="link-button" type="button" onClick={handleForgotPasswordClick}>
+              Esqueci minha senha
+            </button>
+          )}
+          {(mode === "forgot" || mode === "reset") && (
+            <button className="link-button" type="button" onClick={handleBackToLogin}>
+              Voltar para o login
+            </button>
+          )}
         </form>
         {error && <div className="error-box">{error}</div>}
+        {success && <div className="success-box">{success}</div>}
       </section>
     </main>
   );
@@ -2765,6 +2950,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const [editingCmsLocation, setEditingCmsLocation] = useState<CmsLocationRow | null>(null);
   const [cmsModalityImagePreview, setCmsModalityImagePreview] = useState<string | null>(null);
   const [cmsModalityImageRemove, setCmsModalityImageRemove] = useState(false);
+  const [cmsModalityImageJustSaved, setCmsModalityImageJustSaved] = useState(false);
   const cmsModalityImageRef = useRef<HTMLInputElement | null>(null);
   const [editingCmsModality, setEditingCmsModality] = useState<CmsModalityRow | null>(null);
   const [editingCmsExercise, setEditingCmsExercise] = useState<CmsExerciseRow | null>(null);
@@ -2784,6 +2970,8 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const [cmsBlockFormModality, setCmsBlockFormModality] = useState("");
   const [cmsWorkoutExerciseRows, setCmsWorkoutExerciseRows] = useState(1);
   const [editingCmsProgram, setEditingCmsProgram] = useState<CmsProgramRow | null>(null);
+  const [cmsProgramFormModality, setCmsProgramFormModality] = useState("");
+  const [cmsProgramsModalityFilter, setCmsProgramsModalityFilter] = useState("");
   const [cmsProgramDurationYears, setCmsProgramDurationYears] = useState(0);
   const [cmsProgramDurationMonths, setCmsProgramDurationMonths] = useState(0);
   const [cmsProgramDurationWeeks, setCmsProgramDurationWeeks] = useState(4);
@@ -2842,11 +3030,19 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   const cmsBlockModalityExercises = cmsBlockFormModality
     ? cmsExercises.filter((item) => (item.modalityLinks ?? []).some((link) => link.modality.id === cmsBlockFormModality))
     : cmsExercises;
+  const cmsProgramFormWorkoutBlocks = cmsProgramFormModality
+    ? cmsWorkoutBlocks.filter(
+        (item) => !item.modality || item.modality.id === cmsProgramFormModality
+      )
+    : cmsWorkoutBlocks;
   const [cmsPrograms, setCmsPrograms] = useState<CmsProgramRow[]>([]);
-  const publishedCmsPrograms = cmsPrograms
+  const filteredCmsPrograms = cmsProgramsModalityFilter
+    ? cmsPrograms.filter((item) => item.modality?.id === cmsProgramsModalityFilter)
+    : cmsPrograms;
+  const publishedCmsPrograms = filteredCmsPrograms
     .filter((item) => item.status === "PUBLISHED" && item.isActive)
     .sort((first, second) => first.sortOrder - second.sortOrder || first.title.localeCompare(second.title));
-  const draftCmsPrograms = cmsPrograms
+  const draftCmsPrograms = filteredCmsPrograms
     .filter((item) => item.status !== "PUBLISHED" || !item.isActive)
     .sort((first, second) => first.sortOrder - second.sortOrder || first.title.localeCompare(second.title));
   const [plans, setPlans] = useState<PlanRow[]>([]);
@@ -3203,6 +3399,13 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
   }, [success]);
 
   useEffect(() => {
+    if (!cmsModalityImageJustSaved) return;
+
+    const timeout = window.setTimeout(() => setCmsModalityImageJustSaved(false), 3000);
+    return () => window.clearTimeout(timeout);
+  }, [cmsModalityImageJustSaved]);
+
+  useEffect(() => {
     if (adminSection !== "overview") return;
 
     const interval = window.setInterval(() => {
@@ -3459,19 +3662,39 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       };
 
       if (editingCmsModality) {
-        await apiPut(`/admin/cms/modalities/${editingCmsModality.id}`, payload, token);
-        form.reset();
+        const response = await apiPut<{ modality: CmsModalityRow }>(
+          `/admin/cms/modalities/${editingCmsModality.id}`,
+          payload,
+          token
+        );
         setCmsModalityImagePreview(null);
         setCmsModalityImageRemove(false);
-        setEditingCmsModality(null);
+        if (cmsModalityImageRef.current) {
+          cmsModalityImageRef.current.value = "";
+        }
+        if (uploadedImage || cmsModalityImageRemove) {
+          setCmsModalityImageJustSaved(true);
+        }
+        setEditingCmsModality(response.modality);
         await applyAdminChange(["modalities"], "Modalidade atualizada com sucesso.");
         return;
       }
 
-      await apiPost("/admin/cms/modalities", payload, token);
+      const response = await apiPost<{ modality: CmsModalityRow }>(
+        "/admin/cms/modalities",
+        payload,
+        token
+      );
       form.reset();
       setCmsModalityImagePreview(null);
       setCmsModalityImageRemove(false);
+      if (cmsModalityImageRef.current) {
+        cmsModalityImageRef.current.value = "";
+      }
+      if (uploadedImage || cmsModalityImageRemove) {
+        setCmsModalityImageJustSaved(true);
+      }
+      setEditingCmsModality(response.modality);
       await applyAdminChange(["modalities"], "Modalidade cadastrada com sucesso.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível salvar a modalidade."));
@@ -3482,6 +3705,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     setEditingCmsModality(item);
     setCmsModalityImagePreview(null);
     setCmsModalityImageRemove(false);
+    setCmsModalityImageJustSaved(false);
     if (cmsModalityImageRef.current) {
       cmsModalityImageRef.current.value = "";
     }
@@ -3491,6 +3715,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     setEditingCmsModality(null);
     setCmsModalityImagePreview(null);
     setCmsModalityImageRemove(false);
+    setCmsModalityImageJustSaved(false);
     if (cmsModalityImageRef.current) {
       cmsModalityImageRef.current.value = "";
     }
@@ -3574,6 +3799,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
     }
 
     setCmsModalityImageRemove(false);
+    setCmsModalityImageJustSaved(false);
     const reader = new FileReader();
     reader.onload = () => setCmsModalityImagePreview(String(reader.result ?? ""));
     reader.readAsDataURL(file);
@@ -3581,6 +3807,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
   function handleCmsModalityImageClear() {
     setCmsModalityImagePreview(null);
+    setCmsModalityImageJustSaved(false);
     if (cmsModalityImageRef.current) {
       cmsModalityImageRef.current.value = "";
     }
@@ -3972,6 +4199,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
         await apiPut(`/admin/cms/programs/${editingCmsProgram.id}`, payload, token);
         form.reset();
         setEditingCmsProgram(null);
+        setCmsProgramFormModality("");
         setCmsProgramDurationYears(0);
         setCmsProgramDurationMonths(0);
         setCmsProgramDurationWeeks(4);
@@ -3984,6 +4212,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
       await apiPost("/admin/cms/programs", payload, token);
       form.reset();
+      setCmsProgramFormModality("");
       setCmsProgramDurationYears(0);
       setCmsProgramDurationMonths(0);
       setCmsProgramDurationWeeks(4);
@@ -3998,6 +4227,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
   function startEditCmsProgram(item: CmsProgramRow) {
     setEditingCmsProgram(item);
+    setCmsProgramFormModality(item.modality?.id ?? "");
     setCmsProgramDurationYears(item.durationYears ?? 0);
     setCmsProgramDurationMonths(item.durationMonths ?? 0);
     setCmsProgramDurationWeeks(item.durationWeeks ?? 4);
@@ -4009,6 +4239,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
 
   function handleCancelCmsProgramEdit() {
     setEditingCmsProgram(null);
+    setCmsProgramFormModality("");
     setCmsProgramDurationYears(0);
     setCmsProgramDurationMonths(0);
     setCmsProgramDurationWeeks(4);
@@ -4109,6 +4340,16 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
       await applyAdminChange(["programs"]);
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o público do programa."));
+    }
+  }
+
+  async function handleUpdateCmsProgramModality(programId: string, modalityId: string) {
+    if (!modalityId) return;
+    try {
+      await apiPut(`/admin/cms/programs/${programId}`, { modalityId }, token);
+      await applyAdminChange(["programs"], "Modalidade do programa atualizada.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar a modalidade do programa."));
     }
   }
 
@@ -5648,6 +5889,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 {cmsModalityImagePreview ? (
                   <div className="cms-image-preview wide-field">
                     <img src={cmsModalityImagePreview} alt="Prévia da imagem da modalidade" />
+                    <small>Prévia local — ainda não foi salva.</small>
                     <button type="button" onClick={handleCmsModalityImageClear}>
                       <Trash2 size={17} />
                       Remover imagem
@@ -5655,8 +5897,19 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   </div>
                 ) : editingCmsModality?.imageUrl && !cmsModalityImageRemove ? (
                   <div className="cms-image-preview wide-field">
-                    <img src={mediaUrl(editingCmsModality.imageUrl)} alt="Imagem atual da modalidade" />
-                    <small>Imagem atual (envie uma nova para substituir)</small>
+                    <img
+                      key={editingCmsModality.imageUrl}
+                      src={mediaUrl(editingCmsModality.imageUrl)}
+                      alt="Imagem atual da modalidade"
+                    />
+                    <div className="cms-image-preview-meta">
+                      <small>Imagem atual salva (envie uma nova para substituir)</small>
+                      {cmsModalityImageJustSaved && (
+                        <em className="cms-image-saved-badge">
+                          <Check size={13} /> Salvo agora
+                        </em>
+                      )}
+                    </div>
                     <button type="button" onClick={() => setCmsModalityImageRemove(true)}>
                       <ImageOff size={17} />
                       Remover imagem
@@ -6399,7 +6652,12 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                 </label>
                 <label>
                   Modalidade
-                  <select name="modalityId" required defaultValue={editingCmsProgram?.modality?.id ?? ""}>
+                  <select
+                    name="modalityId"
+                    required
+                    value={cmsProgramFormModality}
+                    onChange={(event) => setCmsProgramFormModality(event.target.value)}
+                  >
                     <option value="">Selecione a modalidade</option>
                     {cmsProgramFormModalities.map((modality) => (
                       <option value={modality.id} key={modality.id}>
@@ -6540,15 +6798,20 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                   {Array.from({ length: cmsProgramCycleLengthDays }).map((_, index) => {
                     const dayNumber = index + 1;
                     const editDay = editingCmsProgram?.days.find((day) => day.dayNumber === dayNumber);
+                    const dayBlocks = cmsProgramFormWorkoutBlocks.filter((block) => {
+                      if (!editDay) return true;
+                      return block.id === editDay.workoutBlock.id || !block.modality || block.modality.id === cmsProgramFormModality;
+                    });
 
                     return (
                       <div className="cms-builder-row program-day-row" key={`program-day-${dayNumber}`}>
                         <span>{dayNumber}</span>
                         <select name={`workoutBlockId${dayNumber}`} required={dayNumber === 1} defaultValue={editDay?.workoutBlock.id ?? ""}>
                           <option value="">{dayNumber === 1 ? "Selecione a primeira sessão" : "Sessão opcional"}</option>
-                          {cmsWorkoutBlocks.map((block) => (
+                          {dayBlocks.map((block) => (
                             <option value={block.id} key={block.id}>
                               {block.identifier ?? block.title}{block.focus ? ` - ${block.focus}` : ""} ({block.weeklyFrequency ?? 1}x/semana)
+                              {block.modality?.id !== cmsProgramFormModality && block.modality ? " • sem modalidade definida" : ""}
                             </option>
                           ))}
                         </select>
@@ -6571,6 +6834,23 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
               <div className="cms-program-list-title">
                 <strong>Programas publicados</strong>
                 <small>Arraste para definir a ordem que aparece para alunos assinantes.</small>
+              </div>
+              <div className="cms-filter-bar wide-field">
+                <label className="cms-filter-label">
+                  <span>Filtrar por modalidade</span>
+                  <select
+                    value={cmsProgramsModalityFilter}
+                    onChange={(event) => setCmsProgramsModalityFilter(event.target.value)}
+                  >
+                    <option value="">Todas as modalidades</option>
+                    {activeCmsModalities.map((modality) => (
+                      <option value={modality.id} key={modality.id}>
+                        {modality.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <span className="cms-filter-count">{filteredCmsPrograms.length} programa(s)</span>
               </div>
               <div className="accordion cms-program-accordion" id="cmsProgramsAccordion">
                 {publishedCmsPrograms.map((item, index) => {
@@ -6644,6 +6924,22 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
                               <Pencil size={17} />
                               Editar
                             </button>
+                            <select
+                              aria-label="Modalidade do programa"
+                              value={item.modality?.id ?? ""}
+                              onChange={(event) => handleUpdateCmsProgramModality(item.id, event.target.value)}
+                            >
+                              <option value="" disabled>
+                                {item.modality?.name ?? "Selecione a modalidade"}
+                              </option>
+                              {cmsProgramFormModalities
+                                .filter((modality) => modality.id !== item.modality?.id)
+                                .map((modality) => (
+                                  <option value={modality.id} key={modality.id}>
+                                    {modality.name}{modality.isActive ? "" : " (inativa)"}
+                                  </option>
+                                ))}
+                            </select>
                             <select
                               aria-label="Público do programa"
                               value={item.targetGender}
@@ -7710,7 +8006,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             URL de check-in
             <input
               type="url"
-              value={systemSettings["qr_checkin_url"] ?? "http://localhost:5173/checkin"}
+              value={systemSettings["qr_checkin_url"] ?? "https://edersonprogramador.com/checkin"}
               onChange={(event) => setSystemSettingValue("qr_checkin_url", event.target.value)}
               placeholder="https://..."
             />
@@ -7734,7 +8030,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             onClick={() =>
               void handleSaveSettings({
                 ...systemSettings,
-                qr_checkin_url: systemSettings["qr_checkin_url"] || "http://localhost:5173/checkin",
+                qr_checkin_url: systemSettings["qr_checkin_url"] || "https://edersonprogramador.com/checkin",
                 qr_checkin_enabled: systemSettings["qr_checkin_enabled"] || "true"
               })
             }
@@ -7754,7 +8050,7 @@ function AdminView({ token, onLogout }: { token: string | null; onLogout: () => 
             {systemSettings["qr_checkin_enabled"] !== "false" ? (
               <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
-                  systemSettings["qr_checkin_url"] ?? "http://localhost:5173/checkin"
+                  systemSettings["qr_checkin_url"] ?? "https://edersonprogramador.com/checkin"
                 )}`}
                 alt="QR Code de check-in"
               />
@@ -9620,7 +9916,7 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                   <div className="dash-qr-box">
                     <img
                       src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
-                        publicConfig["qr_checkin_url"] || "http://localhost:5173/checkin"
+                        publicConfig["qr_checkin_url"] || "https://edersonprogramador.com/checkin"
                       )}`}
                       alt="QR Code de check-in"
                     />
@@ -9826,19 +10122,26 @@ function UserView({ token, onLogout }: { token: string | null; onLogout: () => v
                     const isCurrent = programWorkout.dayNumber === workoutSheet.dayNumber;
                     const blockLabel = programWorkout.block.identifier ?? programWorkout.block.title;
                     const blockFocus = programWorkout.block.focus || programMuscles.join(", ") || "Exercícios do CMS Fitness";
+                    const cardImage = workoutSheet.modalityImageUrl ?? workoutSheet.modality
+                      ? (workoutSheet.modalityImageUrl as string | null)
+                      : null;
 
                     return (
                       <article className="student-program-card" key={`${programWorkout.programId}-${programWorkout.dayNumber}`}>
                         <div className={`student-training-card ${isCurrent ? "active" : ""}`}>
-                          <div className="student-card-icon">
-                            <Dumbbell size={24} />
-                          </div>
+                          {cardImage ? (
+                            <img className="student-card-image" src={cardImage} alt={blockLabel} />
+                          ) : (
+                            <div className="student-card-icon">
+                              <Dumbbell size={24} />
+                            </div>
+                          )}
                           <div>
                             <h2>{blockLabel}</h2>
                             <p>{blockFocus} • {programWorkout.block.weeklyFrequency ?? 1}x/semana • descanso {programWorkout.block.restTime}s</p>
                           </div>
                           <button onClick={() => void handleStartWorkoutSession(programWorkout)}>
-                            {programWorkout.completed ? "Concluído" : "Iniciar"}
+                            Iniciar
                           </button>
                         </div>
                       </article>

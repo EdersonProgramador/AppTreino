@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
+import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { getAuthUser, hashPassword, toAuthUser, verifyPassword } from "../auth.js";
+import { buildPasswordResetUrl, isDeliverableEmail, sendPasswordResetEmail } from "../email.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 
@@ -87,10 +89,15 @@ const forgotPasswordSchema = z
     if (!data.email && !data.phone) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Informe um e-mail ou telefone para recuperação acesso."
+        message: "Informe um e-mail ou telefone para recuperação de acesso."
       });
     }
   });
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Token de redefinição inválido."),
+  password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres.")
+});
 
 function requireDatabase() {
   if (!env.DATABASE_URL) {
@@ -119,6 +126,17 @@ function buildSyntheticEmail(phone: string) {
   return `phone-${phone.replace(/[^a-z0-9]+/gi, "").toLowerCase()}@app-treino.local`;
 }
 
+function createPasswordResetToken() {
+  const raw = randomBytes(32).toString("hex");
+  const hash = createHash("sha256").update(raw).digest("hex");
+
+  return { raw, hash };
+}
+
+function hashPasswordResetToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
 async function verifyGoogleIdToken(idToken?: string | null) {
   if (!idToken) {
     throw new Error("Credencial do Google não recebida.");
@@ -140,7 +158,11 @@ async function verifyGoogleIdToken(idToken?: string | null) {
     name?: string;
   };
 
-  if (env.GOOGLE_CLIENT_ID && payload.aud !== env.GOOGLE_CLIENT_ID) {
+  if (!env.GOOGLE_CLIENT_ID) {
+    throw new Error("GOOGLE_CLIENT_ID não configurado.");
+  }
+
+  if (payload.aud !== env.GOOGLE_CLIENT_ID) {
     throw new Error("Token do Google emitido para outro cliente.");
   }
 
@@ -194,9 +216,15 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     }
 
     const user = email
-      ? await prisma.user.findUnique({ where: { email } })
+      ? await prisma.user.findUnique({
+          where: { email },
+          omit: { passwordHash: false }
+        })
       : phone
-        ? await prisma.user.findUnique({ where: { phone } })
+        ? await prisma.user.findUnique({
+            where: { phone },
+            omit: { passwordHash: false }
+          })
         : null;
 
     if (!user) {
@@ -205,9 +233,15 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       });
     }
 
-    if (!(await verifyPassword(credentials.password ?? "", user.passwordHash))) {
+    if (!user.passwordHash || !(await verifyPassword(credentials.password ?? "", user.passwordHash))) {
       return reply.code(401).send({
         message: "E-mail ou senha inválidos."
+      });
+    }
+
+    if (user.provider === "GOOGLE") {
+      return reply.code(400).send({
+        message: "Esta conta usa login com Google. Entre pelo botão do Google."
       });
     }
 
@@ -263,7 +297,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         name: body.name,
         email: fallbackEmail ?? `user-${Date.now()}@app-treino.local`,
         phone,
-        passwordHash: await hashPassword(body.password ?? "123456"),
+        passwordHash: await hashPassword(body.password!),
         provider: "EMAIL",
         role: "USER",
         profile: {
@@ -332,7 +366,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           name: googleProfile.name,
           email: email ?? `google-${Date.now()}@app-treino.local`,
           phone,
-          passwordHash: await hashPassword("google-signin"),
+          passwordHash: null,
           provider: "GOOGLE",
           googleId,
           role: "USER",
@@ -344,11 +378,11 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         }
       });
     } else if (!user.googleId) {
+      // Vincula Google a conta existente sem remover a senha de e-mail.
       user = await prisma.user.update({
         where: { id: user.id },
         data: {
           googleId,
-          provider: "GOOGLE",
           phone: user.phone ?? phone ?? undefined,
           profile: phone
             ? {
@@ -358,6 +392,15 @@ export async function registerAuthRoutes(app: FastifyInstance) {
                 }
               }
             : undefined
+        }
+      });
+    } else if (user.provider === "GOOGLE") {
+      // Remove senhas residuais (ex.: hash legado "google-signin").
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash: null,
+          phone: user.phone ?? phone ?? undefined
         }
       });
     }
@@ -376,11 +419,116 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     "/auth/forgot-password",
     { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
     async (request, reply) => {
-    const body = forgotPasswordSchema.parse(request.body);
+      requireDatabase();
+      const body = forgotPasswordSchema.parse(request.body);
+      const email = normalizeEmail(body.email);
+      const phone = normalizePhone(body.phone);
 
-    return reply.send({
-      message: "Se o e-mail ou telefone estiver cadastrado, as instruções de recuperação foram preparadas."
-    });
+      const user = email
+        ? await prisma.user.findUnique({
+            where: { email },
+            omit: { passwordHash: false }
+          })
+        : phone
+          ? await prisma.user.findUnique({
+              where: { phone },
+              omit: { passwordHash: false }
+            })
+          : null;
+
+      if (
+        user &&
+        user.status === "ACTIVE" &&
+        !user.deletedAt &&
+        user.passwordHash &&
+        isDeliverableEmail(user.email)
+      ) {
+        const { raw, hash } = createPasswordResetToken();
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+        await prisma.passwordResetToken.deleteMany({
+          where: {
+            userId: user.id,
+            usedAt: null
+          }
+        });
+
+        await prisma.passwordResetToken.create({
+          data: {
+            userId: user.id,
+            tokenHash: hash,
+            expiresAt
+          }
+        });
+
+        try {
+          await sendPasswordResetEmail(user.email!, buildPasswordResetUrl(raw), user.name);
+        } catch (error) {
+          console.error("Failed to send password reset email.", error);
+        }
+      }
+
+      return reply.send({
+        message:
+          "Se o e-mail ou telefone estiver cadastrado, você receberá instruções para redefinir sua senha."
+      });
+    }
+  );
+
+  app.post(
+    "/auth/reset-password",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+      requireDatabase();
+      const body = resetPasswordSchema.parse(request.body);
+      const tokenHash = hashPasswordResetToken(body.token);
+
+      const resetToken = await prisma.passwordResetToken.findUnique({
+        where: { tokenHash },
+        include: { user: true }
+      });
+
+      if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
+        return reply.code(400).send({
+          message: "Link de redefinição inválido ou expirado."
+        });
+      }
+
+      if (resetToken.user.status !== "ACTIVE" || resetToken.user.deletedAt) {
+        return reply.code(400).send({
+          message: "Link de redefinição inválido ou expirado."
+        });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id: resetToken.userId },
+          data: {
+            passwordHash: await hashPassword(body.password)
+          }
+        });
+
+        await tx.passwordResetToken.update({
+          where: { id: resetToken.id },
+          data: {
+            usedAt: new Date()
+          }
+        });
+
+        await tx.passwordResetToken.deleteMany({
+          where: {
+            userId: resetToken.userId,
+            usedAt: null,
+            id: {
+              not: resetToken.id
+            }
+          }
+        });
+      });
+
+      return reply.send({
+        message: "Senha redefinida com sucesso. Você já pode entrar com a nova senha."
+      });
     }
   );
 
