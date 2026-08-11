@@ -3,7 +3,11 @@ import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
-import { calculateProgramEndDate, isProgramComplete } from "./workout-program.utils.js";
+import { calculateProgramEndDate, isProgramComplete, parseProgramMetadata } from "./workout-program.utils.js";
+import {
+  filterActiveBlockExercises,
+  studentMatchesProgramTargetGender
+} from "./cms-publication.utils.js";
 
 const substituteSchema = z.object({
   exerciseId: z.string().min(1)
@@ -273,22 +277,6 @@ function mapWorkoutExercise(item: {
   };
 }
 
-function parseProgramMetadata(description: string) {
-  try {
-    const parsed = JSON.parse(description) as { description?: string; modality?: string };
-
-    return {
-      description: parsed.description || description,
-      modality: parsed.modality || "Hipertrofia"
-    };
-  } catch {
-    return {
-      description,
-      modality: "Hipertrofia"
-    };
-  }
-}
-
 export async function getTodayWorkout(userId: string, dayNumber: number) {
   const status = await getEnrollmentStatus(userId);
 
@@ -308,13 +296,33 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
     return [];
   }
 
-  const publishedPrograms = await prisma.program.findMany({
+  const student = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      profile: {
+        select: {
+          gender: true
+        }
+      }
+    }
+  });
+  const studentGender = student?.profile?.gender ?? null;
+
+  let publishedPrograms = await prisma.program.findMany({
     where: {
       status: "PUBLISHED",
       isActive: true,
       deletedAt: null,
+      modality: {
+        isActive: true,
+        deletedAt: null
+      },
       days: {
-        some: {}
+        some: {
+          workoutBlock: {
+            deletedAt: null
+          }
+        }
       },
       OR: [
         { audienceMode: "ALL_ACTIVE" },
@@ -334,13 +342,22 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
     orderBy: [{ sortOrder: "asc" }, { publishedAt: "desc" }, { createdAt: "asc" }]
   });
 
+  publishedPrograms = publishedPrograms.filter((program) =>
+    studentMatchesProgramTargetGender(program.targetGender, studentGender)
+  );
+
   const assignedPrograms = await prisma.userProgram.findMany({
     where: {
       userId,
       status: "ACTIVE",
       program: {
         status: "PUBLISHED",
-        isActive: true
+        isActive: true,
+        deletedAt: null,
+        modality: {
+          isActive: true,
+          deletedAt: null
+        }
       }
     },
     select: {
@@ -353,7 +370,11 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
   });
 
   for (const { program } of assignedPrograms) {
-    if (program.days.length > 0 && !publishedPrograms.some((publishedProgram) => publishedProgram.id === program.id)) {
+    if (
+      program.days.length > 0 &&
+      studentMatchesProgramTargetGender(program.targetGender, studentGender) &&
+      !publishedPrograms.some((publishedProgram) => publishedProgram.id === program.id)
+    ) {
       publishedPrograms.push(program);
     }
   }
@@ -394,6 +415,121 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
       }
     })
   ]);
+
+  const allProgramIds = publishedPrograms.map((program) => program.id);
+
+  const programDaysByProgram = await prisma.programDayWorkout.findMany({
+    where: {
+      programId: {
+        in: allProgramIds
+      },
+      workoutBlock: {
+        deletedAt: null
+      }
+    },
+    include: {
+      program: {
+        include: {
+          modality: true
+        }
+      },
+      workoutBlock: {
+        include: {
+          exercises: {
+            where: {
+              exercise: {
+                deletedAt: null
+              }
+            },
+            include: {
+              exercise: {
+                include: {
+                  alternatives: {
+                    where: {
+                      deletedAt: null
+                    }
+                  }
+                }
+              }
+            },
+            orderBy: {
+              order: "asc"
+            }
+          }
+        }
+      }
+    },
+    orderBy: {
+      dayNumber: "asc"
+    }
+  });
+
+  const allExerciseIds = Array.from(
+    new Set(programDaysByProgram.flatMap((day) => day.workoutBlock.exercises.map((exercise) => exercise.exerciseId)))
+  );
+
+  const [completedSessionsByProgram, latestProgressByExercise] = await Promise.all([
+    prisma.workoutSession.findMany({
+      where: {
+        userId,
+        programId: {
+          in: allProgramIds
+        },
+        status: "COMPLETED"
+      },
+      select: {
+        programId: true,
+        dayNumber: true
+      }
+    }),
+    prisma.userProgress.findMany({
+      where: {
+        userId,
+        exerciseId: {
+          in: allExerciseIds
+        }
+      },
+      orderBy: {
+        completedAt: "desc"
+      }
+    })
+  ]);
+
+  const latestWeightByExercise = new Map<string, number>();
+
+  for (const progress of latestProgressByExercise) {
+    if (!latestWeightByExercise.has(progress.exerciseId)) {
+      latestWeightByExercise.set(progress.exerciseId, progress.weightUsed);
+    }
+  }
+
+  const programDaysByProgramId = new Map<string, typeof programDaysByProgram>();
+
+  for (const day of programDaysByProgram) {
+    const existing = programDaysByProgramId.get(day.programId);
+
+    if (existing) {
+      existing.push(day);
+    } else {
+      programDaysByProgramId.set(day.programId, [day]);
+    }
+  }
+
+  const sessionsByProgramId = new Map<string, Set<number>>();
+
+  for (const session of completedSessionsByProgram) {
+    if (!session.programId) {
+      continue;
+    }
+
+    const existing = sessionsByProgramId.get(session.programId);
+
+    if (existing) {
+      existing.add(session.dayNumber);
+    } else {
+      sessionsByProgramId.set(session.programId, new Set([session.dayNumber]));
+    }
+  }
 
   const workouts = await Promise.all(
     publishedPrograms.map(async (publishedProgram) => {
@@ -496,81 +632,25 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
       }
 
       const currentDay = assignment.currentDay;
-      const programDays = await prisma.programDayWorkout.findMany({
-        where: {
-          programId: assignment.programId
-        },
-        include: {
-          program: {
-            include: {
-              modality: true
-            }
-          },
-          workoutBlock: {
-            include: {
-              exercises: {
-                include: {
-                  exercise: {
-                    include: {
-                      alternatives: true
-                    }
-                  }
-                },
-                orderBy: {
-                  order: "asc"
-                }
-              }
-            }
-          }
-        },
-        orderBy: {
-          dayNumber: "asc"
-        }
-      });
+      const programDays = (programDaysByProgramId.get(assignment.programId) ?? []).filter(
+        (day) => day.workoutBlock.exercises.length > 0
+      );
       const programDay = programDays.find((day) => day.dayNumber === currentDay) ?? programDays[0] ?? null;
 
       if (!programDay) {
         return null;
       }
 
-      const allExerciseIds = Array.from(
-        new Set(programDays.flatMap((day) => day.workoutBlock.exercises.map((workoutExercise) => workoutExercise.exerciseId)))
-      );
-      const latestProgressEntries = await Promise.all(
-        allExerciseIds.map(async (exerciseId) => {
-          const latestProgress = await prisma.userProgress.findFirst({
-            where: {
-              userId,
-              exerciseId
-            },
-            orderBy: {
-              completedAt: "desc"
-            }
-          });
+      const mapBlockExercises = (block: typeof programDay.workoutBlock) =>
+        filterActiveBlockExercises(block.exercises).map((exercise) =>
+          mapWorkoutExercise(exercise, latestWeightByExercise.get(exercise.exerciseId) ?? 0, block.restTime)
+        );
 
-          return [exerciseId, latestProgress?.weightUsed ?? 0] as const;
-        })
-      );
-      const latestWeightByExercise = new Map(latestProgressEntries);
-      const completedSessions = await prisma.workoutSession.findMany({
-        where: {
-          userId,
-          assignmentId: assignment.id,
-          programId: assignment.programId,
-          status: "COMPLETED"
-        },
-        select: {
-          dayNumber: true
-        }
-      });
-      const completedWorkoutCount = Math.max(assignment.completedWorkouts, completedSessions.length);
-      const completedInCurrentCycle =
-        assignment.program.completionMode === "BY_SESSIONS" && completedWorkoutCount >= assignment.totalWorkouts
-          ? programDays.length
-          : completedWorkoutCount % programDays.length;
+      const completedDayNumbers = sessionsByProgramId.get(assignment.programId) ?? new Set<number>();
+      const completedWorkoutCount = Math.max(assignment.completedWorkouts, completedDayNumbers.size);
       const metadata = parseProgramMetadata(programDay.program.description);
       const modalityName = programDay.program.modality?.name ?? metadata.modality;
-      const sequence = programDays.map((day, index) => ({
+      const sequence = programDays.map((day) => ({
         programId: day.program.id,
         programTitle: day.program.title,
         assignmentId: assignment.id,
@@ -578,7 +658,7 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
         totalDays: assignment.program.days.length,
         totalWorkouts: assignment.totalWorkouts,
         completedWorkouts: completedWorkoutCount,
-        completed: index < completedInCurrentCycle,
+        completed: completedDayNumbers.has(day.dayNumber),
         block: {
           title: day.workoutBlock.title,
           identifier: day.workoutBlock.identifier,
@@ -590,9 +670,7 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
           workSeconds: day.workoutBlock.workSeconds,
           timeCapSeconds: day.workoutBlock.timeCapSeconds,
           instructions: day.workoutBlock.instructions,
-          exercises: day.workoutBlock.exercises.map((exercise) =>
-            mapWorkoutExercise(exercise, latestWeightByExercise.get(exercise.exerciseId) ?? 0, day.workoutBlock.restTime)
-          )
+          exercises: mapBlockExercises(day.workoutBlock)
         }
       }));
 
@@ -636,9 +714,7 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
           workSeconds: programDay.workoutBlock.workSeconds,
           timeCapSeconds: programDay.workoutBlock.timeCapSeconds,
           instructions: programDay.workoutBlock.instructions,
-          exercises: programDay.workoutBlock.exercises.map((exercise) =>
-            mapWorkoutExercise(exercise, latestWeightByExercise.get(exercise.exerciseId) ?? 0, programDay.workoutBlock.restTime)
-          )
+          exercises: mapBlockExercises(programDay.workoutBlock)
         }
       };
     })
@@ -704,7 +780,6 @@ export async function registerStudentRoutes(app: FastifyInstance) {
   app.get("/student/workout/favorites", async (request) => {
     requireDatabase();
     const authUser = await requireAuth(app, request);
-    const workouts = await getPublishedWorkouts(authUser.id, 1).catch(() => []);
     const [favoritedProgramIds, ratedAssignmentIds] = await Promise.all([
       prisma.workoutFavorite.findMany({
         where: {
@@ -726,22 +801,36 @@ export async function registerStudentRoutes(app: FastifyInstance) {
     ]);
 
     const favoritedSet = new Set(favoritedProgramIds.map((item) => item.programId));
-    const ratedSet = new Set(ratedAssignmentIds.map((item) => item.targetId));
-    const ratedButNotFavorited = workouts.filter(
-      (workout) =>
-        workout.assignmentId &&
-        ratedSet.has(workout.assignmentId) &&
-        !favoritedSet.has(workout.programId)
-    );
+    const ratedAssignmentIdsSet = new Set(ratedAssignmentIds.map((item) => item.targetId).filter(Boolean) as string[]);
 
-    if (ratedButNotFavorited.length > 0) {
-      await prisma.workoutFavorite.createMany({
-        data: ratedButNotFavorited.map((workout) => ({
-          userId: authUser.id,
-          programId: workout.programId
-        })),
-        skipDuplicates: true
+    if (ratedAssignmentIdsSet.size > 0) {
+      const ratedAssignments = await prisma.userProgram.findMany({
+        where: {
+          id: {
+            in: Array.from(ratedAssignmentIdsSet)
+          },
+          userId: authUser.id
+        },
+        select: {
+          id: true,
+          programId: true
+        }
       });
+
+      const ratedButNotFavorited = ratedAssignments
+        .filter((assignment) => !favoritedSet.has(assignment.programId))
+        .map((assignment) => assignment.programId);
+
+      if (ratedButNotFavorited.length > 0) {
+        await prisma.workoutFavorite.createMany({
+          data: ratedButNotFavorited.map((programId) => ({
+            userId: authUser.id,
+            programId
+          })),
+          skipDuplicates: true
+        });
+        ratedButNotFavorited.forEach((programId) => favoritedSet.add(programId));
+      }
     }
 
     const favorites = await prisma.workoutFavorite.findMany({

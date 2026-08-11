@@ -6,12 +6,16 @@ interface LockedOverlayProps {
 
 export function LockedOverlay({ onCheckout }: LockedOverlayProps) {
   return (
-    <article className="locked-overlay">
-      <div className="locked-overlay-icon">
+    <article className="mb-[18px] grid max-w-[760px] justify-items-center gap-3 rounded-xl border border-brand-gold/25 bg-ink-panel p-[clamp(24px,5vw,38px)] text-center shadow-soft [background-image:linear-gradient(180deg,rgba(240,180,90,0.12),rgba(255,255,255,0.035))]">
+      <div className="grid h-[72px] w-[72px] place-items-center rounded-full border border-brand-gold/35 bg-brand-gold/10 text-brand-gold">
         <LockKeyhole size={34} />
       </div>
-      <h2>Este treino esta bloqueado</h2>
-      <p>Finalize a assinatura pendente para liberar o player e as funcionalidades do aluno.</p>
+      <h2 className="font-display m-0 text-[clamp(28px,4vw,42px)] leading-tight text-sand">
+        Este treino esta bloqueado
+      </h2>
+      <p className="mb-2 max-w-[520px] text-sand-muted leading-relaxed">
+        Finalize a assinatura pendente para liberar o player e as funcionalidades do aluno.
+      </p>
       <button className="primary-button" onClick={onCheckout}>
         Finalizar meu pagamento pendente
       </button>

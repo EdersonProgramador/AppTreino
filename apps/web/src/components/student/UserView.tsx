@@ -1,0 +1,3253 @@
+import {
+  ArrowRight,
+  ArrowUpRight,
+  Bell,
+  Bot,
+  Building2,
+  CalendarDays,
+  CalendarPlus,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  CreditCard,
+  Dumbbell,
+  Eye,
+  Flame,
+  Headphones,
+  Home,
+  Loader2,
+  LockKeyhole,
+  LogOut,
+  MapPin,
+  Menu,
+  MessageCircle,
+  Package,
+  Pencil,
+  QrCode,
+  Ruler,
+  Settings,
+  Share2,
+  ShieldCheck,
+  ShoppingCart,
+  Star,
+  Target,
+  Trash2,
+  Trophy,
+  UserRound,
+  UsersRound,
+  X
+} from "lucide-react";
+import { lazy, Suspense, type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { formatPriceInBRL, initialPlans } from "@app-treino/shared";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
+import { BRAZILIAN_STATES, CITIES_BY_STATE } from "../../brazil-data";
+import { levelLabel } from "../onboarding/onboarding.schema";
+import { calculateBodyFatEstimate } from "../../lib/body-composition";
+import { buildMonthCalendar, formatAssessmentDateTime, formatDateTimeLocalInputValue, monthLabel } from "../../lib/dates";
+import { formatProgramDuration } from "../../lib/cms";
+import { assetUrl, mediaUrl } from "../../lib/urls";
+import { studentLocationLabel } from "../../lib/locations";
+import { sessionLabelFromBlock, trainingCopy } from "../../lib/training-copy";
+import { AnimatedList } from "../shared/AnimatedList";
+import {
+  useStudentSyncStore,
+  type StudentPanelSection
+} from "../../stores/studentSyncStore";
+import type { PanelDestination } from "../../lib/event-bus";
+import type {
+  AiWorkoutPlanRow,
+  AssessmentPhotoKey,
+  CheckoutSessionResponse,
+  EventRow,
+  NotificationRow,
+  PaymentCardRow,
+  PaymentRow,
+  PhysicalAssessmentForm,
+  PhysicalAssessmentRow,
+  PlanRow,
+  ProductRow,
+  PurchaseRow,
+  StudentFavoriteRow,
+  StudentLocationRow,
+  StudentMembershipRow,
+  StudentProfile,
+  StudentWorkoutProgramsResponse,
+  SupportTicketRow,
+  TodayWorkoutResponse,
+  UploadResponse,
+  WorkoutConsistencyResponse,
+  WorkoutRow,
+  WorkoutSessionResponse
+} from "../../types";
+import type { PlanCode } from "../../types/auth";
+import { assessmentPerimeterKeys, assessmentPhotoFields } from "../../types/admin";
+import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
+import { LockedOverlay } from "./LockedOverlay";
+import { PhysicalAssessmentFormView } from "../shared/PhysicalAssessmentFormView";
+import type { WorkoutPlayerExercise } from "./WorkoutPlayer";
+
+const WorkoutPlayer = lazy(async () => {
+  const module = await import("./WorkoutPlayer");
+  return { default: module.WorkoutPlayer };
+});
+
+export function UserView({ token, onLogout }: { token: string | null; onLogout: () => void }) {
+  const emitSystemEvent = useStudentSyncStore((state) => state.emit);
+  const syncNavigateTo = useStudentSyncStore((state) => state.navigateTo);
+  const syncPendingRefresh = useStudentSyncStore((state) => state.pendingRefresh);
+  const syncNotifications = useStudentSyncStore((state) => state.syncNotifications);
+  const highlightedSections = useStudentSyncStore((state) => state.highlightedSections);
+  const consumeNavigate = useStudentSyncStore((state) => state.consumeNavigate);
+  const consumeRefresh = useStudentSyncStore((state) => state.consumeRefresh);
+  const markNotificationRead = useStudentSyncStore((state) => state.markNotificationRead);
+  const markAllNotificationsRead = useStudentSyncStore((state) => state.markAllNotificationsRead);
+  const clearSectionHighlight = useStudentSyncStore((state) => state.clearSectionHighlight);
+  const [studentSection, setStudentSection] = useState<StudentPanelSection>("home");
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [workout, setWorkout] = useState<WorkoutRow | null>(null);
+  const [todayWorkout, setTodayWorkout] = useState<TodayWorkoutResponse["workout"] | null>(null);
+  const [publishedWorkouts, setPublishedWorkouts] = useState<TodayWorkoutResponse["workout"][]>([]);
+  const [selectedWorkoutModality, setSelectedWorkoutModality] = useState<string | null>(null);
+  const [selectedWorkoutProgramId, setSelectedWorkoutProgramId] = useState<string | null>(null);
+  const [workoutSession, setWorkoutSession] = useState<WorkoutSessionResponse["session"] | null>(null);
+  const [consistency, setConsistency] = useState<WorkoutConsistencyResponse | null>(null);
+  const [membership, setMembership] = useState<StudentMembershipRow | null>(null);
+  const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const [attendance, setAttendance] = useState<Array<{ id: string; date: string }>>([]);
+  const [assessments, setAssessments] = useState<PhysicalAssessmentRow[]>([]);
+  const [events, setEvents] = useState<EventRow[]>([]);
+  const [tickets, setTickets] = useState<SupportTicketRow[]>([]);
+  const [selectedStudentTicketId, setSelectedStudentTicketId] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<NotificationRow[]>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [studentLocations, setStudentLocations] = useState<StudentLocationRow[]>([]);
+  const [studentAvatarPreview, setStudentAvatarPreview] = useState<string | null>(null);
+  const [studentProfileEditing, setStudentProfileEditing] = useState(false);
+  const [studentProfileUf, setStudentProfileUf] = useState<string>(profile?.state ?? "");
+  const [notificationsReadAt, setNotificationsReadAt] = useState<string | null>(() =>
+    window.localStorage.getItem("student-notifications-read-at")
+  );
+  const [aiPlans, setAiPlans] = useState<AiWorkoutPlanRow[]>([]);
+  const [publicConfig, setPublicConfig] = useState<Record<string, string>>({});
+  const [showStudentQr, setShowStudentQr] = useState(false);
+  const [studentPaymentCards, setStudentPaymentCards] = useState<PaymentCardRow[]>([]);
+  const [showAddCardForm, setShowAddCardForm] = useState(false);
+  const [checkoutPayment, setCheckoutPayment] = useState<PaymentRow | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState<PlanCode | "sandbox" | null>(null);
+  const [streakCalendarOpen, setStreakCalendarOpen] = useState(false);
+  const [streakCalendarMonth, setStreakCalendarMonth] = useState(() => new Date().getMonth() + 1);
+  const [checkoutDraft, setCheckoutDraft] = useState<{
+    planCode: PlanCode;
+    billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED";
+  }>({
+    planCode: "monthly",
+    billingType: "UNDEFINED"
+  });
+  const [assessmentForm, setAssessmentForm] = useState<PhysicalAssessmentForm | null>(null);
+  const [editingAssessmentId, setEditingAssessmentId] = useState<string | null>(null);
+  const [submittingAssessment, setSubmittingAssessment] = useState(false);
+  const [assessmentPhotoPreviews, setAssessmentPhotoPreviews] = useState<Record<string, string>>({});
+  const [assessmentPhotoFiles, setAssessmentPhotoFiles] = useState<Partial<Record<AssessmentPhotoKey, File>>>({});
+  const [studentExpandedAssessmentId, setStudentExpandedAssessmentId] = useState<string | null>(null);
+  const [studentLightbox, setStudentLightbox] = useState<{ urls: string[]; index: number } | null>(null);
+  const [studentProducts, setStudentProducts] = useState<ProductRow[]>([]);
+  const [studentPurchases, setStudentPurchases] = useState<PurchaseRow[]>([]);
+  const [purchasingProductId, setPurchasingProductId] = useState<string | null>(null);
+  const [purchaseConfirmId, setPurchaseConfirmId] = useState<string | null>(null);
+  const purchaseConfirmTimer = useRef<number | null>(null);
+  const [studentWorkoutFavorites, setStudentWorkoutFavorites] = useState<StudentFavoriteRow[]>([]);
+  const [ratingDraft, setRatingDraft] = useState<Record<string, { score: number; comment: string }>>({});
+  const [submittingRatingId, setSubmittingRatingId] = useState<string | null>(null);
+  const [favoritingProgramId, setFavoritingProgramId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [completingOnboarding, setCompletingOnboarding] = useState(false);
+
+  useEffect(() => {
+    if (!success) return;
+    const timer = window.setTimeout(() => setSuccess(null), 2000);
+    return () => window.clearTimeout(timer);
+  }, [success]);
+
+  useEffect(() => {
+    if (!studentLightbox) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setStudentLightbox(null);
+      if (event.key === "ArrowLeft") {
+        setStudentLightbox((current) =>
+          current ? { ...current, index: (current.index - 1 + current.urls.length) % current.urls.length } : current
+        );
+      }
+      if (event.key === "ArrowRight") {
+        setStudentLightbox((current) =>
+          current ? { ...current, index: (current.index + 1) % current.urls.length } : current
+        );
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [studentLightbox]);
+
+  async function loadUserData() {
+    if (!token) return;
+
+    try {
+      const [profileResponse, membershipResponse, paymentsResponse, workoutProgramsResponse] = await Promise.all([
+        apiGet<{ profile: StudentProfile }>("/user/profile", token),
+        apiGet<{ membership: StudentMembershipRow | null }>("/user/membership", token),
+        apiGet<{ payments: PaymentRow[] }>("/user/payments", token),
+        apiGet<StudentWorkoutProgramsResponse>("/student/workout/programs", token).catch(() => ({ workouts: [] }))
+      ]);
+
+      const activeMembership = membershipResponse.membership?.status === "ACTIVE";
+      const firstPublishedWorkout = workoutProgramsResponse.workouts[0] ?? null;
+
+      setProfile(profileResponse.profile);
+      setMembership(membershipResponse.membership);
+      setPayments(paymentsResponse.payments);
+      setPublishedWorkouts(workoutProgramsResponse.workouts);
+      setTodayWorkout(firstPublishedWorkout);
+      setCheckoutPayment(paymentsResponse.payments.find((item) => item.status === "PENDING") ?? null);
+
+      if (!activeMembership) {
+        setWorkout(null);
+        setTodayWorkout(null);
+        setPublishedWorkouts([]);
+        setWorkoutSession(null);
+        setConsistency(null);
+        setAttendance([]);
+        setAssessments([]);
+        setEvents([]);
+        setTickets([]);
+        setNotifications([]);
+        setNotificationsOpen(false);
+        setAiPlans([]);
+        return;
+      }
+
+      const [
+        workoutResponse,
+        attendanceResponse,
+        assessmentsResponse,
+        eventsResponse,
+        ticketsResponse,
+        notificationsResponse,
+        aiPlansResponse,
+        consistencyResponse,
+        productsResponse,
+        purchasesResponse,
+        workoutFavoritesResponse,
+        locationsResponse
+      ] = await Promise.all([
+        apiGet<{ workout: WorkoutRow | null }>("/user/workout", token),
+        apiGet<{ records: Array<{ id: string; date: string }> }>("/user/attendance", token),
+        apiGet<{ assessments: PhysicalAssessmentRow[] }>("/user/physical-assessments", token),
+        apiGet<{ events: EventRow[] }>("/user/events", token),
+        apiGet<{ tickets: SupportTicketRow[] }>("/user/support-tickets", token),
+        apiGet<{ notifications: NotificationRow[] }>("/user/notifications", token),
+        apiGet<{ plans: AiWorkoutPlanRow[] }>("/user/ai-workout-plans", token),
+        apiGet<WorkoutConsistencyResponse>("/student/workout/consistency", token).catch(() => null),
+        apiGet<{ products: ProductRow[] }>("/student/products", token),
+        apiGet<{ purchases: PurchaseRow[] }>("/student/purchases", token),
+        apiGet<{ favorites: StudentFavoriteRow[] }>("/student/workout/favorites", token),
+        apiGet<{ locations: StudentLocationRow[] }>("/student/locations", token)
+      ]);
+
+      setWorkout(workoutResponse.workout);
+      setAttendance(attendanceResponse.records);
+      setAssessments(assessmentsResponse.assessments);
+      setEvents(eventsResponse.events);
+      setTickets(ticketsResponse.tickets);
+      setNotifications(notificationsResponse.notifications);
+      setStudentLocations(locationsResponse.locations);
+      setAiPlans(aiPlansResponse.plans);
+      setConsistency(consistencyResponse);
+      setStudentProducts(productsResponse.products);
+      setStudentPurchases(purchasesResponse.purchases);
+      setStudentWorkoutFavorites(workoutFavoritesResponse.favorites);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : null;
+      setError(message ?? "Não foi possível carregar sua área. Verifique API e banco.");
+    }
+  }
+
+  useEffect(() => {
+    setStudentProfileUf(profile?.state ?? "");
+  }, [profile]);
+
+  useEffect(() => {
+    void loadUserData();
+    apiGet<{ config: Record<string, string> }>("/public/config")
+      .then((response) => setPublicConfig(response.config))
+      .catch(() => {});
+    loadStudentCards();
+  }, [token]);
+
+  /** Consumidores do Event Bus: sincronizam destinos e notificam o painel. */
+  useEffect(() => {
+    if (!syncNavigateTo && syncPendingRefresh.length === 0) return;
+
+    const nextSection = consumeNavigate();
+    const refreshTypes = consumeRefresh();
+
+    if (nextSection) {
+      setStudentSection(nextSection);
+    }
+
+    if (refreshTypes.length === 0 || !token) return;
+
+    void (async () => {
+      try {
+        if (refreshTypes.includes("COMPRA_CONCLUIDA")) {
+          const [membershipResponse, paymentsResponse, productsResponse, purchasesResponse] = await Promise.all([
+            apiGet<{ membership: StudentMembershipRow | null }>("/user/membership", token),
+            apiGet<{ payments: PaymentRow[] }>("/user/payments", token),
+            apiGet<{ products: ProductRow[] }>("/student/products", token),
+            apiGet<{ purchases: PurchaseRow[] }>("/student/purchases", token)
+          ]);
+          setMembership(membershipResponse.membership);
+          setPayments(paymentsResponse.payments);
+          setStudentProducts(productsResponse.products);
+          setStudentPurchases(purchasesResponse.purchases);
+          setSuccess("Pagamentos e Matrículas atualizados após a compra.");
+        }
+
+        if (refreshTypes.includes("CARTAO_ATUALIZADO")) {
+          const paymentsResponse = await apiGet<{ payments: PaymentRow[] }>("/user/payments", token);
+          setPayments(paymentsResponse.payments);
+          await loadStudentCards();
+          setSuccess("Forma de cobrança sincronizada com Pagamentos.");
+        }
+
+        if (refreshTypes.includes("CHECKIN_REALIZADO")) {
+          const today = new Date().toISOString().slice(0, 10);
+          setAttendance((current) => {
+            if (current.some((item) => item.date.slice(0, 10) === today)) return current;
+            return [{ id: `checkin-${today}`, date: new Date().toISOString() }, ...current];
+          });
+          const [attendanceResponse, locationsResponse] = await Promise.all([
+            apiGet<{ records: Array<{ id: string; date: string }> }>("/user/attendance", token),
+            apiGet<{ locations: StudentLocationRow[] }>("/student/locations", token)
+          ]);
+          setAttendance(attendanceResponse.records);
+          setStudentLocations(locationsResponse.locations);
+          setSuccess("Frequência e Unidades atualizadas após o check-in.");
+        }
+
+        if (refreshTypes.includes("MENSAGEM_ENVIADA")) {
+          const ticketsResponse = await apiGet<{ tickets: SupportTicketRow[] }>("/user/support-tickets", token);
+          setTickets(ticketsResponse.tickets);
+          setSuccess("Atendimento atualizado com a nova mensagem.");
+        }
+
+        if (refreshTypes.includes("AVALIACAO_SUBMETIDA")) {
+          const workoutProgramsResponse = await apiGet<StudentWorkoutProgramsResponse>(
+            "/student/workout/programs",
+            token
+          ).catch(() => ({ workouts: [] as TodayWorkoutResponse["workout"][] }));
+          setPublishedWorkouts(workoutProgramsResponse.workouts);
+          setSuccess("Feedback sincronizado com Avaliação física / Treino.");
+        }
+      } catch {
+        setError("Não foi possível sincronizar os módulos do painel.");
+      }
+    })();
+  }, [syncNavigateTo, syncPendingRefresh, consumeNavigate, consumeRefresh, token]);
+
+  useEffect(() => {
+    const destination = studentSection as PanelDestination;
+    if (highlightedSections.includes(destination)) {
+      clearSectionHighlight(destination);
+    }
+  }, [studentSection, highlightedSections, clearSectionHighlight]);
+
+  useEffect(() => {
+    setSelectedWorkoutProgramId((current) => {
+      if (!current) return current;
+      const stillExists = publishedWorkouts.some((item) => item.programId === current);
+      return stillExists ? current : null;
+    });
+    setSelectedWorkoutModality((current) => {
+      if (!current || current === "all") return current;
+      const stillExists = publishedWorkouts.some((item) => (item.modality ?? "Hipertrofia") === current);
+      return stillExists ? current : null;
+    });
+  }, [publishedWorkouts]);
+
+  function openTrainingHub(preferred?: TodayWorkoutResponse["workout"] | null) {
+    const target = preferred ?? todayWorkout ?? (publishedWorkouts.length === 1 ? publishedWorkouts[0] : null);
+    if (target) {
+      setSelectedWorkoutModality(target.modality ?? "Hipertrofia");
+      setSelectedWorkoutProgramId(target.programId);
+    } else if (publishedModalities.length === 1) {
+      setSelectedWorkoutModality(publishedModalities[0].modality);
+      setSelectedWorkoutProgramId(null);
+    } else {
+      setSelectedWorkoutModality("all");
+      setSelectedWorkoutProgramId(null);
+    }
+    setStudentSection("training");
+  }
+
+  useEffect(() => {
+    if (!token) return;
+    if (membership?.status === "ACTIVE") return;
+
+    const pending = checkoutPayment ?? payments.find((item) => item.status === "PENDING");
+    if (!pending) return;
+
+    const interval = window.setInterval(async () => {
+      try {
+        const response = await apiGet<{ membership: StudentMembershipRow | null }>("/user/membership", token);
+        if (response.membership?.status === "ACTIVE") {
+          setMembership(response.membership);
+          await loadUserData();
+        }
+      } catch {
+        // Ignora falhas transitórias enquanto aguarda a confirmação do pagamento.
+      }
+    }, 4000);
+
+    return () => window.clearInterval(interval);
+  }, [token, membership?.status, checkoutPayment, payments]);
+
+  useEffect(() => {
+    if (studentSection !== "support" || !token) return;
+    const interval = window.setInterval(() => {
+      void apiGet<{ tickets: SupportTicketRow[] }>("/user/support-tickets", token)
+        .then((response) => setTickets(response.tickets))
+        .catch(() => undefined);
+    }, 8000);
+    return () => window.clearInterval(interval);
+  }, [studentSection, token]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    const now = new Date().toISOString();
+    setNotificationsReadAt(now);
+    window.localStorage.setItem("student-notifications-read-at", now);
+    markAllNotificationsRead();
+  }, [notificationsOpen, markAllNotificationsRead]);
+
+  async function handleEventRegistration(eventId: string) {
+    try {
+      await apiPost("/user/events/register", { eventId }, token);
+      await loadUserData();
+    } catch {
+      setError("Não foi possível confirmar sua inscrição no evento.");
+    }
+  }
+
+  async function handleCreateTicket(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+
+    try {
+      const created = await apiPost<{ ticket: SupportTicketRow }>(
+        "/user/support-tickets",
+        {
+          subject: String(data.get("subject") ?? ""),
+          message: String(data.get("message") ?? ""),
+          category: String(data.get("category") ?? "GENERAL")
+        },
+        token
+      );
+      form.reset();
+      setSelectedStudentTicketId(created.ticket.id);
+      emitSystemEvent("MENSAGEM_ENVIADA", {
+        ticketId: created.ticket.id,
+        action: "created",
+        subject: created.ticket.subject,
+        source: "contato"
+      });
+    } catch {
+      setError("Não foi possível abrir o atendimento.");
+    }
+  }
+
+  async function handleStudentSendTicketMessage(ticketId: string, body: string) {
+    try {
+      await apiPost(`/user/support-tickets/${ticketId}/messages`, { body }, token);
+      emitSystemEvent("MENSAGEM_ENVIADA", {
+        ticketId,
+        action: "replied",
+        source: "contato"
+      });
+    } catch {
+      setError("Não foi possível enviar a mensagem.");
+    }
+  }
+
+  async function handleStudentCloseTicket(ticketId: string) {
+    try {
+      await apiPost(`/user/support-tickets/${ticketId}/close`, {}, token);
+      await loadUserData();
+    } catch {
+      setError("Não foi possível encerrar o atendimento.");
+    }
+  }
+
+  async function handleCreateAiPlan(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+
+    try {
+      await apiPost(
+        "/user/ai-workout-plans",
+        {
+          objective: String(data.get("objective") ?? profile?.objective ?? "condicionamenão"),
+          level: String(data.get("level") ?? profile?.level ?? "iniciante"),
+          daysPerWeek: Number(data.get("daysPerWeek") ?? 3),
+          focus: String(data.get("focus") ?? "")
+        },
+        token
+      );
+      form.reset();
+      await loadUserData();
+    } catch {
+      setError("Não foi possível gerar o plano pelo agente IA.");
+    }
+  }
+
+  async function handleCreateCheckout(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token) return;
+
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const planCode = String(data.get("planCode") ?? checkoutDraft.planCode) as PlanCode;
+    const billingType = String(data.get("billingType") ?? checkoutDraft.billingType) as
+      | "BOLETO"
+      | "CREDIT_CARD"
+      | "PIX"
+      | "UNDEFINED";
+
+    setError(null);
+    setCheckoutLoading(planCode);
+    setCheckoutDraft({
+      planCode,
+      billingType
+    });
+
+    try {
+      const response = await apiPost<CheckoutSessionResponse>(
+        "/checkout/session",
+        {
+          planCode,
+          billingType
+        },
+        token
+      );
+
+      setMembership(response.membership);
+      setCheckoutPayment(response.payment);
+      if (response.payment) {
+        setPayments((current) => {
+          const others = current.filter((item) => item.id !== response.payment?.id);
+          return [response.payment, ...others].filter(Boolean) as PaymentRow[];
+        });
+      }
+
+      if (response.alreadyActive) {
+        await loadUserData();
+        return;
+      }
+
+      if (response.payment?.paymentUrl) {
+        window.location.href = response.payment.paymentUrl;
+      }
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : null;
+      setError(message ?? "Não foi possível iniciar o checkout.");
+    } finally {
+      setCheckoutLoading(null);
+    }
+  }
+
+  function openAsaasCheckout(url: string) {
+    window.location.href = url;
+  }
+
+  async function handleConfirmSandboxPayment() {
+    if (!token || !checkoutPayment) return;
+
+    setError(null);
+    setCheckoutLoading("sandbox");
+
+    try {
+      const response = await apiPost<{ membership: StudentMembershipRow; payment: PaymentRow }>(
+        "/checkout/confirm-sandbox",
+        {
+          paymentId: checkoutPayment.id
+        },
+        token
+      );
+
+      setMembership(response.membership);
+      setCheckoutPayment(response.payment);
+      await loadUserData();
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : null;
+      setError(message ?? "Não foi possível confirmar o pagamento sandbox.");
+    } finally {
+      setCheckoutLoading(null);
+    }
+  }
+
+  async function handleRequestSubstitutes(exerciseId: string) {
+    const response = await apiPost<{ alternatives: WorkoutPlayerExercise["alternatives"] }>(
+      "/student/workout/substitute",
+      { exerciseId },
+      token
+    );
+
+    return response.alternatives;
+  }
+
+  async function handleStartWorkoutSession(workoutToStart = todayWorkout) {
+    if (!workoutToStart) return;
+
+    setTodayWorkout(workoutToStart);
+    setWorkoutSession(null);
+    setStudentSection("player");
+  }
+
+  async function handleBeginWorkoutSession() {
+    if (!todayWorkout) return;
+
+    try {
+      const response = await apiPost<WorkoutSessionResponse>(
+        "/student/workout/start-session",
+        {
+          assignmentId: todayWorkout.assignmentId,
+          dayNumber: todayWorkout.dayNumber
+        },
+        token
+      );
+      setWorkoutSession(response.session);
+      return response.session;
+    } catch {
+      setError("Não foi possível iniciar o cronômetro do treino.");
+      throw new Error("Não foi possível iniciar o cronômetro do treino.");
+    }
+  }
+
+  async function handleCompleteWorkoutDay() {
+    if (!todayWorkout) return;
+
+    try {
+      await apiPost(
+        "/student/workout/complete-day",
+        {
+          assignmentId: todayWorkout.assignmentId,
+          sessionId: workoutSession?.id
+        },
+        token
+      );
+      setWorkoutSession(null);
+      await loadUserData();
+      setStudentSection("training");
+      setSelectedWorkoutModality(todayWorkout.modality ?? selectedWorkoutModality);
+    } catch {
+      setError("Não foi possível concluir o treino agora.");
+    }
+  }
+
+  async function handleCancelWorkoutSession() {
+    if (!workoutSession?.id) {
+      setWorkoutSession(null);
+      return;
+    }
+
+    try {
+      await apiPost(
+        "/student/workout/cancel-session",
+        {
+          sessionId: workoutSession.id
+        },
+        token
+      );
+      setWorkoutSession(null);
+    } catch {
+      setError("Não foi possível cancelar o treino agora.");
+    }
+  }
+
+  async function loadStudentCards() {
+    if (!token) return;
+    try {
+      const response = await apiGet<{ paymentCards: PaymentCardRow[] }>("/student/payment-cards", token);
+      setStudentPaymentCards(response.paymentCards);
+    } catch {
+      setStudentPaymentCards([]);
+    }
+  }
+
+  async function handleAddStudentCard(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token) return;
+    const form = event.currentTarget;
+    const data = new FormData(form);
+
+    try {
+      await apiPost(
+        "/student/payment-cards",
+        {
+          brand: String(data.get("brand") ?? "") || undefined,
+          lastFour: String(data.get("lastFour") ?? ""),
+          holderName: String(data.get("holderName") ?? "") || undefined,
+          isDefault: data.get("isDefault") === "on"
+        },
+        token
+      );
+      form.reset();
+      emitSystemEvent("CARTAO_ATUALIZADO", {
+        action: "added",
+        source: "meus_cartoes"
+      });
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : null;
+      setError(message ?? "Não foi possível adicionar o cartão.");
+    }
+  }
+
+  async function handleDeleteStudentCard(cardId: string) {
+    if (!token) return;
+    try {
+      await apiDelete(`/student/payment-cards/${cardId}`, token);
+      emitSystemEvent("CARTAO_ATUALIZADO", {
+        cardId,
+        action: "removed",
+        source: "meus_cartoes"
+      });
+    } catch {
+      setError("Não foi possível remover o cartão.");
+    }
+  }
+
+  function handleStudentAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setStudentAvatarPreview(String(reader.result));
+    reader.readAsDataURL(file);
+  }
+
+  function handleCancelStudentProfileEdit() {
+    setStudentProfileEditing(false);
+    setStudentAvatarPreview(null);
+  }
+
+  function handleUpdateStudentProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void saveStudentProfile(event.currentTarget);
+  }
+
+  async function saveStudentProfile(form: HTMLFormElement) {
+    if (!token) return;
+    const data = new FormData(form);
+    const name = String(data.get("name") ?? "").trim();
+    const phone = String(data.get("phone") ?? "").trim();
+    const document = String(data.get("document") ?? "").trim();
+    const gender = String(data.get("gender") ?? "");
+    const birthDate = String(data.get("birthDate") ?? "").trim();
+    const objective = String(data.get("objective") ?? "").trim();
+    const level = String(data.get("level") ?? "").trim();
+    const city = String(data.get("city") ?? "").trim();
+    const state = String(data.get("state") ?? "").trim();
+    const avatarFile = data.get("avatar");
+
+    if (!name) {
+      setError("Informe seu nome.");
+      return;
+    }
+
+    try {
+      let avatarUrl: string | undefined;
+      if (avatarFile instanceof File && avatarFile.size > 0) {
+        const uploadData = new FormData();
+        uploadData.append("file", avatarFile);
+        const uploaded = await apiUpload<UploadResponse>(`/user/uploads?group=images`, uploadData, token);
+        avatarUrl = uploaded.file.url;
+      }
+
+      const response = await apiPut<{ profile: StudentProfile }>(
+        "/user/profile",
+        {
+          name,
+          phone: phone || undefined,
+          document: document || undefined,
+          gender: gender === "MALE" || gender === "FEMALE" ? gender : null,
+          birthDate: birthDate ? `${birthDate}T12:00:00.000Z` : undefined,
+          objective: objective || undefined,
+          level: level || undefined,
+          city: city || undefined,
+          state: state || undefined,
+          avatarUrl
+        },
+        token
+      );
+      setProfile(response.profile);
+      setStudentAvatarPreview(null);
+      setStudentProfileEditing(false);
+      setSuccess("Dados cadastrais atualizados com sucesso.");
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : null;
+      setError(message ?? "Não foi possível salvar seus dados.");
+    }
+  }
+
+  async function handleCompleteOnboarding(payload: WorkoutOnboardingSubmitPayload) {
+    if (!token) return;
+    setCompletingOnboarding(true);
+    setError(null);
+
+    try {
+      const response = await apiPut<{ profile: StudentProfile }>(
+        "/user/profile",
+        {
+          name: payload.name,
+          phone: payload.phone || undefined,
+          gender: payload.gender,
+          birthDate: `${payload.birthDate}T12:00:00.000Z`,
+          objective: payload.objective,
+          level: levelLabel(payload.level),
+          daysPerWeek: payload.daysPerWeekNumber,
+          equipmentTags: payload.equipment
+        },
+        token
+      );
+      setProfile(response.profile);
+      setSuccess("Perfil concluído. Seus treinos foram liberados conforme o público definido.");
+      await loadUserData();
+    } catch (completeError) {
+      const message = completeError instanceof ApiError ? completeError.message : null;
+      setError(message ?? "Não foi possível concluir o onboarding.");
+    } finally {
+      setCompletingOnboarding(false);
+    }
+  }
+
+  async function handleExerciseProgressChange(input: {
+    sessionId?: string | null;
+    exerciseId: string;
+    prescriptionId: string;
+    completed: boolean;
+    weightUsed: number;
+    repsCompleted: number;
+    sets: number;
+    durationSeconds?: number;
+    distanceMeters?: number;
+    roundsCompleted?: number;
+    perceivedExertion?: number;
+    notes?: string;
+  }) {
+    await apiPost(
+      "/student/workout/exercise-progress",
+      {
+        ...input,
+        sessionId: input.sessionId ?? workoutSession?.id
+      },
+      token
+    );
+  }
+
+  function createEmptyAssessmentForm(): PhysicalAssessmentForm {
+    return {
+      formulario_avaliacao_fisica: {
+        dados_pessoais_e_objetivos: {
+          nome_completo: profile?.name ?? "",
+          data_nascimento: profile?.birthDate ?? "",
+          genero_biologico: {
+            opcoes: ["Masculino", "Feminino"],
+            resposta: profile?.gender === "MALE" ? "Masculino" : profile?.gender === "FEMALE" ? "Feminino" : ""
+          },
+          objetivo_principal: {
+            opcoes: ["Emagrecimento", "Hipertrofia", "Condicionamento/Saúde"],
+            resposta: ""
+          },
+          nivel_atividade_atual: {
+            opcoes: ["Sedentário", "Leve", "Moderado", "Intenso"],
+            resposta: ""
+          }
+        },
+        historico_de_saude_anamnese: {
+          possui_lesao: { descricao: "Joelho, coluna, ombro, etc.", resposta: "" },
+          medicamento_continuo: { descricao: "Se sim, qual?", resposta: "" },
+          restricao_medica_cardiaca: { descricao: "Se sim, qual?", resposta: "" }
+        },
+        composicao_corporal_basica: {
+          instrucao: "Aferir preferencialmente em jejum, pela manhã",
+          peso_atual_kg: null,
+          altura_cm: null
+        },
+        perimetros_corporais_cm: {
+          instrucao: "Use uma fita métrica, sem apertar a pele e sem prender a respiração",
+          pescoço: { detalhe: "Abaixo do pomo de Adão", valor: null },
+          torax: { detalhe: "Na linha dos mamilos", valor: null },
+          cintura: { detalhe: "Na parte mais estreita do tronco", valor: null },
+          abdomen: { detalhe: "Exatamente sobre a linha do umbigo", valor: null },
+          quadril: { detalhe: "Na maior parte dos glúteos", valor: null },
+          braco_direito_relaxado: { detalhe: "Linha média do bíceps", valor: null },
+          braco_esquerdo_relaxado: { detalhe: "Linha média do bíceps", valor: null },
+          coxa_direita: { detalhe: "Na região média da coxa", valor: null },
+          coxa_esquerda: { detalhe: "Na região média da coxa", valor: null },
+          panturrilha_direita: { detalhe: "Na maior porção do músculo", valor: null },
+          panturrilha_esquerda: { detalhe: "Na maior porção do músculo", valor: null }
+        },
+        fotos_analise_visual: {
+          instrucao: "Anexar fotos com roupas leves, postura relaxada e câmera na altura da cintura",
+          arquivos: { foto_frente: "", foto_costas: "", foto_perfil: "" }
+        }
+      }
+    };
+  }
+
+  function updateAssessmentForm(mutate: (draft: PhysicalAssessmentForm) => void) {
+    setAssessmentForm((current) => {
+      const draft = current ? structuredClone(current) : createEmptyAssessmentForm();
+      mutate(draft);
+      return draft;
+    });
+  }
+
+  function handleAssessmentPhotoSelect(key: AssessmentPhotoKey, file: File | undefined) {
+    updateAssessmentForm((draft) => {
+      draft.formulario_avaliacao_fisica.fotos_analise_visual.arquivos[key] = file?.name ?? "";
+    });
+    setAssessmentPhotoFiles((current) => {
+      const next = { ...current };
+      if (!file) {
+        delete next[key];
+      } else {
+        next[key] = file;
+      }
+      return next;
+    });
+    setAssessmentPhotoPreviews((current) => {
+      if (current[key]) {
+        URL.revokeObjectURL(current[key]);
+      }
+      if (!file) {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      }
+      return { ...current, [key]: URL.createObjectURL(file) };
+    });
+  }
+
+  function clearAssessmentForm() {
+    setAssessmentForm(null);
+    setEditingAssessmentId(null);
+    setAssessmentPhotoFiles({});
+    setAssessmentPhotoPreviews((current) => {
+      Object.values(current).forEach((url) => URL.revokeObjectURL(url));
+      return {};
+    });
+  }
+
+  function handleEditStudentAssessment(item: PhysicalAssessmentRow) {
+    const existing = item.details ? structuredClone(item.details) : createEmptyAssessmentForm();
+    const form = existing.formulario_avaliacao_fisica;
+    if (!form.dados_pessoais_e_objetivos.nome_completo) form.dados_pessoais_e_objetivos.nome_completo = profile?.name ?? "";
+    if (!form.dados_pessoais_e_objetivos.data_nascimento && profile?.birthDate) {
+      form.dados_pessoais_e_objetivos.data_nascimento = profile.birthDate;
+    }
+    if (item.weightKg != null) form.composicao_corporal_basica.peso_atual_kg = item.weightKg;
+    if (item.heightCm != null) form.composicao_corporal_basica.altura_cm = item.heightCm;
+    if (item.waistCm != null) form.perimetros_corporais_cm.cintura.valor = item.waistCm;
+    if (item.chestCm != null) form.perimetros_corporais_cm.torax.valor = item.chestCm;
+    if (item.hipCm != null) form.perimetros_corporais_cm.quadril.valor = item.hipCm;
+
+    setAssessmentForm(existing);
+    setEditingAssessmentId(item.id);
+    setStudentExpandedAssessmentId(item.id);
+    setAssessmentPhotoFiles({});
+    setAssessmentPhotoPreviews((current) => {
+      Object.values(current).forEach((url) => URL.revokeObjectURL(url));
+      return {};
+    });
+  }
+
+  async function handleSubmitPhysicalAssessment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!assessmentForm) return;
+    setSubmittingAssessment(true);
+    setError(null);
+    try {
+      let arquivos = assessmentForm.formulario_avaliacao_fisica.fotos_analise_visual.arquivos;
+      for (const [key] of assessmentPhotoFields) {
+        const file = assessmentPhotoFiles[key];
+        if (!file) continue;
+        const uploadData = new FormData();
+        uploadData.append("file", file);
+        const uploaded = await apiUpload<UploadResponse>("/user/uploads?group=images", uploadData, token);
+        arquivos = { ...arquivos, [key]: uploaded.file.url };
+      }
+      const payload: PhysicalAssessmentForm = {
+        ...assessmentForm,
+        formulario_avaliacao_fisica: {
+          ...assessmentForm.formulario_avaliacao_fisica,
+          fotos_analise_visual: {
+            ...assessmentForm.formulario_avaliacao_fisica.fotos_analise_visual,
+            arquivos
+          }
+        }
+      };
+      const editingId = editingAssessmentId;
+      const response = editingId
+        ? await apiPut<{ assessment: PhysicalAssessmentRow }>(
+            `/user/physical-assessments/${editingId}`,
+            payload,
+            token
+          )
+        : await apiPost<{ assessment: PhysicalAssessmentRow }>(
+            "/user/physical-assessments",
+            payload,
+            token
+          );
+      setAssessments((current) =>
+        editingId
+          ? current.map((item) => (item.id === response.assessment.id ? response.assessment : item))
+          : [response.assessment, ...current.filter((item) => item.id !== response.assessment.id)]
+      );
+      clearAssessmentForm();
+      setSuccess(editingId ? "Avaliação física atualizada com sucesso." : "Avaliação física salva com sucesso.");
+    } catch (submitError) {
+      setError(
+        submitError instanceof ApiError ? submitError.message : "Não foi possível salvar a avaliação física."
+      );
+    } finally {
+      setSubmittingAssessment(false);
+    }
+  }
+
+  async function handleBuyProduct(productId: string) {
+    setPurchasingProductId(productId);
+    setError(null);
+    try {
+      const response = await apiPost<{ purchase: PurchaseRow }>("/student/purchases", { productId }, token);
+      const productName = studentProducts.find((item) => item.id === productId)?.name;
+      setStudentPurchases([response.purchase, ...studentPurchases]);
+      setStudentProducts((current) =>
+        current.map((item) => (item.id === productId ? { ...item, purchasedByMe: true } : item))
+      );
+      setPurchaseConfirmId(productId);
+      emitSystemEvent("COMPRA_CONCLUIDA", {
+        productId,
+        purchaseId: response.purchase.id,
+        productName,
+        source: "produtos"
+      });
+      if (purchaseConfirmTimer.current) {
+        window.clearTimeout(purchaseConfirmTimer.current);
+      }
+      purchaseConfirmTimer.current = window.setTimeout(() => {
+        setPurchaseConfirmId(null);
+        purchaseConfirmTimer.current = null;
+      }, 2000);
+    } catch (buyError) {
+      setError(buyError instanceof ApiError ? buyError.message : "Não foi possível registrar a compra.");
+    } finally {
+      setPurchasingProductId(null);
+    }
+  }
+
+  async function handleToggleWorkoutFavorite(programId: string) {
+    setFavoritingProgramId(programId);
+    setError(null);
+    try {
+      const response = await apiPost<{ favorited: boolean }>(`/student/workout/favorites/${programId}`, {}, token);
+      const favorited = response.favorited;
+      setPublishedWorkouts((current) =>
+        current.map((item) => (item.programId === programId ? { ...item, favoritedByMe: favorited } : item))
+      );
+      if (favorited) {
+        const program = publishedWorkouts.find((item) => item.programId === programId);
+        if (program) {
+          setStudentWorkoutFavorites([
+            {
+              id: `fav-${programId}`,
+              createdAt: new Date().toISOString(),
+              program: {
+                id: program.programId,
+                title: program.programTitle,
+                description: program.description ?? "",
+                modality: program.modality ?? null,
+                modalityImageUrl: program.modalityImageUrl ?? null,
+                totalWorkouts: program.totalWorkouts ?? program.totalDays
+              }
+            },
+            ...studentWorkoutFavorites
+          ]);
+        }
+      } else {
+        setStudentWorkoutFavorites((current) => current.filter((item) => item.program.id !== programId));
+      }
+    } catch (favoriteError) {
+      setError(favoriteError instanceof ApiError ? favoriteError.message : "Não foi possível atualizar o favorito.");
+    } finally {
+      setFavoritingProgramId(null);
+    }
+  }
+
+  async function handleSubmitWorkoutProgramRating(
+    programId: string,
+    assignmentId: string,
+    scoreOverride?: number,
+    commentOverride?: string
+  ) {
+    const draft = ratingDraft[programId];
+    const finalScore = scoreOverride ?? draft?.score;
+    const finalComment = (commentOverride ?? draft?.comment)?.trim() || undefined;
+    if (!finalScore || finalScore < 1) return;
+    setSubmittingRatingId(programId);
+    setError(null);
+    try {
+      await apiPost(
+        "/student/ratings",
+        {
+          score: finalScore,
+          comment: finalComment,
+          targetType: "WORKOUT",
+          targetId: assignmentId
+        },
+        token
+      );
+      const program = publishedWorkouts.find((item) => item.programId === programId);
+      const alreadyFavorited = program?.favoritedByMe ?? false;
+      let favoritedNow = false;
+      if (!alreadyFavorited) {
+        try {
+          const favoriteResponse = await apiPost<{ favorited: boolean }>(
+            `/student/workout/favorites/${programId}`,
+            {},
+            token
+          );
+          favoritedNow = favoriteResponse.favorited;
+        } catch {
+          favoritedNow = false;
+        }
+      }
+      setPublishedWorkouts((current) =>
+        current.map((item) =>
+          item.programId === programId
+            ? { ...item, ratedByMe: true, favoritedByMe: item.favoritedByMe || favoritedNow }
+            : item
+        )
+      );
+      if (favoritedNow && program) {
+        setStudentWorkoutFavorites((current) => [
+          {
+            id: `fav-${programId}`,
+            createdAt: new Date().toISOString(),
+            program: {
+              id: program.programId,
+              title: program.programTitle,
+              description: program.description ?? "",
+              modality: program.modality ?? null,
+              modalityImageUrl: program.modalityImageUrl ?? null,
+              totalWorkouts: program.totalWorkouts ?? program.totalDays
+            }
+          },
+          ...current
+        ]);
+      }
+      setRatingDraft((current) => {
+        const next = { ...current };
+        delete next[programId];
+        return next;
+      });
+      emitSystemEvent("AVALIACAO_SUBMETIDA", {
+        programId,
+        assignmentId,
+        score: finalScore,
+        programTitle: program?.programTitle,
+        source: "avaliar"
+      });
+      setSuccess("Avaliação enviada.");
+    } catch (ratingError) {
+      setError(ratingError instanceof ApiError ? ratingError.message : "Não foi possível enviar a avaliação.");
+    } finally {
+      setSubmittingRatingId(null);
+    }
+  }
+
+  const firstDay = workout?.days[0];
+  const pendingPayment = payments.find((item) => item.status === "PENDING");
+  const latestAssessment = assessments[0];
+  const latestAssessmentForm = latestAssessment?.details?.formulario_avaliacao_fisica ?? null;
+  const computedBodyFat = latestAssessmentForm
+    ? calculateBodyFatEstimate({
+        gender: latestAssessmentForm.dados_pessoais_e_objetivos.genero_biologico.resposta,
+        heightCm: latestAssessmentForm.composicao_corporal_basica.altura_cm,
+        neckCm: latestAssessmentForm.perimetros_corporais_cm.pescoço.valor,
+        waistCm: latestAssessmentForm.perimetros_corporais_cm.cintura.valor,
+        hipCm: latestAssessmentForm.perimetros_corporais_cm.quadril.valor,
+        weightKg: latestAssessmentForm.composicao_corporal_basica.peso_atual_kg,
+        birthDate: latestAssessmentForm.dados_pessoais_e_objetivos.data_nascimento
+      })
+    : null;
+  const computedBodyFatPct = computedBodyFat?.value ?? null;
+  const latestAiPlan = aiPlans[0];
+  const hasActiveMembership = membership?.status === "ACTIVE";
+  const hasStudentAreaAccess = hasActiveMembership;
+  const needsOnboarding = Boolean(profile && (!profile.gender || !profile.objective || !profile.level));
+  const currentCheckoutPayment = checkoutPayment ?? pendingPayment;
+  const lockedFeatures = [
+    {
+      icon: Dumbbell,
+      title: trainingCopy.todayWorkout,
+      text: "Sessões, exercícios, séries, repetições e descanso."
+    },
+    {
+      icon: Ruler,
+      title: trainingCopy.physicalAssessment,
+      text: "Medidas, histórico corporal e acompanhamento de evolução."
+    },
+    {
+      icon: CalendarPlus,
+      title: "Eventos",
+      text: "Inscrições em aulas, desafios e encontros da comunidade."
+    },
+    {
+      icon: Headphones,
+      title: "Atendimento",
+      text: "Abertura de chamados para suporte de treino, pagamento e acesso."
+    },
+    {
+      icon: Bot,
+      title: "Agente de Treino IA",
+      text: "Geração de planos personalizados conforme objetivo e nível."
+    }
+  ];
+  const cmsExercisesToday = todayWorkout?.block.exercises ?? [];
+  const cmsMusclesToday = Array.from(
+    new Set(cmsExercisesToday.flatMap((exercise) => exercise.targetMuscles ?? []))
+  );
+  const totalWorkoutDaysFromPrograms = publishedWorkouts.reduce((total, item) => total + item.totalDays, 0);
+  const totalWorkoutGoalFromPrograms = publishedWorkouts.reduce((total, item) => total + (item.totalWorkouts ?? item.totalDays), 0);
+  const totalWorkoutDays = consistency?.totalWorkoutDays ?? totalWorkoutGoalFromPrograms ?? totalWorkoutDaysFromPrograms;
+  const workoutsCompleted = Math.min(consistency?.completedWorkoutCount ?? 0, totalWorkoutDays);
+  const workoutProgressPercent = Math.min(100, Math.round((workoutsCompleted / Math.max(totalWorkoutDays, 1)) * 100));
+  const publishedModalities = useMemo(
+    () =>
+      Array.from(new Set(publishedWorkouts.map((item) => item.modality ?? "Hipertrofia"))).map((modality) => ({
+        modality,
+        count: publishedWorkouts.filter((item) => (item.modality ?? "Hipertrofia") === modality).length,
+        imageUrl:
+          publishedWorkouts.find((item) => (item.modality ?? "Hipertrofia") === modality)?.modalityImageUrl ?? null
+      })),
+    [publishedWorkouts]
+  );
+  const modalityWorkouts =
+    !selectedWorkoutModality || selectedWorkoutModality === "all"
+      ? publishedWorkouts
+      : publishedWorkouts.filter((item) => (item.modality ?? "Hipertrofia") === selectedWorkoutModality);
+  const selectedProgramWorkout = selectedWorkoutProgramId
+    ? publishedWorkouts.find((item) => item.programId === selectedWorkoutProgramId) ?? null
+    : null;
+  const workoutSheet =
+    selectedProgramWorkout ??
+    (selectedWorkoutModality &&
+    selectedWorkoutModality !== "all" &&
+    modalityWorkouts.length === 1
+      ? modalityWorkouts[0]
+      : null);
+  const workoutSequence = workoutSheet?.sequence?.length ? workoutSheet.sequence : publishedWorkouts;
+  const sheetCompleted = Math.min(workoutSheet?.completedWorkouts ?? workoutsCompleted, workoutSheet?.totalWorkouts ?? workoutSheet?.totalDays ?? totalWorkoutDays);
+  const sheetTotal = workoutSheet?.totalWorkouts ?? workoutSheet?.totalDays ?? totalWorkoutDays;
+  const sheetProgressPercent = Math.min(100, Math.round((sheetCompleted / Math.max(sheetTotal, 1)) * 100));
+  const currentSequenceWorkout = workoutSequence.find((item) => item.dayNumber === workoutSheet?.dayNumber) ?? workoutSequence[0];
+  const sheetMembershipStartsAt = workoutSheet?.membershipStartsAt ?? membership?.startsAt ?? null;
+  const sheetMembershipEndsAt = workoutSheet?.membershipEndsAt ?? membership?.endsAt ?? null;
+  const formatStudentDate = (date?: string | null) => (date ? new Date(date).toLocaleDateString("pt-BR") : "Não informado");
+  const formatWorkoutDuration = (seconds?: number | null) => {
+    if (!seconds) return "Duração não informada";
+    const minutes = Math.floor(seconds / 60);
+    const restSeconds = seconds % 60;
+    return minutes > 0 ? `${minutes}min ${restSeconds}s` : `${restSeconds}s`;
+  };
+  const getWorkoutHistoryMuscles = (dayNumber: number) => {
+    const workoutFromDay = workoutSequence.find((item) => item.dayNumber === dayNumber) ?? workoutSheet;
+    const muscles = workoutFromDay?.block.exercises.flatMap((exercise) => exercise.targetMuscles ?? []) ?? [];
+    return Array.from(new Set(muscles)).join(", ") || "Músculos não registrados";
+  };
+  async function handleShareWorkoutHistory(session: WorkoutConsistencyResponse["sessions"][number]) {
+    const text = `Treino dia ${session.dayNumber} concluído em ${new Date(session.startedAt).toLocaleString("pt-BR")} no App Treino.`;
+
+    if (navigator.share) {
+      await navigator.share({
+        title: "Histórico de treino",
+        text
+      });
+      return;
+    }
+
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+    }
+  }
+  const workoutHistorySessions = useMemo(
+    () =>
+      [...(consistency?.sessions ?? [])].sort(
+        (first, second) => new Date(second.finishedAt ?? second.startedAt).getTime() - new Date(first.finishedAt ?? first.startedAt).getTime()
+      ),
+    [consistency?.sessions]
+  );
+  const studentCode = profile?.name ? String(profile.name.length * 193 + 1) : "1931";
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentCalendarMonth = currentDate.getMonth() + 1;
+  const currentMonth = useMemo(
+    () => ({
+      year: currentYear,
+      month: streakCalendarMonth
+    }),
+    [currentYear, streakCalendarMonth]
+  );
+  const calendarCells = useMemo(
+    () => buildMonthCalendar(currentMonth.year, currentMonth.month),
+    [currentMonth.month, currentMonth.year]
+  );
+  const todayIsoDate = new Date().toISOString().slice(0, 10);
+  const streakDateSet = useMemo(
+    () => new Set(consistency?.historyDates ?? consistency?.completedDates ?? []),
+    [consistency?.completedDates, consistency?.historyDates]
+  );
+  const monthPrefix = `${currentMonth.year}-${String(currentMonth.month).padStart(2, "0")}-`;
+  const completedDateSet = useMemo(
+    () => new Set(Array.from(streakDateSet).filter((date) => date.startsWith(monthPrefix))),
+    [monthPrefix, streakDateSet]
+  );
+  const currentStreak = useMemo(() => {
+    const date = new Date();
+    const todayKey = date.toISOString().slice(0, 10);
+
+    if (!streakDateSet.has(todayKey)) {
+      date.setDate(date.getDate() - 1);
+      const yesterdayKey = date.toISOString().slice(0, 10);
+
+      if (!streakDateSet.has(yesterdayKey)) {
+        return 0;
+      }
+    }
+
+    let streak = 0;
+
+    while (streakDateSet.has(date.toISOString().slice(0, 10))) {
+      streak += 1;
+      date.setDate(date.getDate() - 1);
+    }
+
+    return streak;
+  }, [streakDateSet]);
+
+  const attendanceMonthPrefix = `${currentYear}-${String(currentCalendarMonth).padStart(2, "0")}-`;
+  const attendanceThisMonth = attendance.filter((record) => record.date.startsWith(attendanceMonthPrefix)).length;
+  const recentAccesses = useMemo(
+    () =>
+      [...attendance]
+        .sort((first, second) => new Date(second.date).getTime() - new Date(first.date).getTime())
+        .slice(0, 8),
+    [attendance]
+  );
+
+  const selectedStudentTicket = useMemo(
+    () => tickets.find((ticket) => ticket.id === selectedStudentTicketId) ?? tickets[0] ?? null,
+    [selectedStudentTicketId, tickets]
+  );
+
+  const unreadNotificationsCount = useMemo(() => {
+    const since = notificationsReadAt ? new Date(notificationsReadAt) : new Date(0);
+    const remoteUnread = notifications.filter((notification) => new Date(notification.publishedAt) > since).length;
+    const syncUnread = syncNotifications.filter((notification) => !notification.read).length;
+    return remoteUnread + syncUnread;
+  }, [notifications, notificationsReadAt, syncNotifications]);
+
+  const mergedNotifications = useMemo(() => {
+    const syncItems = syncNotifications.map((item) => ({
+      id: item.id,
+      kind: "sync" as const,
+      title: item.title,
+      message: item.message,
+      publishedAt: item.publishedAt,
+      origin: item.origin,
+      targets: item.targets,
+      read: item.read
+    }));
+    const remoteItems = notifications.map((item) => ({
+      id: item.id,
+      kind: "remote" as const,
+      title: item.title,
+      message: item.message,
+      publishedAt: item.publishedAt,
+      origin: null as string | null,
+      targets: [] as PanelDestination[],
+      read: notificationsReadAt ? new Date(item.publishedAt) <= new Date(notificationsReadAt) : false
+    }));
+    return [...syncItems, ...remoteItems]
+      .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+      .slice(0, 12);
+  }, [syncNotifications, notifications, notificationsReadAt]);
+
+  if (needsOnboarding) {
+    return (
+      <main className="auth-layout">
+        <section className="auth-panel">
+          <span className="eyebrow">Personalização</span>
+          <h1>Complete seu perfil de treino</h1>
+          <p>Faltam alguns dados para liberar os treinos certos para o seu perfil.</p>
+          <WorkoutOnboarding
+            mode="complete"
+            submitting={completingOnboarding}
+            error={error}
+            requirePassword={false}
+            initialValues={{
+              name: profile?.name ?? "",
+              email: profile?.email ?? "",
+              phone: profile?.phone ?? "",
+              gender: profile?.gender ?? undefined,
+              birthYear: profile?.birthDate ? String(new Date(profile.birthDate).getUTCFullYear()) : "",
+              goal: "hypertrophy",
+              level: "beginner",
+              daysPerWeek: profile?.daysPerWeek ? (String(profile.daysPerWeek) as "3" | "4" | "5" | "6") : "4",
+              equipment: (profile?.equipmentTags?.length
+                ? profile.equipmentTags
+                : ["gym"]) as Array<"gym" | "dumbbells" | "bodyweight" | "bands">
+            }}
+            onSubmit={handleCompleteOnboarding}
+          />
+          {success && <div className="success-box">{success}</div>}
+          <button className="link-button" type="button" onClick={onLogout}>
+            Sair
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  if (!hasStudentAreaAccess) {
+    return (
+      <main className="workspace-shell grid min-h-screen grid-cols-[280px_minmax(0,1fr)] bg-ink text-sand">
+        <aside
+          className="workspace-sidebar sticky top-0 grid min-h-screen content-start gap-[22px] self-start border-r border-white/10 bg-gradient-to-b from-white/[0.045] to-transparent bg-ink-soft px-[18px] py-[22px]"
+          aria-label="Menu do aluno"
+        >
+          <div className="workspace-sidebar-brand flex min-w-0 items-center gap-3 border-b border-white/10 pb-[18px]">
+            <img
+              className="h-[42px] w-[42px] shrink-0 rounded-lg bg-brand-gold/10"
+              src={assetUrl("assets/app-treino-mark.svg")}
+              alt=""
+              aria-hidden="true"
+            />
+            <div className="grid min-w-0 gap-0.5">
+              <strong className="text-base text-sand">Aluno</strong>
+              <span className="truncate text-[13px] font-extrabold text-sand-faint">{profile?.name ?? "App Treino"}</span>
+            </div>
+          </div>
+          <nav className="workspace-nav grid gap-1.5">
+            <button className={studentSection === "subscription" ? "active" : ""} onClick={() => setStudentSection("subscription")}>
+              <CreditCard size={18} />Assinatura
+            </button>
+            <button className={studentSection === "locked" ? "active" : ""} onClick={() => setStudentSection("locked")}>
+              <LockKeyhole size={18} />Conteúdos
+            </button>
+          </nav>
+          <button
+            className="workspace-logout mt-3 flex w-full min-h-[44px] items-center justify-start gap-2.5 rounded-lg border border-brand-ember/20 bg-brand-ember/10 px-3 text-left font-extrabold text-[#ffd8d4] transition hover:border-brand-ember/35 hover:bg-brand-ember/15"
+            onClick={onLogout}
+          >
+            <LogOut size={18} />
+            Sair
+          </button>
+        </aside>
+        <section className="workspace-content min-w-0 p-[clamp(28px,4vw,48px)]">
+        <section className="dashboard-heading grid items-start gap-3">
+          <span className="eyebrow w-fit">área do aluno</span>
+          <h1 className="font-display m-0 text-[clamp(38px,5.4vw,72px)] leading-[0.95] tracking-tight text-sand">
+            {profile?.name ?? "Comece a treinar"}
+          </h1>
+        </section>
+        {error && <div className="error-box">{error}</div>}
+        {success && <div className="success-box">{success}</div>}
+        {(studentSection === "subscription" || !["subscription", "locked"].includes(studentSection)) && <section className="subscription-flow">
+          <article className="table-panel checkout-panel">
+            <span className="eyebrow">Assinatura</span>
+            <h2>Assine agora e comece a treinar.</h2>
+            <p>
+              Escolha seu plano e finalize o pagamento com Pix ou cartão no checkout seguro do Asaas.
+              O acesso é liberado automaticamente assim que o pagamento for confirmado.
+            </p>
+            {currentCheckoutPayment && (
+              <div className="pending-payment-note">
+                <strong>Pagamento pendente de {formatPriceInBRL(currentCheckoutPayment.amountInCents)}</strong>
+                <span>Continue no checkout do Asaas para concluir sua assinatura.</span>
+              </div>
+            )}
+            <form className="checkout-form" onSubmit={handleCreateCheckout}>
+              <div className="checkout-plan-grid">
+                {initialPlans.map((plan) => (
+                  <label className="checkout-plan-option" key={plan.code}>
+                    <input
+                      name="planCode"
+                      type="radio"
+                      value={plan.code}
+                      checked={checkoutDraft.planCode === plan.code}
+                      onChange={() =>
+                        setCheckoutDraft((current) => ({
+                          ...current,
+                          planCode: plan.code
+                        }))
+                      }
+                    />
+                    <span>
+                      <strong>{plan.name}</strong>
+                      {formatPriceInBRL(plan.priceInCents)}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <label>
+                Pagamento
+                <select
+                  name="billingType"
+                  value={checkoutDraft.billingType}
+                  onChange={(event) =>
+                    setCheckoutDraft((current) => ({
+                      ...current,
+                      billingType: event.target.value as typeof current.billingType
+                    }))
+                  }
+                >
+                  <option value="UNDEFINED">Escolher no checkout</option>
+                  <option value="PIX">Pix</option>
+                  <option value="CREDIT_CARD">Cartão</option>
+                </select>
+              </label>
+              {currentCheckoutPayment?.paymentUrl && (
+                <button
+                  className="outline-button"
+                  type="button"
+                  onClick={() => openAsaasCheckout(currentCheckoutPayment.paymentUrl as string)}
+                >
+                  <ArrowUpRight size={18} />
+                  Abrir checkout do Asaas
+                </button>
+              )}
+              {currentCheckoutPayment && !currentCheckoutPayment.paymentUrl && (
+                <button
+                  className="outline-button"
+                  type="button"
+                  onClick={handleConfirmSandboxPayment}
+                  disabled={checkoutLoading === "sandbox"}
+                >
+                  {checkoutLoading === "sandbox" ? <Loader2 className="spin" size={18} /> : <CreditCard size={18} />}
+                  Finalizar checkout sandbox
+                </button>
+              )}
+              <button className="primary-button" disabled={Boolean(checkoutLoading)}>
+                {checkoutLoading ? <Loader2 className="spin" size={18} /> : <CreditCard size={18} />}
+                Assinar agora
+              </button>
+            </form>
+          </article>
+        </section>}
+        {studentSection === "locked" && <section className="locked-content" aria-label="Funcionalidades bloqueadas">
+          <LockedOverlay onCheckout={() => setStudentSection("subscription")} />
+          <div className="section-heading locked-heading">
+            <span className="eyebrow">Acesso apos pagamento</span>
+            <h2>Conteúdos bloqueados enquando sua assinatura não for confirmada.</h2>
+          </div>
+          <div className="locked-grid">
+            {lockedFeatures.map((feature) => (
+              <article className="locked-card" key={feature.title}>
+                <div className="locked-card-header">
+                  <feature.icon size={22} />
+                  <LockKeyhole size={18} />
+                </div>
+                <h3>{feature.title}</h3>
+                <p>{feature.text}</p>
+              </article>
+            ))}
+          </div>
+        </section>}
+        </section>
+      </main>
+    );
+  }
+
+  const studentTicketStatusLabel: Record<SupportTicketRow["status"], string> = {
+    OPEN: "Aguardando resposta",
+    IN_PROGRESS: "Em andamento",
+    WAITING_STUDENT: "Aguardando sua resposta",
+    RESOLVED: "Resolvido",
+    CLOSED: "Encerrado"
+  };
+
+  return (
+    <main className="student-app-shell">
+      <section className="student-app-header">
+        <div className="student-avatar">
+          {profile?.avatarUrl ? (
+            <img src={profile.avatarUrl} alt="" />
+          ) : (
+            <UserRound size={34} />
+          )}
+        </div>
+        <div>
+          <strong>{profile?.name ?? "Aluno"}</strong>
+          <span>Código: {studentCode}</span>
+        </div>
+        <div className="student-header-actions">
+          <button className="student-streak-button" aria-label={`Ofensiva de ${currentStreak} dias`} onClick={() => setStreakCalendarOpen(true)}>
+            <Flame size={18} />
+            <span>Ofensiva</span>
+            <strong>{currentStreak}</strong>
+          </button>
+          <div className="student-notification-wrap">
+            <button className="student-icon-button" aria-label="Notificações" onClick={() => setNotificationsOpen((open) => !open)}>
+              <Bell size={24} />
+              {unreadNotificationsCount > 0 && <span className="student-notification-badge">{unreadNotificationsCount}</span>}
+            </button>
+            {notificationsOpen && (
+              <section className="student-notification-panel" aria-label="Notificações publicadas">
+                <div>
+                  <strong>Notificações</strong>
+                  <span>{mergedNotifications.length}</span>
+                </div>
+                {mergedNotifications.length > 0 ? (
+                  mergedNotifications.map((notification) => (
+                    <article
+                      key={notification.id}
+                      className={notification.kind === "sync" ? "student-sync-notification" : undefined}
+                    >
+                      <strong>{notification.title}</strong>
+                      {notification.origin && <em className="student-sync-origin">{notification.origin}</em>}
+                      <span>{notification.message}</span>
+                      <small>{new Date(notification.publishedAt).toLocaleString("pt-BR")}</small>
+                      {notification.kind === "sync" && notification.targets[0] && (
+                        <button
+                          type="button"
+                          className="student-sync-open"
+                          onClick={() => {
+                            markNotificationRead(notification.id);
+                            setStudentSection(notification.targets[0] as StudentPanelSection);
+                            setNotificationsOpen(false);
+                          }}
+                        >
+                          Abrir {notification.targets.map((target) => {
+                            const labels: Record<string, string> = {
+                              payments: "Pagamentos",
+                              membership: "Matrículas",
+                              status: "Frequência",
+                              locations: "Localidades",
+                              support: "Atendimento",
+                              ratings: trainingCopy.rateWorkout,
+                              training: trainingCopy.workout,
+                              assessments: trainingCopy.physicalAssessment
+                            };
+                            return labels[target] ?? target;
+                          }).join(" / ")}
+                        </button>
+                      )}
+                    </article>
+                  ))
+                ) : (
+                  <article>
+                    <strong>Nenhuma publicação</strong>
+                    <span>Novidades publicadas pelo admin e sincronizações entre módulos aparecerão aqui.</span>
+                  </article>
+                )}
+              </section>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <>
+        {error && <div className="error-box">{error}</div>}
+        {success && <div className="success-box">{success}</div>}
+
+        {studentSection === "home" && (
+          <>
+            <section className="student-hero-card">
+              <span>{todayWorkout ? "Pronto para treinar" : "Seu treino"}</span>
+              <div className="student-workout-summary">
+                <div className="student-card-icon">
+                  <Dumbbell size={26} />
+                </div>
+                <div>
+                  <h2>
+                    {todayWorkout
+                      ? `${trainingCopy.todayWorkout} · ${sessionLabelFromBlock(todayWorkout.block.identifier ?? todayWorkout.block.title)}`
+                      : trainingCopy.todayWorkout}
+                  </h2>
+                  <p>
+                    {todayWorkout
+                      ? (cmsMusclesToday.join(", ") || todayWorkout.programTitle || trainingCopy.sessionFocusFallback)
+                      : trainingCopy.noWorkoutsHint}
+                  </p>
+                </div>
+                <strong>{trainingCopy.sessionsDone(workoutsCompleted, totalWorkoutDays)}</strong>
+              </div>
+              <div className="student-progress-track">
+                <span style={{ width: `${workoutProgressPercent}%` }} />
+              </div>
+              {cmsExercisesToday.length > 0 && (
+                <ol className="student-exercise-preview">
+                  {cmsExercisesToday.slice(0, 3).map((exercise, index) => (
+                    <li key={exercise.id}>{index + 1}- {exercise.title}</li>
+                  ))}
+                  {cmsExercisesToday.length > 3 && <li>+{cmsExercisesToday.length - 3} exercícios</li>}
+                </ol>
+              )}
+              <div className="student-hero-actions">
+                <button
+                  className="student-green-button"
+                  onClick={() => openTrainingHub(todayWorkout)}
+                  disabled={publishedWorkouts.length === 0 && !todayWorkout}
+                >
+                  {todayWorkout ? trainingCopy.continueWorkout : trainingCopy.openWorkout}
+                </button>
+                {publicConfig["module_qr"] !== "false" && publicConfig["qr_checkin_enabled"] !== "false" && (
+                  <button
+                    className="student-outline-button"
+                    onClick={() => setShowStudentQr((value) => !value)}
+                  >
+                    <QrCode size={18} />
+                    {showStudentQr ? "Fechar QR" : "QR de check-in"}
+                  </button>
+                )}
+              </div>
+              {showStudentQr && (
+                <div className="student-qr-panel">
+                  <div className="dash-qr-box">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+                        publicConfig["qr_checkin_url"] || "https://edersonprogramador.com/checkin"
+                      )}`}
+                      alt="QR Code de check-in"
+                    />
+                  </div>
+                  <span>Mostre este código na recepção para registrar sua presença.</span>
+                  <button
+                    className="student-green-button"
+                    type="button"
+                    onClick={() => {
+                      emitSystemEvent(
+                        "CHECKIN_REALIZADO",
+                        {
+                          checkInUrl: publicConfig["qr_checkin_url"] || "https://edersonprogramador.com/checkin",
+                          locationId: profile?.locationId ?? studentLocations[0]?.id,
+                          locationName: studentLocations.find((item) => item.id === profile?.locationId)?.name
+                            ?? studentLocations[0]?.name,
+                          source: "qr_code"
+                        },
+                        { navigateTo: "status" }
+                      );
+                      setShowStudentQr(false);
+                    }}
+                  >
+                    Confirmar check-in
+                  </button>
+                </div>
+              )}
+            </section>
+
+            <h2 className="student-section-title">Mais do app</h2>
+            <section className="student-feature-grid">
+              {[
+                { icon: UserRound, title: "Perfil", text: "Dados cadastrais", section: "profile" as const },
+                { icon: Dumbbell, title: trainingCopy.workout, text: "Sessões e exercícios", section: "training" as const },
+                { icon: ShieldCheck, title: "Matrículas", text: "Seu plano e vigência", section: "membership" as const },
+                { icon: CreditCard, title: "Pagamentos", text: "Central de cobranças", section: "payments" as const },
+                { icon: Ruler, title: trainingCopy.physicalAssessment, text: "Medidas e evolução", section: "assessments" as const },
+                { icon: CalendarDays, title: "Frequência", text: "Consulte seus acessos", section: "status" as const },
+                { icon: CalendarPlus, title: "Eventos", text: "Veja os eventos", section: "events" as const },
+                { icon: MapPin, title: "Unidades", text: "Academias e clubes", section: "locations" as const },
+                { icon: Headphones, title: "Atendimento", text: "Histórico de conversas", section: "support" as const },
+                ...(publicConfig["module_products"] !== "false"
+                  ? [{ icon: Package, title: "Produtos", text: "Vitrine online", section: "products" as const }]
+                  : []),
+                ...(publicConfig["module_purchases"] !== "false"
+                  ? [{ icon: ShoppingCart, title: "Compras", text: "Seu histórico de compras", section: "purchases" as const }]
+                  : []),
+                ...(publicConfig["module_favorites"] !== "false"
+                  ? [{ icon: Star, title: "Favoritos", text: "Treinos salvos", section: "favorites" as const }]
+                  : []),
+                ...(publicConfig["module_ratings"] !== "false"
+                  ? [{ icon: Trophy, title: trainingCopy.rateWorkout, text: "Nota para seus treinos", section: "ratings" as const }]
+                  : [])
+              ].map((item) => {
+                const synced = highlightedSections.includes(item.section as PanelDestination);
+                return (
+                  <button
+                    className={`student-feature-card${synced ? " student-feature-synced" : ""}`}
+                    key={item.title}
+                    onClick={() => {
+                      if (item.section === "training") {
+                        openTrainingHub();
+                        return;
+                      }
+                      setStudentSection(item.section);
+                    }}
+                  >
+                    <span><item.icon size={25} /></span>
+                    <strong>{item.title}</strong>
+                    <small>{item.text}</small>
+                    {synced && <em className="student-feature-sync-badge">Sync</em>}
+                  </button>
+                );
+              })}
+            </section>
+          </>
+        )}
+
+        {studentSection === "training" && (
+          <section className="student-sheet">
+            {!workoutSheet && (
+              <>
+                <div className="student-sheet-heading">
+                  <span>{trainingCopy.workout}</span>
+                  <h1>{trainingCopy.yourWorkouts}</h1>
+                  <p>{publishedWorkouts.length > 0 ? trainingCopy.pickWorkout : trainingCopy.noWorkoutsHint}</p>
+                </div>
+
+                {publishedModalities.length > 1 && (
+                  <div className="student-modality-filter" role="tablist" aria-label={trainingCopy.modalities}>
+                    <button
+                      type="button"
+                      className={!selectedWorkoutModality || selectedWorkoutModality === "all" ? "active" : ""}
+                      onClick={() => {
+                        setSelectedWorkoutModality("all");
+                        setSelectedWorkoutProgramId(null);
+                      }}
+                    >
+                      {trainingCopy.filterAll}
+                    </button>
+                    {publishedModalities.map((item) => (
+                      <button
+                        type="button"
+                        key={item.modality}
+                        className={selectedWorkoutModality === item.modality ? "active" : ""}
+                        onClick={() => {
+                          setSelectedWorkoutModality(item.modality);
+                          setSelectedWorkoutProgramId(null);
+                        }}
+                      >
+                        {item.modality}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {modalityWorkouts.length > 0 ? (
+                  <AnimatedList className="student-program-list">
+                    {modalityWorkouts.map((programWorkout) => {
+                      const done = programWorkout.completedWorkouts ?? 0;
+                      const total = programWorkout.totalWorkouts ?? programWorkout.totalDays;
+                      return (
+                        <article className="student-program-card" key={programWorkout.programId}>
+                          <div className="student-training-card">
+                            {programWorkout.modalityImageUrl ? (
+                              <img
+                                className="student-card-image"
+                                src={mediaUrl(programWorkout.modalityImageUrl)}
+                                alt=""
+                              />
+                            ) : (
+                              <div className="student-card-icon">
+                                <Dumbbell size={24} />
+                              </div>
+                            )}
+                            <div className="student-card-body">
+                              <h2>{programWorkout.programTitle}</h2>
+                              <p>
+                                {programWorkout.modality ?? "Treino"} · {trainingCopy.sessionsDone(done, total)}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedWorkoutModality(programWorkout.modality ?? "Hipertrofia");
+                                setSelectedWorkoutProgramId(programWorkout.programId);
+                              }}
+                            >
+                              {trainingCopy.openWorkout}
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </AnimatedList>
+                ) : (
+                  <article className="student-training-card">
+                    <div className="student-card-icon">
+                      <Dumbbell size={24} />
+                    </div>
+                    <div className="student-card-body">
+                      <h2>{trainingCopy.noWorkouts}</h2>
+                      <p>{trainingCopy.noWorkoutsHint}</p>
+                    </div>
+                  </article>
+                )}
+              </>
+            )}
+
+            {workoutSheet && workoutSequence.length > 0 ? (
+              <article className="student-training-sheet-card">
+                <header className="student-training-sheet-header">
+                  <button
+                    className="student-training-back-button"
+                    onClick={() => {
+                      setSelectedWorkoutProgramId(null);
+                      setSelectedWorkoutModality(
+                        publishedModalities.length > 1 ? "all" : publishedModalities[0]?.modality ?? "all"
+                      );
+                    }}
+                  >
+                    <ChevronLeft size={18} />
+                    {trainingCopy.backToWorkouts}
+                  </button>
+                  <span>{trainingCopy.workout}</span>
+                  <h1>{workoutSheet.programTitle}</h1>
+                  <p>{workoutSheet.modality ?? trainingCopy.modality}</p>
+                  {workoutSheet.favoritedByMe ? (
+                    <span className="student-favorite-badge">
+                      <Star size={15} fill="currentColor" />
+                      Favoritado
+                    </span>
+                  ) : (
+                    <div className="student-header-rating">
+                      <span>{trainingCopy.rateWorkout}</span>
+                      <div className="student-rating-stars">
+                        {[1, 2, 3, 4, 5].map((score) => (
+                          <button
+                            key={score}
+                            type="button"
+                            aria-label={`${score} estrelas`}
+                            className={ratingDraft[workoutSheet.programId] && score <= (ratingDraft[workoutSheet.programId]?.score ?? 0) ? "active" : ""}
+                            disabled={submittingRatingId === workoutSheet.programId}
+                            onClick={() =>
+                              void handleSubmitWorkoutProgramRating(
+                                workoutSheet.programId,
+                                workoutSheet.assignmentId,
+                                score
+                              )
+                            }
+                          >
+                            <Star
+                              size={22}
+                              fill={
+                                ratingDraft[workoutSheet.programId] && score <= (ratingDraft[workoutSheet.programId]?.score ?? 0)
+                                  ? "currentColor"
+                                  : "none"
+                              }
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="student-training-sheet-icon">
+                    <Dumbbell size={58} />
+                  </div>
+                </header>
+                <div className="student-training-sheet-meta">
+                  <span>
+                    <small>{trainingCopy.todayWorkout}</small>
+                    <strong>
+                      {sessionLabelFromBlock(
+                        currentSequenceWorkout?.block.identifier ??
+                          currentSequenceWorkout?.block.title ??
+                          workoutSheet.block.identifier ??
+                          workoutSheet.block.title
+                      )}
+                    </strong>
+                  </span>
+                  <span>
+                    <small>Foco</small>
+                    <strong>
+                      {currentSequenceWorkout?.block.focus ?? workoutSheet.block.focus ?? trainingCopy.sessionFocusFallback}
+                    </strong>
+                  </span>
+                  <span>
+                    <small>{trainingCopy.sessions}</small>
+                    <strong>{trainingCopy.sessionsDone(sheetCompleted, sheetTotal)}</strong>
+                    <Settings size={22} />
+                  </span>
+                </div>
+                <div className="student-progress-track">
+                  <span style={{ width: `${sheetProgressPercent}%` }} />
+                </div>
+                <AnimatedList className="student-program-list">
+                  {workoutSequence.map((programWorkout) => {
+                    const programMuscles = Array.from(
+                      new Set(programWorkout.block.exercises.flatMap((exercise) => exercise.targetMuscles ?? []))
+                    );
+                    const isCurrent = programWorkout.dayNumber === workoutSheet.dayNumber;
+                    const blockLabel = sessionLabelFromBlock(
+                      programWorkout.block.identifier ?? programWorkout.block.title
+                    );
+                    const blockFocus =
+                      programWorkout.block.focus || programMuscles.join(", ") || trainingCopy.sessionFocusFallback;
+                    const cardImage = workoutSheet.modalityImageUrl ?? null;
+
+                    return (
+                      <article className="student-program-card" key={`${programWorkout.programId}-${programWorkout.dayNumber}`}>
+                        <div className={`student-training-card${isCurrent ? " active" : ""}`}>
+                          {cardImage ? (
+                            <img className="student-card-image" src={mediaUrl(cardImage)} alt={blockLabel} />
+                          ) : (
+                            <div className="student-card-icon">
+                              <Dumbbell size={24} />
+                            </div>
+                          )}
+                          <div className="student-card-body">
+                            <h2>{blockLabel}</h2>
+                            <p>
+                              {blockFocus} · {programWorkout.block.weeklyFrequency ?? 1}x/semana · descanso{" "}
+                              {programWorkout.block.restTime}s
+                            </p>
+                          </div>
+                          <button type="button" onClick={() => void handleStartWorkoutSession(programWorkout)}>
+                            {isCurrent ? trainingCopy.startSession : "Iniciar"}
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </AnimatedList>
+                <button className="student-history-button" onClick={() => setStudentSection("history")}>
+                  <ClipboardList size={22} />
+                  {trainingCopy.workoutHistory}
+                </button>
+                <div className="student-training-info-grid">
+                  <div>
+                    <UsersRound size={24} />
+                    <span><strong>Professores:</strong>{workoutSheet.teacherNames?.join(", ") || "Não informado"}</span>
+                  </div>
+                  <div>
+                    <Home size={24} />
+                    <span><strong>Unidade:</strong>{workoutSheet.unitName || "Não informada"}</span>
+                  </div>
+                  <div>
+                    <CalendarDays size={24} />
+                    <span><strong>Início da matrícula:</strong>{formatStudentDate(sheetMembershipStartsAt)}</span>
+                  </div>
+                  <div>
+                    <CalendarDays size={24} />
+                    <span><strong>Vencimento da matrícula:</strong>{formatStudentDate(sheetMembershipEndsAt)}</span>
+                  </div>
+                  <div>
+                    <CalendarDays size={24} />
+                    <span><strong>Duração do treino:</strong>{formatProgramDuration(workoutSheet.duration)}</span>
+                  </div>
+                  <div>
+                    <CalendarDays size={24} />
+                    <span><strong>Término previsto:</strong>{formatStudentDate(workoutSheet.duration?.plannedEndsAt)}</span>
+                  </div>
+                </div>
+              </article>
+            ) : null}
+          </section>
+        )}
+
+         {studentSection === "player" && todayWorkout && (
+           <section className="student-player-mobile">
+             <Suspense fallback={<div className="workout-player-empty">Carregando execução...</div>}>
+               <WorkoutPlayer
+                 programTitle={todayWorkout.programTitle}
+                 blockTitle={todayWorkout.block.identifier ?? todayWorkout.block.title}
+                 exercises={todayWorkout.block.exercises}
+                 restTimeDefault={todayWorkout.block.restTime}
+                 structureType={todayWorkout.block.structureType}
+                 protocolRounds={todayWorkout.block.protocolRounds}
+                 workSeconds={todayWorkout.block.workSeconds}
+                 timeCapSeconds={todayWorkout.block.timeCapSeconds}
+                 instructions={todayWorkout.block.instructions}
+                 sessionId={workoutSession?.id ?? null}
+                 onBack={() => setStudentSection("training")}
+                 onWorkoutStart={handleBeginWorkoutSession}
+                 onCancelSession={handleCancelWorkoutSession}
+                 onExerciseProgressChange={handleExerciseProgressChange}
+                 onRequestSubstitutes={handleRequestSubstitutes}
+                 onWorkoutComplete={handleCompleteWorkoutDay}
+               />
+             </Suspense>
+           </section>
+         )}
+
+        {studentSection === "membership" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Matrículas</span>
+              <h1>Seu plano e vigência</h1>
+              <p>{membership ? `Plano ${membership.plan.name}` : "Nenhuma matrícula ativa"}</p>
+            </div>
+            {membership ? (
+              <>
+                <article className="student-info-card">
+                  <ShieldCheck size={22} />
+                  <div>
+                    <strong>{membership.plan.name}</strong>
+                    <span>Status: {membership.status}</span>
+                  </div>
+                </article>
+                <div className="student-metric-grid">
+                  <span><strong>{formatPriceInBRL(membership.plan.priceInCents)}</strong>{membership.plan.billingCycle === "YEARLY" ? "/ano" : "/mês"}</span>
+                  <span><strong>Início</strong>{new Date(membership.startsAt).toLocaleDateString("pt-BR")}</span>
+                  <span><strong>Vigência</strong>{membership.endsAt ? `até ${new Date(membership.endsAt).toLocaleDateString("pt-BR")}` : "sem término"}</span>
+                  <span><strong>{membership.plan.billingCycle === "YEARLY" ? "Anual" : "Mensal"}</strong>cobrança</span>
+                </div>
+              </>
+            ) : (
+              <article className="student-empty-state">
+                <ShieldCheck size={34} />
+                <strong>Nenhuma matrícula ativa</strong>
+                <span>Matrículas ativas liberam o fluxo do aluno.</span>
+              </article>
+            )}
+          </section>
+        )}
+
+        {studentSection === "payments" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Financeiro</span>
+              <h1>Pagamentos</h1>
+              <p>{payments.length > 0 ? `${payments.length} cobrança(s)` : "Nenhuma cobrança registrada"}</p>
+            </div>
+            {payments.slice(0, 6).map((payment) => (
+              <article className="student-info-card" key={payment.id}>
+                <CreditCard size={22} />
+                <div>
+                  <strong>{formatPriceInBRL(payment.amountInCents)}</strong>
+                  <span>{payment.status} • {new Date(payment.dueDate).toLocaleDateString("pt-BR")}</span>
+                </div>
+                {payment.paymentUrl && <a href={payment.paymentUrl} target="_blank" rel="noreferrer">Abrir</a>}
+              </article>
+            ))}
+            {publicConfig["module_cards"] !== "false" && (
+              <>
+                <div className="student-section-title-row">
+                  <h2 className="student-section-title">Meus Cartões</h2>
+                  <button
+                    className="student-outline-button"
+                    onClick={() => setShowAddCardForm((value) => !value)}
+                  >
+                    {showAddCardForm ? "Fechar" : "Adicionar cartão"}
+                  </button>
+                </div>
+                {showAddCardForm && (
+                  <form className="student-info-card student-card-form" onSubmit={handleAddStudentCard}>
+                    <input name="brand" placeholder="Bandeira" />
+                    <input name="lastFour" placeholder="Últimos 4 dígitos" maxLength={4} pattern="[0-9]{4}" required />
+                    <input name="holderName" placeholder="Nome no cartão" />
+                    <label className="admin-checkbox">
+                      <input name="isDefault" type="checkbox" />
+                      Cartão principal
+                    </label>
+                    <button className="student-green-button" type="submit">
+                      Salvar cartão
+                    </button>
+                  </form>
+                )}
+                {studentPaymentCards.length > 0 ? (
+                  studentPaymentCards.map((card) => (
+                    <article className="student-info-card" key={card.id}>
+                      <CreditCard size={22} />
+                      <div>
+                        <strong>{card.holderName ?? "Cartão"} •••• {card.lastFour}</strong>
+                        <span>
+                          {card.brand ?? "Cartão"}
+                          {card.isDefault ? " · principal" : ""}
+                        </span>
+                      </div>
+                      <button
+                        className="student-delete-button"
+                        aria-label="Remover cartão"
+                        onClick={() => void handleDeleteStudentCard(card.id)}
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    </article>
+                  ))
+                ) : (
+                  <article className="student-empty-state">
+                    <CreditCard size={28} />
+                    <strong>Nenhum cartão salvo</strong>
+                    <span>Adicione um cartão para pagamentos recorrentes.</span>
+                  </article>
+                )}
+              </>
+            )}
+          </section>
+        )}
+
+        {studentSection === "products" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Produtos</span>
+              <h1>Vitrine online</h1>
+              <p>{studentProducts.length} produto(s) disponíveis</p>
+            </div>
+            {purchaseConfirmId && (
+              <div className="student-toast-confirm" role="status">
+                <Check size={18} />
+                Compra registrada
+              </div>
+            )}
+            {studentProducts.length > 0 ? (
+              <div className="student-products-grid">
+                {studentProducts.map((product) => (
+                  <article className="student-product-card" key={product.id}>
+                    {product.imageUrl ? (
+                      <img src={mediaUrl(product.imageUrl)} alt={product.name} />
+                    ) : (
+                      <div className="student-product-fallback">
+                        <Package size={30} />
+                      </div>
+                    )}
+                    <div className="student-product-body">
+                      {product.category && <small>{product.category}</small>}
+                      <strong>{product.name}</strong>
+                      {product.description && <span>{product.description}</span>}
+                      <strong className="student-product-price">{formatPriceInBRL(product.priceInCents)}</strong>
+                      <button
+                        className="student-green-button"
+                        type="button"
+                        disabled={Boolean(product.purchasedByMe) || purchasingProductId === product.id}
+                        onClick={() => void handleBuyProduct(product.id)}
+                      >
+                        {product.purchasedByMe
+                          ? "Já solicitado"
+                          : purchasingProductId === product.id
+                            ? "Registrando..."
+                            : "Comprar"}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <article className="student-empty-state">
+                <Package size={34} />
+                <strong>Nenhum produto cadastrado</strong>
+                <span>A vitrine será preenchida quando a academia cadastrar produtos.</span>
+              </article>
+            )}
+          </section>
+        )}
+
+        {studentSection === "purchases" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Compras</span>
+              <h1>Meu histórico de compras</h1>
+              <p>{studentPurchases.length} compra(s) registrada(s)</p>
+            </div>
+            {studentPurchases.length > 0 ? (
+              studentPurchases.map((purchase) => (
+                <article className="student-info-card" key={purchase.id}>
+                  <ShoppingCart size={22} />
+                  <div>
+                    <strong>{purchase.product.name}</strong>
+                    <span>
+                      {formatPriceInBRL(purchase.amountInCents)} • {purchase.status}
+                    </span>
+                    <span>{new Date(purchase.createdAt).toLocaleDateString("pt-BR")}</span>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <article className="student-empty-state">
+                <ShoppingCart size={34} />
+                <strong>Nenhuma compra ainda</strong>
+                <span>Os produtos que você comprar aparecerão aqui.</span>
+              </article>
+            )}
+          </section>
+        )}
+
+        {studentSection === "favorites" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Favoritos</span>
+              <h1>Treinos favoritos</h1>
+              <p>{studentWorkoutFavorites.length} favorito(s)</p>
+            </div>
+            {studentWorkoutFavorites.length > 0 ? (
+              <div className="student-favorites-grid">
+                {studentWorkoutFavorites.map((favorite) => (
+                  <article className="student-favorite-card" key={favorite.id}>
+                    <span className="student-favorite-media">
+                      {favorite.program.modalityImageUrl ? (
+                        <img src={mediaUrl(favorite.program.modalityImageUrl)} alt="" aria-hidden="true" />
+                      ) : (
+                        <Dumbbell size={24} />
+                      )}
+                    </span>
+                    <strong>{favorite.program.title}</strong>
+                    <span className="student-favorite-meta">
+                      {favorite.program.modality ?? "Hipertrofia"} • {favorite.program.totalWorkouts} treinos
+                    </span>
+                    <button
+                      className="student-delete-button"
+                      type="button"
+                      disabled={favoritingProgramId === favorite.program.id}
+                      onClick={() => void handleToggleWorkoutFavorite(favorite.program.id)}
+                    >
+                      {favoritingProgramId === favorite.program.id ? "Removendo..." : <><Trash2 size={17} /> Remover</>}
+                    </button>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <article className="student-empty-state">
+                <Star size={34} />
+                <strong>Nenhum favorito ainda</strong>
+                <span>Toque em "Favoritar treino" no treino para guardá-lo aqui.</span>
+              </article>
+            )}
+          </section>
+        )}
+
+        {studentSection === "ratings" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>{trainingCopy.rateWorkout}</span>
+              <h1>Avalie seus treinos</h1>
+              <p>{publishedWorkouts.length} treino(s) disponíveis</p>
+            </div>
+            {publishedWorkouts.length > 0 ? (
+              publishedWorkouts.map((programWorkout) => {
+                const draft = ratingDraft[programWorkout.programId];
+                const alreadyRated = programWorkout.ratedByMe;
+                return (
+                  <article className="student-info-card student-rating-card" key={`${programWorkout.programId}-${programWorkout.dayNumber}`}>
+                    <div>
+                      <strong>{programWorkout.programTitle}</strong>
+                      <span>{programWorkout.modality ?? "Hipertrofia"}</span>
+                    </div>
+                    {alreadyRated ? (
+                      <span className="student-rating-done"><Check size={16} /> Avaliado</span>
+                    ) : (
+                      <div className="student-rating-form">
+                        <div className="student-rating-stars">
+                          {[1, 2, 3, 4, 5].map((score) => (
+                            <button
+                              key={score}
+                              type="button"
+                              aria-label={`${score} estrelas`}
+                              className={draft && score <= draft.score ? "active" : ""}
+                              onClick={() =>
+                                setRatingDraft((current) => ({
+                                  ...current,
+                                  [programWorkout.programId]: { score, comment: current[programWorkout.programId]?.comment ?? "" }
+                                }))
+                              }
+                            >
+                              <Star size={24} fill={draft && score <= draft.score ? "currentColor" : "none"} />
+                            </button>
+                          ))}
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Comentário (opcional)"
+                          value={draft?.comment ?? ""}
+                          onChange={(event) =>
+                            setRatingDraft((current) => ({
+                              ...current,
+                              [programWorkout.programId]: { score: current[programWorkout.programId]?.score ?? 0, comment: event.target.value }
+                            }))
+                          }
+                        />
+                        <button
+                          className="student-green-button"
+                          type="button"
+                          disabled={!draft || draft.score < 1 || submittingRatingId === programWorkout.programId}
+                          onClick={() => void handleSubmitWorkoutProgramRating(programWorkout.programId, programWorkout.assignmentId)}
+                        >
+                          {submittingRatingId === programWorkout.programId ? "Enviando..." : "Enviar avaliação"}
+                        </button>
+                      </div>
+                    )}
+                  </article>
+                );
+              })
+            ) : (
+              <article className="student-empty-state">
+                <Trophy size={34} />
+                <strong>Nenhum treino para avaliar</strong>
+                <span>Os treinos publicados aparecerão aqui para você avaliar.</span>
+              </article>
+            )}
+          </section>
+        )}
+        {studentSection === "assessments" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>{trainingCopy.physicalAssessment}</span>
+              <h1>Veja sua evolução</h1>
+              <p>{latestAssessment ? formatAssessmentDateTime(latestAssessment.assessedAt) : "Sem avaliação cadastrada"}</p>
+            </div>
+            {latestAssessment ? (
+              <div className="student-metric-grid">
+                <span><strong>{latestAssessment.weightKg ?? "-"}</strong>kg</span>
+                <span><strong>{latestAssessment.heightCm ?? "-"}</strong>cm</span>
+                <span><strong>{latestAssessment.bodyFatPct ?? computedBodyFatPct ?? "-"}</strong>% gordura</span>
+                <span><strong>{latestAssessment.waistCm ?? "-"}</strong>cm cintura</span>
+              </div>
+            ) : (
+              <article className="student-empty-state">
+                <Ruler size={34} />
+                <strong>Nenhuma avaliação</strong>
+                <span>Solicite sua primeira avaliação com a equipe.</span>
+              </article>
+            )}
+
+            {assessmentForm ? (
+              <>
+                <article className="student-info-card">
+                  <MapPin size={22} />
+                  <div>
+                    <strong>Seu cadastro</strong>
+                    <span>{studentLocationLabel(profile)}</span>
+                  </div>
+                </article>
+                <PhysicalAssessmentFormView
+                  form={assessmentForm}
+                  photoPreviews={assessmentPhotoPreviews}
+                  submitting={submittingAssessment}
+                  submitLabel={editingAssessmentId ? "Atualizar avaliação física" : "Salvar avaliação física"}
+                  namePlaceholder="Seu nome"
+                  onSubmit={handleSubmitPhysicalAssessment}
+                  onCancel={clearAssessmentForm}
+                  onUpdate={updateAssessmentForm}
+                  onPhotoSelect={handleAssessmentPhotoSelect}
+                />
+              </>
+            ) : (
+              <button
+                className="student-outline-button student-assessment-new-button"
+                onClick={() => {
+                  setEditingAssessmentId(null);
+                  setAssessmentPhotoFiles({});
+                  setAssessmentPhotoPreviews((current) => {
+                    Object.values(current).forEach((url) => URL.revokeObjectURL(url));
+                    return {};
+                  });
+                  setAssessmentForm(createEmptyAssessmentForm());
+                }}
+              >
+                Preencher avaliação física
+              </button>
+            )}
+
+            {assessments.length > 0 && (
+              <div className="student-assessment-section">
+                <div className="assessment-section-heading">
+                  <h3>Histórico de avaliações físicas</h3>
+                  <span>{assessments.length}</span>
+                </div>
+                {assessments.map((item) => {
+                  const form = item.details?.formulario_avaliacao_fisica ?? null;
+                  const bodyFat = form
+                    ? calculateBodyFatEstimate({
+                        gender: form.dados_pessoais_e_objetivos.genero_biologico.resposta,
+                        heightCm: form.composicao_corporal_basica.altura_cm,
+                        neckCm: form.perimetros_corporais_cm.pescoço.valor,
+                        waistCm: form.perimetros_corporais_cm.cintura.valor,
+                        hipCm: form.perimetros_corporais_cm.quadril.valor,
+                        weightKg: form.composicao_corporal_basica.peso_atual_kg,
+                        birthDate: form.dados_pessoais_e_objetivos.data_nascimento
+                      })
+                    : null;
+                  const bodyFatPct = item.bodyFatPct ?? bodyFat?.value ?? null;
+                  const waistCm = item.waistCm ?? form?.perimetros_corporais_cm.cintura.valor ?? null;
+
+                  return (
+                    <div className="assessment-history-item" key={item.id}>
+                      <div className="data-row">
+                        <span>
+                          <strong>{formatAssessmentDateTime(item.assessedAt)}</strong>
+                          <span className={item.source === "ADMIN" ? "assessment-source-badge admin" : "assessment-source-badge"}>
+                            {item.source === "ADMIN" ? "Registrada pelo admin" : "Enviada pelo aluno"}
+                          </span>
+                          <span className="assessment-source-badge">{studentLocationLabel(profile)}</span>
+                          {item.weightKg ?? form?.composicao_corporal_basica.peso_atual_kg ?? "-"} kg
+                          {bodyFatPct != null ? ` · ${bodyFatPct}% gordura` : ""}
+                          {waistCm != null ? ` · ${waistCm} cm cintura` : ""}
+                        </span>
+                        <button
+                          aria-label="Ver detalhes da avaliação"
+                          type="button"
+                          onClick={() => setStudentExpandedAssessmentId((current) => (current === item.id ? null : item.id))}
+                        >
+                          <Eye size={17} />
+                        </button>
+                        {item.source !== "ADMIN" && (
+                          <button
+                            aria-label="Editar avaliação"
+                            type="button"
+                            onClick={() => handleEditStudentAssessment(item)}
+                          >
+                            <Pencil size={17} />
+                          </button>
+                        )}
+                      </div>
+
+                      {studentExpandedAssessmentId === item.id && (
+                        <div className="assessment-detail">
+                          {form ? (
+                            <>
+                              <div className="student-assessment-section">
+                                <h2>Dados pessoais e objetivos</h2>
+                                <div className="student-assessment-summary">
+                                  <span><strong>Nome</strong>{form.dados_pessoais_e_objetivos.nome_completo || "-"}</span>
+                                  <span><strong>Nascimento</strong>{form.dados_pessoais_e_objetivos.data_nascimento || "-"}</span>
+                                  <span><strong>Gênero</strong>{form.dados_pessoais_e_objetivos.genero_biologico.resposta || "-"}</span>
+                                  <span><strong>Objetivo</strong>{form.dados_pessoais_e_objetivos.objetivo_principal.resposta || "-"}</span>
+                                  <span><strong>Nível de atividade</strong>{form.dados_pessoais_e_objetivos.nivel_atividade_atual.resposta || "-"}</span>
+                                  <span><strong>Estado/Município</strong>{studentLocationLabel(profile)}</span>
+                                </div>
+                              </div>
+                              <div className="student-assessment-section">
+                                <h2>Histórico de saúde</h2>
+                                <div className="student-assessment-summary">
+                                  <span><strong>Lesões</strong>{form.historico_de_saude_anamnese.possui_lesao.resposta || "Nenhuma informada"}</span>
+                                  <span><strong>Medicação contínua</strong>{form.historico_de_saude_anamnese.medicamento_continuo.resposta || "Nenhuma informada"}</span>
+                                  <span><strong>Restrição cardíaca</strong>{form.historico_de_saude_anamnese.restricao_medica_cardiaca.resposta || "Nenhuma informada"}</span>
+                                </div>
+                              </div>
+                              <div className="student-assessment-section">
+                                <h2>Composição corporal</h2>
+                                <div className="student-metric-grid">
+                                  <span><strong>{form.composicao_corporal_basica.peso_atual_kg ?? "-"}</strong>kg</span>
+                                  <span><strong>{form.composicao_corporal_basica.altura_cm ?? "-"}</strong>cm</span>
+                                  <span><strong>{bodyFatPct ?? "-"}</strong>% gordura</span>
+                                </div>
+                              </div>
+                              <div className="student-assessment-section">
+                                <h2>Perímetros (cm)</h2>
+                                <div className="student-assessment-grid">
+                                  {assessmentPerimeterKeys.map((key) => {
+                                    const perimeter = form.perimetros_corporais_cm[key];
+                                    return (
+                                      <span className="student-assessment-summary-item" key={key}>
+                                        <strong>{key.replace(/_/g, " ")}</strong>
+                                        {perimeter.valor != null ? `${perimeter.valor} cm` : "-"}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                              {assessmentPhotoFields.some(([key]) => form.fotos_analise_visual.arquivos[key]) && (
+                                <div className="student-assessment-section">
+                                  <h2>Fotos anexadas</h2>
+                                  <div className="student-assessment-summary">
+                                    {assessmentPhotoFields.map(([key, label]) =>
+                                      form.fotos_analise_visual.arquivos[key] ? (
+                                        <span className="student-assessment-photo" key={key}>
+                                          <strong>{label}</strong>
+                                          {/^https?:\/\//i.test(form.fotos_analise_visual.arquivos[key]) ? (
+                                            <button
+                                              className="student-assessment-photo-open"
+                                              type="button"
+                                              title="Clique para ampliar"
+                                              onClick={() => {
+                                                const urls = assessmentPhotoFields
+                                                  .map(([photoKey]) => photoKey)
+                                                  .map((k) => form.fotos_analise_visual.arquivos[k])
+                                                  .filter((value): value is string => Boolean(value) && /^https?:\/\//i.test(value))
+                                                  .map((path) => mediaUrl(path));
+                                                setStudentLightbox({
+                                                  urls,
+                                                  index: urls.indexOf(mediaUrl(form.fotos_analise_visual.arquivos[key]))
+                                                });
+                                              }}
+                                            >
+                                              <img src={mediaUrl(form.fotos_analise_visual.arquivos[key])} alt={label} />
+                                            </button>
+                                          ) : (
+                                            <small>{form.fotos_analise_visual.arquivos[key]}</small>
+                                          )}
+                                        </span>
+                                      ) : null
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="student-assessment-section">
+                              <h2>Resumo</h2>
+                              <div className="student-assessment-summary">
+                                <span><strong>Peso</strong>{item.weightKg ?? "-"} kg</span>
+                                <span><strong>Altura</strong>{item.heightCm ?? "-"} cm</span>
+                                <span><strong>Gordura</strong>{item.bodyFatPct ?? "-"}%</span>
+                                <span><strong>Cintura</strong>{item.waistCm ?? "-"} cm</span>
+                                {item.chestCm != null && <span><strong>Tórax</strong>{item.chestCm} cm</span>}
+                                {item.hipCm != null && <span><strong>Quadril</strong>{item.hipCm} cm</span>}
+                                {item.notes ? <span><strong>Observações</strong>{item.notes}</span> : null}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        {studentSection === "events" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Eventos</span>
+              <h1>Agenda da academia</h1>
+              <p>{events.length} evento(s) disponíveis</p>
+            </div>
+            {events.slice(0, 8).map((item) => (
+              <article className="student-info-card" key={item.id}>
+                <CalendarPlus size={22} />
+                <div>
+                  <strong>{item.title}</strong>
+                  <span>{new Date(item.startsAt).toLocaleString("pt-BR")} • {item.location ?? "Online"}</span>
+                </div>
+                <button disabled={item.registered} onClick={() => handleEventRegistration(item.id)}>
+                  {item.registered ? "Inscrito" : "Entrar"}
+                </button>
+              </article>
+            ))}
+          </section>
+        )}
+
+        {studentSection === "locations" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Unidades</span>
+              <h1>Nossas unidades e clubes</h1>
+              <p>{studentLocations.length} localidade(s) disponível(is)</p>
+            </div>
+            {studentLocations.length > 0 ? (
+              studentLocations.slice(0, 12).map((item) => (
+                <article className="student-info-card" key={item.id}>
+                  {item.imageUrl ? (
+                    <img className="student-location-thumb" src={mediaUrl(item.imageUrl)} alt={item.name} />
+                  ) : (
+                    <Building2 size={22} />
+                  )}
+                  <div>
+                    <strong>{item.name}</strong>
+                    <span>
+                      {item.type === "ACADEMY" ? "Academia" : item.type === "UNIT" ? "Unidade" : "Clube"}
+                      {item.address ? ` • ${item.address}` : ""}
+                    </span>
+                    <span>
+                      {[item.city, item.state].filter(Boolean).join(" - ")}
+                      {item.phone ? ` • ${item.phone}` : ""}
+                    </span>
+                    {item.description && <small>{item.description}</small>}
+                  </div>
+                </article>
+              ))
+            ) : (
+              <article className="student-info-card">
+                <MapPin size={22} />
+                <div>
+                  <strong>Nenhuma localidade publicada</strong>
+                  <span>As unidades e clubes cadastrados aparecerão aqui.</span>
+                </div>
+              </article>
+            )}
+          </section>
+        )}
+
+        {studentSection === "support" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Atendimento</span>
+              <h1>Suporte</h1>
+              <p>{tickets.length} chamado(s)</p>
+            </div>
+
+            {tickets.length > 0 && selectedStudentTicket ? (
+              <>
+                <div className="student-chat-list">
+                  {tickets.slice(0, 8).map((item) => (
+                    <button
+                      type="button"
+                      key={item.id}
+                      className={selectedStudentTicket.id === item.id ? "student-chat-item active" : "student-chat-item"}
+                      onClick={() => setSelectedStudentTicketId(item.id)}
+                    >
+                      <strong>{item.subject}</strong>
+                      <span>{item.category} · {studentTicketStatusLabel[item.status]}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <article className="student-chat">
+                  <div className="student-chat-head">
+                    <strong>{selectedStudentTicket.subject}</strong>
+                    <span>{studentTicketStatusLabel[selectedStudentTicket.status]}</span>
+                  </div>
+                  <div className="student-chat-messages">
+                    {selectedStudentTicket.messages.map((message) => (
+                      <div key={message.id} className={message.senderType === "STUDENT" ? "student-chat-msg student-chat-msg--me" : "student-chat-msg"}>
+                        <strong>{message.senderType === "STUDENT" ? "Você" : "Equipe App Treino"}</strong>
+                        <p>{message.body}</p>
+                        <small>
+                          {new Date(message.createdAt).toLocaleString("pt-BR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit"
+                          })}
+                        </small>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedStudentTicket.status !== "CLOSED" && selectedStudentTicket.status !== "RESOLVED" ? (
+                    <>
+                      {selectedStudentTicket.status === "WAITING_STUDENT" && (
+                        <p className="student-chat-hint">
+                          A equipe perguntou se há algo a mais em que podemos ajudar. Responda para continuar a conversa ou finalize o
+                          atendimento. Sem resposta em 24h, o chat será encerrado automaticamente.
+                        </p>
+                      )}
+                      <form
+                        className="student-chat-composer"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          const form = event.currentTarget;
+                          const input = form.elements.namedItem("body") as HTMLTextAreaElement;
+                          const value = input.value.trim();
+                          if (!value) return;
+                          void handleStudentSendTicketMessage(selectedStudentTicket.id, value);
+                          input.value = "";
+                        }}
+                      >
+                        <textarea name="body" placeholder="Digite uma mensagem" required />
+                        <button type="submit" className="student-green-button">Enviar</button>
+                      </form>
+                      <button
+                        type="button"
+                        className="student-outline-button"
+                        onClick={() => void handleStudentCloseTicket(selectedStudentTicket.id)}
+                      >
+                        Encerrar atendimento
+                      </button>
+                    </>
+                  ) : (
+                    <p className="student-chat-closed">Atendimento encerrado.</p>
+                  )}
+                </article>
+              </>
+            ) : (
+              <div className="student-empty-state">
+                <MessageCircle size={26} />
+                <strong>Nenhum chamado aberto</strong>
+                <span>Envie sua dúvida abaixo para falar com a equipe.</span>
+              </div>
+            )}
+
+            <form className="student-form" onSubmit={handleCreateTicket}>
+              <input name="subject" placeholder="Assunto" required />
+              <select name="category" defaultValue="GENERAL">
+                <option value="GENERAL">Geral</option>
+                <option value="WORKOUT">Treino</option>
+                <option value="PAYMENT">Pagamento</option>
+                <option value="TECHNICAL">Técnico</option>
+              </select>
+              <textarea name="message" placeholder="Descreva o que você precisa" required />
+              <button className="student-green-button">Abrir atendimento</button>
+            </form>
+          </section>
+        )}
+
+        {studentSection === "ai" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Agente IA</span>
+              <h1>Plano inteligente</h1>
+              <p>Gere uma rotina baseada no seu objetivo.</p>
+            </div>
+            <form className="student-form" onSubmit={handleCreateAiPlan}>
+              <input name="objective" placeholder="Objetivo" defaultValue={profile?.objective ?? ""} required />
+              <input name="level" placeholder="Nível" defaultValue={profile?.level ?? ""} required />
+              <input name="focus" placeholder="Foco da semana" />
+              <select name="daysPerWeek" defaultValue="3">
+                <option value="2">2 dias</option>
+                <option value="3">3 dias</option>
+                <option value="4">4 dias</option>
+                <option value="5">5 dias</option>
+                <option value="6">6 dias</option>
+              </select>
+              <button className="student-green-button">Gerar plano</button>
+            </form>
+            {latestAiPlan && <article className="student-info-card"><Bot size={22} /><div><strong>?ltimo plano</strong><span>{latestAiPlan.plan.summary}</span></div></article>}
+          </section>
+        )}
+
+        {studentSection === "profile" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Perfil</span>
+              <h1>Dados cadastrais</h1>
+              <p>Complete seus dados para personalizar sua experiência e seus treinos.</p>
+            </div>
+            <article className="student-profile-note">
+              <ShieldCheck size={18} />
+              <span>
+                Nome, e-mail, telefone e sexo já foram informados na contratação do plano. Complete o restante quando
+                quiser.
+              </span>
+            </article>
+            <form
+              id="student-profile-form"
+              className={`student-profile-form${studentProfileEditing ? "" : " student-profile-locked"}`}
+              onSubmit={handleUpdateStudentProfile}
+            >
+              <label className="student-avatar-field wide-field">
+                Foto de perfil
+                <span className="student-avatar-preview">
+                  {studentAvatarPreview ?? profile?.avatarUrl ? (
+                    <img src={studentAvatarPreview ?? profile?.avatarUrl ?? ""} alt="" />
+                  ) : (
+                    <UserRound size={34} className="student-avatar-placeholder" />
+                  )}
+                </span>
+                <input
+                  name="avatar"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={handleStudentAvatarChange}
+                  disabled={!studentProfileEditing}
+                />
+                <small>Formatos JPG, PNG, WEBP ou GIF.</small>
+              </label>
+              <label>
+                Nome
+                <input name="name" defaultValue={profile?.name ?? ""} minLength={2} required placeholder="Seu nome completo" disabled={!studentProfileEditing} />
+              </label>
+              <label>
+                E-mail
+                <input name="email" type="email" value={profile?.email ?? ""} readOnly disabled placeholder="seuemail@exemplo.com" />
+              </label>
+              <label>
+                Telefone
+                <input name="phone" type="tel" defaultValue={profile?.phone ?? ""} placeholder="+55 11 99999-9999" disabled={!studentProfileEditing} />
+              </label>
+              <label>
+                CPF
+                <input name="document" defaultValue={profile?.document ?? ""} placeholder="000.000.000-00" disabled={!studentProfileEditing} />
+              </label>
+              <label>
+                Data de nascimento
+                <input
+                  name="birthDate"
+                  type="date"
+                  defaultValue={profile?.birthDate ? profile.birthDate.slice(0, 10) : ""}
+                  disabled={!studentProfileEditing}
+                />
+              </label>
+              <label>
+                Sexo
+                <select name="gender" defaultValue={profile?.gender ?? ""} disabled={!studentProfileEditing}>
+                  <option value="">Selecione</option>
+                  <option value="MALE">Masculino</option>
+                  <option value="FEMALE">Feminino</option>
+                </select>
+              </label>
+              <label className="wide-field">
+                Estado
+                <select
+                  name="state"
+                  defaultValue={profile?.state ?? ""}
+                  onChange={(event) => setStudentProfileUf(event.target.value)}
+                  disabled={!studentProfileEditing}
+                >
+                  <option value="">Selecione seu estado</option>
+                  {BRAZILIAN_STATES.map((state) => (
+                    <option key={state.uf} value={state.uf}>
+                      {state.name} ({state.uf})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="wide-field">
+                Cidade
+                <select name="city" defaultValue={profile?.city ?? ""} disabled={!studentProfileEditing}>
+                  <option value="">Selecione sua cidade</option>
+                  {profile?.city &&
+                    studentProfileUf === profile?.state &&
+                    !(CITIES_BY_STATE[studentProfileUf] ?? []).includes(profile.city) && (
+                      <option value={profile.city}>{profile.city}</option>
+                    )}
+                  {(CITIES_BY_STATE[studentProfileUf] ?? []).map((city) => (
+                    <option key={city} value={city}>
+                      {city}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Objetivo
+                <select name="objective" defaultValue={profile?.objective ?? ""} disabled={!studentProfileEditing}>
+                  <option value="">Selecione seu objetivo</option>
+                  <option value="Hipertrofia">Hipertrofia</option>
+                  <option value="Emagrecimento">Emagrecimento</option>
+                  <option value="Condicionamento">Condicionamento</option>
+                  <option value="Saúde">Saúde</option>
+                  <option value="Definição">Definição</option>
+                </select>
+              </label>
+              <label>
+                Nível
+                <select name="level" defaultValue={profile?.level ?? ""} disabled={!studentProfileEditing}>
+                  <option value="">Selecione seu nível</option>
+                  <option value="Iniciante">Iniciante</option>
+                  <option value="Intermediário">Intermediário</option>
+                  <option value="Avançado">Avançado</option>
+                </select>
+              </label>
+            </form>
+            <div className="student-profile-actions">
+              {studentProfileEditing ? (
+                <>
+                  <button
+                    className="student-green-button"
+                    type="button"
+                    onClick={() => {
+                      const form = document.getElementById("student-profile-form");
+                      if (form instanceof HTMLFormElement) void saveStudentProfile(form);
+                    }}
+                  >
+                    Salvar dados cadastrais
+                  </button>
+                  <button className="student-outline-button" type="button" onClick={handleCancelStudentProfileEdit}>
+                    Cancelar
+                  </button>
+                </>
+              ) : (
+                <button className="student-green-button" type="button" onClick={() => setStudentProfileEditing(true)}>
+                  Editar Informações
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+
+        {studentSection === "status" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Frequência</span>
+              <h1>Acessos e ofensiva</h1>
+              <p>Sua constância na academia, dia a dia.</p>
+            </div>
+            <div className="student-metric-grid">
+              <span><strong>{currentStreak}</strong> dias de ofensiva</span>
+              <span><strong>{workoutsCompleted}/{totalWorkoutDays}</strong> treinos feitos</span>
+              <span><strong>{attendanceThisMonth}</strong> acessos no mês</span>
+              <span><strong>{attendance.length}</strong> acessos registrados</span>
+            </div>
+            <div className="student-consistency-calendar">
+              <div className="student-consistency-heading">
+                <button
+                  className="student-calendar-arrow"
+                  aria-label="Mês anterior"
+                  disabled={streakCalendarMonth <= 1}
+                  onClick={() => setStreakCalendarMonth((month) => Math.max(1, month - 1))}
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <div>
+                  <span>Treinos concluídos</span>
+                  <strong>{monthLabel(currentMonth.year, currentMonth.month)}</strong>
+                </div>
+                <button
+                  className="student-calendar-arrow"
+                  aria-label="Próximo mês"
+                  disabled={streakCalendarMonth >= currentCalendarMonth}
+                  onClick={() => setStreakCalendarMonth((month) => Math.min(currentCalendarMonth, month + 1))}
+                >
+                  <ChevronRight size={20} />
+                </button>
+                <small>{completedDateSet.size} treino(s) no mês</small>
+              </div>
+              <div className="student-calendar-weekdays" aria-hidden="true">
+                {["D", "S", "T", "Q", "Q", "S", "S"].map((day, index) => (
+                  <span key={`${day}-${index}`}>{day}</span>
+                ))}
+              </div>
+              <div className="student-calendar-grid">
+                {calendarCells.map((cell, index) => {
+                  const isCompleted = Boolean(cell.isoDate && completedDateSet.has(cell.isoDate));
+                  const isToday = cell.isoDate === todayIsoDate;
+
+                  return (
+                    <span
+                      className={`${cell.day ? "" : "empty"} ${isCompleted ? "completed" : ""} ${isToday ? "today" : ""}`}
+                      key={`${cell.isoDate ?? "freq-empty"}-${index}`}
+                    >
+                      {cell.day}
+                    </span>
+                  );
+                })}
+              </div>
+              <p>Dias marcados representam treinos concluídos. O calendário mostra o mês atual e meses anteriores.</p>
+            </div>
+            <div className="student-section-title-row">
+              <h2 className="student-section-title">Registros de acesso</h2>
+            </div>
+            {recentAccesses.length > 0 ? (
+              recentAccesses.map((record) => (
+                <article className="student-info-card" key={record.id}>
+                  <CalendarDays size={22} />
+                  <div>
+                    <strong>{new Date(record.date).toLocaleDateString("pt-BR")}</strong>
+                    <span>Presença registrada</span>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <article className="student-empty-state">
+                <CalendarDays size={28} />
+                <strong>Nenhum acesso registrado</strong>
+                <span>Registre sua presença com o QR de check-in na recepção.</span>
+              </article>
+            )}
+          </section>
+        )}
+
+        {studentSection === "menu" && (
+          <section className="student-menu-list">
+            {[
+              { icon: UserRound, title: "Perfil", action: () => setStudentSection("profile") },
+              { icon: Dumbbell, title: trainingCopy.workout, action: () => openTrainingHub(), favorite: true },
+              { icon: ShieldCheck, title: "Matrículas", action: () => setStudentSection("membership") },
+              { icon: CreditCard, title: "Pagamentos", action: () => setStudentSection("payments"), favorite: true },
+              { icon: Ruler, title: trainingCopy.physicalAssessment, action: () => setStudentSection("assessments") },
+              { icon: CalendarDays, title: "Frequência", action: () => setStudentSection("status") },
+              { icon: Package, title: "Produtos", action: () => setStudentSection("products"), favorite: true },
+              { icon: ShoppingCart, title: "Compras", action: () => setStudentSection("purchases") },
+              { icon: CalendarPlus, title: "Eventos", action: () => setStudentSection("events") },
+              { icon: MapPin, title: "Unidades", action: () => setStudentSection("locations") },
+              { icon: Headphones, title: "Atendimento", action: () => setStudentSection("support") },
+              { icon: QrCode, title: "QR Code", action: () => { setStudentSection("home"); setShowStudentQr(true); } },
+              { icon: CreditCard, title: "Meus Cartões", action: () => setStudentSection("payments") },
+              { icon: Settings, title: "Configurações", action: () => setStudentSection("profile") },
+              { icon: MessageCircle, title: "Contato", action: () => setStudentSection("support") },
+              { icon: Star, title: "Favoritos", action: () => setStudentSection("favorites") },
+              { icon: Trophy, title: trainingCopy.rateWorkout, action: () => setStudentSection("ratings") }
+            ].map((item) => (
+              <button className="student-menu-item" key={item.title} onClick={item.action}>
+                <item.icon size={24} />
+                <span>{item.title}</span>
+                {item.favorite && <Star size={18} />}
+              </button>
+            ))}
+            <button className="student-menu-item danger" onClick={onLogout}>
+              <LogOut size={24} />
+              <span>Sair</span>
+            </button>
+          </section>
+        )}
+      </>
+
+        {studentSection === "history" && (
+          <section className="student-workout-history-page" aria-label="Histórico de treinos">
+            <div className="student-workout-history-header">
+              <div className="student-workout-history-icon">
+                <ClipboardList size={30} />
+              </div>
+              <div>
+                <h2>Histórico de treinos</h2>
+                <p>Consulte todas as execuções do seu treino atual.</p>
+              </div>
+            </div>
+            <div className="student-workout-history-list">
+              {workoutHistorySessions.length > 0 ? (
+                workoutHistorySessions.slice(0, 12).map((session) => (
+                  <article key={session.id}>
+                    <div className="student-history-card-heading">
+                      <div>
+                        <span>Treino</span>
+                        <strong>Treino dia {session.dayNumber}</strong>
+                      </div>
+                      <small>{new Date(session.startedAt).toLocaleString("pt-BR")}</small>
+                    </div>
+                    <div className="student-history-muscles">
+                      <Target size={20} />
+                      <span>{getWorkoutHistoryMuscles(session.dayNumber)}</span>
+                    </div>
+                    <div className="student-history-metrics">
+                      <span><strong>Batimentos (bpm)</strong>Não registrado</span>
+                      <span><strong>Tempo de duração</strong>{formatWorkoutDuration(session.durationSeconds)}</span>
+                      <span><strong>Calorias gastas</strong>Não registrado</span>
+                      <span><strong>Sessão</strong>{session.id.slice(-6).toUpperCase()}</span>
+                    </div>
+                    <button className="student-history-share-button" onClick={() => void handleShareWorkoutHistory(session)}>
+                      <Share2 size={18} />
+                      Compartilhar histórico
+                    </button>
+                  </article>
+                ))
+              ) : (
+                <div className="student-empty-state">
+                  <ClipboardList size={34} />
+                  <strong>Nenhum treino concluído</strong>
+                  <span>Finalize um treino para registrar no histórico.</span>
+                </div>
+              )}
+            </div>
+            <button className="student-history-back-button" onClick={() => setStudentSection("training")}>
+              <ChevronLeft size={20} />
+              Voltar
+            </button>
+          </section>
+        )}
+
+      {streakCalendarOpen && (
+        <div className="student-streak-modal-backdrop" role="presentation" onClick={() => setStreakCalendarOpen(false)}>
+          <section
+            className="student-streak-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Calendario da ofensiva"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="student-streak-modal-header">
+              <div>
+                <span>Ano atual: {currentYear}</span>
+                <strong>{currentStreak} dia(s)</strong>
+                <small>consecutivo(s)</small>
+              </div>
+              <button className="student-icon-button" aria-label="Fechar calendário" onClick={() => setStreakCalendarOpen(false)}>
+                <Check size={20} />
+              </button>
+            </div>
+            <div className="student-consistency-calendar in-modal">
+              <div className="student-consistency-heading">
+                <button
+                  className="student-calendar-arrow"
+                  aria-label="Mes anterior"
+                  disabled={streakCalendarMonth <= 1}
+                  onClick={() => setStreakCalendarMonth((month) => Math.max(1, month - 1))}
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <div>
+                  <span>Histórico</span>
+                  <strong>{monthLabel(currentMonth.year, currentMonth.month)}</strong>
+                </div>
+                <button
+                  className="student-calendar-arrow"
+                  aria-label="Próximo mês"
+                  disabled={streakCalendarMonth >= currentCalendarMonth}
+                  onClick={() => setStreakCalendarMonth((month) => Math.min(currentCalendarMonth, month + 1))}
+                >
+                  <ChevronRight size={20} />
+                </button>
+                <small>{completedDateSet.size} treino(s) no mês</small>
+              </div>
+              <div className="student-calendar-weekdays" aria-hidden="true">
+                {["D", "S", "T", "Q", "Q", "S", "S"].map((day, index) => (
+                  <span key={`${day}-${index}`}>{day}</span>
+                ))}
+              </div>
+              <div className="student-calendar-grid">
+                {calendarCells.map((cell, index) => {
+                  const isCompleted = Boolean(cell.isoDate && completedDateSet.has(cell.isoDate));
+                  const isToday = cell.isoDate === todayIsoDate;
+
+                  return (
+                    <span
+                      className={`${cell.day ? "" : "empty"} ${isCompleted ? "completed" : ""} ${isToday ? "today" : ""}`}
+                      key={`${cell.isoDate ?? "modal-empty"}-${index}`}
+                    >
+                      {cell.day}
+                    </span>
+                  );
+                })}
+              </div>
+              <p>Dias marcados representam treinos concluídos em {currentYear}. O calendário mostra o mês atual e meses anteriores.</p>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {studentLightbox && (
+        <div
+          className="assessment-lightbox"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setStudentLightbox(null)}
+        >
+          <div className="assessment-lightbox-content" onClick={(event) => event.stopPropagation()}>
+            <button
+              className="assessment-lightbox-close"
+              type="button"
+              aria-label="Fechar"
+              onClick={() => setStudentLightbox(null)}
+            >
+              <X size={22} />
+            </button>
+            {studentLightbox.urls.length > 1 && (
+              <button
+                className="assessment-lightbox-nav prev"
+                type="button"
+                aria-label="Foto anterior"
+                onClick={() =>
+                  setStudentLightbox((current) =>
+                    current
+                      ? { ...current, index: (current.index - 1 + current.urls.length) % current.urls.length }
+                      : current
+                  )
+                }
+              >
+                <ChevronLeft size={28} />
+              </button>
+            )}
+            <img src={studentLightbox.urls[studentLightbox.index]} alt="Foto da avaliação física" />
+            {studentLightbox.urls.length > 1 && (
+              <button
+                className="assessment-lightbox-nav next"
+                type="button"
+                aria-label="Próxima foto"
+                onClick={() =>
+                  setStudentLightbox((current) =>
+                    current ? { ...current, index: (current.index + 1) % current.urls.length } : current
+                  )
+                }
+              >
+                <ChevronRight size={28} />
+              </button>
+            )}
+            <span className="assessment-lightbox-counter">
+              {studentLightbox.index + 1} / {studentLightbox.urls.length}
+            </span>
+          </div>
+        </div>
+      )}
+
+      <nav className="student-bottom-nav" aria-label="Navegacao do aluno">
+        <button className={studentSection === "home" ? "active" : ""} onClick={() => setStudentSection("home")}><Home size={22} />Home</button>
+        <button className={studentSection === "payments" ? "active" : ""} onClick={() => setStudentSection("payments")}><CreditCard size={22} />Pagamentos</button>
+        <button className={studentSection === "training" || studentSection === "player" || studentSection === "history" ? "active" : ""} onClick={() => openTrainingHub()}><Dumbbell size={22} />Treino</button>
+        <button className={studentSection === "products" ? "active" : ""} onClick={() => setStudentSection("products")}><Package size={22} />Produtos</button>
+        <button className={studentSection === "menu" ? "active" : ""} onClick={() => setStudentSection("menu")}><Menu size={22} />Menu</button>
+      </nav>
+    </main>
+  );
+}

@@ -6,5 +6,10 @@ export const prisma = new PrismaClient({
     db: {
       url: env.DATABASE_URL
     }
+  },
+  omit: {
+    user: {
+      passwordHash: true
+    }
   }
 });

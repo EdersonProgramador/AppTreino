@@ -50,7 +50,14 @@ const registerSchema = z
     email: z.string().email().optional().or(z.literal("")),
     phone: z.string().min(8).optional().or(z.literal("")),
     password: z.string().min(6).optional(),
-    gender: z.enum(["MALE", "FEMALE"]).optional().or(z.literal("")),
+    gender: z.enum(["MALE", "FEMALE"], {
+      required_error: "Selecione o sexo para continuar."
+    }),
+    birthDate: z.string().optional().or(z.literal("")),
+    objective: z.string().min(3).optional(),
+    level: z.string().min(3).optional(),
+    daysPerWeek: z.coerce.number().int().min(2).max(7).optional(),
+    equipmentTags: z.array(z.string().min(1)).optional(),
     provider: z.enum(["EMAIL", "GOOGLE"]).default("EMAIL")
   })
   .superRefine((data, ctx) => {
@@ -292,6 +299,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
     const fallbackEmail = email ?? (phone ? buildSyntheticEmail(phone) : null);
 
+    const birthDate = body.birthDate ? new Date(body.birthDate) : null;
+
     const user = await prisma.user.create({
       data: {
         name: body.name,
@@ -303,7 +312,12 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         profile: {
           create: {
             phone,
-            gender: body.gender || null
+            gender: body.gender,
+            birthDate: birthDate && !Number.isNaN(birthDate.getTime()) ? birthDate : null,
+            objective: body.objective ?? null,
+            level: body.level ?? null,
+            daysPerWeek: body.daysPerWeek ?? null,
+            equipmentTags: body.equipmentTags ?? []
           }
         }
       }

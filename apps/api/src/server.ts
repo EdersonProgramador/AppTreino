@@ -10,6 +10,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ZodError } from "zod";
 import { env } from "./env.js";
+import { prisma } from "./prisma.js";
 import { registerAdminRoutes } from "./modules/admin.routes.js";
 import { registerAsaasRoutes } from "./modules/asaas.routes.js";
 import { registerAuthRoutes } from "./modules/auth.routes.js";
@@ -19,7 +20,8 @@ import { registerStudentRoutes } from "./modules/student.routes.js";
 import { registerUserRoutes } from "./modules/user.routes.js";
 
 const app = Fastify({
-  logger: true
+  logger: true,
+  trustProxy: true
 });
 
 console.log("[Env Check] ASAAS_API_KEY present:", Boolean(env.ASAAS_API_KEY));
@@ -65,6 +67,8 @@ app.setErrorHandler((error, _request, reply) => {
   }
 
   const statusCode = "statusCode" in error && typeof error.statusCode === "number" ? error.statusCode : 500;
+
+  app.log.error({ err: error }, "request error");
 
   if (statusCode >= 500) {
     return reply.code(statusCode).send({
@@ -115,13 +119,38 @@ await app.register(multipart, {
 
 await app.register(staticFiles, {
   root: uploadsDir,
-  prefix: "/uploads/"
+  prefix: "/uploads/",
+  setHeaders: (response) => {
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+  }
 });
 
-app.get("/health", async () => ({
-  status: "ok",
-  service: "app-treino-api"
-}));
+app.get("/health", async (request, reply) => {
+  if (!env.DATABASE_URL) {
+    return reply.code(200).send({
+      status: "ok",
+      service: "app-treino-api",
+      database: "not_configured"
+    });
+  }
+
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch {
+    return reply.code(503).send({
+      status: "error",
+      service: "app-treino-api",
+      database: "unreachable"
+    });
+  }
+
+  return reply.code(200).send({
+    status: "ok",
+    service: "app-treino-api",
+    database: "ok"
+  });
+});
 
 await registerPublicRoutes(app);
 await registerAuthRoutes(app);
@@ -130,6 +159,32 @@ await registerAdminRoutes(app);
 await registerUserRoutes(app);
 await registerStudentRoutes(app);
 await registerAsaasRoutes(app);
+
+async function shutdown(signal: string) {
+  app.log.info({ signal }, "shutting down");
+  try {
+    await app.close();
+    await prisma.$disconnect();
+  } catch (error) {
+    app.log.error(error);
+  } finally {
+    process.exit(0);
+  }
+}
+
+process.on("SIGINT", () => {
+  void shutdown("SIGINT");
+});
+process.on("SIGTERM", () => {
+  void shutdown("SIGTERM");
+});
+process.on("unhandledRejection", (reason) => {
+  app.log.error({ err: reason }, "unhandledRejection");
+});
+process.on("uncaughtException", (error) => {
+  app.log.error({ err: error }, "uncaughtException");
+  void shutdown("uncaughtException");
+});
 
 try {
   await app.listen({

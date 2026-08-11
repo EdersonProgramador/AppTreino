@@ -11,7 +11,14 @@ const checkoutRegisterSchema = z
     email: z.string().trim().email("Informe um e-mail valido.").optional().or(z.literal("")),
     phone: z.string().trim().min(8, "Informe um telefone valido.").optional().or(z.literal("")),
     password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
-    gender: z.enum(["MALE", "FEMALE"]).optional().or(z.literal("")),
+    gender: z.enum(["MALE", "FEMALE"], {
+      required_error: "Selecione o sexo para continuar."
+    }),
+    birthDate: z.string().optional().or(z.literal("")),
+    objective: z.string().min(3).optional(),
+    level: z.string().min(3).optional(),
+    daysPerWeek: z.coerce.number().int().min(2).max(7).optional(),
+    equipmentTags: z.array(z.string().min(1)).optional(),
     planCode: z.enum(["monthly", "annual"], {
       required_error: "Escolha um plano para continuar."
     }),
@@ -316,7 +323,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
   app.post("/checkout/confirm-sandbox", async (request, reply) => {
     requireDatabase();
 
-    if (env.NODE_ENV === "production") {
+    if (env.NODE_ENV === "production" || !env.ENABLE_SANDBOX_CONFIRM) {
       return reply.code(404).send({
         message: "Recurso não encontrado."
       });
@@ -413,6 +420,8 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       update: {}
     });
 
+    const birthDate = body.birthDate ? new Date(body.birthDate) : null;
+
     const { user, payment } = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
           data: {
@@ -424,7 +433,12 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
             profile: {
               create: {
                 phone,
-                gender: body.gender || null
+                gender: body.gender,
+                birthDate: birthDate && !Number.isNaN(birthDate.getTime()) ? birthDate : null,
+                objective: body.objective ?? null,
+                level: body.level ?? null,
+                daysPerWeek: body.daysPerWeek ?? null,
+                equipmentTags: body.equipmentTags ?? []
               }
             }
           }

@@ -1,9 +1,19 @@
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import { z } from "zod";
 
-for (const envPath of [resolve(process.cwd(), "../../.env"), resolve(process.cwd(), ".env")]) {
+const moduleDir = dirname(fileURLToPath(import.meta.url));
+const envCandidates = [
+  resolve(process.cwd(), ".env"),
+  resolve(process.cwd(), "../../.env"),
+  resolve(process.cwd(), "../.env"),
+  resolve(moduleDir, "../../../.env"),
+  resolve(moduleDir, "../../../../.env")
+];
+
+for (const envPath of [...new Set(envCandidates)]) {
   if (existsSync(envPath)) {
     config({ path: envPath, override: false });
   }

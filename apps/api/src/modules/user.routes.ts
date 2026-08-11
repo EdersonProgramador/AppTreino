@@ -1,15 +1,15 @@
 import type { FastifyInstance } from "fastify";
-import { createWriteStream, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { pipeline } from "node:stream/promises";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
-import { allowedUploadMimeTypes, publicUploadUrl, safeFileExtension, uploadsDir } from "./admin.routes.js";
+import { buildPublicUploadUrl, saveValidatedUpload, uploadsDir } from "../upload-security.js";
 import { autoCloseStaleTickets, ticketInclude } from "./ticket.utils.js";
 import { calculateBodyFatEstimate, physicalAssessmentFormSchema } from "./physical-assessment.utils.js";
+import { studentMatchesProgramTargetGender } from "./cms-publication.utils.js";
 
 function normalizeSearch(value: string) {
   return value
@@ -106,22 +106,44 @@ function resolveMembershipStartsAt(membership: {
   return latestConfirmedPayment?.paidAt ?? latestConfirmedPayment?.dueDate ?? membership.startsAt;
 }
 
+const attendanceRecordedToday = new Map<string, string>();
+
+function pruneAttendanceCache() {
+  const todayKey = todayUtcOnly().toISOString();
+
+  for (const [userId, recordedDay] of attendanceRecordedToday) {
+    if (recordedDay !== todayKey) {
+      attendanceRecordedToday.delete(userId);
+    }
+  }
+}
+
+setInterval(pruneAttendanceCache, 10 * 60 * 1000).unref();
+
 async function recordDailyAttendance(userId: string) {
   if (!env.DATABASE_URL) return;
+
+  const today = todayUtcOnly();
+
+  if (attendanceRecordedToday.get(userId) === today.toISOString()) {
+    return;
+  }
 
   await prisma.attendanceRecord.upsert({
     where: {
       userId_date: {
         userId,
-        date: todayUtcOnly()
+        date: today
       }
     },
     create: {
       userId,
-      date: todayUtcOnly()
+      date: today
     },
     update: {}
   });
+
+  attendanceRecordedToday.set(userId, today.toISOString());
 }
 
 async function requireActiveMembership(userId: string) {
@@ -240,8 +262,7 @@ export async function registerUserRoutes(app: FastifyInstance) {
         !request.url.startsWith("/user/uploads") &&
         !request.url.startsWith("/user/physical-assessments")
       ) {
-        await requireActiveMembership(user.id);
-        await recordDailyAttendance(user.id);
+        await Promise.all([requireActiveMembership(user.id), recordDailyAttendance(user.id)]);
       }
     }
   });
@@ -266,6 +287,8 @@ export async function registerUserRoutes(app: FastifyInstance) {
         birthDate: profile.profile?.birthDate,
         objective: profile.profile?.objective,
         level: profile.profile?.level,
+        daysPerWeek: profile.profile?.daysPerWeek ?? null,
+        equipmentTags: profile.profile?.equipmentTags ?? [],
         city: profile.profile?.city ?? null,
         state: profile.profile?.state ?? null,
         avatarUrl: profile.profile?.avatarUrl ?? null,
@@ -282,6 +305,8 @@ export async function registerUserRoutes(app: FastifyInstance) {
     birthDate: z.string().optional(),
     objective: z.string().optional(),
     level: z.string().optional(),
+    daysPerWeek: z.coerce.number().int().min(2).max(7).nullable().optional(),
+    equipmentTags: z.array(z.string().min(1)).optional(),
     city: z.string().optional(),
     state: z.string().optional(),
     avatarUrl: z.string().optional().or(z.literal("")),
@@ -308,6 +333,8 @@ export async function registerUserRoutes(app: FastifyInstance) {
               birthDate,
               objective: body.objective,
               level: body.level,
+              daysPerWeek: body.daysPerWeek ?? null,
+              equipmentTags: body.equipmentTags ?? [],
               city: body.city,
               state: body.state,
               avatarUrl: body.avatarUrl === undefined ? undefined : body.avatarUrl || null,
@@ -320,6 +347,8 @@ export async function registerUserRoutes(app: FastifyInstance) {
               birthDate,
               objective: body.objective,
               level: body.level,
+              daysPerWeek: body.daysPerWeek === undefined ? undefined : body.daysPerWeek,
+              equipmentTags: body.equipmentTags === undefined ? undefined : body.equipmentTags,
               city: body.city,
               state: body.state,
               avatarUrl: body.avatarUrl === undefined ? undefined : body.avatarUrl || null,
@@ -343,6 +372,8 @@ export async function registerUserRoutes(app: FastifyInstance) {
         birthDate: updated.profile?.birthDate,
         objective: updated.profile?.objective,
         level: updated.profile?.level,
+        daysPerWeek: updated.profile?.daysPerWeek ?? null,
+        equipmentTags: updated.profile?.equipmentTags ?? [],
         city: updated.profile?.city ?? null,
         state: updated.profile?.state ?? null,
         avatarUrl: updated.profile?.avatarUrl ?? null,
@@ -351,40 +382,51 @@ export async function registerUserRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post("/user/uploads", async (request, reply) => {
+  app.post(
+    "/user/uploads",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (request, reply) => {
     requireDatabase();
     await requireAuth(app, request);
-    const file = await request.file();
+    const file = await request.file({
+      limits: {
+        fileSize: 10 * 1024 * 1024,
+        files: 1
+      }
+    });
 
     if (!file) {
       return reply.code(400).send({ error: "Selecione um arquivo para enviar." });
     }
 
-    if (!allowedUploadMimeTypes.has(file.mimetype)) {
-      return reply.code(400).send({ error: "Tipo de arquivo não permitido." });
-    }
-
     const targetDir = resolve(uploadsDir, "images");
     mkdirSync(targetDir, { recursive: true });
 
-    const extension = safeFileExtension(file.filename);
-    const filename = `${Date.now()}-${randomUUID()}${extension}`;
+    const filename = `${Date.now()}-${randomUUID()}`;
     const targetPath = resolve(targetDir, filename);
+    const extension = await saveValidatedUpload(file.file, targetPath, "images", file.mimetype, file.filename);
 
-    await pipeline(file.file, createWriteStream(targetPath));
+    if (!extension) {
+      return reply.code(400).send({ error: "Tipo de arquivo não permitido." });
+    }
 
-    const relativePath = `images/${filename}`;
+    const storedFilename = `${filename}.${extension}`;
+    const { rename } = await import("node:fs/promises");
+    await rename(targetPath, resolve(targetDir, storedFilename));
+
+    const relativePath = `images/${storedFilename}`;
 
     return reply.code(201).send({
       file: {
         originalName: file.filename,
-        filename,
+        filename: storedFilename,
         mimeType: file.mimetype,
-        url: publicUploadUrl(request, relativePath),
+        url: buildPublicUploadUrl(relativePath),
         path: relativePath
       }
     });
-  });
+    }
+  );
 
   app.get("/user/workout", async (request) => {
     requireDatabase();
@@ -452,19 +494,35 @@ export async function registerUserRoutes(app: FastifyInstance) {
     const user = await requireAuth(app, request);
     const userProfile = await prisma.profile.findUnique({
       where: { userId: user.id },
-      select: { city: true, state: true }
+      select: { city: true, state: true, gender: true }
     });
 
     const [programs, events, workouts, tickets, announcements, locations] = await Promise.all([
       prisma.program.findMany({
         where: {
           status: "PUBLISHED",
-          isActive: true
+          isActive: true,
+          deletedAt: null,
+          modality: {
+            isActive: true,
+            deletedAt: null
+          },
+          OR: [
+            { audienceMode: "ALL_ACTIVE" },
+            {
+              assignedUsers: {
+                some: {
+                  userId: user.id,
+                  status: "ACTIVE"
+                }
+              }
+            }
+          ]
         },
         orderBy: {
           publishedAt: "desc"
         },
-        take: 10
+        take: 20
       }),
       prisma.event.findMany({
         where: {
@@ -580,7 +638,10 @@ export async function registerUserRoutes(app: FastifyInstance) {
     const notifications = [
       ...locationNotifications,
       ...supportNotifications,
-      ...programs.map((program) => ({
+      ...programs
+        .filter((program) => studentMatchesProgramTargetGender(program.targetGender, userProfile?.gender))
+        .slice(0, 10)
+        .map((program) => ({
         id: `program-${program.id}`,
         type: "WORKOUT_PROGRAM",
         title: "Novo programa de treino",

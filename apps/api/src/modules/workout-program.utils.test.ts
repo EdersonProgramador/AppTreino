@@ -5,6 +5,7 @@ import {
   calculateSuggestedSessions,
   estimateProgramDurationDays,
   isProgramComplete,
+  parseProgramMetadata,
   parseRepetitionRange
 } from "./workout-program.utils.js";
 
@@ -39,4 +40,17 @@ test("supports completion by sessions, date, both or manual decision", () => {
 test("does not invent repetitions for textual prescriptions", () => {
   assert.deepEqual(parseRepetitionRange("10-12"), { min: 10, max: 12 });
   assert.deepEqual(parseRepetitionRange("Até a falha"), { min: null, max: null });
+});
+
+test("parses program metadata JSON with sensible fallbacks", () => {
+  const json = JSON.stringify({ description: "Treino de hipertrofia", modality: "Musculação" });
+  assert.deepEqual(parseProgramMetadata(json), {
+    description: "Treino de hipertrofia",
+    modality: "Musculação"
+  });
+
+  assert.deepEqual(parseProgramMetadata("Texto puro sem JSON"), {
+    description: "Texto puro sem JSON",
+    modality: "Hipertrofia"
+  });
 });

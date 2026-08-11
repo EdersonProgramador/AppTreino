@@ -1,47 +1,29 @@
 import type { FastifyInstance } from "fastify";
-import { createWriteStream, mkdirSync } from "node:fs";
-import { dirname, extname, resolve } from "node:path";
-import { pipeline } from "node:stream/promises";
+import { mkdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { hashPassword, requireRole } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
+import { buildPublicUploadUrl, saveValidatedUpload, uploadsDir } from "../upload-security.js";
+import type { UploadGroup } from "../upload-security.js";
 import { autoCloseStaleTickets, FINALIZE_PROMPT, ticketInclude } from "./ticket.utils.js";
 import { buildPaginationMeta, parsePagination } from "./pagination.js";
 import { calculateBodyFatEstimate, physicalAssessmentFormSchema } from "./physical-assessment.utils.js";
 import {
   calculateProgramEndDate,
   estimateProgramDurationDays,
+  parseProgramMetadata,
   parseRepetitionRange
 } from "./workout-program.utils.js";
+import { buildProgramPublishReadiness } from "./cms-publication.utils.js";
 
-export const uploadsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../uploads");
 const uploadGroups = ["lessons", "materials", "images", "audio"] as const;
 const uploadSchema = z.object({
   group: z.enum(uploadGroups).default("materials")
 });
-export const allowedUploadMimeTypes = new Set([
-  "video/mp4",
-  "video/webm",
-  "video/ogg",
-  "video/quicktime",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-  "audio/mpeg",
-  "audio/mp3",
-  "audio/wav",
-  "audio/ogg",
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "text/csv"
-]);
 
 const userSchema = z.object({
   name: z.string().min(2),
@@ -214,6 +196,21 @@ const cmsProgramSchema = cmsProgramObjectSchema.superRefine((value, context) => 
     }
     if (value.days.some((day) => day.dayNumber > value.cycleLengthDays)) {
       context.addIssue({ code: z.ZodIssueCode.custom, path: ["days"], message: "Existe uma sessão fora do tamanho do ciclo configurado." });
+    }
+    if (!value.days.some((day) => day.dayNumber === 1)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["days"], message: "A posição 1 do ciclo é obrigatória." });
+    }
+    const seenDays = new Set<number>();
+    for (const day of value.days) {
+      if (seenDays.has(day.dayNumber)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["days"],
+          message: `Existem sessões duplicadas na posição ${day.dayNumber}.`
+        });
+        break;
+      }
+      seenDays.add(day.dayNumber);
     }
     if (value.scheduleType === "WEEKLY" && value.cycleLengthDays !== 7) {
       context.addIssue({ code: z.ZodIssueCode.custom, path: ["cycleLengthDays"], message: "A grade semanal deve ter exatamente 7 posições." });
@@ -482,15 +479,6 @@ function httpError(statusCode: number, message: string) {
   return error;
 }
 
-export function safeFileExtension(filename: string) {
-  return extname(filename).toLowerCase().replace(/[^a-z0-9.]/g, "").slice(0, 12);
-}
-
-export function publicUploadUrl(request: { headers: { host?: string }; protocol: string }, relativePath: string) {
-  const host = request.headers.host ?? `localhost:${env.API_PORT}`;
-  return `${request.protocol}://${host}/uploads/${relativePath.replace(/\\/g, "/")}`;
-}
-
 function uniqueValues(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
 }
@@ -710,8 +698,13 @@ async function assertExercisesMatchModality(exerciseIds: string[], modalityId: s
   }
 }
 
-async function assignProgramToStudents(programId: string, currentDay = 1, totalWorkouts?: number) {
-  return assignProgramToActiveStudents(programId, currentDay, totalWorkouts);
+async function assignProgramToStudents(
+  programId: string,
+  currentDay = 1,
+  totalWorkouts?: number,
+  userIds?: string[]
+) {
+  return assignProgramToActiveStudents(programId, currentDay, totalWorkouts, userIds);
 }
 
 async function getActiveStudentIds(userIds?: string[], targetGender: "ALL" | "MALE" | "FEMALE" = "ALL") {
@@ -750,6 +743,84 @@ async function getActiveStudentIds(userIds?: string[], targetGender: "ALL" | "MA
   return students
     .filter((student) => targetGender === "ALL" || student.profile?.gender === targetGender)
     .map((student) => student.id);
+}
+
+async function loadProgramPublishContext(programId: string) {
+  return prisma.program.findUniqueOrThrow({
+    where: { id: programId },
+    include: {
+      modality: true,
+      assignedUsers: {
+        where: {
+          status: "ACTIVE"
+        },
+        select: {
+          id: true
+        }
+      },
+      days: {
+        include: {
+          workoutBlock: {
+            include: {
+              exercises: {
+                include: {
+                  exercise: true
+                },
+                orderBy: {
+                  order: "asc"
+                }
+              }
+            }
+          }
+        },
+        orderBy: [{ dayNumber: "asc" }, { order: "asc" }]
+      }
+    }
+  });
+}
+
+async function getProgramPublishPreview(programId: string) {
+  const program = await loadProgramPublishContext(programId);
+  const readiness = buildProgramPublishReadiness({
+    daysCount: program.days.length,
+    modality: program.modality,
+    days: program.days
+  });
+  const eligibleStudentIds = await getActiveStudentIds(undefined, program.targetGender);
+  const audienceLabel =
+    program.audienceMode === "ALL_ACTIVE"
+      ? "Todos os alunos ativos elegíveis"
+      : "Somente alunos atribuídos manualmente";
+
+  return {
+    programId: program.id,
+    title: program.title,
+    status: program.status,
+    audienceMode: program.audienceMode,
+    audienceLabel,
+    targetGender: program.targetGender,
+    ready: readiness.ready,
+    issues: readiness.issues,
+    eligibleStudentCount:
+      program.audienceMode === "ALL_ACTIVE" ? eligibleStudentIds.length : program.assignedUsers.length,
+    dayCount: program.days.length,
+    modalityName: program.modality?.name ?? null
+  };
+}
+
+async function assertProgramReadyForPublish(programId: string) {
+  const program = await loadProgramPublishContext(programId);
+  const readiness = buildProgramPublishReadiness({
+    daysCount: program.days.length,
+    modality: program.modality,
+    days: program.days
+  });
+
+  if (!readiness.ready) {
+    throw httpError(409, readiness.issues.join(" "));
+  }
+
+  return program;
 }
 
 async function assignProgramToActiveStudents(
@@ -940,7 +1011,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post("/admin/uploads", async (request, reply) => {
+  app.post(
+    "/admin/uploads",
+    { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+    async (request, reply) => {
     const { group } = uploadSchema.parse(request.query);
     const file = await request.file();
 
@@ -948,31 +1022,39 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       throw httpError(400, "Selecione um arquivo para enviar.");
     }
 
-    if (!allowedUploadMimeTypes.has(file.mimetype)) {
-      throw httpError(400, "Tipo de arquivo não permitido para o CMS Fitness.");
-    }
-
     const targetDir = resolve(uploadsDir, group);
     mkdirSync(targetDir, { recursive: true });
 
-    const extension = safeFileExtension(file.filename);
-    const filename = `${Date.now()}-${randomUUID()}${extension}`;
+    const filename = `${Date.now()}-${randomUUID()}`;
     const targetPath = resolve(targetDir, filename);
+    const extension = await saveValidatedUpload(
+      file.file,
+      targetPath,
+      group as UploadGroup,
+      file.mimetype,
+      file.filename
+    );
 
-    await pipeline(file.file, createWriteStream(targetPath));
+    if (!extension) {
+      throw httpError(400, "Tipo de arquivo não permitido para o CMS Fitness.");
+    }
 
-    const relativePath = `${group}/${filename}`;
+    const storedFilename = `${filename}.${extension}`;
+    await import("node:fs/promises").then(({ rename }) => rename(targetPath, resolve(targetDir, storedFilename)));
+
+    const relativePath = `${group}/${storedFilename}`;
 
     return reply.code(201).send({
       file: {
         originalName: file.filename,
-        filename,
+        filename: storedFilename,
         mimeType: file.mimetype,
-        url: publicUploadUrl(request, relativePath),
+        url: buildPublicUploadUrl(relativePath),
         path: relativePath
       }
     });
-  });
+    }
+  );
 
   app.get("/admin/summary", async () => {
     requireDatabase();
@@ -2060,6 +2142,99 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { programs };
   });
 
+  app.get("/admin/cms/workflow-summary", async () => {
+    requireDatabase();
+
+    const [modalities, exercises, workoutBlocks, programs] = await Promise.all([
+      prisma.modality.findMany({
+        where: { deletedAt: null },
+        select: { id: true, isActive: true }
+      }),
+      prisma.exercise.findMany({
+        where: {
+          workoutDayId: null,
+          deletedAt: null
+        },
+        select: {
+          id: true,
+          modalityLinks: {
+            select: { id: true }
+          }
+        }
+      }),
+      prisma.workoutBlock.findMany({
+        where: { deletedAt: null },
+        select: {
+          id: true,
+          exercises: {
+            where: {
+              exercise: {
+                deletedAt: null
+              }
+            },
+            select: { id: true }
+          }
+        }
+      }),
+      prisma.program.findMany({
+        where: { deletedAt: null },
+        include: {
+          modality: true,
+          days: {
+            include: {
+              workoutBlock: {
+                include: {
+                  exercises: {
+                    include: {
+                      exercise: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      })
+    ]);
+
+    const draftPrograms = programs.filter((program) => program.status !== "PUBLISHED" || !program.isActive);
+    const readyDraftCount = draftPrograms.filter((program) => {
+      const readiness = buildProgramPublishReadiness({
+        daysCount: program.days.length,
+        modality: program.modality,
+        days: program.days
+      });
+      return readiness.ready;
+    }).length;
+
+    return {
+      modalities: {
+        total: modalities.length,
+        active: modalities.filter((item) => item.isActive).length
+      },
+      exercises: {
+        total: exercises.length,
+        withoutModality: exercises.filter((item) => item.modalityLinks.length === 0).length
+      },
+      workoutBlocks: {
+        total: workoutBlocks.length,
+        withoutExercises: workoutBlocks.filter((item) => item.exercises.length === 0).length
+      },
+      programs: {
+        total: programs.length,
+        published: programs.filter((item) => item.status === "PUBLISHED" && item.isActive).length,
+        draftsReady: readyDraftCount
+      }
+    };
+  });
+
+  app.get("/admin/cms/programs/:id/publish-preview", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const preview = await getProgramPublishPreview(id);
+    return { preview };
+  });
+
   app.post("/admin/cms/programs", async (request, reply) => {
     requireDatabase();
     const body = cmsProgramSchema.parse(request.body);
@@ -2078,6 +2253,37 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         sortOrder: true
       }
     });
+
+    if (body.status === "PUBLISHED") {
+      const workoutBlocks = await prisma.workoutBlock.findMany({
+        where: {
+          id: {
+            in: body.days.map((day) => day.workoutBlockId)
+          }
+        },
+        include: {
+          exercises: {
+            include: {
+              exercise: true
+            }
+          }
+        }
+      });
+      const blocksById = new Map(workoutBlocks.map((block) => [block.id, block]));
+      const readiness = buildProgramPublishReadiness({
+        daysCount: body.days.length,
+        modality,
+        days: body.days.map((day) => ({
+          dayNumber: day.dayNumber,
+          workoutBlock: blocksById.get(day.workoutBlockId) ?? null
+        }))
+      });
+
+      if (!readiness.ready) {
+        throw httpError(409, readiness.issues.join(" "));
+      }
+    }
+
     const program = await prisma.program.create({
       data: {
         modalityId: body.modalityId,
@@ -2153,6 +2359,18 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     if (nextProgramDays.some((day) => day.dayNumber > nextCycleLengthDays)) {
       throw httpError(400, "Existe uma sessão fora do tamanho do ciclo configurado.");
     }
+    if (nextProgramDays.length > 0 && !nextProgramDays.some((day) => day.dayNumber === 1)) {
+      throw httpError(400, "A posição 1 do ciclo é obrigatória.");
+    }
+    if (nextProgramDays.length > 0) {
+      const seenDays = new Set<number>();
+      for (const day of nextProgramDays) {
+        if (seenDays.has(day.dayNumber)) {
+          throw httpError(400, `Existem sessões duplicadas na posição ${day.dayNumber}.`);
+        }
+        seenDays.add(day.dayNumber);
+      }
+    }
     if ((body.scheduleType ?? currentProgram.scheduleType) === "WEEKLY" && nextCycleLengthDays !== 7) {
       throw httpError(400, "A grade semanal deve ter exatamente 7 posições.");
     }
@@ -2175,11 +2393,52 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     }
     const plannedSessions = body.plannedSessions ?? body.totalWorkouts ?? currentProgram.plannedSessions;
 
-    const descriptionText = body.description
-      ? buildProgramDescription(body.description, modality?.name ?? currentProgram.modality?.name ?? "Hipertrofia")
-      : currentProgram.description;
+    const modalityChanged =
+      body.modalityId != null && body.modalityId !== currentProgram.modalityId;
+    const currentMetadata = parseProgramMetadata(currentProgram.description);
+    const nextModalityName = modality?.name ?? currentMetadata.modality;
+    const descriptionText =
+      body.description != null
+        ? buildProgramDescription(body.description, nextModalityName)
+        : modalityChanged
+        ? buildProgramDescription(currentMetadata.description, nextModalityName)
+        : currentProgram.description;
     const publishedAt =
       body.status === "PUBLISHED" ? new Date() : body.status === "DRAFT" || body.status === "ARCHIVED" ? null : currentProgram.publishedAt;
+    const nextStatus = body.status ?? currentProgram.status;
+    const nextIsActive = body.isActive ?? currentProgram.isActive;
+
+    if (nextStatus === "PUBLISHED" && nextIsActive) {
+      const workoutBlockIds = nextProgramDays.map((day) => day.workoutBlockId);
+      const workoutBlocks = await prisma.workoutBlock.findMany({
+        where: {
+          id: {
+            in: workoutBlockIds
+          }
+        },
+        include: {
+          exercises: {
+            include: {
+              exercise: true
+            }
+          }
+        }
+      });
+      const blocksById = new Map(workoutBlocks.map((block) => [block.id, block]));
+      const readiness = buildProgramPublishReadiness({
+        daysCount: nextProgramDays.length,
+        modality,
+        days: nextProgramDays.map((day) => ({
+          dayNumber: day.dayNumber,
+          workoutBlock: blocksById.get(day.workoutBlockId) ?? null
+        }))
+      });
+
+      if (!readiness.ready) {
+        throw httpError(409, readiness.issues.join(" "));
+      }
+    }
+
     const nextPublishedSortOrder =
       body.status === "PUBLISHED" && currentProgram.status !== "PUBLISHED" && body.sortOrder == null
         ? ((await prisma.program.aggregate({
@@ -2253,7 +2512,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
     if (program.status === "PUBLISHED" && program.isActive && program.audienceMode === "ALL_ACTIVE") {
       await assignProgramToStudents(program.id, 1, program.plannedSessions);
-    } else if (program.assignedUsers.length > 0) {
+    } else if (program.status === "PUBLISHED" && program.isActive && program.assignedUsers.length > 0) {
       await assignProgramToActiveStudents(
         program.id,
         1,
@@ -2332,16 +2591,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.post("/admin/cms/programs/:id/publish", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    const currentProgram = await prisma.program.findUniqueOrThrow({
-      where: { id },
-      include: {
-        days: true
-      }
-    });
-
-    if (currentProgram.days.length === 0) {
-      throw httpError(409, "Cadastre ao menos um dia antes de publicar o programa.");
-    }
+    const currentProgram = await assertProgramReadyForPublish(id);
 
     const maxPublishedSortOrder = await prisma.program.aggregate({
       where: {

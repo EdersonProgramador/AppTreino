@@ -2,6 +2,7 @@ import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:cry
 import { promisify } from "node:util";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { UserRole } from "@app-treino/shared";
+import { prisma } from "./prisma.js";
 
 const scrypt = promisify(scryptCallback);
 const keyLength = 64;
@@ -74,11 +75,40 @@ export async function getAuthUser(
     return null;
   }
 
+  let payload: AuthTokenPayload;
+
   try {
-    return app.jwt.verify<AuthTokenPayload>(authorization.slice("Bearer ".length));
+    payload = app.jwt.verify<AuthTokenPayload>(authorization.slice("Bearer ".length));
   } catch {
     return null;
   }
+
+  const dbUser = await prisma.user.findUnique({
+    where: { id: payload.id },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      role: true,
+      status: true,
+      deletedAt: true,
+      provider: true
+    }
+  });
+
+  if (!dbUser || dbUser.status !== "ACTIVE" || dbUser.deletedAt) {
+    return null;
+  }
+
+  return {
+    id: dbUser.id,
+    name: dbUser.name,
+    email: dbUser.email ?? dbUser.phone ?? "",
+    role: dbUser.role,
+    phone: dbUser.phone ?? null,
+    provider: dbUser.provider ?? "EMAIL"
+  };
 }
 
 export async function requireAuth(app: FastifyInstance, request: FastifyRequest) {

@@ -1,5 +1,21 @@
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3333";
 
+type UnauthorizedHandler = () => void;
+
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+export function getApiBaseUrl() {
+  return API_URL;
+}
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
+  unauthorizedHandler = handler;
+}
+
+export function notifyUnauthorized() {
+  unauthorizedHandler?.();
+}
+
 export class ApiError extends Error {
   status: number;
 
@@ -27,16 +43,24 @@ function authHeaders(token?: string | null): Record<string, string> {
     : {};
 }
 
-export async function apiGet<T>(path: string, token?: string | null): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
-    headers: authHeaders(token)
-  });
+async function parseResponse<T>(response: Response): Promise<T> {
+  if (response.status === 401) {
+    unauthorizedHandler?.();
+  }
 
   if (!response.ok) {
     throw new ApiError(response.status, await getErrorMessage(response));
   }
 
   return response.json() as Promise<T>;
+}
+
+export async function apiGet<T>(path: string, token?: string | null): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, {
+    headers: authHeaders(token)
+  });
+
+  return parseResponse<T>(response);
 }
 
 export async function apiPost<T>(path: string, body: unknown, token?: string | null): Promise<T> {
@@ -49,11 +73,7 @@ export async function apiPost<T>(path: string, body: unknown, token?: string | n
     body: JSON.stringify(body)
   });
 
-  if (!response.ok) {
-    throw new ApiError(response.status, await getErrorMessage(response));
-  }
-
-  return response.json() as Promise<T>;
+  return parseResponse<T>(response);
 }
 
 export async function apiPut<T>(path: string, body: unknown, token?: string | null): Promise<T> {
@@ -66,11 +86,7 @@ export async function apiPut<T>(path: string, body: unknown, token?: string | nu
     body: JSON.stringify(body)
   });
 
-  if (!response.ok) {
-    throw new ApiError(response.status, await getErrorMessage(response));
-  }
-
-  return response.json() as Promise<T>;
+  return parseResponse<T>(response);
 }
 
 export async function apiDelete<T>(path: string, token?: string | null): Promise<T> {
@@ -79,11 +95,7 @@ export async function apiDelete<T>(path: string, token?: string | null): Promise
     headers: authHeaders(token)
   });
 
-  if (!response.ok) {
-    throw new ApiError(response.status, await getErrorMessage(response));
-  }
-
-  return response.json() as Promise<T>;
+  return parseResponse<T>(response);
 }
 
 export async function apiUpload<T>(path: string, body: FormData, token?: string | null): Promise<T> {
@@ -93,9 +105,5 @@ export async function apiUpload<T>(path: string, body: FormData, token?: string 
     body
   });
 
-  if (!response.ok) {
-    throw new ApiError(response.status, await getErrorMessage(response));
-  }
-
-  return response.json() as Promise<T>;
+  return parseResponse<T>(response);
 }

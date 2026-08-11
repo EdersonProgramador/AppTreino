@@ -1058,7 +1058,7 @@ export function WorkoutPlayer({
             </header>
             <section>
               <h2>Descrição</h2>
-              <p>{resolvedCurrentExercise.description || (muscles.length ? `Exercício focado em ${muscles.join(", ")}.` : "Descrição técnica ainda não cadastrada no CMS.")}</p>
+              <p>{resolvedCurrentExercise.description || (muscles.length ? `Exercício focado em ${muscles.join(", ")}.` : "Descrição técnica ainda não cadastrada.")}</p>
             </section>
             <section>
               <h2>Instrução de execução</h2>
@@ -1119,7 +1119,7 @@ export function WorkoutPlayer({
                   ))}
                 </div>
               ) : (
-                <p>Músculos alvo ainda não cadastrados no CMS.</p>
+                <p>Músculos alvo ainda não cadastrados.</p>
               )}
             </section>
           </article>
@@ -1157,7 +1157,7 @@ export function WorkoutPlayer({
             <MediaBlock exercise={resolvedCurrentExercise} expanded lesson />
             <section>
               <h2>Descrição</h2>
-              <p>{resolvedCurrentExercise.description || (muscles.length ? `Exercício focado em ${muscles.join(", ")}.` : "Descrição técnica ainda não cadastrada no CMS.")}</p>
+              <p>{resolvedCurrentExercise.description || (muscles.length ? `Exercício focado em ${muscles.join(", ")}.` : "Descrição técnica ainda não cadastrada.")}</p>
             </section>
             {resolvedCurrentExercise.audioUrl && (
               <section>

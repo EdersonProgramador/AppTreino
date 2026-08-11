@@ -89,3 +89,19 @@ export function parseRepetitionRange(value: string) {
 
   return { min: null, max: null };
 }
+
+export function parseProgramMetadata(description: string) {
+  try {
+    const parsed = JSON.parse(description) as { description?: string; modality?: string };
+
+    return {
+      description: parsed.description || description,
+      modality: parsed.modality || "Hipertrofia"
+    };
+  } catch {
+    return {
+      description,
+      modality: "Hipertrofia"
+    };
+  }
+}

@@ -71,22 +71,24 @@ model Enrollment {
 }
 
 model Profile {
-  id         String    @id @default(cuid())
-  userId     String    @unique @map("user_id")
-  user       User      @relation(fields: [userId], references: [id])
-  phone      String?
-  document   String?
-  gender     Gender?
-  birthDate  DateTime? @map("birth_date")
-  objective  String?
-  level      String?
-  city       String?
-  state      String?
-  avatarUrl  String?   @map("avatar_url")
-  locationId String?   @map("location_id")
-  location   Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
+  id             String    @id @default(cuid())
+  userId         String    @unique @map("user_id")
+  user           User      @relation(fields: [userId], references: [id])
+  phone          String?
+  document       String?
+  gender         Gender?
+  birthDate      DateTime? @map("birth_date")
+  objective      String?
+  level          String?
+  daysPerWeek    Int?      @map("days_per_week")
+  equipmentTags  String[]  @default([]) @map("equipment_tags")
+  city           String?
+  state          String?
+  avatarUrl      String?   @map("avatar_url")
+  locationId     String?   @map("location_id")
+  location       Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   @@map("profiles")
 }
