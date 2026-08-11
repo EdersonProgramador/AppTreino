@@ -1,80 +1,26 @@
-name: Deploy GitHub Pages
+name: Deploy GitHub Pages (deprecated)
 
+# Substituído por Vercel (edersonprogramador.com). Mantido apenas para referência.
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Digite DEPLOY para confirmar (legado Pages)"
+        required: true
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build web app
+  skipped:
+    name: Deprecated
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build shared package
-        run: npm run build --workspace @app-treino/shared
-
-      - name: Check production API URL
-        env:
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
-        shell: bash
+      - name: Notice
         run: |
-          if [ -z "$VITE_API_URL" ]; then
-            echo "VITE_API_URL is required for GitHub Pages deploy."
-            echo "Create a repository variable VITE_API_URL with the public HTTPS API URL."
+          echo "Este workflow foi descontinuado."
+          echo "Use Vercel conforme docs/deploy.md"
+          if [ "${{ github.event.inputs.confirm }}" != "DEPLOY" ]; then
             exit 1
           fi
-
-          if [[ "$VITE_API_URL" == http://localhost* || "$VITE_API_URL" == http://127.0.0.1* ]]; then
-            echo "VITE_API_URL cannot point to localhost in production: $VITE_API_URL"
-            exit 1
-          fi
-
-      - name: Build web app
-        run: npm run build --workspace @app-treino/web
-        env:
-          GITHUB_PAGES: "true"
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload GitHub Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: apps/web/dist
-
-  deploy:
-    name: Deploy
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          exit 1

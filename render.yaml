@@ -1,0 +1,35 @@
+# Render blueprint — API App Treino
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Domínio customizado: api.edersonprogramador.com
+# Banco: Neon (configure DATABASE_URL manualmente no dashboard)
+
+services:
+  - type: web
+    name: app-treino-api
+    runtime: node
+    region: oregon
+    plan: starter
+    buildCommand: npm ci && npm run prisma:generate && npm run build --workspace @app-treino/shared && npm run build --workspace @app-treino/api
+    startCommand: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma && npm run start --workspace @app-treino/api
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: WEB_ORIGIN
+        value: https://edersonprogramador.com,https://www.edersonprogramador.com
+      - key: PUBLIC_BASE_URL
+        value: https://api.edersonprogramador.com
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: ASAAS_API_KEY
+        sync: false
+      - key: ASAAS_API_URL
+        sync: false
+      - key: ASAAS_WEBHOOK_TOKEN
+        sync: false

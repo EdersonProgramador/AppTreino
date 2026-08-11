@@ -1,88 +1,59 @@
 # App Treino
 
-Base inicial do projeto criada a partir do `pdr.md`.
+Monorepo com web (React/Vite), API (Fastify/Prisma) e pacotes compartilhados.
 
 ## Estrutura
 
 ```txt
 apps/
-  web/      Landing page, login, painel administrativo e area do usuario
-  api/      API Node.js, banco, autenticacao, pagamentos e webhooks
+  web/      Landing, login, painel admin e área do aluno
+  api/      API Node.js, auth, pagamentos e webhooks
 packages/
   shared/   Tipos e contratos compartilhados
-docs/       Documentacao de apoio
+docs/       Documentação (inclui deploy)
 ```
 
-## Primeiros comandos
+## Produção
+
+| Camada | Serviço | Domínio |
+|--------|---------|---------|
+| Banco | Neon | PostgreSQL gerenciado |
+| API | Render | https://api.edersonprogramador.com |
+| Web | Vercel | https://edersonprogramador.com |
+| DNS | HostGator | aponta os nomes acima |
+
+Guia completo: [docs/deploy.md](docs/deploy.md).
+
+Arquivos de infra:
+
+- `render.yaml` — blueprint da API no Render
+- `vercel.json` — build/output do frontend na Vercel
+
+## Desenvolvimento local
 
 ```bash
+cp .env.example .env
 npm install
-npm run dev:web
+npm run prisma:generate
+npm run prisma:migrate
 npm run dev:api
+npm run dev:web
 ```
 
 ## GitHub Actions
 
-O projeto possui CI em `.github/workflows/ci.yml` para pushes e pull requests na branch `main`.
-O deploy da web para GitHub Pages fica em `.github/workflows/deploy-pages.yml`.
-O deploy da API/backend para HostGator/cPanel fica em `.github/workflows/deploy-hostgator.yml`.
-
-Para reproduzir localmente as principais checagens:
-
-```bash
-npm run prisma:generate
-npm run typecheck
-npm run build
-```
-
-### Deploy da API/backend na HostGator
-
-O workflow `Deploy API to HostGator` faz:
-
-- build da API e do pacote compartilhado no GitHub Actions;
-- envio dos arquivos de produção por SSH/SCP para o cPanel;
-- criação do `.env` remoto;
-- instalação com `npm ci --omit=dev`;
-- execução de `prisma migrate deploy`;
-- restart por `touch tmp/restart.txt`, compatível com aplicações Node.js gerenciadas por Passenger/cPanel.
-
-Configure estes secrets no GitHub:
-
-```txt
-HOSTGATOR_HOST
-HOSTGATOR_USER
-HOSTGATOR_SSH_KEY
-HOSTGATOR_PORT
-PRODUCTION_DATABASE_URL
-PRODUCTION_JWT_SECRET
-PRODUCTION_ASAAS_API_KEY
-PRODUCTION_ASAAS_WEBHOOK_TOKEN
-```
-
-Configure estas variables no GitHub quando aplicável:
-
-```txt
-VITE_API_URL
-HOSTGATOR_APP_DIR
-PRODUCTION_WEB_ORIGIN
-PRODUCTION_GOOGLE_CLIENT_ID
-```
-
-Para GitHub Pages, `VITE_API_URL` deve apontar para a API publica em HTTPS, por exemplo `https://api.seudominio.com`.
-Para o CORS da API, `PRODUCTION_WEB_ORIGIN` deve incluir a origem do Pages: `https://edersonprogramador.github.io`.
-Se precisar liberar mais de uma origem, separe por virgula, por exemplo `https://edersonprogramador.github.io,http://localhost:5173`.
-
-No cPanel da HostGator, crie uma aplicacao Node.js apontando para a mesma pasta de `HOSTGATOR_APP_DIR`, com `app.js` como arquivo inicial.
-Se `HOSTGATOR_APP_DIR` nao for configurado, o workflow usa `app-treino-api`.
+- `.github/workflows/ci.yml` — typecheck, testes e build em pushes/PRs na `main`
+- Workflows antigos de HostGator/GitHub Pages foram desativados (deploy agora é Render + Vercel)
 
 ## Ambiente
 
-Copie `.env.example` para `.env` na raiz e ajuste as credenciais. Para a API, tambem crie `apps/api/.env` se preferir manter variaveis especificas no app.
+Copie `.env.example` para `.env` na raiz.
 
-## Proximos passos tecnicos
+Produção (resumo):
 
-- Instalar dependencias com `npm install`.
-- Configurar o PostgreSQL e atualizar `DATABASE_URL`.
-- Rodar `npm run prisma:generate`.
-- Rodar `npm run prisma:migrate` apos revisar o schema.
-- Implementar persistencia real nas rotas que hoje estao estruturadas como base inicial.
+```txt
+DATABASE_URL=postgresql://...@...neon.tech/...?sslmode=require
+WEB_ORIGIN=https://edersonprogramador.com,https://www.edersonprogramador.com
+PUBLIC_BASE_URL=https://api.edersonprogramador.com
+VITE_API_URL=https://api.edersonprogramador.com
+```

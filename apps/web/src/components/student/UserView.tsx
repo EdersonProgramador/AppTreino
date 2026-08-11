@@ -369,24 +369,26 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       return stillExists ? current : null;
     });
     setSelectedWorkoutModality((current) => {
-      if (!current || current === "all") return current;
+      if (!current) return current;
       const stillExists = publishedWorkouts.some((item) => (item.modality ?? "Hipertrofia") === current);
       return stillExists ? current : null;
     });
   }, [publishedWorkouts]);
 
-  function openTrainingHub(preferred?: TodayWorkoutResponse["workout"] | null) {
-    const target = preferred ?? todayWorkout ?? (publishedWorkouts.length === 1 ? publishedWorkouts[0] : null);
-    if (target) {
-      setSelectedWorkoutModality(target.modality ?? "Hipertrofia");
-      setSelectedWorkoutProgramId(target.programId);
-    } else if (publishedModalities.length === 1) {
-      setSelectedWorkoutModality(publishedModalities[0].modality);
-      setSelectedWorkoutProgramId(null);
-    } else {
-      setSelectedWorkoutModality("all");
-      setSelectedWorkoutProgramId(null);
+  function openTrainingCatalog() {
+    setSelectedWorkoutModality(null);
+    setSelectedWorkoutProgramId(null);
+    setStudentSection("training");
+  }
+
+  function openTodaySession() {
+    const target = todayWorkout ?? (publishedWorkouts.length === 1 ? publishedWorkouts[0] : null);
+    if (!target) {
+      openTrainingCatalog();
+      return;
     }
+    setSelectedWorkoutModality(target.modality ?? "Hipertrofia");
+    setSelectedWorkoutProgramId(target.programId);
     setStudentSection("training");
   }
 
@@ -1244,20 +1246,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       })),
     [publishedWorkouts]
   );
-  const modalityWorkouts =
-    !selectedWorkoutModality || selectedWorkoutModality === "all"
-      ? publishedWorkouts
-      : publishedWorkouts.filter((item) => (item.modality ?? "Hipertrofia") === selectedWorkoutModality);
+  const modalityWorkouts = selectedWorkoutModality
+    ? publishedWorkouts.filter((item) => (item.modality ?? "Hipertrofia") === selectedWorkoutModality)
+    : [];
   const selectedProgramWorkout = selectedWorkoutProgramId
     ? publishedWorkouts.find((item) => item.programId === selectedWorkoutProgramId) ?? null
     : null;
-  const workoutSheet =
-    selectedProgramWorkout ??
-    (selectedWorkoutModality &&
-    selectedWorkoutModality !== "all" &&
-    modalityWorkouts.length === 1
-      ? modalityWorkouts[0]
-      : null);
+  /** Só abre a ficha quando o aluno escolhe um treino na lista. */
+  const workoutSheet = selectedProgramWorkout;
   const workoutSequence = workoutSheet?.sequence?.length ? workoutSheet.sequence : publishedWorkouts;
   const sheetCompleted = Math.min(workoutSheet?.completedWorkouts ?? workoutsCompleted, workoutSheet?.totalWorkouts ?? workoutSheet?.totalDays ?? totalWorkoutDays);
   const sheetTotal = workoutSheet?.totalWorkouts ?? workoutSheet?.totalDays ?? totalWorkoutDays;
@@ -1707,13 +1703,30 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 </ol>
               )}
               <div className="student-hero-actions">
-                <button
-                  className="student-green-button"
-                  onClick={() => openTrainingHub(todayWorkout)}
-                  disabled={publishedWorkouts.length === 0 && !todayWorkout}
-                >
-                  {todayWorkout ? trainingCopy.continueWorkout : trainingCopy.openWorkout}
-                </button>
+                {todayWorkout ? (
+                  <>
+                    <button
+                      className="student-green-button"
+                      onClick={() => openTodaySession()}
+                    >
+                      {trainingCopy.continueWorkout}
+                    </button>
+                    <button
+                      className="student-outline-button"
+                      onClick={() => openTrainingCatalog()}
+                    >
+                      {trainingCopy.browseWorkouts}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="student-green-button"
+                    onClick={() => openTrainingCatalog()}
+                    disabled={publishedWorkouts.length === 0}
+                  >
+                    {trainingCopy.browseWorkouts}
+                  </button>
+                )}
                 {publicConfig["module_qr"] !== "false" && publicConfig["qr_checkin_enabled"] !== "false" && (
                   <button
                     className="student-outline-button"
@@ -1791,7 +1804,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                     key={item.title}
                     onClick={() => {
                       if (item.section === "training") {
-                        openTrainingHub();
+                        openTrainingCatalog();
                         return;
                       }
                       setStudentSection(item.section);
@@ -1810,50 +1823,86 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
         {studentSection === "training" && (
           <section className="student-sheet">
-            {!workoutSheet && (
+            {!selectedWorkoutModality && (
               <>
                 <div className="student-sheet-heading">
                   <span>{trainingCopy.workout}</span>
-                  <h1>{trainingCopy.yourWorkouts}</h1>
-                  <p>{publishedWorkouts.length > 0 ? trainingCopy.pickWorkout : trainingCopy.noWorkoutsHint}</p>
+                  <h1>{trainingCopy.modalities}</h1>
+                  <p>{publishedModalities.length > 0 ? trainingCopy.pickModality : trainingCopy.noWorkoutsHint}</p>
                 </div>
 
-                {publishedModalities.length > 1 && (
-                  <div className="student-modality-filter" role="tablist" aria-label={trainingCopy.modalities}>
-                    <button
-                      type="button"
-                      className={!selectedWorkoutModality || selectedWorkoutModality === "all" ? "active" : ""}
-                      onClick={() => {
-                        setSelectedWorkoutModality("all");
-                        setSelectedWorkoutProgramId(null);
-                      }}
-                    >
-                      {trainingCopy.filterAll}
-                    </button>
+                {publishedModalities.length > 0 ? (
+                  <div className="student-modality-list">
                     {publishedModalities.map((item) => (
                       <button
-                        type="button"
+                        className="student-modality-card"
                         key={item.modality}
-                        className={selectedWorkoutModality === item.modality ? "active" : ""}
+                        type="button"
                         onClick={() => {
                           setSelectedWorkoutModality(item.modality);
                           setSelectedWorkoutProgramId(null);
                         }}
                       >
-                        {item.modality}
+                        <span className={`student-modality-media ${item.imageUrl ? "with-image" : ""}`}>
+                          {item.imageUrl ? (
+                            <img src={mediaUrl(item.imageUrl)} alt="" aria-hidden="true" />
+                          ) : (
+                            <Dumbbell size={26} />
+                          )}
+                        </span>
+                        <span className="student-modality-copy">
+                          <strong>{item.modality}</strong>
+                          <small>{trainingCopy.workoutsCount(item.count)}</small>
+                        </span>
                       </button>
                     ))}
                   </div>
+                ) : (
+                  <article className="student-training-card">
+                    <div className="student-card-icon">
+                      <Dumbbell size={24} />
+                    </div>
+                    <div className="student-card-body">
+                      <h2>{trainingCopy.noWorkouts}</h2>
+                      <p>{trainingCopy.noWorkoutsHint}</p>
+                    </div>
+                  </article>
                 )}
+              </>
+            )}
+
+            {selectedWorkoutModality && !workoutSheet && (
+              <>
+                <div className="student-sheet-heading">
+                  <button
+                    className="student-training-back-button"
+                    type="button"
+                    onClick={() => {
+                      setSelectedWorkoutModality(null);
+                      setSelectedWorkoutProgramId(null);
+                    }}
+                  >
+                    <ChevronLeft size={18} />
+                    {trainingCopy.backToModalities}
+                  </button>
+                  <span>{selectedWorkoutModality}</span>
+                  <h1>{trainingCopy.modalityWorkoutsHeading}</h1>
+                  <p>{trainingCopy.pickWorkout}</p>
+                </div>
 
                 {modalityWorkouts.length > 0 ? (
                   <AnimatedList className="student-program-list">
                     {modalityWorkouts.map((programWorkout) => {
                       const done = programWorkout.completedWorkouts ?? 0;
                       const total = programWorkout.totalWorkouts ?? programWorkout.totalDays;
+                      const isToday = todayWorkout?.programId === programWorkout.programId;
+                      const focus =
+                        programWorkout.block?.focus ||
+                        programWorkout.sequence?.[0]?.block.focus ||
+                        trainingCopy.sessionFocusFallback;
                       return (
                         <article className="student-program-card" key={programWorkout.programId}>
-                          <div className="student-training-card">
+                          <div className={`student-training-card${isToday ? " active" : ""}`}>
                             {programWorkout.modalityImageUrl ? (
                               <img
                                 className="student-card-image"
@@ -1868,13 +1917,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                             <div className="student-card-body">
                               <h2>{programWorkout.programTitle}</h2>
                               <p>
-                                {programWorkout.modality ?? "Treino"} · {trainingCopy.sessionsDone(done, total)}
+                                {focus} · {trainingCopy.sessionsDone(done, total)}
+                                {isToday ? ` · ${trainingCopy.todayWorkout}` : ""}
                               </p>
                             </div>
                             <button
                               type="button"
                               onClick={() => {
-                                setSelectedWorkoutModality(programWorkout.modality ?? "Hipertrofia");
                                 setSelectedWorkoutProgramId(programWorkout.programId);
                               }}
                             >
@@ -1906,9 +1955,6 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                     className="student-training-back-button"
                     onClick={() => {
                       setSelectedWorkoutProgramId(null);
-                      setSelectedWorkoutModality(
-                        publishedModalities.length > 1 ? "all" : publishedModalities[0]?.modality ?? "all"
-                      );
                     }}
                   >
                     <ChevronLeft size={18} />
@@ -3034,7 +3080,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           <section className="student-menu-list">
             {[
               { icon: UserRound, title: "Perfil", action: () => setStudentSection("profile") },
-              { icon: Dumbbell, title: trainingCopy.workout, action: () => openTrainingHub(), favorite: true },
+              { icon: Dumbbell, title: trainingCopy.workout, action: () => openTrainingCatalog(), favorite: true },
               { icon: ShieldCheck, title: "Matrículas", action: () => setStudentSection("membership") },
               { icon: CreditCard, title: "Pagamentos", action: () => setStudentSection("payments"), favorite: true },
               { icon: Ruler, title: trainingCopy.physicalAssessment, action: () => setStudentSection("assessments") },
@@ -3244,7 +3290,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       <nav className="student-bottom-nav" aria-label="Navegacao do aluno">
         <button className={studentSection === "home" ? "active" : ""} onClick={() => setStudentSection("home")}><Home size={22} />Home</button>
         <button className={studentSection === "payments" ? "active" : ""} onClick={() => setStudentSection("payments")}><CreditCard size={22} />Pagamentos</button>
-        <button className={studentSection === "training" || studentSection === "player" || studentSection === "history" ? "active" : ""} onClick={() => openTrainingHub()}><Dumbbell size={22} />Treino</button>
+        <button className={studentSection === "training" || studentSection === "player" || studentSection === "history" ? "active" : ""} onClick={() => openTrainingCatalog()}><Dumbbell size={22} />Treino</button>
         <button className={studentSection === "products" ? "active" : ""} onClick={() => setStudentSection("products")}><Package size={22} />Produtos</button>
         <button className={studentSection === "menu" ? "active" : ""} onClick={() => setStudentSection("menu")}><Menu size={22} />Menu</button>
       </nav>

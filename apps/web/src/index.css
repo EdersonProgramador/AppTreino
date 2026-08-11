@@ -4628,6 +4628,11 @@ summary:focus-visible {
   max-width: 7.5rem;
 }
 
+.student-modality-list {
+  display: grid;
+  gap: 14px;
+}
+
 .student-modality-card {
   display: grid;
   gap: 14px;
