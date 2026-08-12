@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { hashPassword } from "../src/auth.js";
 
 const prisma = new PrismaClient();
 
@@ -82,8 +83,7 @@ async function main() {
     create: {
       id: "seed-program-definicao-30-dias",
       title: "Projeto Definicao 30 Dias",
-      description: "Treinos intensos focados em queima de gordura e ganho de massa magra."
-      ,
+      description: "Treinos intensos focados em queima de gordura e ganho de massa magra.",
       status: "PUBLISHED",
       isActive: true,
       publishedAt: new Date()
@@ -137,6 +137,46 @@ async function main() {
       sortOrder: 1
     }
   });
+
+  // Vincula seed legado (divisão + programa) à modalidade — sem isso o aluno não vê o treino.
+  await prisma.workoutBlock.update({
+    where: { id: blocoA.id },
+    data: { modalityId: musculacao.id }
+  });
+  await prisma.program.update({
+    where: { id: programa.id },
+    data: {
+      modalityId: musculacao.id,
+      description: JSON.stringify({
+        description: "Treinos intensos focados em queima de gordura e ganho de massa magra.",
+        modality: "Musculação"
+      }),
+      targetGender: "ALL",
+      audienceMode: "ALL_ACTIVE",
+      cycleLengthDays: 1,
+      plannedSessions: 12,
+      totalWorkouts: 12
+    }
+  });
+
+  for (const exerciseId of [exSupino.id, "seed-ex-flexao-solo"]) {
+    await prisma.exerciseModality.upsert({
+      where: {
+        exerciseId_modalityId: {
+          exerciseId,
+          modalityId: musculacao.id
+        }
+      },
+      create: {
+        exerciseId,
+        modalityId: musculacao.id,
+        principal: true
+      },
+      update: {
+        principal: true
+      }
+    });
+  }
 
   const beginnerAbcExercises = [
     {
@@ -338,12 +378,14 @@ async function main() {
         id: block.id,
         title: block.title,
         structureType: "NORMAL",
-        restTime: block.restTime
+        restTime: block.restTime,
+        modalityId: musculacao.id
       },
       update: {
         title: block.title,
         structureType: "NORMAL",
-        restTime: block.restTime
+        restTime: block.restTime,
+        modalityId: musculacao.id
       }
     });
 
@@ -380,7 +422,7 @@ async function main() {
           "Planilha de treino iniciante com divisão ABC em dias alternados. Duração: 6 meses. Progredir carga ou repetição toda semana dentro da zona alvo e fazer 20 min de cardio pós treino em qualquer aparelho.",
         modality: "Musculação"
       }),
-      targetGender: "MALE",
+      targetGender: "ALL",
       status: "PUBLISHED",
       isActive: true,
       publishedAt: new Date()
@@ -393,7 +435,7 @@ async function main() {
           "Planilha de treino iniciante com divisão ABC em dias alternados. Duração: 6 meses. Progredir carga ou repetição toda semana dentro da zona alvo e fazer 20 min de cardio pós treino em qualquer aparelho.",
         modality: "Musculação"
       }),
-      targetGender: "MALE",
+      targetGender: "ALL",
       status: "PUBLISHED",
       isActive: true,
       publishedAt: new Date()
@@ -975,6 +1017,9 @@ async function main() {
     where: {
       role: "USER",
       status: "ACTIVE",
+      profile: {
+        gender: "FEMALE"
+      },
       OR: [
         {
           enrollmentStatus: "ACTIVE"
@@ -1018,7 +1063,129 @@ async function main() {
     });
   }
 
-  console.log("Seed do CMS Fitness executado com sucesso.");
+  const e2ePassword = process.env.E2E_STUDENT_PASSWORD ?? "Teste@123";
+  const e2eEmail = (process.env.E2E_STUDENT_EMAIL ?? "teste@gmail.com").trim().toLowerCase();
+  const e2ePhone = "11999990000";
+  const e2ePasswordHash = await hashPassword(e2ePassword);
+
+  const e2eUser = await prisma.user.upsert({
+    where: { email: e2eEmail },
+    create: {
+      name: "Aluno Teste",
+      email: e2eEmail,
+      phone: e2ePhone,
+      passwordHash: e2ePasswordHash,
+      provider: "EMAIL",
+      role: "USER",
+      status: "ACTIVE",
+      enrollmentStatus: "ACTIVE",
+      profile: {
+        create: {
+          phone: e2ePhone,
+          gender: "MALE",
+          objective: "Hipertrofia",
+          level: "Intermediario",
+          daysPerWeek: 4,
+          equipmentTags: ["Academia"]
+        }
+      }
+    },
+    update: {
+      name: "Aluno Teste",
+      phone: e2ePhone,
+      passwordHash: e2ePasswordHash,
+      provider: "EMAIL",
+      role: "USER",
+      status: "ACTIVE",
+      enrollmentStatus: "ACTIVE",
+      deletedAt: null
+    }
+  });
+
+  // Acesso liberado como pós-pagamento Asaas / autorização admin: membership ACTIVE.
+  const e2ePlan = await prisma.plan.upsert({
+    where: { code: "monthly" },
+    create: {
+      code: "monthly",
+      name: "Mensal",
+      priceInCents: 9700,
+      billingCycle: "MONTHLY"
+    },
+    update: {
+      name: "Mensal",
+      priceInCents: 9700,
+      billingCycle: "MONTHLY",
+      deletedAt: null
+    }
+  });
+
+  const e2eStartsAt = new Date();
+  e2eStartsAt.setUTCHours(0, 0, 0, 0);
+  const e2eEndsAt = new Date(e2eStartsAt);
+  e2eEndsAt.setUTCMonth(e2eEndsAt.getUTCMonth() + 1);
+
+  const existingActiveMembership = await prisma.membership.findFirst({
+    where: {
+      userId: e2eUser.id,
+      status: "ACTIVE",
+      deletedAt: null
+    }
+  });
+
+  if (existingActiveMembership) {
+    await prisma.membership.update({
+      where: { id: existingActiveMembership.id },
+      data: {
+        planId: e2ePlan.id,
+        startsAt: e2eStartsAt,
+        endsAt: e2eEndsAt,
+        deletedAt: null
+      }
+    });
+  } else {
+    await prisma.membership.create({
+      data: {
+        userId: e2eUser.id,
+        planId: e2ePlan.id,
+        status: "ACTIVE",
+        startsAt: e2eStartsAt,
+        endsAt: e2eEndsAt
+      }
+    });
+  }
+
+  console.log(`Seed do CMS Fitness executado com sucesso. E2E student: ${e2eEmail} (membership ACTIVE)`);
+
+  const e2eAdminEmail = (process.env.E2E_ADMIN_EMAIL ?? "admin@apptreino.com").trim().toLowerCase();
+  const e2eAdminPassword = process.env.E2E_ADMIN_PASSWORD ?? "Admin@123";
+  const e2eAdminPhone = "11988880000";
+  const e2eAdminPasswordHash = await hashPassword(e2eAdminPassword);
+
+  await prisma.user.upsert({
+    where: { email: e2eAdminEmail },
+    create: {
+      name: "Admin Teste",
+      email: e2eAdminEmail,
+      phone: e2eAdminPhone,
+      passwordHash: e2eAdminPasswordHash,
+      provider: "EMAIL",
+      role: "ADMIN",
+      status: "ACTIVE",
+      enrollmentStatus: "ACTIVE"
+    },
+    update: {
+      name: "Admin Teste",
+      phone: e2eAdminPhone,
+      passwordHash: e2eAdminPasswordHash,
+      provider: "EMAIL",
+      role: "ADMIN",
+      status: "ACTIVE",
+      enrollmentStatus: "ACTIVE",
+      deletedAt: null
+    }
+  });
+
+  console.log(`E2E admin: ${e2eAdminEmail}`);
 }
 
 main()

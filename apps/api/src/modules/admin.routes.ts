@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { hashPassword, requireRole } from "../auth.js";
+import { hashPassword, requirePathRole, requireRole } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { buildPublicUploadUrl, saveValidatedUpload, uploadsDir } from "../upload-security.js";
@@ -18,7 +18,7 @@ import {
   parseProgramMetadata,
   parseRepetitionRange
 } from "./workout-program.utils.js";
-import { buildProgramPublishReadiness } from "./cms-publication.utils.js";
+import { buildProgramPublishReadiness, studentMatchesProgramTargetGender } from "./cms-publication.utils.js";
 
 const uploadGroups = ["lessons", "materials", "images", "audio"] as const;
 const uploadSchema = z.object({
@@ -156,8 +156,16 @@ const cmsWorkoutBlockSchema = z.object({
   workSeconds: z.coerce.number().int().min(1).nullable().optional(),
   timeCapSeconds: z.coerce.number().int().min(1).nullable().optional(),
   instructions: z.string().max(2000).optional(),
-  modalityId: z.string().min(1).nullable().optional(),
+  modalityId: z.string().min(1, "Selecione a modalidade da divisão."),
   exercises: z.array(cmsWorkoutExerciseSchema).min(1, "Cadastre ao menos um exercício no bloco.")
+});
+
+const cmsPublishBlockSchema = z.object({
+  title: z.string().min(2).optional(),
+  targetGender: z.enum(["ALL", "MALE", "FEMALE"]).default("ALL"),
+  audienceMode: z.enum(["ALL_ACTIVE", "SELECTED"]).default("ALL_ACTIVE"),
+  durationWeeks: z.coerce.number().int().min(1).max(520).default(4),
+  plannedSessions: z.coerce.number().int().min(1).max(10000).optional()
 });
 
 const cmsProgramObjectSchema = z.object({
@@ -662,7 +670,14 @@ async function assertWorkoutBlocksMatchModality(workoutBlockIds: string[], modal
       modalityId: true
     }
   });
-  const incompatible = blocks.filter((block) => block.modalityId && block.modalityId !== modalityId);
+  const withoutModality = blocks.filter((block) => !block.modalityId);
+  if (withoutModality.length > 0) {
+    throw httpError(
+      400,
+      `Divisão sem modalidade (vincule a modalidade antes de publicar): ${withoutModality.map((block) => block.title).join(", ")}.`
+    );
+  }
+  const incompatible = blocks.filter((block) => block.modalityId !== modalityId);
 
   if (incompatible.length > 0) {
     throw httpError(
@@ -1006,9 +1021,7 @@ async function createCmsProgramFromWorkout(input: z.infer<typeof workoutProgramS
 
 export async function registerAdminRoutes(app: FastifyInstance) {
   app.addHook("preHandler", async (request) => {
-    if (request.url.startsWith("/admin")) {
-      await requireRole(app, request, "ADMIN");
-    }
+    await requirePathRole(app, request, "/admin", "ADMIN");
   });
 
   app.post(
@@ -1974,9 +1987,8 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     const body = cmsWorkoutBlockSchema.parse(request.body);
     await assertCmsExercisesExist(body.exercises.map((exercise) => exercise.exerciseId));
-    if (body.modalityId) {
-      await assertExercisesMatchModality(body.exercises.map((exercise) => exercise.exerciseId), body.modalityId);
-    }
+    await assertModalitiesExist([body.modalityId]);
+    await assertExercisesMatchModality(body.exercises.map((exercise) => exercise.exerciseId), body.modalityId);
     const workoutBlock = await prisma.workoutBlock.create({
       data: {
         title: body.title,
@@ -1989,7 +2001,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         workSeconds: body.workSeconds ?? null,
         timeCapSeconds: body.timeCapSeconds ?? null,
         instructions: body.instructions || null,
-        modalityId: body.modalityId ?? null,
+        modalityId: body.modalityId,
         exercises: {
           create: body.exercises.map(buildWorkoutExerciseData)
         }
@@ -2003,11 +2015,186 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           orderBy: {
             order: "asc"
           }
+        },
+        programDays: {
+          include: {
+            program: true
+          }
         }
       }
     });
 
     return reply.code(201).send({ workoutBlock });
+  });
+
+  app.post("/admin/cms/workout-blocks/:id/publish", async (request, reply) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const body = cmsPublishBlockSchema.parse(request.body ?? {});
+
+    const workoutBlock = await prisma.workoutBlock.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        modality: true,
+        exercises: {
+          where: { exercise: { deletedAt: null } },
+          include: { exercise: true },
+          orderBy: { order: "asc" }
+        }
+      }
+    });
+
+    if (!workoutBlock) {
+      throw httpError(404, "Divisão não encontrada.");
+    }
+    if (!workoutBlock.modalityId || !workoutBlock.modality || workoutBlock.modality.deletedAt) {
+      throw httpError(409, "Vincule uma modalidade ativa à divisão antes de publicar para os alunos.");
+    }
+    if (!workoutBlock.modality.isActive) {
+      throw httpError(409, `A modalidade "${workoutBlock.modality.name}" está inativa.`);
+    }
+    if (workoutBlock.exercises.length === 0) {
+      throw httpError(409, "Cadastre ao menos um exercício ativo na divisão antes de publicar.");
+    }
+
+    await assertExercisesMatchModality(
+      workoutBlock.exercises.map((entry) => entry.exerciseId),
+      workoutBlock.modalityId
+    );
+
+    const programTitle = (body.title ?? workoutBlock.identifier ?? workoutBlock.title).trim();
+    const plannedSessions = body.plannedSessions ?? Math.max(1, workoutBlock.weeklyFrequency * body.durationWeeks);
+
+    // Reutiliza programa single-day já gerado a partir desta divisão (não altera ciclos multi-dia).
+    const linkedDays = await prisma.programDayWorkout.findMany({
+      where: { workoutBlockId: id },
+      include: {
+        program: {
+          include: {
+            days: true,
+            modality: true
+          }
+        }
+      }
+    });
+    const existingSingleDayProgram =
+      linkedDays.find(
+        (day) =>
+          !day.program.deletedAt &&
+          day.program.days.length === 1 &&
+          day.program.days[0]?.workoutBlockId === id
+      )?.program ?? null;
+
+    const maxSortOrder = await prisma.program.aggregate({
+      where: { deletedAt: null },
+      _max: { sortOrder: true }
+    });
+
+    let program;
+    if (existingSingleDayProgram) {
+      program = await prisma.program.update({
+        where: { id: existingSingleDayProgram.id },
+        data: {
+          modalityId: workoutBlock.modalityId,
+          title: programTitle,
+          description: buildProgramDescription(
+            workoutBlock.focus
+              ? `${workoutBlock.focus}. Publicado a partir da divisão.`
+              : "Publicado a partir da divisão do estúdio.",
+            workoutBlock.modality.name
+          ),
+          durationYears: 0,
+          durationMonths: 0,
+          durationWeeks: body.durationWeeks,
+          durationExtraDays: 0,
+          durationDays: body.durationWeeks * 7,
+          plannedSessions,
+          totalWorkouts: plannedSessions,
+          completionMode: "BY_SESSIONS",
+          scheduleType: "ROTATING_CYCLE",
+          audienceMode: body.audienceMode,
+          cycleLengthDays: 1,
+          targetGender: body.targetGender,
+          status: "PUBLISHED",
+          isActive: true,
+          publishedAt: existingSingleDayProgram.publishedAt ?? new Date(),
+          sortOrder:
+            existingSingleDayProgram.status === "PUBLISHED"
+              ? existingSingleDayProgram.sortOrder
+              : (maxSortOrder._max.sortOrder ?? 0) + 1
+        },
+        include: {
+          modality: true,
+          days: {
+            include: { workoutBlock: true },
+            orderBy: [{ dayNumber: "asc" }, { order: "asc" }]
+          },
+          assignedUsers: {
+            include: { user: true }
+          }
+        }
+      });
+    } else {
+      program = await prisma.program.create({
+        data: {
+          modalityId: workoutBlock.modalityId,
+          title: programTitle,
+          description: buildProgramDescription(
+            workoutBlock.focus
+              ? `${workoutBlock.focus}. Publicado a partir da divisão.`
+              : "Publicado a partir da divisão do estúdio.",
+            workoutBlock.modality.name
+          ),
+          durationYears: 0,
+          durationMonths: 0,
+          durationWeeks: body.durationWeeks,
+          durationExtraDays: 0,
+          durationDays: body.durationWeeks * 7,
+          plannedSessions,
+          totalWorkouts: plannedSessions,
+          completionMode: "BY_SESSIONS",
+          scheduleType: "ROTATING_CYCLE",
+          audienceMode: body.audienceMode,
+          cycleLengthDays: 1,
+          targetGender: body.targetGender,
+          status: "PUBLISHED",
+          isActive: true,
+          publishedAt: new Date(),
+          sortOrder: (maxSortOrder._max.sortOrder ?? 0) + 1,
+          days: {
+            create: [
+              {
+                workoutBlockId: id,
+                dayNumber: 1,
+                order: 1
+              }
+            ]
+          }
+        },
+        include: {
+          modality: true,
+          days: {
+            include: { workoutBlock: true },
+            orderBy: [{ dayNumber: "asc" }, { order: "asc" }]
+          },
+          assignedUsers: {
+            include: { user: true }
+          }
+        }
+      });
+    }
+
+    let assignedCount = 0;
+    if (program.audienceMode === "ALL_ACTIVE") {
+      const assignments = await assignProgramToStudents(program.id, 1, program.plannedSessions);
+      assignedCount = assignments.length;
+    }
+
+    return reply.code(existingSingleDayProgram ? 200 : 201).send({
+      program,
+      assignedCount,
+      sourceWorkoutBlockId: id
+    });
   });
 
   app.put("/admin/cms/workout-blocks/:id", async (request) => {
@@ -2026,7 +2213,13 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     if (body.exercises !== undefined) {
       await assertCmsExercisesExist(body.exercises.map((exercise) => exercise.exerciseId));
     }
+    if (body.modalityId !== undefined) {
+      await assertModalitiesExist([body.modalityId]);
+    }
     const nextBlockModalityId = body.modalityId === undefined ? currentWorkoutBlock.modalityId : body.modalityId;
+    if ((body.exercises !== undefined || body.modalityId !== undefined) && !nextBlockModalityId) {
+      throw httpError(409, "Vincule uma modalidade à divisão antes de salvar.");
+    }
     if (nextBlockModalityId && (body.exercises !== undefined || body.modalityId !== undefined)) {
       await assertExercisesMatchModality(
         body.exercises?.map((exercise) => exercise.exerciseId) ?? currentWorkoutBlock.exercises.map((exercise) => exercise.exerciseId),
@@ -2051,7 +2244,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           ...(body.workSeconds !== undefined ? { workSeconds: body.workSeconds } : {}),
           ...(body.timeCapSeconds !== undefined ? { timeCapSeconds: body.timeCapSeconds } : {}),
           ...(body.instructions !== undefined ? { instructions: body.instructions || null } : {}),
-          ...(body.modalityId !== undefined ? { modalityId: body.modalityId ?? null } : {}),
+          ...(body.modalityId !== undefined ? { modalityId: body.modalityId } : {}),
           ...(body.exercises !== undefined
             ? {
                 exercises: {
@@ -2073,6 +2266,11 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           },
           orderBy: {
             order: "asc"
+          }
+        },
+        programDays: {
+          include: {
+            program: true
           }
         }
       }
@@ -2166,10 +2364,21 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         where: { deletedAt: null },
         select: {
           id: true,
+          modalityId: true,
           exercises: {
             where: {
               exercise: {
                 deletedAt: null
+              }
+            },
+            select: { id: true }
+          },
+          programDays: {
+            where: {
+              program: {
+                deletedAt: null,
+                status: "PUBLISHED",
+                isActive: true
               }
             },
             select: { id: true }
@@ -2218,7 +2427,12 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       },
       workoutBlocks: {
         total: workoutBlocks.length,
-        withoutExercises: workoutBlocks.filter((item) => item.exercises.length === 0).length
+        withoutExercises: workoutBlocks.filter((item) => item.exercises.length === 0).length,
+        withoutModality: workoutBlocks.filter((item) => !item.modalityId).length,
+        unpublished:
+          workoutBlocks.filter(
+            (item) => item.exercises.length > 0 && item.modalityId && item.programDays.length === 0
+          ).length
       },
       programs: {
         total: programs.length,
@@ -2377,7 +2591,19 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     if (body.days) {
       await assertWorkoutBlocksExist(body.days.map((day) => day.workoutBlockId));
     }
-    if (nextModalityId && (body.days || body.modalityId)) {
+    const modalityChanged =
+      body.modalityId != null && body.modalityId !== currentProgram.modalityId;
+
+    // Troca rápida de modalidade no card: alinha as fichas do ciclo à nova modalidade.
+    if (modalityChanged && !body.days && nextModalityId) {
+      const linkedBlockIds = uniqueValues(currentProgram.days.map((day) => day.workoutBlockId));
+      if (linkedBlockIds.length > 0) {
+        await prisma.workoutBlock.updateMany({
+          where: { id: { in: linkedBlockIds }, deletedAt: null },
+          data: { modalityId: nextModalityId }
+        });
+      }
+    } else if (nextModalityId && (body.days || body.modalityId)) {
       await assertWorkoutBlocksMatchModality(nextProgramDays.map((day) => day.workoutBlockId), nextModalityId);
     }
 
@@ -2393,8 +2619,6 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     }
     const plannedSessions = body.plannedSessions ?? body.totalWorkouts ?? currentProgram.plannedSessions;
 
-    const modalityChanged =
-      body.modalityId != null && body.modalityId !== currentProgram.modalityId;
     const currentMetadata = parseProgramMetadata(currentProgram.description);
     const nextModalityName = modality?.name ?? currentMetadata.modality;
     const descriptionText =
@@ -2634,6 +2858,34 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       await assignProgramToStudents(program.id, 1, program.plannedSessions);
     }
 
+    // Remove atribuições incompatíveis com o público (sexo) após publicar.
+    const activeAssignments = await prisma.userProgram.findMany({
+      where: {
+        programId: program.id,
+        status: "ACTIVE"
+      },
+      include: {
+        user: {
+          include: {
+            profile: {
+              select: { gender: true }
+            }
+          }
+        }
+      }
+    });
+
+    const mismatchedIds = activeAssignments
+      .filter((assignment) => !studentMatchesProgramTargetGender(program.targetGender, assignment.user.profile?.gender))
+      .map((assignment) => assignment.id);
+
+    if (mismatchedIds.length > 0) {
+      await prisma.userProgram.updateMany({
+        where: { id: { in: mismatchedIds } },
+        data: { status: "CANCELED" }
+      });
+    }
+
     return { program };
   });
 
@@ -2683,7 +2935,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       body.currentDay,
       body.totalWorkouts ?? program.plannedSessions,
       body.userIds,
-      "ALL",
+      program.targetGender,
       body.resetProgress,
       true
     );

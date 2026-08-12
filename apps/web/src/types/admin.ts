@@ -80,6 +80,19 @@ export interface CmsWorkoutBlockRow {
   timeCapSeconds?: number | null;
   instructions?: string | null;
   modality?: CmsModalityRow | null;
+  programDays?: Array<{
+    id: string;
+    dayNumber: number;
+    order: number;
+    program: {
+      id: string;
+      title: string;
+      status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+      isActive: boolean;
+      deletedAt?: string | null;
+      cycleLengthDays?: number;
+    };
+  }>;
   exercises: Array<{
     id: string;
     sets: number;
@@ -143,7 +156,12 @@ export interface CmsProgramRow {
 export interface CmsWorkflowSummary {
   modalities: { total: number; active: number };
   exercises: { total: number; withoutModality: number };
-  workoutBlocks: { total: number; withoutExercises: number };
+  workoutBlocks: {
+    total: number;
+    withoutExercises: number;
+    withoutModality: number;
+    unpublished: number;
+  };
   programs: { total: number; published: number; draftsReady: number };
 }
 

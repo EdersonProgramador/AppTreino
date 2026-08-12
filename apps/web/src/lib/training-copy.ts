@@ -51,7 +51,7 @@ export const trainingCopy = {
   adminStepModalities: "Modalidades",
   adminStepExercises: "Exercícios",
   adminStepDivisions: "Divisões",
-  adminStepPublish: "Publicar treinos"
+  adminStepPublish: "Ciclos / Publicar"
 } as const;
 
 export function sessionLabelFromBlock(title: string) {

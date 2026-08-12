@@ -127,11 +127,61 @@ import { ALL_ADMIN_RESOURCES, ALL_TRASH_KINDS, assessmentPerimeterKeys, assessme
 import type { TrashDisplayItem } from "../../types/admin";
 import type { PurchaseStatus } from "../../types/shared";
 import type { WorkoutIntensityType, WorkoutPrescriptionType } from "../student/WorkoutPlayer";
+import { ThemeModeSwitch } from "../shared/ThemeModeSwitch";
+import { uiSounds } from "../../lib/ui-sounds";
+import { useUiPrefsStore } from "../../stores/uiPrefsStore";
+import { publish as publishSystemEvent } from "../../lib/event-bus";
 import { PhysicalAssessmentFormView } from "../shared/PhysicalAssessmentFormView";
 import { StateCityFields } from "./StateCityFields";
 import { AdminDashboardOverview } from "./AdminDashboardOverview";
 import { AdminPaginationBar } from "./AdminPaginationBar";
 import { AdminReports } from "./AdminReports";
+
+const AdminSoundToggle = () => {
+  const soundEnabled = useUiPrefsStore((state) => state.soundEnabled);
+  const setSoundEnabled = useUiPrefsStore((state) => state.setSoundEnabled);
+
+  return (
+    <div className="grid gap-3">
+      <div className="grid gap-1">
+        <h3 className="m-0 text-lg font-extrabold text-sand">Efeitos sonoros</h3>
+        <p className="m-0 text-sm text-sand-faint">Ative ou silencie os feedbacks do painel admin.</p>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          aria-pressed={soundEnabled}
+          className={`rounded-2xl border px-4 py-3 text-sm font-extrabold transition ${
+            soundEnabled
+              ? "border-brand-gold/50 bg-gradient-to-r from-brand-gold/25 to-brand-coral/15 text-sand"
+              : "border-white/10 bg-white/5 text-sand-muted"
+          }`}
+          onClick={() => {
+            setSoundEnabled(true);
+            uiSounds.toggleOn();
+          }}
+        >
+          Com efeitos sonoros
+        </button>
+        <button
+          type="button"
+          aria-pressed={!soundEnabled}
+          className={`rounded-2xl border px-4 py-3 text-sm font-extrabold transition ${
+            !soundEnabled
+              ? "border-brand-gold/50 bg-gradient-to-r from-ink-elev to-ink-panel text-sand"
+              : "border-white/10 bg-white/5 text-sand-muted"
+          }`}
+          onClick={() => {
+            uiSounds.toggleOff();
+            setSoundEnabled(false);
+          }}
+        >
+          Sem efeitos sonoros
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export function AdminView({ token, onLogout }: { token: string | null; onLogout: () => void }) {
   const [adminSection, setAdminSection] = useState<
@@ -152,6 +202,31 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     | "events"
     | "trash"
   >("overview");
+
+  const goAdminSection = (
+    section:
+      | "overview"
+      | "training"
+      | "users"
+      | "finance"
+      | "programs"
+      | "settings"
+      | "products"
+      | "purchases"
+      | "qr"
+      | "cards"
+      | "contact"
+      | "favorites"
+      | "ratings"
+      | "assessments"
+      | "events"
+      | "trash"
+  ) => {
+    if (section === "trash") uiSounds.trash();
+    else uiSounds.pageChange();
+    setAdminSection(section);
+  };
+
   const [summary, setSummary] = useState({
     users: 0,
     activeMemberships: 0,
@@ -625,6 +700,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
 
   useEffect(() => {
     void loadAdminData();
+    uiSounds.bootUp();
   }, [token]);
 
   useEffect(() => {
@@ -638,10 +714,16 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
 
   useEffect(() => {
     if (!success) return;
-
+    uiSounds.success();
     const timeout = window.setTimeout(() => setSuccess(null), 3500);
     return () => window.clearTimeout(timeout);
   }, [success]);
+
+  useEffect(() => {
+    if (!feedback) return;
+    if (/não foi|não possível|erro|falha/i.test(feedback)) uiSounds.error();
+    else uiSounds.popupNotify();
+  }, [feedback]);
 
   useEffect(() => {
     if (!cmsModalityImageJustSaved) return;
@@ -1360,6 +1442,10 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
 
     try {
       const selectedModalityId = String(data.get("modalityId") ?? "").trim();
+      if (!selectedModalityId) {
+        setFeedback("Selecione a modalidade da divisão antes de salvar.");
+        return;
+      }
       const payload = {
         title: String(data.get("title") ?? ""),
         identifier: String(data.get("identifier") || data.get("title") || ""),
@@ -1371,7 +1457,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         workSeconds: String(data.get("workSeconds") ?? "").trim() === "" ? undefined : Number(data.get("workSeconds")),
         timeCapSeconds: String(data.get("timeCapSeconds") ?? "").trim() === "" ? undefined : Number(data.get("timeCapSeconds")),
         instructions: String(data.get("instructions") ?? "").trim(),
-        modalityId: selectedModalityId ? selectedModalityId : null,
+        modalityId: selectedModalityId,
         exercises: parseCmsWorkoutBlockExercises(data)
       };
 
@@ -1405,6 +1491,41 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     setEditingCmsWorkoutBlock(null);
     setCmsBlockFormModality("");
     setCmsWorkoutExerciseRows(1);
+  }
+
+  async function handlePublishCmsWorkoutBlock(item: CmsWorkoutBlockRow) {
+    if (!item.modality?.id) {
+      setFeedback("Vincule uma modalidade à divisão antes de publicar para os alunos.");
+      return;
+    }
+    if (item.exercises.length === 0) {
+      setFeedback("Cadastre ao menos um exercício na divisão antes de publicar.");
+      return;
+    }
+
+    try {
+      const response = await apiPost<{
+        program: { id: string; title: string; audienceMode: CmsProgramRow["audienceMode"] };
+        assignedCount: number;
+      }>(`/admin/cms/workout-blocks/${item.id}/publish`, {
+        targetGender: "ALL",
+        audienceMode: "ALL_ACTIVE",
+        durationWeeks: 4
+      }, token);
+      publishSystemEvent("PROGRAMA_PUBLICADO", {
+        programId: response.program.id,
+        programTitle: response.program.title,
+        audienceMode: response.program.audienceMode,
+        eligibleStudentCount: response.assignedCount,
+        source: "cms_publish"
+      });
+      await applyAdminChange(
+        ["workoutBlocks", "programs"],
+        `Divisão publicada: "${response.program.title}" (${response.assignedCount} aluno(s) atualizado(s)).`
+      );
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível publicar a divisão para os alunos."));
+    }
   }
 
   async function handleSaveCmsProgram(event: FormEvent<HTMLFormElement>) {
@@ -1567,6 +1688,13 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
 
     try {
       await apiPost(`/admin/cms/programs/${cmsPublishPreview.programId}/publish`, {}, token);
+      publishSystemEvent("PROGRAMA_PUBLICADO", {
+        programId: cmsPublishPreview.programId,
+        programTitle: cmsPublishPreview.title,
+        audienceMode: cmsPublishPreview.audienceMode,
+        eligibleStudentCount: cmsPublishPreview.eligibleStudentCount,
+        source: "cms_publish"
+      });
       setCmsPublishPreview(null);
       await applyAdminChange(
         ["programs"],
@@ -1619,7 +1747,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     if (!modalityId) return;
     try {
       await apiPut(`/admin/cms/programs/${programId}`, { modalityId }, token);
-      await applyAdminChange(["programs"], "Modalidade do treino atualizada.");
+      await applyAdminChange(["programs", "workoutBlocks"], "Modalidade do treino atualizada.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível atualizar a modalidade do treino."));
     }
@@ -1752,6 +1880,9 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         { status, paidAt: status === "CONFIRMED" ? new Date().toISOString() : null },
         token
       );
+      if (status === "CONFIRMED") uiSounds.paymentApproved();
+      else if (status === "CANCELED" || status === "OVERDUE" || status === "REFUNDED") uiSounds.paymentDisconnected();
+      else uiSounds.itemSelect();
       await refreshAdminStudentOverview(["payments", "memberships", "summary"]);
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o pagamento."));
@@ -1809,6 +1940,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   }
 
   function handleAdminAssessmentPhotoSelect(key: AssessmentPhotoKey, file: File | undefined) {
+    if (file) uiSounds.screenshot();
     updateAdminAssessmentForm((draft) => {
       draft.formulario_avaliacao_fisica.fotos_analise_visual.arquivos[key] = file?.name ?? "";
     });
@@ -2342,17 +2474,17 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       id: "blocks" as const,
       icon: ClipboardList,
       title: trainingCopy.adminStepDivisions,
-      text: "Defina divisões, exercícios, séries, carga e descanso.",
+      text: "Monte a ficha, vincule a modalidade e publique direto para os alunos.",
       metric:
-        cmsWorkflowSummary && cmsWorkflowSummary.workoutBlocks.withoutExercises > 0
-          ? `${cmsWorkflowSummary.workoutBlocks.total} divisão(ões) • ${cmsWorkflowSummary.workoutBlocks.withoutExercises} vazia(s)`
+        cmsWorkflowSummary && (cmsWorkflowSummary.workoutBlocks.unpublished > 0 || cmsWorkflowSummary.workoutBlocks.withoutModality > 0)
+          ? `${cmsWorkflowSummary.workoutBlocks.total} divisão(ões) • ${cmsWorkflowSummary.workoutBlocks.unpublished} sem publicar`
           : `${cmsWorkflowSummary?.workoutBlocks.total ?? cmsWorkoutBlocks.length} divisão(ões)`
     },
     {
       id: "publish" as const,
       icon: Check,
       title: trainingCopy.adminStepPublish,
-      text: "Publique treinos para alunos ativos com validação antes do envio.",
+      text: "Ciclos multi-dia (ABC) e rascunhos avançados com público e duração.",
       metric:
         cmsWorkflowSummary
           ? `${cmsWorkflowSummary.programs.published} publicado(s) • ${cmsWorkflowSummary.programs.draftsReady} pronto(s)`
@@ -2423,7 +2555,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         </div>
         <nav className="workspace-nav grid gap-2">
           <span className="admin-nav-group-label">Principal</span>
-          <button className={adminSection === "overview" ? "active" : ""} onClick={() => setAdminSection("overview")}>
+          <button className={adminSection === "overview" ? "active" : ""} onClick={() => goAdminSection("overview")}>
             <Home size={18} />
             <span className="sidebar-label">Dashboard</span>
           </button>
@@ -2431,83 +2563,83 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           <span className="admin-nav-group-label">Conteúdo e membros</span>
           <button
             className={adminSection === "training" ? "active" : ""}
-            onClick={() => {
-              setAdminSection("training");
-              setCmsStep("locations");
-            }}
+            onClick={() => { goAdminSection("training"); setCmsStep("locations"); }}
           >
             <Dumbbell size={18} />
             <span className="sidebar-label">{trainingCopy.adminSidebar}</span>
           </button>
           <button
             className={adminSection === "users" ? "active" : ""}
-            onClick={() => setAdminSection("users")}
+            onClick={() => goAdminSection("users")}
           >
             <UsersRound size={18} />
             <span className="sidebar-label">Dados do usuário</span>
           </button>
-          <button className={adminSection === "finance" ? "active" : ""} onClick={() => setAdminSection("finance")}>
+          <button className={adminSection === "finance" ? "active" : ""} onClick={() => goAdminSection("finance")}>
             <CircleDollarSign size={18} />
             <span className="sidebar-label">Financeiro</span>
           </button>
 
           <span className="admin-nav-group-label">Comercial</span>
-          <button className={adminSection === "products" ? "active" : ""} onClick={() => setAdminSection("products")}>
+          <button className={adminSection === "products" ? "active" : ""} onClick={() => goAdminSection("products")}>
             <Package size={18} />
             <span className="sidebar-label">Produtos</span>
           </button>
-          <button className={adminSection === "purchases" ? "active" : ""} onClick={() => setAdminSection("purchases")}>
+          <button className={adminSection === "purchases" ? "active" : ""} onClick={() => goAdminSection("purchases")}>
             <ShoppingCart size={18} />
             <span className="sidebar-label">Compras</span>
           </button>
-          <button className={adminSection === "qr" ? "active" : ""} onClick={() => setAdminSection("qr")}>
+          <button className={adminSection === "qr" ? "active" : ""} onClick={() => goAdminSection("qr")}>
             <QrCode size={18} />
             <span className="sidebar-label">QR Code</span>
           </button>
-          <button className={adminSection === "cards" ? "active" : ""} onClick={() => setAdminSection("cards")}>
+          <button className={adminSection === "cards" ? "active" : ""} onClick={() => goAdminSection("cards")}>
             <CreditCard size={18} />
             <span className="sidebar-label">Meus Cartões</span>
           </button>
 
           <span className="admin-nav-group-label">Avaliação e eventos</span>
-          <button className={adminSection === "assessments" ? "active" : ""} onClick={() => setAdminSection("assessments")}>
+          <button className={adminSection === "assessments" ? "active" : ""} onClick={() => goAdminSection("assessments")}>
             <Ruler size={18} />
             <span className="sidebar-label">Avaliações físicas</span>
           </button>
-          <button className={adminSection === "events" ? "active" : ""} onClick={() => setAdminSection("events")}>
+          <button className={adminSection === "events" ? "active" : ""} onClick={() => goAdminSection("events")}>
             <CalendarPlus size={18} />
             <span className="sidebar-label">Eventos</span>
           </button>
 
           <span className="admin-nav-group-label">Relacionamento</span>
-          <button className={adminSection === "contact" ? "active" : ""} onClick={() => setAdminSection("contact")}>
+          <button className={adminSection === "contact" ? "active" : ""} onClick={() => goAdminSection("contact")}>
             <MessageCircle size={18} />
             <span className="sidebar-label">Contato</span>
             {unreadTicketsCount > 0 && <span className="admin-nav-badge">{unreadTicketsCount}</span>}
           </button>
-          <button className={adminSection === "favorites" ? "active" : ""} onClick={() => setAdminSection("favorites")}>
+          <button className={adminSection === "favorites" ? "active" : ""} onClick={() => goAdminSection("favorites")}>
             <Star size={18} />
             <span className="sidebar-label">Favoritos</span>
           </button>
-          <button className={adminSection === "ratings" ? "active" : ""} onClick={() => setAdminSection("ratings")}>
+          <button className={adminSection === "ratings" ? "active" : ""} onClick={() => goAdminSection("ratings")}>
             <Sparkles size={18} />
             <span className="sidebar-label">Avaliar</span>
           </button>
 
           <span className="admin-nav-group-label">Sistema</span>
-          <button className={adminSection === "trash" ? "active" : ""} onClick={() => setAdminSection("trash")}>
+          <button className={adminSection === "trash" ? "active" : ""} onClick={() => goAdminSection("trash")}>
             <Trash2 size={18} />
             <span className="sidebar-label">Lixeira</span>
             {adminTrashTotal > 0 && <span className="admin-nav-badge">{adminTrashTotal}</span>}
           </button>
-          <button className={adminSection === "settings" ? "active" : ""} onClick={() => setAdminSection("settings")}>
+          <button className={adminSection === "settings" ? "active" : ""} onClick={() => goAdminSection("settings")}>
             <Settings size={18} />
             <span className="sidebar-label">Configurações</span>
           </button>
         </nav>
         <button
           className="workspace-logout mt-3 flex w-full min-h-[44px] items-center justify-start gap-2.5 rounded-lg border border-brand-ember/35 bg-brand-ember/10 px-3 text-left text-[13px] font-extrabold text-[#ffb4b4] transition hover:border-brand-ember/55 hover:bg-brand-ember/15"
-          onClick={onLogout}
+          onClick={() => {
+            uiSounds.disconnect();
+            onLogout();
+          }}
         >
           <LogOut size={18} />
           <span className="sidebar-label">Sair</span>
@@ -2534,6 +2666,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           </h1>
         </div>
         <div className="dashboard-actions flex flex-wrap justify-end gap-2.5">
+          <ThemeModeSwitch compact className="min-w-[220px]" />
           <button className="outline-button compact-button" onClick={() => void loadAdminData()} disabled={loading}>
             {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
             Atualizar
@@ -3028,6 +3161,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               <button
                 className={cmsStep === step.id ? "active" : ""}
                 key={step.id}
+                data-testid={`cms-step-${step.id}`}
                 onClick={() => setCmsStep(step.id)}
                 type="button"
               >
@@ -3041,6 +3175,8 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           {cmsWorkflowSummary &&
             (cmsWorkflowSummary.exercises.withoutModality > 0 ||
               cmsWorkflowSummary.workoutBlocks.withoutExercises > 0 ||
+              cmsWorkflowSummary.workoutBlocks.withoutModality > 0 ||
+              cmsWorkflowSummary.workoutBlocks.unpublished > 0 ||
               cmsWorkflowSummary.programs.draftsReady > 0) && (
               <div className="cms-workflow-alerts">
                 {cmsWorkflowSummary.exercises.withoutModality > 0 && (
@@ -3049,16 +3185,28 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                     {cmsWorkflowSummary.exercises.withoutModality} exercício(s) sem modalidade vinculada.
                   </p>
                 )}
+                {cmsWorkflowSummary.workoutBlocks.withoutModality > 0 && (
+                  <p>
+                    <AlertCircle size={16} />
+                    {cmsWorkflowSummary.workoutBlocks.withoutModality} divisão(ões) sem modalidade — o aluno não recebe sem vínculo.
+                  </p>
+                )}
                 {cmsWorkflowSummary.workoutBlocks.withoutExercises > 0 && (
                   <p>
                     <AlertCircle size={16} />
                     {cmsWorkflowSummary.workoutBlocks.withoutExercises} divisão(ões) sem exercícios ativos.
                   </p>
                 )}
+                {cmsWorkflowSummary.workoutBlocks.unpublished > 0 && (
+                  <p>
+                    <Megaphone size={16} />
+                    {cmsWorkflowSummary.workoutBlocks.unpublished} divisão(ões) pronta(s) para publicar aos alunos.
+                  </p>
+                )}
                 {cmsWorkflowSummary.programs.draftsReady > 0 && (
                   <p>
                     <Check size={16} />
-                    {cmsWorkflowSummary.programs.draftsReady} treino(s) pronto(s) para publicação.
+                    {cmsWorkflowSummary.programs.draftsReady} ciclo(s) pronto(s) para publicação.
                   </p>
                 )}
               </div>
@@ -3609,7 +3757,10 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               <div className={`${panelTitleClass} cms-subtitle`}>
                 <div>
                   <h2>{trainingCopy.adminStepDivisions}</h2>
-                  <p>Cadastre cada divisão do treino e detalhe exatamente o que o aluno deve executar.</p>
+                  <p>
+                    Monte a ficha vinculada à modalidade. Use <strong>Publicar para alunos</strong> para liberar a divisão
+                    no catálogo; use Ciclos para montar ABC/multi-dia.
+                  </p>
                 </div>
                 <span>{cmsWorkoutBlocks.length}</span>
               </div>
@@ -3672,28 +3823,23 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 <label className={wideFieldClass}>
                   Modalidade da divisão
                   <div className="cms-chip-group">
-                    <label className="cms-chip">
-                      <input
-                        type="radio"
-                        name="modalityId"
-                        value=""
-                        checked={!cmsBlockFormModality}
-                        onChange={(event) => setCmsBlockFormModality(event.target.value)}
-                      />
-                      <span>Sem modalidade</span>
-                    </label>
-                    {cmsBlockFormModalities.map((modality) => (
-                      <label className="cms-chip" key={modality.id}>
-                        <input
-                          type="radio"
-                          name="modalityId"
-                          value={modality.id}
-                          checked={cmsBlockFormModality === modality.id}
-                          onChange={(event) => setCmsBlockFormModality(event.target.value)}
-                        />
-                        <span>{modality.name}{modality.isActive ? "" : " (inativa)"}</span>
-                      </label>
-                    ))}
+                    {cmsBlockFormModalities.length === 0 ? (
+                      <span className="cms-filter-count">Cadastre uma modalidade ativa antes de criar divisões.</span>
+                    ) : (
+                      cmsBlockFormModalities.map((modality) => (
+                        <label className="cms-chip" key={modality.id}>
+                          <input
+                            type="radio"
+                            name="modalityId"
+                            value={modality.id}
+                            required
+                            checked={cmsBlockFormModality === modality.id}
+                            onChange={(event) => setCmsBlockFormModality(event.target.value)}
+                          />
+                          <span>{modality.name}{modality.isActive ? "" : " (inativa)"}</span>
+                        </label>
+                      ))
+                    )}
                   </div>
                 </label>
                 <div className={cmsFormSectionTitleClass}>
@@ -3895,7 +4041,15 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 </label>
                 <span className="cms-filter-count">{filteredCmsWorkoutBlocks.length} divisão(ões)</span>
               </div>
-              {cmsBlocksPageItems.map((item) => (
+              {cmsBlocksPageItems.map((item) => {
+                const linkedPublished = (item.programDays ?? []).filter(
+                  (day) => !day.program.deletedAt && day.program.status === "PUBLISHED" && day.program.isActive
+                );
+                const publishedSingleDay = linkedPublished.some((day) => (day.program.cycleLengthDays ?? 1) === 1);
+                const inPublishedCycle = linkedPublished.length > 0;
+                const canPublish = Boolean(item.modality?.id) && item.exercises.length > 0;
+
+                return (
                 <div className={`${dataRowClass} cms-data-row`} key={item.id}>
                   <span>
                     <strong>{item.identifier ?? item.title}</strong>
@@ -3904,6 +4058,13 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                         <em className="cms-modality-badge">{item.modality.name}</em>
                       ) : (
                         <em className="cms-modality-badge muted">Sem modalidade</em>
+                      )}
+                      {publishedSingleDay ? (
+                        <em className="cms-modality-badge">Publicada</em>
+                      ) : inPublishedCycle ? (
+                        <em className="cms-modality-badge">Em ciclo publicado</em>
+                      ) : (
+                        <em className="cms-modality-badge muted">Não publicada</em>
                       )}
                     </span>
                     {item.focus ? `${item.focus} - ` : ""}
@@ -3922,6 +4083,16 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   </select>
                   <small>{item.structureType}</small>
                   <div className="cms-row-actions">
+                    <button
+                      type="button"
+                      aria-label="Publicar divisão para alunos"
+                      title={canPublish ? "Publicar para alunos" : "Vincule modalidade e exercícios para publicar"}
+                      disabled={!canPublish}
+                      data-testid={`cms-publish-block-${item.id}`}
+                      onClick={() => void handlePublishCmsWorkoutBlock(item)}
+                    >
+                      <Megaphone size={17} />
+                    </button>
                     <button aria-label="Editar divisão" onClick={() => startEditCmsWorkoutBlock(item)}>
                       <Pencil size={17} />
                     </button>
@@ -3930,7 +4101,8 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
               {filteredCmsWorkoutBlocks.length > CMS_BLOCKS_PAGE_SIZE && (
                 <div className="admin-users-pagination">
                   <span>
@@ -3962,7 +4134,9 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               <div className={`${panelTitleClass} cms-subtitle`}>
                 <div>
                   <h2>{trainingCopy.adminStepPublish}</h2>
-                  <p>Gerencie treinos publicados, edite sessões e atribua alunos com clareza.</p>
+                  <p>
+                    Ciclos multi-dia (ex.: ABC) e rascunhos avançados. Divisões avulsas podem ser publicadas direto em Divisões.
+                  </p>
                 </div>
                 <span>{cmsPrograms.length}</span>
               </div>
@@ -4342,16 +4516,24 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                                   value={item.modality?.id ?? ""}
                                   onChange={(event) => handleUpdateCmsProgramModality(item.id, event.target.value)}
                                 >
-                                  <option value="" disabled>
-                                    {item.modality?.name ?? "Selecione a modalidade"}
-                                  </option>
-                                  {cmsProgramFormModalities
-                                    .filter((modality) => modality.id !== item.modality?.id)
-                                    .map((modality) => (
-                                      <option value={modality.id} key={modality.id}>
-                                        {modality.name}{modality.isActive ? "" : " (inativa)"}
+                                  {!item.modality?.id && (
+                                    <option value="" disabled>
+                                      Selecione a modalidade
+                                    </option>
+                                  )}
+                                  {cmsProgramFormModalities.map((modality) => (
+                                    <option value={modality.id} key={modality.id}>
+                                      {modality.name}
+                                      {modality.isActive ? "" : " (inativa)"}
+                                    </option>
+                                  ))}
+                                  {item.modality &&
+                                    !cmsProgramFormModalities.some((modality) => modality.id === item.modality?.id) && (
+                                      <option value={item.modality.id}>
+                                        {item.modality.name}
+                                        {item.modality.isActive ? "" : " (inativa)"}
                                       </option>
-                                    ))}
+                                    )}
                                 </select>
                                 <select
                                   aria-label="Público do treino"
@@ -4509,6 +4691,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                                 <button
                                   className="outline-button"
                                   type="button"
+                                  data-testid={`cms-publish-${item.id}`}
                                   onClick={() => handlePublishCmsProgram(item.id)}
                                   disabled={!readiness.ready}
                                 >
@@ -4786,7 +4969,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               <small>{item.bodyFatPct ? `${item.bodyFatPct}% gordura` : "Sem dobra"}</small>
             </div>
           ))}
-          <button className="dash-link-button" type="button" onClick={() => setAdminSection("assessments")}>
+          <button className="dash-link-button" type="button" onClick={() => goAdminSection("assessments")}>
             Abrir Avaliações físicas
             <ArrowRight size={15} />
           </button>
@@ -4809,7 +4992,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               <small>{item.registrations?.length ?? 0}/{item.capacity ?? "sem limite"}</small>
             </div>
           ))}
-          <button className="dash-link-button" type="button" onClick={() => setAdminSection("events")}>
+          <button className="dash-link-button" type="button" onClick={() => goAdminSection("events")}>
             Abrir Eventos
             <ArrowRight size={15} />
           </button>
@@ -5866,6 +6049,16 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       {adminSection === "settings" && <section className="admin-grid phase-three-grid" id="admin-settings">
         <article className="table-panel">
           <div className={panelTitleClass}>
+            <h2>Aparência e sons</h2>
+            <span>Interface</span>
+          </div>
+          <div className="grid gap-6 p-2">
+            <ThemeModeSwitch />
+            <AdminSoundToggle />
+          </div>
+        </article>
+        <article className="table-panel">
+          <div className={panelTitleClass}>
             <h2>Configurações do sistema</h2>
             <span>Operacional</span>
           </div>
@@ -6019,7 +6212,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 Cancelar
               </button>
               {cmsPublishPreview.ready && (
-                <button type="button" className="primary-button" onClick={() => void confirmPublishCmsProgram()} autoFocus>
+                <button type="button" className="primary-button" data-testid="cms-confirm-publish" onClick={() => void confirmPublishCmsProgram()} autoFocus>
                   Publicar agora
                 </button>
               )}
