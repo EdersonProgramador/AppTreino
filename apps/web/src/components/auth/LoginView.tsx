@@ -273,13 +273,19 @@ export function LoginView({
                   Entrar com Google
                 </button>
               ))}
-            <button className="ui-btn-primary w-full" type="submit" disabled={isSubmitting}>
+            <button
+              className={`ui-btn-primary login-submit-button w-full${isSubmitting ? " is-loading" : ""}`}
+              type="submit"
+              disabled={isSubmitting}
+            >
               {loading === "submitting" ? <Loader2 className="animate-spin" size={18} /> : <LogIn size={18} />}
-              {mode === "reset"
-                ? "Salvar nova senha"
-                : mode === "forgot"
-                  ? "Enviar link de recuperação"
-                  : "Entrar"}
+              <span>
+                {mode === "reset"
+                  ? "Salvar nova senha"
+                  : mode === "forgot"
+                    ? "Enviar link de recuperação"
+                    : "Entrar"}
+              </span>
             </button>
             {mode === "login" && (
               <button className="ui-btn-ghost w-full" type="button" onClick={handleForgotPasswordClick}>

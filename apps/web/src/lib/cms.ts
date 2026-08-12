@@ -104,6 +104,30 @@ export function parseProgramMetadata(description: string) {
   }
 }
 
+export function cmsProgramStatusLabel(status: CmsProgramRow["status"]) {
+  switch (status) {
+    case "PUBLISHED":
+      return "Publicado";
+    case "DRAFT":
+      return "Rascunho";
+    case "ARCHIVED":
+      return "Arquivado";
+    default:
+      return status;
+  }
+}
+
+export function cmsTargetGenderLabel(gender: CmsProgramRow["targetGender"]) {
+  switch (gender) {
+    case "MALE":
+      return "Masculino";
+    case "FEMALE":
+      return "Feminino";
+    default:
+      return "Todos";
+  }
+}
+
 export function estimateProgramCalendarDays(years: number, months: number, weeks: number, days: number) {
   return Math.max(0, years) * 365 + Math.max(0, months) * 30 + Math.max(0, weeks) * 7 + Math.max(0, days);
 }

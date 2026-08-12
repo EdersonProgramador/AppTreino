@@ -1,5 +1,5 @@
-import { LogIn } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Loader2, LogIn } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { AuthUser } from "@app-treino/shared";
 import { levelLabel } from "./components/onboarding/onboarding.schema";
 import { ApiError, apiGet, apiPost, setUnauthorizedHandler } from "./api";
@@ -11,22 +11,58 @@ import type { WorkoutOnboardingSubmitPayload } from "./components/onboarding/Wor
 import { assetUrl } from "./lib/urls";
 import type { AuthMode, PlanCode, View } from "./types/auth";
 
+type BootState = "booting" | "ready";
+
+function resolveAuthedView(user: AuthUser): View {
+  return user.role === "ADMIN" ? "admin" : "user";
+}
+
 export function App() {
+  const initialToken = typeof window !== "undefined" ? window.localStorage.getItem("app-treino-token") : null;
+  const [bootState, setBootState] = useState<BootState>(initialToken ? "booting" : "ready");
   const [view, setView] = useState<View>("home");
+  const [displayedView, setDisplayedView] = useState<View>("home");
+  const [viewVisible, setViewVisible] = useState(true);
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState(() => window.localStorage.getItem("app-treino-token"));
+  const [token, setToken] = useState(() => initialToken);
   const [loginState, setLoginState] = useState<"idle" | "submitting">("idle");
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginSuccess, setLoginSuccess] = useState<string | null>(null);
   const [resetToken, setResetToken] = useState<string | null>(null);
   const [selectedPlanCode, setSelectedPlanCode] = useState<PlanCode | null>(null);
+  const transitionTimer = useRef<number | null>(null);
+
+  function navigateTo(next: View) {
+    if (next === view && next === displayedView) return;
+
+    if (transitionTimer.current) {
+      window.clearTimeout(transitionTimer.current);
+    }
+
+    setView(next);
+    setViewVisible(false);
+    transitionTimer.current = window.setTimeout(() => {
+      setDisplayedView(next);
+      setViewVisible(true);
+      transitionTimer.current = null;
+    }, 160);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (transitionTimer.current) {
+        window.clearTimeout(transitionTimer.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
       window.localStorage.removeItem("app-treino-token");
       setToken(null);
       setUser(null);
-      setView("home");
+      setBootState("ready");
+      navigateTo("home");
     });
 
     return () => setUnauthorizedHandler(null);
@@ -41,7 +77,8 @@ export function App() {
     }
 
     setResetToken(tokenFromUrl);
-    setView("login");
+    setBootState("ready");
+    navigateTo("login");
 
     const url = new URL(window.location.href);
     url.searchParams.delete("reset");
@@ -49,35 +86,60 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      setBootState("ready");
+      return;
+    }
+
+    let cancelled = false;
+    setBootState((current) => (user ? current : "booting"));
 
     apiGet<{ user: AuthUser | null }>("/me", token)
       .then((response) => {
+        if (cancelled) return;
+
         if (!response.user) {
           window.localStorage.removeItem("app-treino-token");
           setToken(null);
+          setUser(null);
+          setBootState("ready");
+          navigateTo("home");
           return;
         }
 
         setUser(response.user);
-        setView(response.user.role === "ADMIN" ? "admin" : "user");
+        setBootState("ready");
+        const nextView = resolveAuthedView(response.user);
+        setView(nextView);
+        setDisplayedView(nextView);
+        setViewVisible(true);
       })
       .catch(() => {
+        if (cancelled) return;
         window.localStorage.removeItem("app-treino-token");
         setToken(null);
+        setUser(null);
+        setBootState("ready");
+        navigateTo("home");
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   function applySession(response: { user: AuthUser; token: string }) {
     window.localStorage.setItem("app-treino-token", response.token);
     setToken(response.token);
     setUser(response.user);
-    setView(response.user.role === "ADMIN" ? "admin" : "user");
+    setBootState("ready");
+    const nextView = resolveAuthedView(response.user);
+    navigateTo(nextView);
   }
 
   function handleStart(planCode?: string) {
     setSelectedPlanCode(planCode === "monthly" || planCode === "annual" ? planCode : null);
-    setView("login");
+    navigateTo("login");
   }
 
   async function handleAuthSubmit(
@@ -276,16 +338,29 @@ export function App() {
     window.localStorage.removeItem("app-treino-token");
     setToken(null);
     setUser(null);
-    setView("home");
+    setBootState("ready");
+    navigateTo("home");
   }
+
+  if (bootState === "booting") {
+    return (
+      <div className="ui-shell app-boot-screen" role="status" aria-live="polite">
+        <img src={assetUrl("assets/app-treino-logo.svg")} alt="App Treino" className="app-boot-logo" />
+        <Loader2 className="app-boot-spinner animate-spin" size={28} aria-hidden="true" />
+        <p>Preparando sua área...</p>
+      </div>
+    );
+  }
+
+  const showGuestChrome = !user && displayedView !== "home" && displayedView !== "admin" && displayedView !== "user";
 
   return (
     <div className="ui-shell min-h-screen overflow-x-hidden">
-      {!user && view !== "home" && (
+      {showGuestChrome && (
         <header className="sticky top-0 z-20 grid min-h-[76px] grid-cols-[minmax(150px,1fr)_auto_minmax(150px,1fr)] items-center gap-6 border-b border-white/10 bg-ink/80 px-5 backdrop-blur-md sm:px-8 md:px-12">
           <button
             className="inline-flex items-center border-0 bg-transparent p-0"
-            onClick={() => setView("home")}
+            onClick={() => navigateTo("home")}
             aria-label="Ir para início"
           >
             <img
@@ -298,14 +373,14 @@ export function App() {
             <a
               className="text-sm font-bold text-sand-muted transition hover:-translate-y-px hover:text-sand"
               href="#recursos"
-              onClick={() => setView("home")}
+              onClick={() => navigateTo("home")}
             >
               Recursos
             </a>
             <a
               className="text-sm font-bold text-sand-muted transition hover:-translate-y-px hover:text-sand"
               href="#planos"
-              onClick={() => setView("home")}
+              onClick={() => navigateTo("home")}
             >
               Planos
             </a>
@@ -313,7 +388,7 @@ export function App() {
           <div className="flex items-center justify-end gap-3.5">
             <button
               className="inline-flex items-center gap-2 border-0 bg-transparent text-sm font-bold text-sand-muted transition hover:-translate-y-px hover:text-sand"
-              onClick={() => setView("login")}
+              onClick={() => navigateTo("login")}
             >
               <LogIn size={18} />
               Entrar
@@ -322,25 +397,27 @@ export function App() {
         </header>
       )}
 
-      {view === "home" && (
-        <HomeView onStart={handleStart} onLogin={() => setView("login")} />
-      )}
-      {view === "login" && (
-        <LoginView
-          loading={loginState}
-          error={loginError}
-          success={loginSuccess}
-          selectedPlanCode={selectedPlanCode}
-          resetToken={resetToken}
-          onSubmit={handleAuthSubmit}
-          onRegisterOnboarding={handleRegisterOnboarding}
-          onForgotPassword={handleForgotPassword}
-          onResetPassword={handleResetPassword}
-          onClearResetToken={() => setResetToken(null)}
-        />
-      )}
-      {view === "admin" && <AdminView token={token} onLogout={handleLogout} />}
-      {view === "user" && <UserView token={token} onLogout={handleLogout} />}
+      <div className={`app-view-stage${viewVisible ? " is-visible" : ""}`} key={displayedView}>
+        {displayedView === "home" && (
+          <HomeView onStart={handleStart} onLogin={() => navigateTo("login")} />
+        )}
+        {displayedView === "login" && (
+          <LoginView
+            loading={loginState}
+            error={loginError}
+            success={loginSuccess}
+            selectedPlanCode={selectedPlanCode}
+            resetToken={resetToken}
+            onSubmit={handleAuthSubmit}
+            onRegisterOnboarding={handleRegisterOnboarding}
+            onForgotPassword={handleForgotPassword}
+            onResetPassword={handleResetPassword}
+            onClearResetToken={() => setResetToken(null)}
+          />
+        )}
+        {displayedView === "admin" && <AdminView token={token} onLogout={handleLogout} />}
+        {displayedView === "user" && <UserView token={token} onLogout={handleLogout} />}
+      </div>
     </div>
   );
 }

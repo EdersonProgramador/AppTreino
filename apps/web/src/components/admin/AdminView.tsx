@@ -58,6 +58,8 @@ import { formatPriceInBRL } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { BRAZILIAN_STATES, CITIES_BY_STATE } from "../../brazil-data";
 import {
+  cmsProgramStatusLabel,
+  cmsTargetGenderLabel,
   estimateProgramCalendarDays,
   formatProgramDuration,
   getCmsProgramReadiness,
@@ -192,6 +194,8 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   const [cmsBlockFormModality, setCmsBlockFormModality] = useState("");
   const [cmsWorkoutExerciseRows, setCmsWorkoutExerciseRows] = useState(1);
   const [editingCmsProgram, setEditingCmsProgram] = useState<CmsProgramRow | null>(null);
+  const [cmsProgramFormOpen, setCmsProgramFormOpen] = useState(false);
+  const [assigningCmsProgramId, setAssigningCmsProgramId] = useState<string | null>(null);
   const [cmsProgramFormModality, setCmsProgramFormModality] = useState("");
   const [cmsProgramsModalityFilter, setCmsProgramsModalityFilter] = useState("");
   const [cmsProgramDurationYears, setCmsProgramDurationYears] = useState(0);
@@ -1440,6 +1444,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         await apiPut(`/admin/cms/programs/${editingCmsProgram.id}`, payload, token);
         form.reset();
         setEditingCmsProgram(null);
+        setCmsProgramFormOpen(false);
         setCmsProgramFormModality("");
         setCmsProgramDurationYears(0);
         setCmsProgramDurationMonths(0);
@@ -1453,6 +1458,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
 
       await apiPost("/admin/cms/programs", payload, token);
       form.reset();
+      setCmsProgramFormOpen(false);
       setCmsProgramFormModality("");
       setCmsProgramDurationYears(0);
       setCmsProgramDurationMonths(0);
@@ -1468,6 +1474,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
 
   function startEditCmsProgram(item: CmsProgramRow) {
     setEditingCmsProgram(item);
+    setCmsProgramFormOpen(true);
     setCmsProgramFormModality(item.modality?.id ?? "");
     setCmsProgramDurationYears(item.durationYears ?? 0);
     setCmsProgramDurationMonths(item.durationMonths ?? 0);
@@ -1476,10 +1483,14 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     setCmsProgramPlannedSessions(item.plannedSessions ?? item.totalWorkouts ?? 1);
     setCmsProgramCycleLengthDays(item.cycleLengthDays ?? 7);
     setExpandedCmsProgramId(item.id);
+    window.setTimeout(() => {
+      document.getElementById("cms-program-editor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
   }
 
   function handleCancelCmsProgramEdit() {
     setEditingCmsProgram(null);
+    setCmsProgramFormOpen(false);
     setCmsProgramFormModality("");
     setCmsProgramDurationYears(0);
     setCmsProgramDurationMonths(0);
@@ -3951,15 +3962,35 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               <div className={`${panelTitleClass} cms-subtitle`}>
                 <div>
                   <h2>{trainingCopy.adminStepPublish}</h2>
-                  <p>Finalize o treino, revise sua duração e publique para um aluno ou para todos.</p>
+                  <p>Gerencie treinos publicados, edite sessões e atribua alunos com clareza.</p>
                 </div>
                 <span>{cmsPrograms.length}</span>
               </div>
-              <form className={`${crudFormClass} ${cmsFormClass}`} key={editingCmsProgram?.id ?? "new"} onSubmit={handleSaveCmsProgram}>
+
+              <div className="cms-program-toolbar">
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => {
+                    if (editingCmsProgram) {
+                      handleCancelCmsProgramEdit();
+                    }
+                    setCmsProgramFormOpen((open) => !open);
+                  }}
+                >
+                  {cmsProgramFormOpen && !editingCmsProgram ? "Fechar formulário" : "Novo treino"}
+                </button>
+                {editingCmsProgram && (
+                  <strong className="cms-editing-banner">Editando: {editingCmsProgram.title}</strong>
+                )}
+              </div>
+
+              {(cmsProgramFormOpen || editingCmsProgram) && (
+              <form id="cms-program-editor" className={`${crudFormClass} ${cmsFormClass}`} key={editingCmsProgram?.id ?? "new"} onSubmit={handleSaveCmsProgram}>
                 <div className={cmsFormSectionTitleClass}>
                   <span>Bloco 1</span>
                   <div>
-                    <h3>Cabeçalho e vigência</h3>
+                    <h3>{editingCmsProgram ? "Editar treino" : "Cabeçalho e vigência"}</h3>
                     <p>Dê um nome claro ao treino e informe por quanto tempo o aluno deverá segui-lo.</p>
                   </div>
                 </div>
@@ -4148,9 +4179,10 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   </button>
                 )}
               </form>
+              )}
               <div className="cms-program-list-title">
                 <strong>Treinos publicados</strong>
-                <small>Arraste para definir a ordem que aparece para alunos assinantes.</small>
+                <small>Toque no card para ver sessões, editar, atribuir ou arquivar.</small>
               </div>
               <div className={cmsFilterBarClass}>
                 <label className="cms-filter-label">
@@ -4215,11 +4247,12 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                           aria-controls={programCollapseId}
                           onClick={() => setExpandedCmsProgramId(expanded ? null : item.id)}
                         >
-                          <span className={`cms-status ${item.status.toLowerCase()}`}>{item.status}</span>
+                          <span className={`cms-status ${item.status.toLowerCase()}`}>{cmsProgramStatusLabel(item.status)}</span>
                           <span className="cms-program-title-group">
                             <strong>{item.title}</strong>
                             <small>
-                              {item.modality?.name ?? programMetadata.modality} • {item.durationDays ?? item.totalWorkouts} dia(s) • {item.days.length} sessão(ões)
+                              {item.modality?.name ?? programMetadata.modality} · {cmsTargetGenderLabel(item.targetGender)} ·{" "}
+                              {item.days.length} sessão(ões) · {(item.assignedUsers ?? []).length} aluno(s)
                             </small>
                           </span>
                         </button>
@@ -4231,107 +4264,169 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                       >
                         <div className="accordion-body cms-program-body">
                           <div className="cms-program-main">
-                            <p>{programMetadata.description}</p>
-                            <small>Público: {item.targetGender === "MALE" ? "Masculino" : item.targetGender === "FEMALE" ? "Feminino" : "Todos"}</small>
-                            <small>Duração: {item.durationYears ?? 0} ano(s), {item.durationMonths ?? 0} mês(es), {item.durationWeeks ?? 0} semana(s), {item.durationExtraDays ?? 0} dia(s) | {item.plannedSessions ?? item.totalWorkouts} sessão(ões)</small>
-                            <small>{item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.identifier ?? day.workoutBlock.title}${day.workoutBlock.focus ? ` (${day.workoutBlock.focus})` : ""}`).join(" | ") || "Sem dias cadastrados"}</small>
+                            <div className="cms-program-summary-grid">
+                              <span>
+                                <strong>Modalidade</strong>
+                                {item.modality?.name ?? programMetadata.modality}
+                              </span>
+                              <span>
+                                <strong>Público</strong>
+                                {cmsTargetGenderLabel(item.targetGender)}
+                              </span>
+                              <span>
+                                <strong>Meta</strong>
+                                {item.plannedSessions ?? item.totalWorkouts} sessões
+                              </span>
+                              <span>
+                                <strong>Alunos</strong>
+                                {(item.assignedUsers ?? []).length} atribuído(s)
+                              </span>
+                            </div>
+                            <p className="cms-program-description">
+                              {programMetadata.description?.trim()
+                                ? programMetadata.description
+                                : "Sem descrição cadastrada para este treino."}
+                            </p>
+                            <div className="cms-program-sessions">
+                              <strong>Sessões do ciclo</strong>
+                              {item.days.length > 0 ? (
+                                <ol>
+                                  {item.days.map((day) => (
+                                    <li key={`${item.id}-${day.dayNumber}`}>
+                                      <em>Dia {day.dayNumber}</em>
+                                      <span>
+                                        {day.workoutBlock.identifier ?? day.workoutBlock.title}
+                                        {day.workoutBlock.focus ? ` · ${day.workoutBlock.focus}` : ""}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ol>
+                              ) : (
+                                <span className="cms-empty-hint">Nenhuma sessão cadastrada neste treino.</span>
+                              )}
+                            </div>
                           </div>
-                          <div className="cms-program-actions">
+                          <div className="cms-program-actions cms-program-actions-primary">
                             <button className="outline-button" type="button" onClick={() => startEditCmsProgram(item)}>
                               <Pencil size={17} />
                               Editar
                             </button>
-                            <select
-                              aria-label="Modalidade do treino"
-                              value={item.modality?.id ?? ""}
-                              onChange={(event) => handleUpdateCmsProgramModality(item.id, event.target.value)}
+                            <button
+                              className="outline-button"
+                              type="button"
+                              onClick={() =>
+                                setAssigningCmsProgramId((current) => (current === item.id ? null : item.id))
+                              }
                             >
-                              <option value="" disabled>
-                                {item.modality?.name ?? "Selecione a modalidade"}
-                              </option>
-                              {cmsProgramFormModalities
-                                .filter((modality) => modality.id !== item.modality?.id)
-                                .map((modality) => (
-                                  <option value={modality.id} key={modality.id}>
-                                    {modality.name}{modality.isActive ? "" : " (inativa)"}
-                                  </option>
-                                ))}
-                            </select>
-                            <select
-                              aria-label="Público do treino"
-                              value={item.targetGender}
-                              onChange={(event) => handleUpdateCmsProgramGender(item.id, event.target.value as CmsProgramRow["targetGender"])}
-                            >
-                              <option value="ALL">Todos</option>
-                              <option value="MALE">Masculino</option>
-                              <option value="FEMALE">Feminino</option>
-                            </select>
-                            <select
-                              aria-label="Meta de treinos"
-                              value={item.totalWorkouts}
-                              onChange={(event) => handleUpdateCmsProgramTotalWorkouts(item.id, Number(event.target.value))}
-                            >
-                              <option value="12">12 treinos</option>
-                              <option value="18">18 treinos</option>
-                              <option value="24">24 treinos</option>
-                              <option value="30">30 treinos</option>
-                              <option value="36">36 treinos</option>
-                            </select>
-                            <button className="outline-button" type="button" onClick={() => handlePublishCmsProgram(item.id)} disabled={item.status === "PUBLISHED"}>
-                              <Check size={17} />
-                              Publicar
+                              <UsersRound size={17} />
+                              {assigningCmsProgramId === item.id ? "Fechar atribuição" : "Atribuir alunos"}
                             </button>
-                            <button className="outline-button" type="button" onClick={() => handleArchiveCmsProgram(item.id)} disabled={item.status === "ARCHIVED"}>
+                            <button className="outline-button" type="button" onClick={() => handleArchiveCmsProgram(item.id)}>
                               <LockKeyhole size={17} />
                               Arquivar
                             </button>
-                            <button className={`outline-button ${dangerButtonClass}`} type="button" onClick={() => setPendingCmsDelete({ kind: "programs", id: item.id, name: item.title })}>
+                            <button
+                              className={`outline-button ${dangerButtonClass}`}
+                              type="button"
+                              onClick={() => setPendingCmsDelete({ kind: "programs", id: item.id, name: item.title })}
+                            >
                               <Trash2 size={17} />
                               Excluir
                             </button>
                           </div>
-                          <form className="cms-assign-form" onSubmit={(event) => handleAssignCmsProgramSubmit(event, item.id)}>
-                            <select name="userId" disabled={item.status !== "PUBLISHED"}>
-                              <option value="">Todos os alunos</option>
-                              {activeStudents.map((user) => (
-                                <option value={user.id} key={user.id}>
-                                  {user.name}
-                                </option>
-                              ))}
-                            </select>
-                            <input name="currentDay" type="number" min="1" defaultValue="1" disabled={item.status !== "PUBLISHED"} />
-                            <input name="totalWorkouts" type="number" min="1" defaultValue={item.totalWorkouts ?? 30} disabled={item.status !== "PUBLISHED"} aria-label="Meta de treinos da atribuição" />
-                            <button className="primary-button" disabled={item.status !== "PUBLISHED"}>
-                              <UsersRound size={17} />
-                              Atribuir
-                            </button>
-                          </form>
-                          <div className="cms-assignment-list">
-                            <strong>4. Acompanhamento</strong>
-                            {(item.assignedUsers ?? []).length > 0 ? (
-                              item.assignedUsers?.slice(0, 8).map((assignment) => (
-                                <span key={assignment.id}>
-                                  {assignment.user.name} • {assignment.completedWorkouts}/{assignment.totalWorkouts} treino(s) • dia {assignment.currentDay} • {assignment.status}
-                                </span>
-                              ))
-                            ) : (
-                              <span>Nenhum aluno atribuído.</span>
-                            )}
-                          </div>
+                          {assigningCmsProgramId === item.id && (
+                            <div className="cms-assign-panel">
+                              <div className="cms-program-actions cms-assign-quick">
+                                <select
+                                  aria-label="Modalidade do treino"
+                                  value={item.modality?.id ?? ""}
+                                  onChange={(event) => handleUpdateCmsProgramModality(item.id, event.target.value)}
+                                >
+                                  <option value="" disabled>
+                                    {item.modality?.name ?? "Selecione a modalidade"}
+                                  </option>
+                                  {cmsProgramFormModalities
+                                    .filter((modality) => modality.id !== item.modality?.id)
+                                    .map((modality) => (
+                                      <option value={modality.id} key={modality.id}>
+                                        {modality.name}{modality.isActive ? "" : " (inativa)"}
+                                      </option>
+                                    ))}
+                                </select>
+                                <select
+                                  aria-label="Público do treino"
+                                  value={item.targetGender}
+                                  onChange={(event) =>
+                                    handleUpdateCmsProgramGender(item.id, event.target.value as CmsProgramRow["targetGender"])
+                                  }
+                                >
+                                  <option value="ALL">Todos</option>
+                                  <option value="MALE">Masculino</option>
+                                  <option value="FEMALE">Feminino</option>
+                                </select>
+                                <select
+                                  aria-label="Meta de treinos"
+                                  value={item.totalWorkouts}
+                                  onChange={(event) => handleUpdateCmsProgramTotalWorkouts(item.id, Number(event.target.value))}
+                                >
+                                  <option value="12">12 treinos</option>
+                                  <option value="18">18 treinos</option>
+                                  <option value="24">24 treinos</option>
+                                  <option value="30">30 treinos</option>
+                                  <option value="36">36 treinos</option>
+                                </select>
+                              </div>
+                              <form className="cms-assign-form" onSubmit={(event) => handleAssignCmsProgramSubmit(event, item.id)}>
+                                <select name="userId">
+                                  <option value="">Todos os alunos ativos</option>
+                                  {activeStudents.map((user) => (
+                                    <option value={user.id} key={user.id}>
+                                      {user.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <input name="currentDay" type="number" min="1" defaultValue="1" aria-label="Dia atual" />
+                                <input
+                                  name="totalWorkouts"
+                                  type="number"
+                                  min="1"
+                                  defaultValue={item.totalWorkouts ?? 30}
+                                  aria-label="Meta de treinos da atribuição"
+                                />
+                                <button className="primary-button">
+                                  <UsersRound size={17} />
+                                  Atribuir
+                                </button>
+                              </form>
+                              <div className="cms-assignment-list">
+                                <strong>Alunos neste treino</strong>
+                                {(item.assignedUsers ?? []).length > 0 ? (
+                                  item.assignedUsers?.slice(0, 8).map((assignment) => (
+                                    <span key={assignment.id}>
+                                      {assignment.user.name} · {assignment.completedWorkouts}/{assignment.totalWorkouts} · dia{" "}
+                                      {assignment.currentDay} · {assignment.status}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span>Nenhum aluno atribuído ainda.</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </article>
                   );
                 })}
                 {publishedCmsPrograms.length === 0 && (
-                  <div className="cms-empty-hint">Nenhum treino publicado para ordenar.</div>
+                  <div className="cms-empty-hint">Nenhum treino publicado. Crie um novo ou publique um rascunho.</div>
                 )}
               </div>
               {draftCmsPrograms.length > 0 && (
                 <>
                   <div className="cms-program-list-title secondary">
                     <strong>Rascunhos e arquivados</strong>
-                    <small>Publique um treino para incluir no drag & drop dos alunos.</small>
+                    <small>Publique um treino pronto para liberar aos alunos.</small>
                   </div>
                   <div className="accordion cms-program-accordion" id="cmsDraftProgramsAccordion">
                     {draftCmsPrograms.map((item) => {
@@ -4355,11 +4450,11 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                               aria-controls={programCollapseId}
                               onClick={() => setExpandedCmsProgramId(expanded ? null : item.id)}
                             >
-                              <span className={`cms-status ${item.status.toLowerCase()}`}>{item.status}</span>
+                              <span className={`cms-status ${item.status.toLowerCase()}`}>{cmsProgramStatusLabel(item.status)}</span>
                               <span className="cms-program-title-group">
                                 <strong>{item.title}</strong>
                                 <small>
-                                  {item.modality?.name ?? programMetadata.modality} • {item.durationDays ?? item.totalWorkouts} dia(s) • {item.days.length} sessão(ões)
+                                  {item.modality?.name ?? programMetadata.modality} · {item.days.length} sessão(ões)
                                 </small>
                               </span>
                             </button>
@@ -4371,10 +4466,29 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                           >
                             <div className="accordion-body cms-program-body">
                               <div className="cms-program-main">
-                                <p>{programMetadata.description}</p>
-                                <small>Público: {item.targetGender === "MALE" ? "Masculino" : item.targetGender === "FEMALE" ? "Feminino" : "Todos"}</small>
-                                <small>Duração: {item.durationYears ?? 0} ano(s), {item.durationMonths ?? 0} mês(es), {item.durationWeeks ?? 0} semana(s), {item.durationExtraDays ?? 0} dia(s) | {item.plannedSessions ?? item.totalWorkouts} sessão(ões)</small>
-                                <small>{item.days.map((day) => `Dia ${day.dayNumber}: ${day.workoutBlock.identifier ?? day.workoutBlock.title}${day.workoutBlock.focus ? ` (${day.workoutBlock.focus})` : ""}`).join(" | ") || "Sem dias cadastrados"}</small>
+                                <p className="cms-program-description">
+                                  {programMetadata.description?.trim()
+                                    ? programMetadata.description
+                                    : "Sem descrição cadastrada para este treino."}
+                                </p>
+                                <div className="cms-program-sessions">
+                                  <strong>Sessões do ciclo</strong>
+                                  {item.days.length > 0 ? (
+                                    <ol>
+                                      {item.days.map((day) => (
+                                        <li key={`${item.id}-${day.dayNumber}`}>
+                                          <em>Dia {day.dayNumber}</em>
+                                          <span>
+                                            {day.workoutBlock.identifier ?? day.workoutBlock.title}
+                                            {day.workoutBlock.focus ? ` · ${day.workoutBlock.focus}` : ""}
+                                          </span>
+                                        </li>
+                                      ))}
+                                    </ol>
+                                  ) : (
+                                    <span className="cms-empty-hint">Nenhuma sessão cadastrada.</span>
+                                  )}
+                                </div>
                                 <div className={`cms-readiness ${readiness.ready ? "ready" : "blocked"}`}>
                                   {readiness.ready ? (
                                     <span>Pronto para publicar.</span>
@@ -4387,7 +4501,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                                   )}
                                 </div>
                               </div>
-                              <div className="cms-program-actions">
+                              <div className="cms-program-actions cms-program-actions-primary">
                                 <button className="outline-button" type="button" onClick={() => startEditCmsProgram(item)}>
                                   <Pencil size={17} />
                                   Editar
@@ -4401,7 +4515,11 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                                   <Check size={17} />
                                   Publicar
                                 </button>
-                                <button className={`outline-button ${dangerButtonClass}`} type="button" onClick={() => setPendingCmsDelete({ kind: "programs", id: item.id, name: item.title })}>
+                                <button
+                                  className={`outline-button ${dangerButtonClass}`}
+                                  type="button"
+                                  onClick={() => setPendingCmsDelete({ kind: "programs", id: item.id, name: item.title })}
+                                >
                                   <Trash2 size={17} />
                                   Excluir
                                 </button>
