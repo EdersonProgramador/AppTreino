@@ -696,6 +696,29 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       }
     }
     setSuccess(successMessage);
+
+    const scopes: Array<"training" | "locations" | "announcements" | "account"> = [];
+    if (resources.some((resource) => ["modalities", "exercises", "workoutBlocks", "programs"].includes(resource))) {
+      scopes.push("training");
+    }
+    if (resources.includes("locations")) {
+      scopes.push("locations");
+    }
+    if (resources.includes("announcements") || resources.includes("events")) {
+      scopes.push("announcements");
+    }
+    if (resources.some((resource) => ["users", "memberships", "payments", "plans"].includes(resource))) {
+      scopes.push("account");
+    }
+
+    if (scopes.length > 0) {
+      publishSystemEvent("CMS_ATUALIZADO", {
+        scopes,
+        resources,
+        message: successMessage,
+        source: "admin_save"
+      });
+    }
   }
 
   useEffect(() => {
@@ -1493,7 +1516,10 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     setCmsWorkoutExerciseRows(1);
   }
 
-  async function handlePublishCmsWorkoutBlock(item: CmsWorkoutBlockRow) {
+  async function handlePublishCmsWorkoutBlock(
+    item: CmsWorkoutBlockRow,
+    targetGender: CmsProgramRow["targetGender"] = "ALL"
+  ) {
     if (!item.modality?.id) {
       setFeedback("Vincule uma modalidade à divisão antes de publicar para os alunos.");
       return;
@@ -1508,7 +1534,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         program: { id: string; title: string; audienceMode: CmsProgramRow["audienceMode"] };
         assignedCount: number;
       }>(`/admin/cms/workout-blocks/${item.id}/publish`, {
-        targetGender: "ALL",
+        targetGender,
         audienceMode: "ALL_ACTIVE",
         durationWeeks: 4
       }, token);
@@ -1521,7 +1547,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       });
       await applyAdminChange(
         ["workoutBlocks", "programs"],
-        `Divisão publicada: "${response.program.title}" (${response.assignedCount} aluno(s) atualizado(s)).`
+        `Divisão publicada: "${response.program.title}" (${response.assignedCount} aluno(s) elegível(eis)).`
       );
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível publicar a divisão para os alunos."));
@@ -1737,7 +1763,14 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   async function handleUpdateCmsProgramGender(programId: string, targetGender: CmsProgramRow["targetGender"]) {
     try {
       await apiPut(`/admin/cms/programs/${programId}`, { targetGender }, token);
-      await applyAdminChange(["programs"]);
+      await applyAdminChange(
+        ["programs"],
+        targetGender === "ALL"
+          ? "Público atualizado para todos os alunos."
+          : targetGender === "MALE"
+            ? "Público atualizado: apenas alunos masculinos receberão este treino."
+            : "Público atualizado: apenas alunas femininas receberão este treino."
+      );
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o público do treino."));
     }
@@ -4083,13 +4116,30 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   </select>
                   <small>{item.structureType}</small>
                   <div className="cms-row-actions">
+                    <select
+                      aria-label="Público ao publicar divisão"
+                      defaultValue="ALL"
+                      disabled={!canPublish}
+                      id={`cms-publish-gender-${item.id}`}
+                      title="Público por sexo ao publicar"
+                    >
+                      <option value="ALL">Todos</option>
+                      <option value="MALE">Masculino</option>
+                      <option value="FEMALE">Feminino</option>
+                    </select>
                     <button
                       type="button"
                       aria-label="Publicar divisão para alunos"
                       title={canPublish ? "Publicar para alunos" : "Vincule modalidade e exercícios para publicar"}
                       disabled={!canPublish}
                       data-testid={`cms-publish-block-${item.id}`}
-                      onClick={() => void handlePublishCmsWorkoutBlock(item)}
+                      onClick={() => {
+                        const genderSelect = document.getElementById(
+                          `cms-publish-gender-${item.id}`
+                        ) as HTMLSelectElement | null;
+                        const targetGender = (genderSelect?.value ?? "ALL") as CmsProgramRow["targetGender"];
+                        void handlePublishCmsWorkoutBlock(item, targetGender);
+                      }}
                     >
                       <Megaphone size={17} />
                     </button>
@@ -4560,12 +4610,28 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                               </div>
                               <form className="cms-assign-form" onSubmit={(event) => handleAssignCmsProgramSubmit(event, item.id)}>
                                 <select name="userId">
-                                  <option value="">Todos os alunos ativos</option>
-                                  {activeStudents.map((user) => (
-                                    <option value={user.id} key={user.id}>
-                                      {user.name}
-                                    </option>
-                                  ))}
+                                  <option value="">
+                                    {item.targetGender === "MALE"
+                                      ? "Todos os alunos masculinos ativos"
+                                      : item.targetGender === "FEMALE"
+                                        ? "Todas as alunas femininas ativas"
+                                        : "Todos os alunos ativos"}
+                                  </option>
+                                  {activeStudents
+                                    .filter(
+                                      (user) =>
+                                        item.targetGender === "ALL" || user.profile?.gender === item.targetGender
+                                    )
+                                    .map((user) => (
+                                      <option value={user.id} key={user.id}>
+                                        {user.name}
+                                        {user.profile?.gender === "MALE"
+                                          ? " · Masculino"
+                                          : user.profile?.gender === "FEMALE"
+                                            ? " · Feminino"
+                                            : " · Sem sexo"}
+                                      </option>
+                                    ))}
                                 </select>
                                 <input name="currentDay" type="number" min="1" defaultValue="1" aria-label="Dia atual" />
                                 <input

@@ -162,7 +162,7 @@ const cmsWorkoutBlockSchema = z.object({
 
 const cmsPublishBlockSchema = z.object({
   title: z.string().min(2).optional(),
-  targetGender: z.enum(["ALL", "MALE", "FEMALE"]).default("ALL"),
+  targetGender: z.enum(["ALL", "MALE", "FEMALE"]).optional(),
   audienceMode: z.enum(["ALL_ACTIVE", "SELECTED"]).default("ALL_ACTIVE"),
   durationWeeks: z.coerce.number().int().min(1).max(520).default(4),
   plannedSessions: z.coerce.number().int().min(1).max(10000).optional()
@@ -914,6 +914,70 @@ async function assignProgramToActiveStudents(
       });
     })
   );
+}
+
+async function cancelMismatchedProgramAssignments(programId: string, targetGender: "ALL" | "MALE" | "FEMALE") {
+  if (targetGender === "ALL") {
+    return 0;
+  }
+
+  const activeAssignments = await prisma.userProgram.findMany({
+    where: {
+      programId,
+      status: "ACTIVE"
+    },
+    include: {
+      user: {
+        include: {
+          profile: {
+            select: { gender: true }
+          }
+        }
+      }
+    }
+  });
+
+  const mismatchedIds = activeAssignments
+    .filter((assignment) => !studentMatchesProgramTargetGender(targetGender, assignment.user.profile?.gender))
+    .map((assignment) => assignment.id);
+
+  if (mismatchedIds.length === 0) {
+    return 0;
+  }
+
+  await prisma.userProgram.updateMany({
+    where: { id: { in: mismatchedIds } },
+    data: { status: "CANCELED" }
+  });
+
+  return mismatchedIds.length;
+}
+
+/** Mantém atribuições alinhadas ao público por sexo (e reatribui alunos ativos elegíveis quando ALL_ACTIVE). */
+async function reconcileProgramAudienceAssignments(programId: string) {
+  const program = await prisma.program.findUniqueOrThrow({
+    where: { id: programId },
+    select: {
+      status: true,
+      isActive: true,
+      audienceMode: true,
+      targetGender: true,
+      plannedSessions: true
+    }
+  });
+
+  const canceledCount = await cancelMismatchedProgramAssignments(programId, program.targetGender);
+
+  if (program.status !== "PUBLISHED" || !program.isActive) {
+    return { assigned: [] as Awaited<ReturnType<typeof assignProgramToActiveStudents>>, canceledCount };
+  }
+
+  if (program.audienceMode === "ALL_ACTIVE") {
+    const assigned = await assignProgramToActiveStudents(programId, 1, program.plannedSessions);
+    return { assigned, canceledCount };
+  }
+
+  return { assigned: [] as Awaited<ReturnType<typeof assignProgramToActiveStudents>>, canceledCount };
 }
 
 async function getCmsProgramById(programId: string) {
@@ -2084,6 +2148,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           day.program.days.length === 1 &&
           day.program.days[0]?.workoutBlockId === id
       )?.program ?? null;
+    const nextTargetGender = body.targetGender ?? existingSingleDayProgram?.targetGender ?? "ALL";
 
     const maxSortOrder = await prisma.program.aggregate({
       where: { deletedAt: null },
@@ -2114,7 +2179,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           scheduleType: "ROTATING_CYCLE",
           audienceMode: body.audienceMode,
           cycleLengthDays: 1,
-          targetGender: body.targetGender,
+          targetGender: nextTargetGender,
           status: "PUBLISHED",
           isActive: true,
           publishedAt: existingSingleDayProgram.publishedAt ?? new Date(),
@@ -2156,7 +2221,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           scheduleType: "ROTATING_CYCLE",
           audienceMode: body.audienceMode,
           cycleLengthDays: 1,
-          targetGender: body.targetGender,
+          targetGender: nextTargetGender,
           status: "PUBLISHED",
           isActive: true,
           publishedAt: new Date(),
@@ -2184,11 +2249,8 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       });
     }
 
-    let assignedCount = 0;
-    if (program.audienceMode === "ALL_ACTIVE") {
-      const assignments = await assignProgramToStudents(program.id, 1, program.plannedSessions);
-      assignedCount = assignments.length;
-    }
+    const reconciled = await reconcileProgramAudienceAssignments(program.id);
+    const assignedCount = reconciled.assigned.length;
 
     return reply.code(existingSingleDayProgram ? 200 : 201).send({
       program,
@@ -2544,7 +2606,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     });
 
     if (program.status === "PUBLISHED" && program.isActive && program.audienceMode === "ALL_ACTIVE") {
-      await assignProgramToStudents(program.id, 1, program.plannedSessions);
+      await reconcileProgramAudienceAssignments(program.id);
     }
 
     return reply.code(201).send({ program });
@@ -2734,19 +2796,33 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       }
     });
 
-    if (program.status === "PUBLISHED" && program.isActive && program.audienceMode === "ALL_ACTIVE") {
-      await assignProgramToStudents(program.id, 1, program.plannedSessions);
-    } else if (program.status === "PUBLISHED" && program.isActive && program.assignedUsers.length > 0) {
-      await assignProgramToActiveStudents(
-        program.id,
-        1,
-        program.plannedSessions,
-        program.assignedUsers.map((assignment) => assignment.userId),
-        "ALL"
-      );
+    if (program.status === "PUBLISHED" && program.isActive) {
+      if (program.audienceMode === "ALL_ACTIVE") {
+        await reconcileProgramAudienceAssignments(program.id);
+      } else {
+        await cancelMismatchedProgramAssignments(program.id, program.targetGender);
+      }
     }
 
-    return { program };
+    const refreshedProgram = await prisma.program.findUniqueOrThrow({
+      where: { id },
+      include: {
+        modality: true,
+        days: {
+          include: {
+            workoutBlock: true
+          },
+          orderBy: [{ dayNumber: "asc" }, { order: "asc" }]
+        },
+        assignedUsers: {
+          include: {
+            user: true
+          }
+        }
+      }
+    });
+
+    return { program: refreshedProgram };
   });
 
   app.post("/admin/cms/programs/reorder", async (request, reply) => {
@@ -2855,35 +2931,9 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       }
     });
     if (program.audienceMode === "ALL_ACTIVE") {
-      await assignProgramToStudents(program.id, 1, program.plannedSessions);
-    }
-
-    // Remove atribuições incompatíveis com o público (sexo) após publicar.
-    const activeAssignments = await prisma.userProgram.findMany({
-      where: {
-        programId: program.id,
-        status: "ACTIVE"
-      },
-      include: {
-        user: {
-          include: {
-            profile: {
-              select: { gender: true }
-            }
-          }
-        }
-      }
-    });
-
-    const mismatchedIds = activeAssignments
-      .filter((assignment) => !studentMatchesProgramTargetGender(program.targetGender, assignment.user.profile?.gender))
-      .map((assignment) => assignment.id);
-
-    if (mismatchedIds.length > 0) {
-      await prisma.userProgram.updateMany({
-        where: { id: { in: mismatchedIds } },
-        data: { status: "CANCELED" }
-      });
+      await reconcileProgramAudienceAssignments(program.id);
+    } else {
+      await cancelMismatchedProgramAssignments(program.id, program.targetGender);
     }
 
     return { program };
@@ -2940,9 +2990,17 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       true
     );
 
+    await cancelMismatchedProgramAssignments(id, program.targetGender);
+
     if (assignments.length === 0) {
+      const genderHint =
+        program.targetGender === "FEMALE"
+          ? " Este treino é destinado ao público feminino."
+          : program.targetGender === "MALE"
+            ? " Este treino é destinado ao público masculino."
+            : "";
       return reply.code(409).send({
-        message: "Nenhum aluno ativo foi encontrado para receber este programa."
+        message: `Nenhum aluno ativo elegível foi encontrado para receber este programa.${genderHint}`
       });
     }
 

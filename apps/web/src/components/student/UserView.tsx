@@ -84,7 +84,9 @@ import type { PlanCode } from "../../types/auth";
 import { assessmentPerimeterKeys, assessmentPhotoFields } from "../../types/admin";
 import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
 import { LockedOverlay } from "./LockedOverlay";
+import { StudentSettingsPanel } from "./StudentSettingsPanel";
 import { PhysicalAssessmentFormView } from "../shared/PhysicalAssessmentFormView";
+import { uiSounds } from "../../lib/ui-sounds";
 import type { WorkoutPlayerExercise } from "./WorkoutPlayer";
 
 const WorkoutPlayer = lazy(async () => {
@@ -113,6 +115,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [workoutSession, setWorkoutSession] = useState<WorkoutSessionResponse["session"] | null>(null);
   const [consistency, setConsistency] = useState<WorkoutConsistencyResponse | null>(null);
   const [membership, setMembership] = useState<StudentMembershipRow | null>(null);
+  const [accessReady, setAccessReady] = useState(false);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [attendance, setAttendance] = useState<Array<{ id: string; date: string }>>([]);
   const [assessments, setAssessments] = useState<PhysicalAssessmentRow[]>([]);
@@ -125,6 +128,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [studentAvatarPreview, setStudentAvatarPreview] = useState<string | null>(null);
   const [studentProfileEditing, setStudentProfileEditing] = useState(false);
   const [studentProfileUf, setStudentProfileUf] = useState<string>(profile?.state ?? "");
+  const [studentProfileFormKey, setStudentProfileFormKey] = useState(0);
   const [notificationsReadAt, setNotificationsReadAt] = useState<string | null>(() =>
     window.localStorage.getItem("student-notifications-read-at")
   );
@@ -166,14 +170,28 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
   useEffect(() => {
     if (!success) return;
+    uiSounds.success();
     const timer = window.setTimeout(() => setSuccess(null), 2000);
     return () => window.clearTimeout(timer);
   }, [success]);
 
   useEffect(() => {
+    if (error) uiSounds.error();
+  }, [error]);
+
+  useEffect(() => {
+    if (!accessReady) return;
+    uiSounds.bootUp();
+  }, [accessReady]);
+
+  useEffect(() => {
     if (!studentLightbox) return;
+    uiSounds.popupOpen();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setStudentLightbox(null);
+      if (event.key === "Escape") {
+        uiSounds.popupClose();
+        setStudentLightbox(null);
+      }
       if (event.key === "ArrowLeft") {
         setStudentLightbox((current) =>
           current ? { ...current, index: (current.index - 1 + current.urls.length) % current.urls.length } : current
@@ -201,6 +219,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       ]);
 
       const activeMembership = membershipResponse.membership?.status === "ACTIVE";
+      const enrollmentActive = profileResponse.profile.enrollmentStatus === "ACTIVE";
+      const hasAccess = activeMembership || enrollmentActive;
       const firstPublishedWorkout = workoutProgramsResponse.workouts[0] ?? null;
 
       setProfile(profileResponse.profile);
@@ -209,8 +229,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       setPublishedWorkouts(workoutProgramsResponse.workouts);
       setTodayWorkout(firstPublishedWorkout);
       setCheckoutPayment(paymentsResponse.payments.find((item) => item.status === "PENDING") ?? null);
+      setAccessReady(true);
 
-      if (!activeMembership) {
+      if (!hasAccess) {
         setWorkout(null);
         setTodayWorkout(null);
         setPublishedWorkouts([]);
@@ -269,6 +290,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;
       setError(message ?? "Não foi possível carregar sua área. Verifique API e banco.");
+      setAccessReady(true);
     }
   }
 
@@ -277,11 +299,29 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   }, [profile]);
 
   useEffect(() => {
+    setAccessReady(false);
     void loadUserData();
     apiGet<{ config: Record<string, string> }>("/public/config")
       .then((response) => setPublicConfig(response.config))
       .catch(() => {});
     loadStudentCards();
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        void loadUserData();
+      }
+    };
+
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    window.addEventListener("focus", refreshWhenVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.removeEventListener("focus", refreshWhenVisible);
+    };
   }, [token]);
 
   /** Consumidores do Event Bus: sincronizam destinos e notificam o painel. */
@@ -311,6 +351,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           setStudentProducts(productsResponse.products);
           setStudentPurchases(purchasesResponse.purchases);
           setSuccess("Pagamentos e Matrículas atualizados após a compra.");
+          uiSounds.paymentApproved();
         }
 
         if (refreshTypes.includes("CARTAO_ATUALIZADO")) {
@@ -349,6 +390,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           setPublishedWorkouts(workoutProgramsResponse.workouts);
           setSuccess("Feedback sincronizado com Avaliação física / Treino.");
         }
+
+        if (refreshTypes.includes("PROGRAMA_PUBLICADO") || refreshTypes.includes("CMS_ATUALIZADO")) {
+          await loadUserData();
+          if (refreshTypes.includes("PROGRAMA_PUBLICADO")) {
+            setSuccess("Novo treino publicado disponível na área de Treino.");
+            uiSounds.success();
+          } else {
+            setSuccess("Informações atualizadas com as alterações do admin.");
+            uiSounds.popupNotify();
+          }
+        }
       } catch {
         setError("Não foi possível sincronizar os módulos do painel.");
       }
@@ -375,13 +427,19 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     });
   }, [publishedWorkouts]);
 
-  function openTrainingCatalog() {
+  const goToSection = (section: StudentPanelSection) => {
+    uiSounds.studentPage();
+    uiSounds.pageChange();
+    setStudentSection(section);
+  };
+
+  const openTrainingCatalog = () => {
     setSelectedWorkoutModality(null);
     setSelectedWorkoutProgramId(null);
-    setStudentSection("training");
-  }
+    goToSection("training");
+  };
 
-  function openTodaySession() {
+  const openTodaySession = () => {
     const target = todayWorkout ?? (publishedWorkouts.length === 1 ? publishedWorkouts[0] : null);
     if (!target) {
       openTrainingCatalog();
@@ -389,21 +447,28 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     }
     setSelectedWorkoutModality(target.modality ?? "Hipertrofia");
     setSelectedWorkoutProgramId(target.programId);
-    setStudentSection("training");
-  }
+    goToSection("training");
+  };
 
   useEffect(() => {
     if (!token) return;
-    if (membership?.status === "ACTIVE") return;
+    if (membership?.status === "ACTIVE" || profile?.enrollmentStatus === "ACTIVE") return;
 
     const pending = checkoutPayment ?? payments.find((item) => item.status === "PENDING");
     if (!pending) return;
 
     const interval = window.setInterval(async () => {
       try {
-        const response = await apiGet<{ membership: StudentMembershipRow | null }>("/user/membership", token);
-        if (response.membership?.status === "ACTIVE") {
-          setMembership(response.membership);
+        const [membershipResponse, profileResponse] = await Promise.all([
+          apiGet<{ membership: StudentMembershipRow | null }>("/user/membership", token),
+          apiGet<{ profile: StudentProfile }>("/user/profile", token)
+        ]);
+        if (
+          membershipResponse.membership?.status === "ACTIVE" ||
+          profileResponse.profile.enrollmentStatus === "ACTIVE"
+        ) {
+          setMembership(membershipResponse.membership);
+          setProfile(profileResponse.profile);
           await loadUserData();
         }
       } catch {
@@ -412,7 +477,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     }, 4000);
 
     return () => window.clearInterval(interval);
-  }, [token, membership?.status, checkoutPayment, payments]);
+  }, [token, membership?.status, profile?.enrollmentStatus, checkoutPayment, payments]);
 
   useEffect(() => {
     if (studentSection !== "support" || !token) return;
@@ -554,6 +619,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       }
 
       if (response.alreadyActive) {
+        uiSounds.paymentApproved();
         await loadUserData();
         return;
       }
@@ -590,9 +656,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
       setMembership(response.membership);
       setCheckoutPayment(response.payment);
+      uiSounds.paymentApproved();
       await loadUserData();
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;
+      uiSounds.paymentDisconnected();
       setError(message ?? "Não foi possível confirmar o pagamento sandbox.");
     } finally {
       setCheckoutLoading(null);
@@ -609,13 +677,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     return response.alternatives;
   }
 
-  async function handleStartWorkoutSession(workoutToStart = todayWorkout) {
+  const handleStartWorkoutSession = async (workoutToStart = todayWorkout) => {
     if (!workoutToStart) return;
 
+    uiSounds.open();
     setTodayWorkout(workoutToStart);
     setWorkoutSession(null);
     setStudentSection("player");
-  }
+  };
 
   async function handleBeginWorkoutSession() {
     if (!todayWorkout) return;
@@ -637,7 +706,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     }
   }
 
-  async function handleCompleteWorkoutDay() {
+  const handleCompleteWorkoutDay = async () => {
     if (!todayWorkout) return;
 
     try {
@@ -654,12 +723,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       setStudentSection("training");
       setSelectedWorkoutModality(todayWorkout.modality ?? selectedWorkoutModality);
     } catch {
+      uiSounds.error();
       setError("Não foi possível concluir o treino agora.");
     }
-  }
+  };
 
   async function handleCancelWorkoutSession() {
     if (!workoutSession?.id) {
+      uiSounds.void();
       setWorkoutSession(null);
       return;
     }
@@ -672,6 +743,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         },
         token
       );
+      uiSounds.void();
       setWorkoutSession(null);
     } catch {
       setError("Não foi possível cancelar o treino agora.");
@@ -741,6 +813,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   function handleCancelStudentProfileEdit() {
     setStudentProfileEditing(false);
     setStudentAvatarPreview(null);
+    setStudentProfileUf(profile?.state ?? "");
+    setStudentProfileFormKey((key) => key + 1);
   }
 
   function handleUpdateStudentProfile(event: FormEvent<HTMLFormElement>) {
@@ -773,6 +847,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         const uploadData = new FormData();
         uploadData.append("file", avatarFile);
         const uploaded = await apiUpload<UploadResponse>(`/user/uploads?group=images`, uploadData, token);
+        uiSounds.screenshot();
         avatarUrl = uploaded.file.url;
       }
 
@@ -792,10 +867,18 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         },
         token
       );
-      setProfile(response.profile);
+      setProfile((current) => ({
+        ...current,
+        ...response.profile,
+        enrollmentStatus: current?.enrollmentStatus ?? response.profile.enrollmentStatus
+      }));
+      setStudentProfileUf(response.profile.state ?? "");
       setStudentAvatarPreview(null);
       setStudentProfileEditing(false);
+      setStudentProfileFormKey((key) => key + 1);
+      await loadUserData();
       setSuccess("Dados cadastrais atualizados com sucesso.");
+      uiSounds.success();
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;
       setError(message ?? "Não foi possível salvar seus dados.");
@@ -980,6 +1063,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     if (!assessmentForm) return;
     setSubmittingAssessment(true);
     setError(null);
+    uiSounds.submit();
     try {
       let arquivos = assessmentForm.formulario_avaliacao_fisica.fotos_analise_visual.arquivos;
       for (const [key] of assessmentPhotoFields) {
@@ -988,6 +1072,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         const uploadData = new FormData();
         uploadData.append("file", file);
         const uploaded = await apiUpload<UploadResponse>("/user/uploads?group=images", uploadData, token);
+        uiSounds.screenshot();
         arquivos = { ...arquivos, [key]: uploaded.file.url };
       }
       const payload: PhysicalAssessmentForm = {
@@ -1065,6 +1150,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     try {
       const response = await apiPost<{ favorited: boolean }>(`/student/workout/favorites/${programId}`, {}, token);
       const favorited = response.favorited;
+      if (favorited) {
+        uiSounds.itemSelect();
+      } else {
+        uiSounds.itemDeselect();
+      }
       setPublishedWorkouts((current) =>
         current.map((item) => (item.programId === programId ? { ...item, favoritedByMe: favorited } : item))
       );
@@ -1197,7 +1287,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const computedBodyFatPct = computedBodyFat?.value ?? null;
   const latestAiPlan = aiPlans[0];
   const hasActiveMembership = membership?.status === "ACTIVE";
-  const hasStudentAreaAccess = hasActiveMembership;
+  const hasAdminEnrollment = profile?.enrollmentStatus === "ACTIVE";
+  /** Liberação só após bootstrap: membership ACTIVE (Asaas) ou enrollment ACTIVE (admin). */
+  const hasStudentAreaAccess = hasActiveMembership || hasAdminEnrollment;
   const needsOnboarding = Boolean(profile && (!profile.gender || !profile.objective || !profile.level));
   const currentCheckoutPayment = checkoutPayment ?? pendingPayment;
   const lockedFeatures = [
@@ -1391,6 +1483,25 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       .slice(0, 12);
   }, [syncNotifications, notifications, notificationsReadAt]);
 
+  if (!accessReady) {
+    return (
+      <main className="relative grid min-h-screen place-items-center overflow-hidden bg-ink p-6 text-sand">
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 20% 20%, rgba(240,180,90,0.22), transparent 36%), radial-gradient(circle at 80% 0%, rgba(224,106,60,0.18), transparent 42%), linear-gradient(160deg, #07080a 0%, #10131a 48%, #0b0f14 100%)"
+          }}
+        />
+        <div className="relative grid animate-fade-up gap-4 rounded-3xl border border-white/10 bg-ink-elev/70 px-8 py-10 text-center shadow-panel backdrop-blur-sm">
+          <Loader2 className="mx-auto animate-spin text-brand-gold" size={36} />
+          <span className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand-gold">área do aluno</span>
+          <p className="m-0 text-sand-muted">Verificando sua liberação de acesso...</p>
+        </div>
+      </main>
+    );
+  }
+
   if (needsOnboarding) {
     return (
       <main className="auth-layout">
@@ -1447,16 +1558,22 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             </div>
           </div>
           <nav className="workspace-nav grid gap-1.5">
-            <button className={studentSection === "subscription" ? "active" : ""} onClick={() => setStudentSection("subscription")}>
+            <button className={studentSection === "subscription" ? "active" : ""} onClick={() => goToSection("subscription")}>
               <CreditCard size={18} />Assinatura
             </button>
-            <button className={studentSection === "locked" ? "active" : ""} onClick={() => setStudentSection("locked")}>
+            <button className={studentSection === "locked" ? "active" : ""} onClick={() => goToSection("locked")}>
               <LockKeyhole size={18} />Conteúdos
+            </button>
+            <button className={studentSection === "settings" ? "active" : ""} onClick={() => goToSection("settings")}>
+              <Settings size={18} />Configurações
             </button>
           </nav>
           <button
             className="workspace-logout mt-3 flex w-full min-h-[44px] items-center justify-start gap-2.5 rounded-lg border border-brand-ember/20 bg-brand-ember/10 px-3 text-left font-extrabold text-[#ffd8d4] transition hover:border-brand-ember/35 hover:bg-brand-ember/15"
-            onClick={onLogout}
+            onClick={() => {
+              uiSounds.disconnect();
+              onLogout();
+            }}
           >
             <LogOut size={18} />
             Sair
@@ -1471,7 +1588,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         </section>
         {error && <div className="error-box">{error}</div>}
         {success && <div className="success-box">{success}</div>}
-        {(studentSection === "subscription" || !["subscription", "locked"].includes(studentSection)) && <section className="subscription-flow">
+        {(studentSection === "subscription" || !["subscription", "locked", "settings"].includes(studentSection)) && <section className="subscription-flow">
           <article className="table-panel checkout-panel">
             <span className="eyebrow">Assinatura</span>
             <h2>Assine agora e comece a treinar.</h2>
@@ -1494,12 +1611,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                       type="radio"
                       value={plan.code}
                       checked={checkoutDraft.planCode === plan.code}
-                      onChange={() =>
+                      onChange={() => {
+                        uiSounds.radioSelect();
                         setCheckoutDraft((current) => ({
                           ...current,
                           planCode: plan.code
-                        }))
-                      }
+                        }));
+                      }}
                     />
                     <span>
                       <strong>{plan.name}</strong>
@@ -1554,7 +1672,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           </article>
         </section>}
         {studentSection === "locked" && <section className="locked-content" aria-label="Funcionalidades bloqueadas">
-          <LockedOverlay onCheckout={() => setStudentSection("subscription")} />
+          <LockedOverlay onCheckout={() => goToSection("subscription")} />
           <div className="section-heading locked-heading">
             <span className="eyebrow">Acesso apos pagamento</span>
             <h2>Conteúdos bloqueados enquando sua assinatura não for confirmada.</h2>
@@ -1572,6 +1690,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             ))}
           </div>
         </section>}
+        {studentSection === "settings" && (
+          <StudentSettingsPanel onBack={() => goToSection("subscription")} />
+        )}
         </section>
       </main>
     );
@@ -1600,13 +1721,23 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           <span>Código: {studentCode}</span>
         </div>
         <div className="student-header-actions">
-          <button className="student-streak-button" aria-label={`Ofensiva de ${currentStreak} dias`} onClick={() => setStreakCalendarOpen(true)}>
+          <button className="student-streak-button" aria-label={`Ofensiva de ${currentStreak} dias`} onClick={() => {
+            uiSounds.popupOpen();
+            setStreakCalendarOpen(true);
+          }}>
             <Flame size={18} />
             <span>Ofensiva</span>
             <strong>{currentStreak}</strong>
           </button>
           <div className="student-notification-wrap">
-            <button className="student-icon-button" aria-label="Notificações" onClick={() => setNotificationsOpen((open) => !open)}>
+            <button className="student-icon-button" aria-label="Notificações" onClick={() => setNotificationsOpen((open) => {
+              if (open) uiSounds.popupClose();
+              else {
+                uiSounds.popupOpen();
+                uiSounds.popupNotify();
+              }
+              return !open;
+            })}>
               <Bell size={24} />
               {unreadNotificationsCount > 0 && <span className="student-notification-badge">{unreadNotificationsCount}</span>}
             </button>
@@ -1730,7 +1861,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 {publicConfig["module_qr"] !== "false" && publicConfig["qr_checkin_enabled"] !== "false" && (
                   <button
                     className="student-outline-button"
-                    onClick={() => setShowStudentQr((value) => !value)}
+                    onClick={() => setShowStudentQr((value) => {
+                      if (value) uiSounds.popupClose();
+                      else uiSounds.popupOpen();
+                      return !value;
+                    })}
                   >
                     <QrCode size={18} />
                     {showStudentQr ? "Fechar QR" : "QR de check-in"}
@@ -2860,6 +2995,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               </span>
             </article>
             <form
+              key={`student-profile-form-${studentProfileFormKey}`}
               id="student-profile-form"
               className={`student-profile-form${studentProfileEditing ? "" : " student-profile-locked"}`}
               onSubmit={handleUpdateStudentProfile}
@@ -3077,25 +3213,25 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         )}
 
         {studentSection === "menu" && (
-          <section className="student-menu-list">
+          <section className="student-menu-list p-4 sm:p-6">
             {[
-              { icon: UserRound, title: "Perfil", action: () => setStudentSection("profile") },
+              { icon: UserRound, title: "Perfil", action: () => goToSection("profile") },
               { icon: Dumbbell, title: trainingCopy.workout, action: () => openTrainingCatalog(), favorite: true },
-              { icon: ShieldCheck, title: "Matrículas", action: () => setStudentSection("membership") },
-              { icon: CreditCard, title: "Pagamentos", action: () => setStudentSection("payments"), favorite: true },
-              { icon: Ruler, title: trainingCopy.physicalAssessment, action: () => setStudentSection("assessments") },
-              { icon: CalendarDays, title: "Frequência", action: () => setStudentSection("status") },
-              { icon: Package, title: "Produtos", action: () => setStudentSection("products"), favorite: true },
-              { icon: ShoppingCart, title: "Compras", action: () => setStudentSection("purchases") },
-              { icon: CalendarPlus, title: "Eventos", action: () => setStudentSection("events") },
-              { icon: MapPin, title: "Unidades", action: () => setStudentSection("locations") },
-              { icon: Headphones, title: "Atendimento", action: () => setStudentSection("support") },
-              { icon: QrCode, title: "QR Code", action: () => { setStudentSection("home"); setShowStudentQr(true); } },
-              { icon: CreditCard, title: "Meus Cartões", action: () => setStudentSection("payments") },
-              { icon: Settings, title: "Configurações", action: () => setStudentSection("profile") },
-              { icon: MessageCircle, title: "Contato", action: () => setStudentSection("support") },
-              { icon: Star, title: "Favoritos", action: () => setStudentSection("favorites") },
-              { icon: Trophy, title: trainingCopy.rateWorkout, action: () => setStudentSection("ratings") }
+              { icon: ShieldCheck, title: "Matrículas", action: () => goToSection("membership") },
+              { icon: CreditCard, title: "Pagamentos", action: () => goToSection("payments"), favorite: true },
+              { icon: Ruler, title: trainingCopy.physicalAssessment, action: () => goToSection("assessments") },
+              { icon: CalendarDays, title: "Frequência", action: () => goToSection("status") },
+              { icon: Package, title: "Produtos", action: () => goToSection("products"), favorite: true },
+              { icon: ShoppingCart, title: "Compras", action: () => goToSection("purchases") },
+              { icon: CalendarPlus, title: "Eventos", action: () => goToSection("events") },
+              { icon: MapPin, title: "Unidades", action: () => goToSection("locations") },
+              { icon: Headphones, title: "Atendimento", action: () => goToSection("support") },
+              { icon: QrCode, title: "QR Code", action: () => { goToSection("home"); setShowStudentQr(true); } },
+              { icon: CreditCard, title: "Meus Cartões", action: () => goToSection("payments") },
+              { icon: Settings, title: "Configurações", action: () => goToSection("settings") },
+              { icon: MessageCircle, title: "Contato", action: () => goToSection("support") },
+              { icon: Star, title: "Favoritos", action: () => goToSection("favorites") },
+              { icon: Trophy, title: trainingCopy.rateWorkout, action: () => goToSection("ratings") }
             ].map((item) => (
               <button className="student-menu-item" key={item.title} onClick={item.action}>
                 <item.icon size={24} />
@@ -3103,11 +3239,21 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 {item.favorite && <Star size={18} />}
               </button>
             ))}
-            <button className="student-menu-item danger" onClick={onLogout}>
+            <button
+              className="student-menu-item danger"
+              onClick={() => {
+                uiSounds.disconnect();
+                onLogout();
+              }}
+            >
               <LogOut size={24} />
               <span>Sair</span>
             </button>
           </section>
+        )}
+
+        {studentSection === "settings" && (
+          <StudentSettingsPanel onBack={() => goToSection("menu")} />
         )}
       </>
 
@@ -3165,7 +3311,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         )}
 
       {streakCalendarOpen && (
-        <div className="student-streak-modal-backdrop" role="presentation" onClick={() => setStreakCalendarOpen(false)}>
+        <div className="student-streak-modal-backdrop" role="presentation" onClick={() => {
+          uiSounds.popupClose();
+          setStreakCalendarOpen(false);
+        }}>
           <section
             className="student-streak-modal"
             role="dialog"
@@ -3179,7 +3328,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 <strong>{currentStreak} dia(s)</strong>
                 <small>consecutivo(s)</small>
               </div>
-              <button className="student-icon-button" aria-label="Fechar calendário" onClick={() => setStreakCalendarOpen(false)}>
+              <button className="student-icon-button" aria-label="Fechar calendário" onClick={() => {
+                uiSounds.popupClose();
+                setStreakCalendarOpen(false);
+              }}>
                 <Check size={20} />
               </button>
             </div>
@@ -3288,12 +3440,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       )}
 
       <nav className="student-bottom-nav" aria-label="Navegacao do aluno">
-        <button className={studentSection === "home" ? "active" : ""} onClick={() => setStudentSection("home")}><Home size={22} />Home</button>
-        <button className={studentSection === "payments" ? "active" : ""} onClick={() => setStudentSection("payments")}><CreditCard size={22} />Pagamentos</button>
+        <button className={studentSection === "home" ? "active" : ""} onClick={() => goToSection("home")}><Home size={22} />Home</button>
+        <button className={studentSection === "payments" ? "active" : ""} onClick={() => goToSection("payments")}><CreditCard size={22} />Pagamentos</button>
         <button className={studentSection === "training" || studentSection === "player" || studentSection === "history" ? "active" : ""} onClick={() => openTrainingCatalog()}><Dumbbell size={22} />Treino</button>
-        <button className={studentSection === "products" ? "active" : ""} onClick={() => setStudentSection("products")}><Package size={22} />Produtos</button>
-        <button className={studentSection === "menu" ? "active" : ""} onClick={() => setStudentSection("menu")}><Menu size={22} />Menu</button>
+        <button className={studentSection === "products" ? "active" : ""} onClick={() => goToSection("products")}><Package size={22} />Produtos</button>
+        <button className={studentSection === "menu" ? "active" : ""} onClick={() => goToSection("menu")}><Menu size={22} />Menu</button>
       </nav>
     </main>
   );
 }
+

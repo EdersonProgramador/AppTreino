@@ -422,7 +422,7 @@ async function main() {
           "Planilha de treino iniciante com divisão ABC em dias alternados. Duração: 6 meses. Progredir carga ou repetição toda semana dentro da zona alvo e fazer 20 min de cardio pós treino em qualquer aparelho.",
         modality: "Musculação"
       }),
-      targetGender: "ALL",
+      targetGender: "MALE",
       status: "PUBLISHED",
       isActive: true,
       publishedAt: new Date()
@@ -435,7 +435,7 @@ async function main() {
           "Planilha de treino iniciante com divisão ABC em dias alternados. Duração: 6 meses. Progredir carga ou repetição toda semana dentro da zona alvo e fazer 20 min de cardio pós treino em qualquer aparelho.",
         modality: "Musculação"
       }),
-      targetGender: "ALL",
+      targetGender: "MALE",
       status: "PUBLISHED",
       isActive: true,
       publishedAt: new Date()

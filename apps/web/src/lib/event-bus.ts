@@ -14,7 +14,9 @@ export type SystemEventType =
   | "CHECKIN_REALIZADO"
   | "CARTAO_ATUALIZADO"
   | "MENSAGEM_ENVIADA"
-  | "AVALIACAO_SUBMETIDA";
+  | "AVALIACAO_SUBMETIDA"
+  | "PROGRAMA_PUBLICADO"
+  | "CMS_ATUALIZADO";
 
 export type PanelDestination =
   | "payments"
@@ -32,7 +34,9 @@ export const EVENT_PANEL_TARGETS: Record<SystemEventType, PanelDestination[]> = 
   CHECKIN_REALIZADO: ["status", "locations"],
   CARTAO_ATUALIZADO: ["payments"],
   MENSAGEM_ENVIADA: ["support"],
-  AVALIACAO_SUBMETIDA: ["assessments", "training", "ratings"]
+  AVALIACAO_SUBMETIDA: ["assessments", "training", "ratings"],
+  PROGRAMA_PUBLICADO: ["training"],
+  CMS_ATUALIZADO: ["training", "locations", "membership", "payments"]
 };
 
 export const PANEL_SECTION_LABEL: Record<PanelDestination, string> = {
@@ -78,6 +82,16 @@ export const EVENT_FLOW_META: Record<
     origin: "Avaliar treino",
     syncAction: "Envia feedback de instrutores, treinos ou infraestrutura para o painel do aluno.",
     notificationTitle: "Avaliação sincronizada"
+  },
+  PROGRAMA_PUBLICADO: {
+    origin: "Estúdio de Treinos",
+    syncAction: "Libera o programa publicado no catálogo de treinos do aluno elegível.",
+    notificationTitle: "Novo treino publicado"
+  },
+  CMS_ATUALIZADO: {
+    origin: "Painel Admin",
+    syncAction: "Recarrega no aluno as informações alteradas no admin.",
+    notificationTitle: "Catálogo atualizado"
   }
 };
 
@@ -111,6 +125,19 @@ export type SystemEventPayloadMap = {
     score: number;
     programTitle?: string;
     source: "avaliar";
+  };
+  PROGRAMA_PUBLICADO: {
+    programId: string;
+    programTitle: string;
+    audienceMode: "ALL_ACTIVE" | "SELECTED";
+    eligibleStudentCount?: number;
+    source: "cms_publish";
+  };
+  CMS_ATUALIZADO: {
+    scopes: Array<"training" | "locations" | "announcements" | "account">;
+    resources: string[];
+    message?: string;
+    source: "admin_save";
   };
 };
 
@@ -153,6 +180,16 @@ export function buildSyncNotificationMessage<T extends SystemEventType>(
       const data = payload as SystemEventPayloadMap["AVALIACAO_SUBMETIDA"];
       const program = data.programTitle ? ` "${data.programTitle}"` : "";
       return `Feedback${program} (${data.score}★) enviado. ${meta.syncAction} Destinos: ${targets}.`;
+    }
+    case "PROGRAMA_PUBLICADO": {
+      const data = payload as SystemEventPayloadMap["PROGRAMA_PUBLICADO"];
+      const count =
+        typeof data.eligibleStudentCount === "number" ? ` para ${data.eligibleStudentCount} aluno(s)` : "";
+      return `Treino "${data.programTitle}" publicado${count}. ${meta.syncAction} Destino: ${targets}.`;
+    }
+    case "CMS_ATUALIZADO": {
+      const data = payload as SystemEventPayloadMap["CMS_ATUALIZADO"];
+      return data.message ?? `Alteração do admin sincronizada. ${meta.syncAction} Destinos: ${targets}.`;
     }
     default:
       return meta.syncAction;
@@ -209,7 +246,47 @@ export function publish<T extends SystemEventType>(
     }
   });
 
+  // Propaga entre abas (admin → aluno no mesmo navegador).
+  try {
+    if (typeof BroadcastChannel !== "undefined") {
+      const channel = new BroadcastChannel("app-treino-events");
+      channel.postMessage(event);
+      channel.close();
+    }
+  } catch {
+    // Ambiente sem BroadcastChannel.
+  }
+
   return event;
+}
+
+let broadcastWired = false;
+
+/** Escuta eventos publicados em outras abas do mesmo origem. */
+export function wireEventBusBroadcast() {
+  if (broadcastWired || typeof BroadcastChannel === "undefined") return;
+  broadcastWired = true;
+
+  const channel = new BroadcastChannel("app-treino-events");
+  channel.addEventListener("message", (messageEvent) => {
+    const event = messageEvent.data as SystemEvent | null;
+    if (!event?.type || !event.payload) return;
+
+    getBucket(event.type).forEach((handler) => {
+      try {
+        handler(event);
+      } catch {
+        // Isola falhas.
+      }
+    });
+    getBucket("*").forEach((handler) => {
+      try {
+        handler(event);
+      } catch {
+        // Isola falhas.
+      }
+    });
+  });
 }
 
 export function clearEventBus() {

@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { requireAuth } from "../auth.js";
+import { requireAuth, requirePathRole } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { calculateProgramEndDate, isProgramComplete, parseProgramMetadata } from "./workout-program.utils.js";
@@ -324,15 +324,26 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
           }
         }
       },
-      OR: [
-        { audienceMode: "ALL_ACTIVE" },
-        {
-          assignedUsers: {
-            some: {
-              userId,
-              status: "ACTIVE"
-            }
+      ...(studentGender
+        ? {
+            OR: [{ targetGender: "ALL" as const }, { targetGender: studentGender }]
           }
+        : {
+            targetGender: "ALL"
+          }),
+      AND: [
+        {
+          OR: [
+            { audienceMode: "ALL_ACTIVE" },
+            {
+              assignedUsers: {
+                some: {
+                  userId,
+                  status: "ACTIVE"
+                }
+              }
+            }
+          ]
         }
       ]
     },
@@ -724,6 +735,10 @@ export async function getPublishedWorkouts(userId: string, dayNumber: number) {
 }
 
 export async function registerStudentRoutes(app: FastifyInstance) {
+  app.addHook("preHandler", async (request) => {
+    await requirePathRole(app, request, "/student", "USER");
+  });
+
   app.get("/student/workout/programs", async (request) => {
     requireDatabase();
     const authUser = await requireActiveEnrollment(app, request);
