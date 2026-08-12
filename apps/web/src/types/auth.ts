@@ -1,4 +1,3 @@
-export type View = "home" | "login" | "admin" | "user";
 export type AuthMode = "login" | "register" | "forgot" | "reset";
 export type PlanCode = "monthly" | "annual";
 
