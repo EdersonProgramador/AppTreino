@@ -599,6 +599,10 @@
     gap: 0.5rem;
   }
 
+  .cms-row-actions-danger {
+    flex-wrap: nowrap;
+  }
+
   .cms-upload-field {
     grid-column: 1 / -1;
     display: grid;
@@ -2306,8 +2310,34 @@ html.light .admin-workspace-shell .workspace-logout:hover svg {
   font-size: clamp(22px, 2.4vw, 28px);
 }
 
+.cms-subtitle-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.75rem;
+  min-width: 0;
+}
+
+.cms-subtitle-inline h2 {
+  margin: 0;
+}
+
+.cms-subtitle-inline p {
+  margin: 0;
+  white-space: nowrap;
+}
+
 .cms-data-row {
   grid-template-columns: minmax(0, 1fr) minmax(100px, auto) auto auto;
+}
+
+.cms-data-row.cms-locations-row {
+  grid-template-columns: minmax(0, 1fr) minmax(110px, auto) minmax(96px, auto) auto auto;
+  align-items: center;
+}
+
+.cms-data-row.cms-locations-row.with-thumb {
+  grid-template-columns: 52px minmax(0, 1fr) minmax(110px, auto) minmax(96px, auto) auto auto;
 }
 
 .cms-data-row.cms-sortable-row {
@@ -2396,7 +2426,144 @@ html.light .admin-workspace-shell .workspace-logout:hover svg {
 .cms-row-actions {
   display: flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 6px;
+}
+
+.cms-row-actions-danger {
+  flex-shrink: 0;
+}
+
+/* Editar: laranja | Deletar: vermelho */
+.edit-action-button,
+button.edit-action-button {
+  color: #ff8a3d;
+  border-color: rgba(223, 102, 60, 0.6);
+  background: rgba(223, 102, 60, 0.18);
+}
+
+.edit-action-button:hover,
+button.edit-action-button:hover {
+  color: #ffb078;
+  border-color: rgba(223, 102, 60, 0.9);
+  background: rgba(223, 102, 60, 0.3);
+  transform: translateY(-1px);
+}
+
+.delete-action-button,
+button.delete-action-button,
+.danger-button.delete-action-button {
+  color: #ff5a4d;
+  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(220, 38, 38, 0.2);
+}
+
+.delete-action-button:hover,
+button.delete-action-button:hover,
+.danger-button.delete-action-button:hover {
+  color: #ff857a;
+  border-color: rgba(239, 68, 68, 0.85);
+  background: rgba(220, 38, 38, 0.36);
+  transform: translateY(-1px);
+}
+
+/* Ícones isolados (lápis/lixeira); botões com texto usam outline/danger. */
+.data-row > .edit-action-button,
+.data-row > .delete-action-button,
+.cms-row-actions > .edit-action-button:not(.outline-button),
+.cms-row-actions > .delete-action-button:not(.outline-button):not(.danger-button),
+.assessment-history-item .edit-action-button,
+.assessment-history-item .delete-action-button {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 8px;
+  padding: 0;
+}
+
+.admin-users-actions .edit-action-button {
+  display: inline-flex;
+  width: auto;
+  min-width: 38px;
+  min-height: 34px;
+  height: auto;
+  padding: 0 10px;
+  font-weight: 900;
+}
+
+.admin-users-actions .delete-action-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  padding: 0;
+}
+
+.outline-button.edit-action-button {
+  width: auto;
+  height: auto;
+  min-height: 42px;
+  padding: 0 14px;
+  color: #ff8a3d;
+  border-color: rgba(223, 102, 60, 0.6);
+  background: rgba(223, 102, 60, 0.14);
+}
+
+.outline-button.edit-action-button:hover {
+  color: #ffb078;
+  border-color: rgba(223, 102, 60, 0.9);
+  background: rgba(223, 102, 60, 0.26);
+}
+
+.outline-button.delete-action-button {
+  width: auto;
+  height: auto;
+  min-height: 42px;
+  padding: 0 14px;
+}
+
+/* Botões de remover com texto (preview de mídia, CTAs) */
+.cms-image-preview .delete-action-button,
+.cms-image-preview button.delete-action-button {
+  display: inline-flex;
+  width: auto;
+  height: auto;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.student-outline-button.edit-action-button,
+.student-profile-actions .edit-action-button {
+  display: inline-flex;
+  width: auto;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  color: #ea580c;
+  border-color: rgba(234, 88, 12, 0.55);
+  background: rgba(249, 115, 22, 0.14);
+}
+
+.student-outline-button.edit-action-button:hover,
+.student-profile-actions .edit-action-button:hover {
+  color: #c2410c;
+  border-color: rgba(194, 65, 12, 0.75);
+  background: rgba(249, 115, 22, 0.24);
+}
+
+.admin-profile-actions .outline-button.edit-action-button {
+  min-height: 44px;
+}
+
+.student-delete-button.delete-action-button {
+  color: #ff5a4d;
+  border-color: rgba(239, 68, 68, 0.45);
+  background: rgba(220, 38, 38, 0.16);
 }
 
 .cms-data-row span {
@@ -3582,17 +3749,68 @@ html.light .admin-workspace-shell .workspace-logout:hover svg {
   border: 1px solid var(--app-border-strong);
   border-radius: 8px;
   background: var(--app-fill);
-  color: #ffd8d4;
+  color: var(--app-text-muted);
   transition:
     border-color 180ms ease,
     background 180ms ease,
+    color 180ms ease,
     transform 180ms ease;
 }
 
 .data-row button:hover {
-  border-color: rgba(255, 216, 212, 0.38);
-  background: rgba(190, 48, 39, 0.14);
+  border-color: rgba(242, 180, 97, 0.35);
+  background: rgba(242, 180, 97, 0.1);
+  color: var(--app-text);
   transform: translateY(-1px);
+}
+
+/* Unidade / Modalidade / Exercício: vence .data-row button */
+.data-row button.edit-action-button,
+.cms-data-row button.edit-action-button,
+.cms-row-actions button.edit-action-button,
+.admin-workspace-shell .data-row button.edit-action-button,
+.admin-workspace-shell .cms-row-actions button.edit-action-button {
+  color: #ff8a3d;
+  border-color: rgba(223, 102, 60, 0.65);
+  background: rgba(223, 102, 60, 0.2);
+}
+
+.data-row button.edit-action-button:hover,
+.cms-data-row button.edit-action-button:hover,
+.cms-row-actions button.edit-action-button:hover,
+.admin-workspace-shell .data-row button.edit-action-button:hover,
+.admin-workspace-shell .cms-row-actions button.edit-action-button:hover {
+  color: #ffb078;
+  border-color: rgba(223, 102, 60, 0.95);
+  background: rgba(223, 102, 60, 0.34);
+}
+
+.data-row button.delete-action-button,
+.cms-data-row button.delete-action-button,
+.cms-row-actions button.delete-action-button,
+.admin-workspace-shell .data-row button.delete-action-button,
+.admin-workspace-shell .cms-row-actions button.delete-action-button {
+  color: #ff5a4d;
+  border-color: rgba(239, 68, 68, 0.65);
+  background: rgba(220, 38, 38, 0.22);
+}
+
+.data-row button.delete-action-button:hover,
+.cms-data-row button.delete-action-button:hover,
+.cms-row-actions button.delete-action-button:hover,
+.admin-workspace-shell .data-row button.delete-action-button:hover,
+.admin-workspace-shell .cms-row-actions button.delete-action-button:hover {
+  color: #ff857a;
+  border-color: rgba(239, 68, 68, 0.95);
+  background: rgba(220, 38, 38, 0.38);
+}
+
+.data-row button.edit-action-button svg,
+.cms-row-actions button.edit-action-button svg,
+.data-row button.delete-action-button svg,
+.cms-row-actions button.delete-action-button svg {
+  color: inherit;
+  stroke: currentColor;
 }
 
 .admin-user-gender-actions {
@@ -3629,6 +3847,283 @@ html.light .admin-workspace-shell .workspace-logout:hover svg {
 
 .finance-admin-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.finance-hub {
+  display: grid;
+  gap: 18px;
+}
+
+.finance-hub-header {
+  display: grid;
+  gap: 16px;
+}
+
+.finance-hub-header h1 {
+  margin: 6px 0 0;
+  font-family: var(--font-display, inherit);
+  font-size: clamp(1.6rem, 2.4vw, 2.1rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--app-text);
+}
+
+.finance-hub-header > div > p {
+  margin: 6px 0 0;
+  max-width: 42rem;
+  color: var(--app-text-muted);
+  font-size: 0.9rem;
+}
+
+.finance-hub-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.finance-kpi {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 76px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: var(--app-panel);
+}
+
+.finance-kpi svg {
+  color: #f0b45a;
+  flex: 0 0 auto;
+}
+
+.finance-kpi strong {
+  display: block;
+  color: var(--app-text);
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.finance-kpi span {
+  color: var(--app-text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.finance-kpi.tone-warning svg {
+  color: #e0a045;
+}
+
+.finance-kpi.tone-danger svg {
+  color: #e07070;
+}
+
+.finance-hub-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.finance-hub-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  padding: 0 14px;
+  background: var(--app-fill);
+  color: var(--app-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.finance-hub-tabs button em {
+  font-style: normal;
+  opacity: 0.75;
+}
+
+.finance-hub-tabs button.active {
+  border-color: rgba(240, 180, 90, 0.55);
+  background: rgba(240, 180, 90, 0.14);
+  color: var(--app-text);
+}
+
+.finance-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.finance-form {
+  align-items: end;
+}
+
+.finance-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--app-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.finance-form--payments {
+  grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)) auto;
+}
+
+.finance-table-head {
+  display: grid;
+  gap: 12px;
+  padding: 0 12px;
+  color: var(--app-text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.finance-table-head--plans,
+.finance-row--plans {
+  grid-template-columns: minmax(0, 1.4fr) minmax(90px, 0.7fr) minmax(110px, 0.8fr) auto;
+}
+
+.finance-table-head--memberships,
+.finance-row--memberships {
+  grid-template-columns: minmax(0, 1.5fr) minmax(90px, 0.7fr) minmax(160px, 1fr) auto;
+}
+
+.finance-table-head--payments,
+.finance-row--payments {
+  grid-template-columns: minmax(0, 1.4fr) minmax(90px, 0.7fr) minmax(160px, 1fr) minmax(100px, 0.8fr) auto;
+}
+
+.finance-table-head--cards,
+.finance-row--cards {
+  grid-template-columns: minmax(0, 1.6fr) minmax(110px, 0.7fr) auto;
+}
+
+.finance-row {
+  align-items: center;
+}
+
+.finance-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.02em;
+}
+
+.finance-money {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  color: var(--app-text);
+}
+
+.finance-muted {
+  color: var(--app-text-muted);
+}
+
+.finance-link {
+  color: #f0b45a;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.finance-link:hover {
+  text-decoration: underline;
+}
+
+.finance-status-cell {
+  display: grid;
+  gap: 6px;
+}
+
+.finance-status-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.finance-status-badge.tone-success {
+  background: rgba(53, 212, 95, 0.16);
+  color: #35d45f;
+}
+
+.finance-status-badge.tone-warning {
+  background: rgba(240, 180, 90, 0.18);
+  color: #f0b45a;
+}
+
+.finance-status-badge.tone-danger {
+  background: rgba(224, 112, 112, 0.18);
+  color: #e07070;
+}
+
+.finance-status-badge.tone-info {
+  background: rgba(110, 168, 254, 0.18);
+  color: #6ea8fe;
+}
+
+.finance-status-badge.tone-neutral {
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--app-text-muted);
+}
+
+html.light .finance-kpi,
+html.light .finance-hub-tabs button {
+  background: #fff;
+}
+
+@media (max-width: 1100px) {
+  .finance-hub-kpis,
+  .dash-stats-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .finance-form--payments {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .dash-quick-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-hub-kpis,
+  .dash-stats-kpis,
+  .dash-metric-kpis,
+  .finance-form--payments,
+  .finance-table-head,
+  .finance-row--plans,
+  .finance-row--memberships,
+  .finance-row--payments,
+  .finance-row--cards,
+  .dash-table-head--payments,
+  .dash-row--payments,
+  .dash-table-head--memberships,
+  .dash-row--memberships,
+  .dash-table-head--tickets,
+  .dash-row--tickets,
+  .dash-table-head--contact,
+  .dash-row--contact,
+  .dash-table-head--events,
+  .dash-row--events,
+  .dash-table-head--students,
+  .dash-row--students,
+  .dash-table-head--products,
+  .dash-row--products {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-table-head {
+    display: none;
+  }
 }
 
 .settings-grid {
@@ -7458,10 +7953,10 @@ html.dark .student-rating-done {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 0;
+  border: 1px solid rgba(239, 68, 68, 0.4);
   border-radius: 10px;
-  background: rgba(223, 102, 60, 0.14);
-  color: #df663c;
+  background: rgba(220, 38, 38, 0.16);
+  color: #ff5a4d;
   font-size: 13px;
   font-weight: 900;
 }
@@ -8562,12 +9057,18 @@ html.light .admin-workspace-shell .workspace-logout svg {
   .data-row,
   .cms-data-row,
   .cms-data-row.with-thumb,
+  .cms-data-row.cms-locations-row,
+  .cms-data-row.cms-locations-row.with-thumb,
   .ticket-row,
   .metric-grid,
   .checkout-plan-grid,
   .checkout-actions,
   .player-input-row {
     grid-template-columns: 1fr;
+  }
+
+  .cms-data-row.cms-locations-row .cms-row-actions-danger {
+    justify-self: start;
   }
 
   .inline-form button {
@@ -8689,7 +9190,59 @@ html.light .admin-workspace-shell .workspace-logout svg {
   }
 }
 
-/* ===== Painel administrativo — Dashboard ===== */
+/* ===== Painel administrativo — Dashboard (padrão finance-hub) ===== */
+
+.dash-hub {
+  margin-top: 0;
+}
+
+.dash-hub-panels {
+  display: grid;
+  gap: 18px;
+}
+
+.dash-metric-kpis {
+  margin-top: 4px;
+}
+
+.dash-stats-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dash-panel-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  width: fit-content;
+}
+
+.dash-table-head--payments,
+.dash-row--payments {
+  grid-template-columns: minmax(0, 1.5fr) minmax(90px, 0.7fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr);
+}
+
+.dash-table-head--memberships,
+.dash-row--memberships {
+  grid-template-columns: minmax(0, 1.6fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr);
+}
+
+.dash-table-head--tickets,
+.dash-row--tickets,
+.dash-table-head--contact,
+.dash-row--contact,
+.dash-table-head--events,
+.dash-row--events,
+.dash-table-head--students,
+.dash-row--students,
+.dash-table-head--products,
+.dash-row--products {
+  grid-template-columns: minmax(0, 1.6fr) minmax(120px, 1fr) minmax(100px, 0.7fr);
+}
 
 .admin-dashboard {
   display: grid;
@@ -8844,7 +9397,12 @@ html.light .admin-workspace-shell .workspace-logout svg {
 
 .dash-quick-actions {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.dash-quick-actions--stack {
+  grid-template-columns: 1fr;
 }
 
 .dash-quick-actions button {
@@ -8852,16 +9410,22 @@ html.light .admin-workspace-shell .workspace-logout svg {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  min-height: 76px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
   padding: 14px;
-  background: rgba(255, 255, 255, 0.045);
-  color: #f2b461;
+  background: var(--app-panel);
+  color: #f0b45a;
   text-align: left;
+  cursor: pointer;
   transition:
     border-color 180ms ease,
     background 180ms ease,
     transform 180ms ease;
+}
+
+html.light .dash-quick-actions button {
+  background: #fff;
 }
 
 .dash-quick-actions button:hover {
@@ -10047,10 +10611,10 @@ html.light .admin-profile-function-card {
   width: 40px;
   min-height: 40px;
   padding: 0;
-  border: 0;
+  border: 1px solid rgba(239, 68, 68, 0.4);
   border-radius: 10px;
-  background: rgba(223, 102, 60, 0.14);
-  color: #df663c;
+  background: rgba(220, 38, 38, 0.16);
+  color: #ff5a4d;
 }
 
 @media (max-width: 520px) {
@@ -11825,6 +12389,171 @@ html.light .primary-button,
 html.light .primary-button span,
 html.light .primary-button svg {
   color: var(--on-accent) !important;
+}
+
+/* Tema claro: botões com cor mais presente */
+html.light .primary-button,
+html.light .price-card button {
+  border-color: #c97a1e;
+  background: linear-gradient(135deg, #f0a93a, #d4572a);
+  color: #15100b !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    0 14px 28px rgba(212, 87, 42, 0.28);
+}
+
+html.light .admin-workspace-shell .primary-button,
+html.light .admin-workspace-shell .admin-publish-shortcut {
+  border-color: #148a36;
+  background: linear-gradient(180deg, #2bbd55, #178a38);
+  color: #ffffff !important;
+  box-shadow: 0 12px 26px rgba(23, 138, 56, 0.3);
+}
+
+html.light .outline-button {
+  border-color: rgba(21, 26, 34, 0.28);
+  background: #ffffff;
+  color: #151a22;
+  box-shadow: 0 1px 2px rgba(21, 26, 34, 0.06);
+}
+
+html.light .outline-button:hover {
+  border-color: rgba(21, 26, 34, 0.42);
+  background: #f3eee6;
+  color: #0e1116;
+}
+
+html.light .student-outline-button {
+  border-color: rgba(21, 26, 34, 0.28);
+  background: #ffffff;
+  color: #151a22;
+}
+
+html.light .student-outline-button:hover {
+  border-color: rgba(21, 26, 34, 0.42);
+  background: #f3eee6;
+}
+
+html.light .student-green-button,
+html.light .student-green-button span {
+  border-color: #148a36;
+  background: linear-gradient(180deg, #2bbd55, #178a38);
+  color: #ffffff !important;
+  box-shadow: 0 10px 22px rgba(23, 138, 56, 0.28);
+}
+
+html.light .edit-action-button,
+html.light button.edit-action-button,
+html.light .outline-button.edit-action-button {
+  color: #ea580c;
+  border-color: rgba(234, 88, 12, 0.55);
+  background: rgba(249, 115, 22, 0.16);
+}
+
+html.light .edit-action-button:hover,
+html.light button.edit-action-button:hover,
+html.light .outline-button.edit-action-button:hover {
+  color: #c2410c;
+  border-color: rgba(194, 65, 12, 0.75);
+  background: rgba(249, 115, 22, 0.26);
+}
+
+html.light .delete-action-button,
+html.light button.delete-action-button,
+html.light .outline-button.delete-action-button,
+html.light .danger-button,
+html.light .cms-confirm-actions .danger-button {
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.55);
+  background: rgba(220, 38, 38, 0.12);
+}
+
+html.light .delete-action-button:hover,
+html.light button.delete-action-button:hover,
+html.light .outline-button.delete-action-button:hover,
+html.light .danger-button:hover,
+html.light .cms-confirm-actions .danger-button:hover {
+  color: #b91c1c;
+  border-color: rgba(185, 28, 28, 0.75);
+  background: rgba(220, 38, 38, 0.22);
+}
+
+html.light .data-row button {
+  color: #44403a;
+  border-color: rgba(21, 26, 34, 0.22);
+  background: #ffffff;
+}
+
+html.light .data-row button:hover {
+  color: #0e1116;
+  border-color: rgba(180, 83, 9, 0.45);
+  background: rgba(245, 158, 11, 0.12);
+}
+
+html.light .admin-users-actions button:not(.edit-action-button):not(.delete-action-button),
+html.light .admin-users-pagination button {
+  border-color: rgba(21, 26, 34, 0.22);
+  background: #ffffff;
+  color: #151a22;
+}
+
+html.light .data-row button.edit-action-button,
+html.light .cms-data-row button.edit-action-button,
+html.light .cms-row-actions button.edit-action-button,
+html.light .admin-workspace-shell .data-row button.edit-action-button,
+html.light .admin-workspace-shell .cms-row-actions button.edit-action-button,
+html.light .admin-users-actions button.edit-action-button {
+  color: #ea580c;
+  border-color: rgba(234, 88, 12, 0.6);
+  background: rgba(249, 115, 22, 0.18);
+}
+
+html.light .data-row button.edit-action-button:hover,
+html.light .cms-row-actions button.edit-action-button:hover,
+html.light .admin-users-actions button.edit-action-button:hover {
+  color: #c2410c;
+  border-color: rgba(194, 65, 12, 0.8);
+  background: rgba(249, 115, 22, 0.28);
+}
+
+html.light .data-row button.delete-action-button,
+html.light .cms-data-row button.delete-action-button,
+html.light .cms-row-actions button.delete-action-button,
+html.light .admin-workspace-shell .data-row button.delete-action-button,
+html.light .admin-workspace-shell .cms-row-actions button.delete-action-button,
+html.light .admin-users-actions button.delete-action-button {
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.6);
+  background: rgba(220, 38, 38, 0.14);
+}
+
+html.light .data-row button.delete-action-button:hover,
+html.light .cms-row-actions button.delete-action-button:hover,
+html.light .admin-users-actions button.delete-action-button:hover {
+  color: #b91c1c;
+  border-color: rgba(185, 28, 28, 0.8);
+  background: rgba(220, 38, 38, 0.24);
+}
+
+html.light .compact-button.outline-button {
+  border-color: rgba(21, 26, 34, 0.28);
+  color: #151a22;
+}
+
+html.light .student-delete-button,
+html.light .student-favorite-card .student-delete-button,
+html.light .student-payment-card .student-delete-button,
+html.light .student-info-card button.student-delete-button {
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.5);
+  background: rgba(220, 38, 38, 0.12);
+}
+
+html.light .student-assessment-history .edit-action-button,
+html.light .assessment-history-item .edit-action-button {
+  color: #ea580c;
+  border-color: rgba(234, 88, 12, 0.55);
+  background: rgba(249, 115, 22, 0.16);
 }
 
 html.light .text-brand-gold,

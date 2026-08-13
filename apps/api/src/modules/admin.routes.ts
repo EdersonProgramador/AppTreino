@@ -299,17 +299,21 @@ function programDurationFields(input: {
   };
 }
 
+/** ACADEMY=Academia, UNIT=Box, CLUB=Studio (labels na UI). */
+const locationTypeEnum = z.enum(["ACADEMY", "UNIT", "CLUB"]);
+
 const cmsLocationSchema = z.object({
   name: z.string().min(2),
   slug: z.string().min(2).optional(),
-  type: z.enum(["ACADEMY", "UNIT", "CLUB"]).default("ACADEMY"),
+  // Sem .default() aqui: em PUT parcial o default regrava o tipo indevidamente.
+  type: locationTypeEnum.optional(),
   description: z.string().optional(),
   address: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
   phone: z.string().optional(),
   imageUrl: urlOrRelative,
-  isActive: z.coerce.boolean().default(true),
+  isActive: z.coerce.boolean().optional(),
   sortOrder: z.coerce.number().int().min(0).optional()
 });
 
@@ -1841,14 +1845,14 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       data: {
         name: body.name,
         slug,
-        type: body.type,
+        type: body.type ?? "ACADEMY",
         description: body.description,
         address: body.address,
         city: body.city,
         state: body.state,
         phone: body.phone,
         imageUrl: body.imageUrl || null,
-        isActive: body.isActive,
+        isActive: body.isActive ?? true,
         sortOrder
       }
     });
@@ -1870,14 +1874,14 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       data: {
         name: body.name,
         slug: body.slug ? slugify(body.slug) : undefined,
-        type: body.type,
+        ...(body.type !== undefined ? { type: body.type } : {}),
         description: body.description,
         address: body.address,
         city: body.city,
         state: body.state,
         phone: body.phone,
         imageUrl: body.imageUrl === undefined ? undefined : body.imageUrl || null,
-        isActive: body.isActive,
+        ...(body.isActive !== undefined ? { isActive: body.isActive } : {}),
         sortOrder: body.sortOrder
       }
     });

@@ -9,6 +9,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  CircleDollarSign,
   ClipboardList,
   CreditCard,
   Dumbbell,
@@ -49,7 +50,13 @@ import { calculateBodyFatEstimate } from "../../lib/body-composition";
 import { buildMonthCalendar, formatAssessmentDateTime, formatDateTimeLocalInputValue, monthLabel } from "../../lib/dates";
 import { formatProgramDuration } from "../../lib/cms";
 import { assetUrl, mediaUrl } from "../../lib/urls";
-import { studentLocationLabel } from "../../lib/locations";
+import {
+  financeStatusBadgeClass,
+  labelBillingCycle,
+  labelMembershipStatus,
+  labelPaymentStatus
+} from "../../lib/finance";
+import { labelLocationType, studentLocationLabel } from "../../lib/locations";
 import { sessionLabelFromBlock, trainingCopy } from "../../lib/training-copy";
 import { AnimatedList } from "../shared/AnimatedList";
 import { MediaImg } from "../shared/MediaImg";
@@ -2337,10 +2344,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
          )}
 
         {studentSection === "membership" && (
-          <section className="student-sheet">
+          <section className="student-sheet student-finance-sheet">
             <div className="student-sheet-heading">
-              <span>Matrículas</span>
-              <h1>Seu plano e vigência</h1>
+              <span>Financeiro</span>
+              <h1>Matrícula</h1>
               <p>{membership ? `Plano ${membership.plan.name}` : "Nenhuma matrícula ativa"}</p>
             </div>
             {membership ? (
@@ -2349,14 +2356,28 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   <ShieldCheck size={22} />
                   <div>
                     <strong>{membership.plan.name}</strong>
-                    <span>Status: {membership.status}</span>
+                    <span className={financeStatusBadgeClass(membership.status)}>
+                      {labelMembershipStatus(membership.status)}
+                    </span>
                   </div>
                 </article>
                 <div className="student-metric-grid">
-                  <span><strong>{formatPriceInBRL(membership.plan.priceInCents)}</strong>{membership.plan.billingCycle === "YEARLY" ? "/ano" : "/mês"}</span>
-                  <span><strong>Início</strong>{new Date(membership.startsAt).toLocaleDateString("pt-BR")}</span>
-                  <span><strong>Vigência</strong>{membership.endsAt ? `até ${new Date(membership.endsAt).toLocaleDateString("pt-BR")}` : "sem término"}</span>
-                  <span><strong>{membership.plan.billingCycle === "YEARLY" ? "Anual" : "Mensal"}</strong>cobrança</span>
+                  <span>
+                    <strong>{formatPriceInBRL(membership.plan.priceInCents)}</strong>
+                    {membership.plan.billingCycle === "YEARLY" ? "/ano" : "/mês"}
+                  </span>
+                  <span>
+                    <strong>Início</strong>
+                    {new Date(membership.startsAt).toLocaleDateString("pt-BR")}
+                  </span>
+                  <span>
+                    <strong>Vigência</strong>
+                    {membership.endsAt ? `até ${new Date(membership.endsAt).toLocaleDateString("pt-BR")}` : "sem término"}
+                  </span>
+                  <span>
+                    <strong>{labelBillingCycle(membership.plan.billingCycle)}</strong>
+                    cobrança
+                  </span>
                 </div>
               </>
             ) : (
@@ -2370,26 +2391,41 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         )}
 
         {studentSection === "payments" && (
-          <section className="student-sheet">
+          <section className="student-sheet student-finance-sheet">
             <div className="student-sheet-heading">
               <span>Financeiro</span>
               <h1>Pagamentos</h1>
               <p>{payments.length > 0 ? `${payments.length} cobrança(s)` : "Nenhuma cobrança registrada"}</p>
             </div>
             {payments.slice(0, 6).map((payment) => (
-              <article className="student-info-card" key={payment.id}>
+              <article className="student-info-card student-finance-payment-card" key={payment.id}>
                 <CreditCard size={22} />
                 <div>
                   <strong>{formatPriceInBRL(payment.amountInCents)}</strong>
-                  <span>{payment.status} • {new Date(payment.dueDate).toLocaleDateString("pt-BR")}</span>
+                  <span>
+                    <em className={financeStatusBadgeClass(payment.status)}>{labelPaymentStatus(payment.status)}</em>
+                    {" · "}
+                    vence {new Date(payment.dueDate).toLocaleDateString("pt-BR")}
+                  </span>
                 </div>
-                {payment.paymentUrl && <a href={payment.paymentUrl} target="_blank" rel="noreferrer">Abrir</a>}
+                {payment.paymentUrl && (
+                  <a className="finance-link" href={payment.paymentUrl} target="_blank" rel="noreferrer">
+                    Abrir checkout
+                  </a>
+                )}
               </article>
             ))}
+            {payments.length === 0 && (
+              <article className="student-empty-state">
+                <CircleDollarSign size={28} />
+                <strong>Nenhuma cobrança</strong>
+                <span>Quando houver faturas, elas aparecem aqui com status padronizado.</span>
+              </article>
+            )}
             {publicConfig["module_cards"] !== "false" && (
               <>
                 <div className="student-section-title-row">
-                  <h2 className="student-section-title">Meus Cartões</h2>
+                  <h2 className="student-section-title">Meus cartões</h2>
                   <button
                     className="student-outline-button"
                     onClick={() => setShowAddCardForm((value) => !value)}
@@ -2452,10 +2488,12 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                           {(card.brand ?? "Cartão").toUpperCase()} •••• {card.lastFour}
                         </strong>
                         <span>{card.holderName ?? "Titular não informado"}</span>
-                        {card.isDefault ? <em>Principal</em> : null}
+                        {card.isDefault ? (
+                          <em className="finance-status-badge tone-success">Principal</em>
+                        ) : null}
                       </div>
                       <button
-                        className="student-delete-button"
+                        className="student-delete-button delete-action-button"
                         aria-label="Remover cartão"
                         type="button"
                         onClick={() => void handleDeleteStudentCard(card.id)}
@@ -2593,7 +2631,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                       {favorite.program.modality ?? "Hipertrofia"} • {favorite.program.totalWorkouts} treinos
                     </span>
                     <button
-                      className="student-delete-button"
+                      className="student-delete-button delete-action-button"
                       type="button"
                       disabled={favoritingProgramId === favorite.program.id}
                       onClick={() => void handleToggleWorkoutFavorite(favorite.program.id)}
@@ -2794,6 +2832,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                         </button>
                         {item.source !== "ADMIN" && (
                           <button
+                            className="edit-action-button"
                             aria-label="Editar avaliação"
                             type="button"
                             onClick={() => handleEditStudentAssessment(item)}
@@ -2935,7 +2974,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           <section className="student-sheet">
             <div className="student-sheet-heading">
               <span>Unidades</span>
-              <h1>Nossas unidades e clubes</h1>
+              <h1>Academias, boxes e studios</h1>
               <p>{studentLocations.length} localidade(s) disponível(is)</p>
             </div>
             {studentLocations.length > 0 ? (
@@ -2949,7 +2988,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   <div>
                     <strong>{item.name}</strong>
                     <span>
-                      {item.type === "ACADEMY" ? "Academia" : item.type === "UNIT" ? "Unidade" : "Clube"}
+                      {labelLocationType(item.type)}
                       {item.address ? ` • ${item.address}` : ""}
                     </span>
                     <span>
@@ -3300,7 +3339,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   </button>
                 </>
               ) : (
-                <button className="student-green-button" type="button" onClick={() => setStudentProfileEditing(true)}>
+                <button className="student-outline-button edit-action-button" type="button" onClick={() => setStudentProfileEditing(true)}>
+                  <Pencil size={18} />
                   Editar informações
                 </button>
               )}

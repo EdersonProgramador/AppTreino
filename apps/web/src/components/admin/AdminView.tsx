@@ -71,8 +71,24 @@ import {
 import { calculateBodyFatEstimate } from "../../lib/body-composition";
 import { formatAssessmentDateTime, formatDateTimeLocalInputValue } from "../../lib/dates";
 import { trainingCopy } from "../../lib/training-copy";
+import {
+  billingCycleLabel,
+  billingTypeLabel,
+  financeStatusBadgeClass,
+  labelBillingCycle,
+  labelMembershipStatus,
+  labelPaymentStatus,
+  membershipStatusLabel,
+  paymentStatusLabel
+} from "../../lib/finance";
 import { assetUrl, mediaUrl } from "../../lib/urls";
-import { studentLocationLabel } from "../../lib/locations";
+import {
+  labelLocationType,
+  locationTypeLabel,
+  normalizeLocationType,
+  studentLocationLabel,
+  type LocationTypeCode
+} from "../../lib/locations";
 import {
   cmsFilterBarClass,
   cmsFormClass,
@@ -87,6 +103,8 @@ import {
   crudFormInlineClass,
   dangerButtonClass,
   dataRowClass,
+  deleteActionButtonClass,
+  editActionButtonClass,
   panelTitleClass,
   wideFieldClass
 } from "../../lib/admin-cms-classes";
@@ -303,7 +321,15 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     if (section === "trash") uiSounds.trash();
     else uiSounds.pageChange();
     // Favoritos e avaliações compartilham a mesma tela.
+    // Cartões ficam dentro do hub Financeiro.
+    if (section === "cards") {
+      setAdminSection("finance");
+      setFinanceTab("cards");
+      setAdminNavOpen(false);
+      return;
+    }
     setAdminSection(section === "favorites" ? "ratings" : section);
+    if (section === "finance") setFinanceTab("payments");
     setAdminNavOpen(false);
   };
 
@@ -459,6 +485,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   const [usersPage, setUsersPage] = useState(1);
   const [membershipsPage, setMembershipsPage] = useState(1);
   const [paymentsPage, setPaymentsPage] = useState(1);
+  const [financeTab, setFinanceTab] = useState<"plans" | "memberships" | "payments" | "cards">("payments");
   const [productsPage, setProductsPage] = useState(1);
   const [purchasesPage, setPurchasesPage] = useState(1);
   const [favoritesPage, setFavoritesPage] = useState(1);
@@ -1421,7 +1448,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           `/admin/cms/locations/${editingCmsLocation.id}`,
           {
             name: String(data.get("name") ?? ""),
-            type: String(data.get("type") ?? "ACADEMY"),
+            type: normalizeLocationType(String(data.get("type") ?? "ACADEMY")),
             description: String(data.get("description") ?? ""),
             address: String(data.get("address") ?? ""),
             city: String(data.get("city") ?? ""),
@@ -1443,7 +1470,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         "/admin/cms/locations",
         {
           name: String(data.get("name") ?? ""),
-          type: String(data.get("type") ?? "ACADEMY"),
+          type: normalizeLocationType(String(data.get("type") ?? "ACADEMY")),
           description: String(data.get("description") ?? ""),
           address: String(data.get("address") ?? ""),
           city: String(data.get("city") ?? ""),
@@ -1506,6 +1533,15 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       await applyAdminChange(["locations"], isActive ? "Unidade reativada." : "Unidade desativada.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível atualizar a unidade."));
+    }
+  }
+
+  async function handleUpdateCmsLocationType(id: string, type: LocationTypeCode) {
+    try {
+      await apiPut(`/admin/cms/locations/${id}`, { type }, token);
+      await applyAdminChange(["locations"], `Tipo atualizado para ${labelLocationType(type)}.`);
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o tipo da unidade."));
     }
   }
 
@@ -2749,7 +2785,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       id: "locations" as const,
       icon: MapPin,
       title: trainingCopy.adminStepLocations,
-      text: "Gerencie academias, unidades ou clubes.",
+      text: "Gerencie academias, box ou studios",
       metric: `${cmsLocations.filter((item) => item.isActive).length} ativa(s)`
     },
     {
@@ -2922,10 +2958,6 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           <button className={adminSection === "qr" ? "active" : ""} onClick={() => goAdminSection("qr")}>
             <QrCode size={18} />
             <span className="sidebar-label">QR Code</span>
-          </button>
-          <button className={adminSection === "cards" ? "active" : ""} onClick={() => goAdminSection("cards")}>
-            <CreditCard size={18} />
-            <span className="sidebar-label">Meus Cartões</span>
           </button>
 
           <span className="admin-nav-group-label">Avaliação e eventos</span>
@@ -3146,11 +3178,16 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                     <td>
                       <div className="admin-users-actions">
                         {item.role === "USER" && (
-                          <button type="button" onClick={() => openAdminStudentManager(item.id)}>
+                          <button type="button" className={editActionButtonClass} onClick={() => openAdminStudentManager(item.id)}>
                             Editar
                           </button>
                         )}
-                        <button aria-label="Excluir usuário" onClick={() => setPendingCmsDelete({ kind: "users", id: item.id, name: item.name })}>
+                        <button
+                          type="button"
+                          className={deleteActionButtonClass}
+                          aria-label="Excluir usuário"
+                          onClick={() => setPendingCmsDelete({ kind: "users", id: item.id, name: item.name })}
+                        >
                           <Trash2 size={17} />
                         </button>
                       </div>
@@ -3345,17 +3382,20 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   <div className={dataRowClass} key={membership.id}>
                     <span>
                       <strong>{membership.plan?.name ?? "Plano"}</strong>
-                      Status da assinatura
+                      <em className={financeStatusBadgeClass(membership.status)}>
+                        {labelMembershipStatus(membership.status)}
+                      </em>
                     </span>
                     <select
                       aria-label="Status da matrícula do aluno"
                       value={membership.status}
                       onChange={(event) => void handleUpdateMembershipStatus(membership.id, event.target.value as MembershipRow["status"])}
                     >
-                      <option value="PENDING">Pendente</option>
-                      <option value="ACTIVE">Ativa</option>
-                      <option value="OVERDUE">Atrasada</option>
-                      <option value="CANCELED">Cancelada</option>
+                      {Object.entries(membershipStatusLabel).map(([value, label]) => (
+                        <option value={value} key={value}>
+                          {label}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 )) ?? <p>Nenhuma matrícula.</p>}
@@ -3370,18 +3410,21 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   <div className={dataRowClass} key={payment.id}>
                     <span>
                       <strong>{formatPriceInBRL(payment.amountInCents)}</strong>
-                      {new Date(payment.dueDate).toLocaleDateString("pt-BR")}
+                      <small>
+                        {new Date(payment.dueDate).toLocaleDateString("pt-BR")} ·{" "}
+                        <em className={financeStatusBadgeClass(payment.status)}>{labelPaymentStatus(payment.status)}</em>
+                      </small>
                     </span>
                     <select
                       aria-label="Status do pagamento do aluno"
                       value={payment.status}
                       onChange={(event) => void handleUpdatePaymentStatus(payment.id, event.target.value as PaymentRow["status"])}
                     >
-                      <option value="PENDING">Pendente</option>
-                      <option value="CONFIRMED">Confirmado</option>
-                      <option value="OVERDUE">Atrasado</option>
-                      <option value="REFUNDED">Reembolsado</option>
-                      <option value="CANCELED">Cancelado</option>
+                      {Object.entries(paymentStatusLabel).map(([value, label]) => (
+                        <option value={value} key={value}>
+                          {label}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 ))}
@@ -3563,9 +3606,9 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           <div className="cms-admin-grid cms-studio-grid">
             {!cmsTrashOpen && cmsStep === "locations" && <section className={cmsStudioCardClass}>
               <div className={`${panelTitleClass} cms-subtitle`}>
-                <div>
+                <div className="cms-subtitle-inline">
                   <h2>{trainingCopy.adminStepLocations}</h2>
-                  <p>Gerencie academias, unidades ou clubes exibidos para os alunos.</p>
+                  <p>Gerencie academias, box ou studios</p>
                 </div>
                 <span>{cmsLocations.length}</span>
               </div>
@@ -3576,10 +3619,14 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 </label>
                 <label>
                   Tipo
-                  <select name="type" defaultValue={editingCmsLocation?.type ?? "ACADEMY"}>
-                    <option value="ACADEMY">Academia</option>
-                    <option value="UNIT">Unidade</option>
-                    <option value="CLUB">Clube</option>
+                  <select
+                    name="type"
+                    defaultValue={normalizeLocationType(editingCmsLocation?.type)}
+                    key={`location-type-${editingCmsLocation?.id ?? "new"}-${normalizeLocationType(editingCmsLocation?.type)}`}
+                  >
+                    <option value="ACADEMY">{locationTypeLabel.ACADEMY}</option>
+                    <option value="UNIT">{locationTypeLabel.UNIT}</option>
+                    <option value="CLUB">{locationTypeLabel.CLUB}</option>
                   </select>
                 </label>
                 <label className={wideFieldClass}>
@@ -3615,7 +3662,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 {cmsLocationImagePreview ? (
                   <div className={cmsImagePreviewClass}>
                     <img src={cmsLocationImagePreview} alt="Prévia da imagem da unidade" />
-                    <button type="button" onClick={handleCmsLocationImageClear}>
+                    <button type="button" className={deleteActionButtonClass} onClick={handleCmsLocationImageClear}>
                       <Trash2 size={17} />
                       Remover imagem
                     </button>
@@ -3624,7 +3671,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   <div className={cmsImagePreviewClass}>
                     <img src={mediaUrl(editingCmsLocation.imageUrl)} alt="Imagem atual da unidade" />
                     <small>Imagem atual (envie uma nova para substituir)</small>
-                    <button type="button" onClick={() => setCmsLocationImageRemove(true)}>
+                    <button type="button" className={deleteActionButtonClass} onClick={() => setCmsLocationImageRemove(true)}>
                       <ImageOff size={17} />
                       Remover imagem
                     </button>
@@ -3649,14 +3696,29 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 )}
               </form>
               {cmsLocations.slice(0, 12).map((item) => (
-                <div className={`data-row cms-data-row${item.imageUrl ? " with-thumb" : ""}`} key={item.id}>
+                <div className={`data-row cms-data-row cms-locations-row${item.imageUrl ? " with-thumb" : ""}`} key={item.id}>
                   {item.imageUrl && (
                     <img className={cmsDataRowThumbClass} src={mediaUrl(item.imageUrl)} alt={item.name} />
                   )}
                   <span>
                     <strong>{item.name}</strong>
-                    {[item.city, item.state].filter(Boolean).join(" - ") || item.address || item.slug}
+                    <small>
+                      {labelLocationType(item.type)}
+                      {" · "}
+                      {[item.city, item.state].filter(Boolean).join(" - ") || item.address || item.slug}
+                    </small>
                   </span>
+                  <select
+                    aria-label={`Tipo de ${item.name}`}
+                    value={normalizeLocationType(item.type)}
+                    onChange={(event) =>
+                      void handleUpdateCmsLocationType(item.id, event.target.value as LocationTypeCode)
+                    }
+                  >
+                    <option value="ACADEMY">{locationTypeLabel.ACADEMY}</option>
+                    <option value="UNIT">{locationTypeLabel.UNIT}</option>
+                    <option value="CLUB">{locationTypeLabel.CLUB}</option>
+                  </select>
                   <select
                     aria-label="Status da unidade"
                     value={item.isActive ? "ACTIVE" : "INACTIVE"}
@@ -3666,11 +3728,11 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                     <option value="INACTIVE">Inativa</option>
                   </select>
                   <small>ordem {item.sortOrder}</small>
-                  <div className="cms-row-actions">
-                    <button aria-label="Editar unidade" onClick={() => startEditCmsLocation(item)}>
+                  <div className="cms-row-actions cms-row-actions-danger">
+                    <button type="button" className={editActionButtonClass} aria-label="Editar unidade" onClick={() => startEditCmsLocation(item)}>
                       <Pencil size={17} />
                     </button>
-                    <button aria-label="Excluir unidade" onClick={() => setPendingCmsDelete({ kind: "locations", id: item.id, name: item.name })}>
+                    <button type="button" className={deleteActionButtonClass} aria-label="Excluir unidade" onClick={() => setPendingCmsDelete({ kind: "locations", id: item.id, name: item.name })}>
                       <Trash2 size={17} />
                     </button>
                   </div>
@@ -3715,7 +3777,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   <div className={cmsImagePreviewClass}>
                     <img src={cmsModalityImagePreview} alt="Prévia da imagem da modalidade" />
                     <small>Prévia local — ainda não foi salva.</small>
-                    <button type="button" onClick={handleCmsModalityImageClear}>
+                    <button type="button" className={deleteActionButtonClass} onClick={handleCmsModalityImageClear}>
                       <Trash2 size={17} />
                       Remover imagem
                     </button>
@@ -3735,7 +3797,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                         </em>
                       )}
                     </div>
-                    <button type="button" onClick={() => setCmsModalityImageRemove(true)}>
+                    <button type="button" className={deleteActionButtonClass} onClick={() => setCmsModalityImageRemove(true)}>
                       <ImageOff size={17} />
                       Remover imagem
                     </button>
@@ -3826,10 +3888,10 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                     </select>
                     <small>ordem {item.sortOrder}</small>
                     <div className="cms-row-actions">
-                      <button aria-label="Editar modalidade" onClick={() => startEditCmsModality(item)}>
+                      <button type="button" className={editActionButtonClass} aria-label="Editar modalidade" onClick={() => startEditCmsModality(item)}>
                         <Pencil size={17} />
                       </button>
-                      <button aria-label="Excluir modalidade" onClick={() => setPendingCmsDelete({ kind: "modalities", id: item.id, name: item.name })}>
+                      <button type="button" className={deleteActionButtonClass} aria-label="Excluir modalidade" onClick={() => setPendingCmsDelete({ kind: "modalities", id: item.id, name: item.name })}>
                         <Trash2 size={17} />
                       </button>
                     </div>
@@ -3897,7 +3959,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 {cmsLessonFilePreview ? (
                   <div className={cmsImagePreviewClass}>
                     {cmsPreviewMedia(cmsLessonFilePreview, "Prévia do exercício enviada")}
-                    <button type="button" onClick={handleCmsLessonFileClear}>
+                    <button type="button" className={deleteActionButtonClass} onClick={handleCmsLessonFileClear}>
                       <Trash2 size={17} />
                       Remover arquivo
                     </button>
@@ -3906,7 +3968,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   <div className={cmsImagePreviewClass}>
                     {cmsPreviewMedia(editingCmsExercise.videoUrl, "Mídia atual do exercício")}
                     <small>Mídia atual (envie um novo arquivo para substituir)</small>
-                    <button type="button" onClick={() => setCmsLessonFileRemove(true)}>
+                    <button type="button" className={deleteActionButtonClass} onClick={() => setCmsLessonFileRemove(true)}>
                       <ImageOff size={17} />
                       Remover mídia
                     </button>
@@ -3929,7 +3991,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 {cmsMaterialFilePreview ? (
                   <div className={cmsImagePreviewClass}>
                     {cmsPreviewMedia(cmsMaterialFilePreview, "Prévia do material enviado")}
-                    <button type="button" onClick={handleCmsMaterialFileClear}>
+                    <button type="button" className={deleteActionButtonClass} onClick={handleCmsMaterialFileClear}>
                       <Trash2 size={17} />
                       Remover material
                     </button>
@@ -3938,7 +4000,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   <div className={cmsImagePreviewClass}>
                     {cmsPreviewMedia(editingCmsExercise.materialUrl, "Material atual")}
                     <small>Material atual (envie um novo arquivo para substituir)</small>
-                    <button type="button" onClick={() => setCmsMaterialFileRemove(true)}>
+                    <button type="button" className={deleteActionButtonClass} onClick={() => setCmsMaterialFileRemove(true)}>
                       <ImageOff size={17} />
                       Remover material
                     </button>
@@ -4071,10 +4133,15 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                     </span>
                     <small>{item.materialUrl ? "Material anexado" : item.equipmentTags.join(", ") || "Sem equipamento"}</small>
                     <div className="cms-row-actions">
-                      <button aria-label="Editar exercício" onClick={() => startEditCmsExercise(item)}>
+                      <button type="button" className={editActionButtonClass} aria-label="Editar exercício" onClick={() => startEditCmsExercise(item)}>
                         <Pencil size={17} />
                       </button>
-                      <button aria-label="Excluir exercício" onClick={() => setPendingCmsDelete({ kind: "exercises", id: item.id, name: item.title ?? item.name ?? "Exercício" })}>
+                      <button
+                        type="button"
+                        className={deleteActionButtonClass}
+                        aria-label="Excluir exercício"
+                        onClick={() => setPendingCmsDelete({ kind: "exercises", id: item.id, name: item.title ?? item.name ?? "Exercício" })}
+                      >
                         <Trash2 size={17} />
                       </button>
                     </div>
@@ -4237,7 +4304,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                             </div>
                             <button
                               type="button"
-                              className="outline-button"
+                              className={`outline-button ${deleteActionButtonClass}`}
                               aria-label={`Remover exercício ${row}`}
                               title="Remover este exercício"
                               onClick={() => removeCmsBlockExerciseDraft(draft.clientKey)}
@@ -4606,10 +4673,15 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                     >
                       <Megaphone size={17} />
                     </button>
-                    <button aria-label="Editar divisão" onClick={() => startEditCmsWorkoutBlock(item)}>
+                    <button type="button" className={editActionButtonClass} aria-label="Editar divisão" onClick={() => startEditCmsWorkoutBlock(item)}>
                       <Pencil size={17} />
                     </button>
-                    <button aria-label="Excluir divisão" onClick={() => setPendingCmsDelete({ kind: "workoutBlocks", id: item.id, name: item.title })}>
+                    <button
+                      type="button"
+                      className={deleteActionButtonClass}
+                      aria-label="Excluir divisão"
+                      onClick={() => setPendingCmsDelete({ kind: "workoutBlocks", id: item.id, name: item.title })}
+                    >
                       <Trash2 size={17} />
                     </button>
                   </div>
@@ -4994,7 +5066,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                             </div>
                           </div>
                           <div className="cms-program-actions cms-program-actions-primary">
-                            <button className="outline-button" type="button" onClick={() => startEditCmsProgram(item)}>
+                            <button className={`outline-button ${editActionButtonClass}`} type="button" onClick={() => startEditCmsProgram(item)}>
                               <Pencil size={17} />
                               Editar
                             </button>
@@ -5213,7 +5285,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                                 </div>
                               </div>
                               <div className="cms-program-actions cms-program-actions-primary">
-                                <button className="outline-button" type="button" onClick={() => startEditCmsProgram(item)}>
+                                <button className={`outline-button ${editActionButtonClass}`} type="button" onClick={() => startEditCmsProgram(item)}>
                                   <Pencil size={17} />
                                   Editar
                                 </button>
@@ -5284,7 +5356,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   <button aria-label={item.status === "PUBLISHED" ? "Recolher aviso" : "Publicar aviso"} onClick={() => void handleToggleCmsAnnouncement(item)}>
                     {item.status === "PUBLISHED" ? <Megaphone size={17} /> : <Send size={17} />}
                   </button>
-                  <button aria-label="Excluir aviso" onClick={() => setPendingCmsDelete({ kind: "announcements", id: item.id, name: item.title })}>
+                  <button className={deleteActionButtonClass} aria-label="Excluir aviso" onClick={() => setPendingCmsDelete({ kind: "announcements", id: item.id, name: item.title })}>
                     <Trash2 size={17} />
                   </button>
                 </div>
@@ -5309,188 +5381,467 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         </article>
       </section>}
 
-      {adminSection === "finance" && <section className="admin-grid finance-admin-grid">
-        <article className="table-panel" id="admin-plans">
-          <div className={panelTitleClass}>
-            <h2>Planos</h2>
-            <span>{plans.length}</span>
-          </div>
-          <form className={crudFormClass} onSubmit={handleCreatePlan}>
-            <input name="code" placeholder="Código" required />
-            <input name="name" placeholder="Nome" required />
-            <input
-              name="price"
-              type="text"
-              inputMode="decimal"
-              placeholder="Valor (ex.: 0,10)"
-              title="Use vírgula para centavos, ex.: 0,10 ou 29,90"
-              required
-            />
-            <select name="billingCycle" defaultValue="MONTHLY">
-              <option value="MONTHLY">Mensal</option>
-              <option value="YEARLY">Anual</option>
-            </select>
-            <button className="primary-button">
-              <Save size={18} />
-              Salvar plano
-            </button>
-          </form>
-          {plans.map((item) => (
-            <div className={dataRowClass} key={item.id}>
-              <span>
-                <strong>{item.name}</strong>
-                {item.code}
-              </span>
-              <small>{formatPriceInBRL(item.priceInCents)}</small>
-              <select
-                aria-label="Ciclo do plano"
-                value={item.billingCycle}
-                onChange={(event) => handleUpdatePlanBilling(item.id, event.target.value as PlanRow["billingCycle"])}
-              >
-                <option value="MONTHLY">Mensal</option>
-                <option value="YEARLY">Anual</option>
-              </select>
-              <button aria-label="Excluir plano" onClick={() => setPendingCmsDelete({ kind: "plans", id: item.id, name: item.name })}>
-                <Trash2 size={17} />
-              </button>
+      {adminSection === "finance" && (
+        <section className="finance-hub" id="admin-finance">
+          <header className="finance-hub-header">
+            <div>
+              <span className="eyebrow w-fit">Operações bancárias</span>
+              <h1>Financeiro</h1>
+              <p>Planos, matrículas, cobranças Asaas e cartões em um fluxo padronizado.</p>
             </div>
-          ))}
-        </article>
-
-        <article className="table-panel" id="admin-memberships">
-          <div className={panelTitleClass}>
-            <h2>Matrículas</h2>
-            <span>{memberships.length}</span>
-          </div>
-          <form className={crudFormClass} onSubmit={handleCreateMembership}>
-            <select name="userId" required>
-              <option value="">Aluno</option>
-              {users
-                .filter((item) => item.role === "USER")
-                .map((item) => (
-                  <option value={item.id} key={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-            </select>
-            <select name="planId" required>
-              <option value="">Plano</option>
-              {plans.map((item) => (
-                <option value={item.id} key={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-            <input name="startsAt" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
-            <select name="status" defaultValue="PENDING">
-              <option value="PENDING">Pendente</option>
-              <option value="ACTIVE">Ativa</option>
-              <option value="OVERDUE">Atrasada</option>
-              <option value="CANCELED">Cancelada</option>
-            </select>
-            <button className="primary-button">
-              <Save size={18} />
-              Salvar matrícula
-            </button>
-          </form>
-          {visibleFinanceMemberships.map((item) => (
-            <div className={dataRowClass} key={item.id}>
-              <span>
-                <strong>{item.user.name}</strong>
-                {item.plan.name}
-              </span>
-              <select
-                aria-label="Status da matrícula"
-                value={item.status}
-                onChange={(event) => handleUpdateMembershipStatus(item.id, event.target.value as MembershipRow["status"])}
-              >
-                <option value="PENDING">Pendente</option>
-                <option value="ACTIVE">Ativa</option>
-                <option value="OVERDUE">Atrasada</option>
-                <option value="CANCELED">Cancelada</option>
-              </select>
-              <button aria-label="Excluir matrícula" onClick={() => setPendingCmsDelete({ kind: "memberships", id: item.id, name: item.user.name })}>
-                <Trash2 size={17} />
-              </button>
+            <div className="finance-hub-kpis">
+              <article className="finance-kpi">
+                <Wallet size={18} />
+                <div>
+                  <strong>
+                    {formatPriceInBRL(
+                      payments.filter((item) => item.status === "CONFIRMED").reduce((sum, item) => sum + item.amountInCents, 0)
+                    )}
+                  </strong>
+                  <span>Recebido</span>
+                </div>
+              </article>
+              <article className="finance-kpi">
+                <CircleDollarSign size={18} />
+                <div>
+                  <strong>{memberships.filter((item) => item.status === "ACTIVE").length}</strong>
+                  <span>Matrículas ativas</span>
+                </div>
+              </article>
+              <article className="finance-kpi tone-warning">
+                <CreditCard size={18} />
+                <div>
+                  <strong>{payments.filter((item) => item.status === "PENDING").length}</strong>
+                  <span>Cobranças pendentes</span>
+                </div>
+              </article>
+              <article className="finance-kpi tone-danger">
+                <AlertCircle size={18} />
+                <div>
+                  <strong>{payments.filter((item) => item.status === "OVERDUE").length}</strong>
+                  <span>Em atraso</span>
+                </div>
+              </article>
             </div>
-          ))}
-          <AdminPaginationBar
-            page={currentMembershipsPage}
-            pageCount={membershipsTotalPages}
-            totalLabel={`${memberships.length} matrícula(s)`}
-            onPageChange={setMembershipsPage}
-          />
-        </article>
+          </header>
 
-        <article className="table-panel wide-panel" id="admin-payments">
-          <div className={panelTitleClass}>
-            <h2>Pagamentos</h2>
-            <span>{payments.length}</span>
-          </div>
-          <form className={crudFormInlineClass} onSubmit={handleCreatePayment}>
-            <select name="membershipId" required>
-              <option value="">Matrícula</option>
-              {memberships.map((item) => (
-                <option value={item.id} key={item.id}>
-                  {item.user.name} - {item.plan.name}
-                </option>
-              ))}
-            </select>
-            <input
-              name="amount"
-              type="text"
-              inputMode="decimal"
-              placeholder="Valor (ex.: 0,10)"
-              title="Use vírgula para centavos, ex.: 0,10 ou 29,90"
-              required
-            />
-            <input name="dueDate" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
-            <select name="billingType" defaultValue="UNDEFINED">
-              <option value="UNDEFINED">Escolha do aluno</option>
-              <option value="PIX">Pix</option>
-              <option value="BOLETO">Boleto</option>
-              <option value="CREDIT_CARD">Cartão</option>
-            </select>
-            <button className="primary-button">
-              <CreditCard size={18} />
-              Gerar cobranca
-            </button>
-          </form>
-          {visibleFinancePayments.map((item) => (
-            <div className={dataRowClass} key={item.id}>
-              <span>
-                <strong>{formatPriceInBRL(item.amountInCents)}</strong>
-                Vence em {new Date(item.dueDate).toLocaleDateString("pt-BR")}
-              </span>
-              <select
-                aria-label="Status do pagamento"
-                value={item.status}
-                onChange={(event) => handleUpdatePaymentStatus(item.id, event.target.value as PaymentRow["status"])}
+          <nav className="finance-hub-tabs" aria-label="Seções do financeiro">
+            {(
+              [
+                { id: "payments" as const, label: "Pagamentos", count: payments.length, icon: CircleDollarSign },
+                { id: "memberships" as const, label: "Matrículas", count: memberships.length, icon: ShieldCheck },
+                { id: "plans" as const, label: "Planos", count: plans.length, icon: Wallet },
+                { id: "cards" as const, label: "Cartões", count: paymentCards.length, icon: CreditCard }
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={financeTab === tab.id ? "active" : ""}
+                onClick={() => setFinanceTab(tab.id)}
               >
-                <option value="PENDING">Pendente</option>
-                <option value="CONFIRMED">Confirmado</option>
-                <option value="OVERDUE">Atrasado</option>
-                <option value="REFUNDED">Reembolsado</option>
-                <option value="CANCELED">Cancelado</option>
-              </select>
-              {item.paymentUrl && (
-                <a href={item.paymentUrl} target="_blank" rel="noreferrer">
-                  Abrir
-                </a>
+                <tab.icon size={16} />
+                <span>{tab.label}</span>
+                <em>{tab.count}</em>
+              </button>
+            ))}
+          </nav>
+
+          {financeTab === "plans" && (
+            <article className="table-panel finance-panel" id="admin-plans">
+              <div className={panelTitleClass}>
+                <div>
+                  <h2>Planos de assinatura</h2>
+                  <p>Configure valores e ciclo de cobrança.</p>
+                </div>
+                <span>{plans.length}</span>
+              </div>
+              <form className={`${crudFormClass} finance-form`} onSubmit={handleCreatePlan}>
+                <label>
+                  Código
+                  <input name="code" placeholder="monthly" required />
+                </label>
+                <label>
+                  Nome
+                  <input name="name" placeholder="Plano Mensal" required />
+                </label>
+                <label>
+                  Valor (R$)
+                  <input
+                    name="price"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="29,90"
+                    title="Use vírgula para centavos, ex.: 0,10 ou 29,90"
+                    required
+                  />
+                </label>
+                <label>
+                  Ciclo
+                  <select name="billingCycle" defaultValue="MONTHLY">
+                    <option value="MONTHLY">Mensal</option>
+                    <option value="YEARLY">Anual</option>
+                  </select>
+                </label>
+                <button className="primary-button" type="submit">
+                  <Save size={18} />
+                  Salvar plano
+                </button>
+              </form>
+              <div className="finance-table-head finance-table-head--plans" aria-hidden="true">
+                <span>Plano</span>
+                <span>Valor</span>
+                <span>Ciclo</span>
+                <span>Ações</span>
+              </div>
+              {plans.length > 0 ? (
+                plans.map((item) => (
+                  <div className={`${dataRowClass} finance-row finance-row--plans`} key={item.id}>
+                    <span>
+                      <strong>{item.name}</strong>
+                      <small className="finance-mono">{item.code}</small>
+                    </span>
+                    <strong className="finance-money">{formatPriceInBRL(item.priceInCents)}</strong>
+                    <select
+                      aria-label="Ciclo do plano"
+                      value={item.billingCycle}
+                      onChange={(event) => handleUpdatePlanBilling(item.id, event.target.value as PlanRow["billingCycle"])}
+                    >
+                      <option value="MONTHLY">{billingCycleLabel.MONTHLY}</option>
+                      <option value="YEARLY">{billingCycleLabel.YEARLY}</option>
+                    </select>
+                    <button className={deleteActionButtonClass} aria-label="Excluir plano" onClick={() => setPendingCmsDelete({ kind: "plans", id: item.id, name: item.name })}>
+                      <Trash2 size={17} />
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="dash-empty">
+                  <Wallet size={18} />
+                  Nenhum plano cadastrado.
+                </div>
               )}
-              <button aria-label="Excluir pagamento" onClick={() => setPendingCmsDelete({ kind: "payments", id: item.id, name: item.membership?.user?.name ?? "Pagamento" })}>
-                <Trash2 size={17} />
-              </button>
-            </div>
-          ))}
-          <AdminPaginationBar
-            page={currentPaymentsPage}
-            pageCount={paymentsTotalPages}
-            totalLabel={`${payments.length} pagamento(s)`}
-            onPageChange={setPaymentsPage}
-          />
-        </article>
-      </section>}
+            </article>
+          )}
+
+          {financeTab === "memberships" && (
+            <article className="table-panel finance-panel" id="admin-memberships">
+              <div className={panelTitleClass}>
+                <div>
+                  <h2>Matrículas</h2>
+                  <p>Vínculo do aluno ao plano e status bancário da assinatura.</p>
+                </div>
+                <span>{memberships.length}</span>
+              </div>
+              <form className={`${crudFormClass} finance-form`} onSubmit={handleCreateMembership}>
+                <label>
+                  Aluno
+                  <select name="userId" required>
+                    <option value="">Selecione</option>
+                    {users
+                      .filter((item) => item.role === "USER")
+                      .map((item) => (
+                        <option value={item.id} key={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  Plano
+                  <select name="planId" required>
+                    <option value="">Selecione</option>
+                    {plans.map((item) => (
+                      <option value={item.id} key={item.id}>
+                        {item.name} · {formatPriceInBRL(item.priceInCents)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Início
+                  <input name="startsAt" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
+                </label>
+                <label>
+                  Status
+                  <select name="status" defaultValue="PENDING">
+                    {Object.entries(membershipStatusLabel).map(([value, label]) => (
+                      <option value={value} key={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button className="primary-button" type="submit">
+                  <Save size={18} />
+                  Salvar matrícula
+                </button>
+              </form>
+              <div className="finance-table-head finance-table-head--memberships" aria-hidden="true">
+                <span>Aluno / Plano</span>
+                <span>Início</span>
+                <span>Status</span>
+                <span>Ações</span>
+              </div>
+              {visibleFinanceMemberships.length > 0 ? (
+                visibleFinanceMemberships.map((item) => (
+                  <div className={`${dataRowClass} finance-row finance-row--memberships`} key={item.id}>
+                    <span>
+                      <strong>{item.user.name}</strong>
+                      <small>
+                        {item.plan.name} · {labelBillingCycle(item.plan.billingCycle)}
+                      </small>
+                    </span>
+                    <small>{new Date(item.startsAt).toLocaleDateString("pt-BR")}</small>
+                    <div className="finance-status-cell">
+                      <em className={financeStatusBadgeClass(item.status)}>{labelMembershipStatus(item.status)}</em>
+                      <select
+                        aria-label="Status da matrícula"
+                        value={item.status}
+                        onChange={(event) => handleUpdateMembershipStatus(item.id, event.target.value as MembershipRow["status"])}
+                      >
+                        {Object.entries(membershipStatusLabel).map(([value, label]) => (
+                          <option value={value} key={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      className={deleteActionButtonClass} aria-label="Excluir matrícula"
+                      onClick={() => setPendingCmsDelete({ kind: "memberships", id: item.id, name: item.user.name })}
+                    >
+                      <Trash2 size={17} />
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="dash-empty">
+                  <ShieldCheck size={18} />
+                  Nenhuma matrícula registrada.
+                </div>
+              )}
+              <AdminPaginationBar
+                page={currentMembershipsPage}
+                pageCount={membershipsTotalPages}
+                totalLabel={`${memberships.length} matrícula(s)`}
+                onPageChange={setMembershipsPage}
+              />
+            </article>
+          )}
+
+          {financeTab === "payments" && (
+            <article className="table-panel finance-panel" id="admin-payments">
+              <div className={panelTitleClass}>
+                <div>
+                  <h2>Pagamentos e cobranças</h2>
+                  <p>Gere cobrança Asaas (Pix, boleto ou cartão) e acompanhe o status.</p>
+                </div>
+                <span>{payments.length}</span>
+              </div>
+              <form className={`${crudFormInlineClass} finance-form finance-form--payments`} onSubmit={handleCreatePayment}>
+                <label>
+                  Matrícula
+                  <select name="membershipId" required>
+                    <option value="">Selecione</option>
+                    {memberships.map((item) => (
+                      <option value={item.id} key={item.id}>
+                        {item.user.name} — {item.plan.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Valor (R$)
+                  <input
+                    name="amount"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="29,90"
+                    title="Use vírgula para centavos, ex.: 0,10 ou 29,90"
+                    required
+                  />
+                </label>
+                <label>
+                  Vencimento
+                  <input name="dueDate" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
+                </label>
+                <label>
+                  Meio
+                  <select name="billingType" defaultValue="PIX">
+                    {Object.entries(billingTypeLabel).map(([value, label]) => (
+                      <option value={value} key={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button className="primary-button" type="submit">
+                  <CreditCard size={18} />
+                  Gerar cobrança
+                </button>
+              </form>
+              <div className="finance-table-head finance-table-head--payments" aria-hidden="true">
+                <span>Aluno / Valor</span>
+                <span>Vencimento</span>
+                <span>Status</span>
+                <span>Link</span>
+                <span>Ações</span>
+              </div>
+              {visibleFinancePayments.length > 0 ? (
+                visibleFinancePayments.map((item) => (
+                  <div className={`${dataRowClass} finance-row finance-row--payments`} key={item.id}>
+                    <span>
+                      <strong>{item.membership?.user?.name ?? "Aluno"}</strong>
+                      <small className="finance-money">{formatPriceInBRL(item.amountInCents)}</small>
+                      <small>{item.membership?.plan?.name ?? "Plano"}</small>
+                    </span>
+                    <small>{new Date(item.dueDate).toLocaleDateString("pt-BR")}</small>
+                    <div className="finance-status-cell">
+                      <em className={financeStatusBadgeClass(item.status)}>{labelPaymentStatus(item.status)}</em>
+                      <select
+                        aria-label="Status do pagamento"
+                        value={item.status}
+                        onChange={(event) => handleUpdatePaymentStatus(item.id, event.target.value as PaymentRow["status"])}
+                      >
+                        {Object.entries(paymentStatusLabel).map(([value, label]) => (
+                          <option value={value} key={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {item.paymentUrl ? (
+                      <a className="finance-link" href={item.paymentUrl} target="_blank" rel="noreferrer">
+                        Abrir checkout
+                      </a>
+                    ) : (
+                      <small className="finance-muted">Sem link</small>
+                    )}
+                    <button
+                      className={deleteActionButtonClass} aria-label="Excluir pagamento"
+                      onClick={() =>
+                        setPendingCmsDelete({
+                          kind: "payments",
+                          id: item.id,
+                          name: item.membership?.user?.name ?? "Pagamento"
+                        })
+                      }
+                    >
+                      <Trash2 size={17} />
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="dash-empty">
+                  <CircleDollarSign size={18} />
+                  Nenhuma cobrança registrada.
+                </div>
+              )}
+              <AdminPaginationBar
+                page={currentPaymentsPage}
+                pageCount={paymentsTotalPages}
+                totalLabel={`${payments.length} pagamento(s)`}
+                onPageChange={setPaymentsPage}
+              />
+            </article>
+          )}
+
+          {financeTab === "cards" && (
+            <article className="table-panel finance-panel" id="admin-cards">
+              <div className={panelTitleClass}>
+                <div>
+                  <h2>Cartões dos alunos</h2>
+                  <p>Cartões salvos para referência de cobrança recorrente.</p>
+                </div>
+                <span>{paymentCards.length}</span>
+              </div>
+              <form className={`${crudFormClass} finance-form`} onSubmit={handleCreatePaymentCard}>
+                <label>
+                  Aluno
+                  <select name="userId" required>
+                    <option value="">Selecione</option>
+                    {users
+                      .filter((item) => item.role === "USER")
+                      .map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  Bandeira
+                  <input name="brand" placeholder="Visa, Mastercard…" />
+                </label>
+                <label>
+                  Últimos 4
+                  <input name="lastFour" placeholder="0000" maxLength={4} pattern="[0-9]{4}" required />
+                </label>
+                <label>
+                  Titular
+                  <input name="holderName" placeholder="Nome no cartão" />
+                </label>
+                <label className="admin-checkbox">
+                  <input name="isDefault" type="checkbox" />
+                  Cartão principal
+                </label>
+                <button className="primary-button" type="submit">
+                  <Save size={18} />
+                  Adicionar cartão
+                </button>
+              </form>
+              <div className="finance-table-head finance-table-head--cards" aria-hidden="true">
+                <span>Cartão / Aluno</span>
+                <span>Tipo</span>
+                <span>Ações</span>
+              </div>
+              {paymentCards.length > 0 ? (
+                visiblePaymentCards.map((card) => (
+                  <div className={`${dataRowClass} finance-row finance-row--cards`} key={card.id}>
+                    <span>
+                      <strong>
+                        {(card.brand ?? "Cartão").toUpperCase()} •••• {card.lastFour}
+                      </strong>
+                      <small>
+                        {card.holderName ?? "Titular não informado"} · {card.user.name}
+                      </small>
+                    </span>
+                    <em className={`finance-status-badge ${card.isDefault ? "tone-success" : "tone-neutral"}`}>
+                      {card.isDefault ? "Principal" : "Adicional"}
+                    </em>
+                    <button
+                      className={deleteActionButtonClass} aria-label="Excluir cartão"
+                      onClick={() =>
+                        setPendingCmsDelete({
+                          kind: "cards",
+                          id: card.id,
+                          name: card.brand ? `${card.brand} •••• ${card.lastFour}` : card.lastFour
+                        })
+                      }
+                    >
+                      <Trash2 size={17} />
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="dash-empty">
+                  <CreditCard size={18} />
+                  Nenhum cartão salvo.
+                </div>
+              )}
+              {paymentCards.length > 0 && (
+                <AdminPaginationBar
+                  page={currentCardsPage}
+                  pageCount={cardsTotalPages}
+                  totalLabel={`${paymentCards.length} cartão(ões)`}
+                  onPageChange={setCardsPage}
+                />
+              )}
+            </article>
+          )}
+        </section>
+      )}
 
       {adminSection === "overview" && <section className="admin-grid phase-three-grid" id="admin-operations">
         <h2 className="admin-reports-operations-title">Operações e atendimento</h2>
@@ -5564,7 +5915,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 <option value="CLOSED">Fechado</option>
               </select>
               <small>{item.priority}</small>
-              <button aria-label="Excluir atendimento" onClick={() => setPendingCmsDelete({ kind: "tickets", id: item.id, name: item.subject })}>
+              <button className={deleteActionButtonClass} aria-label="Excluir atendimento" onClick={() => setPendingCmsDelete({ kind: "tickets", id: item.id, name: item.subject })}>
                 <Trash2 size={17} />
               </button>
             </div>
@@ -5584,7 +5935,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               </span>
               <small>{item.daysPerWeek}x/sem</small>
               <Bot size={18} />
-              <button aria-label="Excluir plano IA" onClick={() => setPendingCmsDelete({ kind: "aiPlans", id: item.id, name: item.objective })}>
+              <button className={deleteActionButtonClass} aria-label="Excluir plano IA" onClick={() => setPendingCmsDelete({ kind: "aiPlans", id: item.id, name: item.objective })}>
                 <Trash2 size={17} />
               </button>
             </div>
@@ -5758,10 +6109,15 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   >
                     <Eye size={17} />
                   </button>
-                  <button aria-label="Editar avaliação" onClick={() => handleEditAdminAssessment(item)}>
+                  <button type="button" className={editActionButtonClass} aria-label="Editar avaliação" onClick={() => handleEditAdminAssessment(item)}>
                     <Pencil size={17} />
                   </button>
-                  <button aria-label="Excluir avaliação" onClick={() => setPendingCmsDelete({ kind: "assessments", id: item.id, name: item.user.name })}>
+                  <button
+                    type="button"
+                    className={deleteActionButtonClass}
+                    aria-label="Excluir avaliação"
+                    onClick={() => setPendingCmsDelete({ kind: "assessments", id: item.id, name: item.user.name })}
+                  >
                     <Trash2 size={17} />
                   </button>
                 </div>
@@ -6014,7 +6370,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   <option value="FINISHED">Finalizado</option>
                 </select>
                 <small>{item.registrations?.length ?? 0}/{item.capacity ?? "sem limite"}</small>
-                <button aria-label="Excluir evento" onClick={() => setPendingCmsDelete({ kind: "events", id: item.id, name: item.title })}>
+                <button className={deleteActionButtonClass} aria-label="Excluir evento" onClick={() => setPendingCmsDelete({ kind: "events", id: item.id, name: item.title })}>
                   <Trash2 size={17} />
                 </button>
               </div>
@@ -6062,7 +6418,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   <option value="true">Ativo</option>
                   <option value="false">Inativo</option>
                 </select>
-                <button aria-label="Excluir produto" onClick={() => setPendingCmsDelete({ kind: "products", id: product.id, name: product.name })}>
+                <button className={deleteActionButtonClass} aria-label="Excluir produto" onClick={() => setPendingCmsDelete({ kind: "products", id: product.id, name: product.name })}>
                   <Trash2 size={17} />
                 </button>
               </div>
@@ -6149,7 +6505,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   <option value="CANCELED">Cancelada</option>
                   <option value="REFUNDED">Reembolsada</option>
                 </select>
-                <button aria-label="Excluir compra" onClick={() => setPendingCmsDelete({ kind: "purchases", id: purchase.id, name: purchase.product?.name ?? "Compra" })}>
+                <button className={deleteActionButtonClass} aria-label="Excluir compra" onClick={() => setPendingCmsDelete({ kind: "purchases", id: purchase.id, name: purchase.product?.name ?? "Compra" })}>
                   <Trash2 size={17} />
                 </button>
               </div>
@@ -6239,66 +6595,6 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               </div>
           )}
           </div>
-        </article>
-      </section>}
-
-      {adminSection === "cards" && <section className="admin-grid phase-three-grid" id="admin-cards">
-        <article className="table-panel">
-          <div className={panelTitleClass}>
-            <div>
-              <h2>Cartões dos alunos</h2>
-              <p>Cartões salvos para pagamentos recorrentes.</p>
-            </div>
-            <span>{paymentCards.length}</span>
-          </div>
-          <form className={crudFormClass} onSubmit={handleCreatePaymentCard}>
-            <select name="userId" required>
-              <option value="">Aluno</option>
-              {users.filter((item) => item.role === "USER").map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-            <input name="brand" placeholder="Bandeira" />
-            <input name="lastFour" placeholder="Últimos 4 dígitos" maxLength={4} pattern="[0-9]{4}" required />
-            <input name="holderName" placeholder="Nome no cartão" />
-            <label className="admin-checkbox">
-              <input name="isDefault" type="checkbox" />
-              Cartão principal
-            </label>
-            <button className="primary-button">
-              <Save size={18} />
-              Adicionar cartão
-            </button>
-          </form>
-          {paymentCards.length > 0 ? (
-            visiblePaymentCards.map((card) => (
-              <div className={dataRowClass} key={card.id}>
-                <span>
-                  <strong>{card.holderName ?? card.user.name}</strong>
-                  {card.brand ?? "Cartão"} •••• {card.lastFour} · {card.user.name}
-                </span>
-                <small className="dash-badge">{card.isDefault ? "Principal" : "Adicional"}</small>
-                <button aria-label="Excluir cartão" onClick={() => setPendingCmsDelete({ kind: "cards", id: card.id, name: card.brand ? `${card.brand} •••• ${card.lastFour}` : card.lastFour })}>
-                  <Trash2 size={17} />
-                </button>
-              </div>
-            ))
-          ) : (
-            <div className="dash-empty">
-              <CreditCard size={18} />
-              Nenhum cartão salvo.
-            </div>
-          )}
-          {paymentCards.length > 0 && (
-            <AdminPaginationBar
-              page={currentCardsPage}
-              pageCount={cardsTotalPages}
-              totalLabel={`${paymentCards.length} cartão(ões)`}
-              onPageChange={setCardsPage}
-            />
-          )}
         </article>
       </section>}
 
@@ -6448,7 +6744,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   <option value="CLOSED">Encerrada</option>
                 </select>
                 <button
-                  aria-label="Excluir mensagem"
+                  className={deleteActionButtonClass} aria-label="Excluir mensagem"
                   onClick={() => setPendingCmsDelete({ kind: "contactMessages", id: message.id, name: message.name })}
                 >
                   <Trash2 size={17} />
@@ -6527,7 +6823,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   {favorite.user.name} · favoritou em {new Date(favorite.createdAt).toLocaleDateString("pt-BR")}
                 </span>
                 <Star size={18} />
-                <button aria-label="Remover favorito" onClick={() => setPendingCmsDelete({ kind: "favorites", id: favorite.id, name: favorite.product?.name ?? "Favorito" })}>
+                <button className={deleteActionButtonClass} aria-label="Remover favorito" onClick={() => setPendingCmsDelete({ kind: "favorites", id: favorite.id, name: favorite.product?.name ?? "Favorito" })}>
                   <Trash2 size={17} />
                 </button>
               </div>
@@ -6564,7 +6860,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   <small>{rating.comment}</small>
                 </span>
                 <small className="dash-badge">{rating.score}/5</small>
-                <button aria-label="Excluir avaliação" onClick={() => setPendingCmsDelete({ kind: "ratings", id: rating.id, name: rating.product?.name ?? "Avaliação" })}>
+                <button className={deleteActionButtonClass} aria-label="Excluir avaliação" onClick={() => setPendingCmsDelete({ kind: "ratings", id: rating.id, name: rating.product?.name ?? "Avaliação" })}>
                   <Trash2 size={17} />
                 </button>
               </div>
@@ -6767,7 +7063,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               </>
             ) : (
               <>
-                <button className="primary-button" type="button" onClick={() => setAdminProfileEditing(true)}>
+                <button className={`outline-button ${editActionButtonClass}`} type="button" onClick={() => setAdminProfileEditing(true)}>
                   <Pencil size={18} />
                   Editar perfil
                 </button>
@@ -6835,7 +7131,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               <button type="button" className="admin-profile-function-card" onClick={() => goAdminSection("finance")}>
                 <CircleDollarSign size={20} />
                 <strong>Financeiro</strong>
-                <span>Planos, pagamentos e assinaturas</span>
+                <span>Planos, matrículas, cobranças Asaas e cartões</span>
               </button>
               <button type="button" className="admin-profile-function-card" onClick={() => goAdminSection("settings")}>
                 <Settings size={20} />

@@ -102,11 +102,16 @@ import type { AdminUser, PaymentRow, PhysicalAssessmentRow, RatingRow } from "..
     : "—";
 
   return (
-    <section className="admin-reports" id="admin-reports">
-      <div className="dashboard-heading">
+    <section className="finance-hub dash-hub admin-reports" id="admin-reports">
+      <header className="finance-hub-header">
         <div>
-          <span className="eyebrow">Análise e desempenho</span>
+          <span className="eyebrow w-fit">Análise e desempenho</span>
           <h1>Relatórios</h1>
+          <p>
+            {loading
+              ? "Sincronizando dados..."
+              : `Atualizado às ${formatUpdatedAt} · sincronização automática a cada 1 minuto`}
+          </p>
         </div>
         <div className="dashboard-actions">
           <button className="outline-button compact-button" onClick={onRefresh} disabled={loading}>
@@ -114,13 +119,10 @@ import type { AdminUser, PaymentRow, PhysicalAssessmentRow, RatingRow } from "..
             Atualizar
           </button>
         </div>
-      </div>
-      <p className="admin-sync-label">
-        {loading ? "Sincronizando dados..." : `Atualizado às ${formatUpdatedAt} · sincronização automática a cada 1 minuto`}
-      </p>
+      </header>
 
-      <section className="admin-dashboard-grid">
-        <article className="table-panel dash-panel dash-panel-wide">
+      <section className="dash-hub-panels">
+        <article className="table-panel finance-panel dash-revenue-panel">
           <div className={panelTitleClass}>
             <div>
               <h2>Receita confirmada por plano</h2>
@@ -148,7 +150,7 @@ import type { AdminUser, PaymentRow, PhysicalAssessmentRow, RatingRow } from "..
           )}
         </article>
 
-        <article className="table-panel dash-panel">
+        <article className="table-panel finance-panel">
           <div className={panelTitleClass}>
             <div>
               <h2>Novos alunos</h2>
@@ -169,7 +171,7 @@ import type { AdminUser, PaymentRow, PhysicalAssessmentRow, RatingRow } from "..
           </div>
         </article>
 
-        <article className="table-panel dash-panel">
+        <article className="table-panel finance-panel">
           <div className={panelTitleClass}>
             <div>
               <h2>Avaliações físicas</h2>
@@ -191,8 +193,8 @@ import type { AdminUser, PaymentRow, PhysicalAssessmentRow, RatingRow } from "..
         </article>
       </section>
 
-      <section className="admin-dashboard-grid">
-        <article className="table-panel dash-panel dash-panel-wide">
+      <section className="dash-hub-panels">
+        <article className="table-panel finance-panel">
           <div className={panelTitleClass}>
             <div>
               <h2>Avaliações de alunos</h2>

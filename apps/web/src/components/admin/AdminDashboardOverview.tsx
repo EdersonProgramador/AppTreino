@@ -20,13 +20,9 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useMemo } from "react";
 import { formatPriceInBRL } from "@app-treino/shared";
-import {
-  dataRowClass,
-  panelTitleClass
-} from "../../lib/admin-cms-classes";
+import { dataRowClass, panelTitleClass } from "../../lib/admin-cms-classes";
 import { trainingCopy } from "../../lib/training-copy";
 import type {
-  AdminResource,
   AdminUser,
   ContactMessageRow,
   EventRow,
@@ -39,7 +35,7 @@ import type {
   SupportTicketRow
 } from "../../types";
 
-﻿export function AdminDashboardOverview({
+export function AdminDashboardOverview({
   stats,
   payments,
   events,
@@ -91,6 +87,7 @@ import type {
       | "events"
   ) => void;
 }) {
+  void products;
   const scrollToOperations = () => {
     document.getElementById("admin-operations")?.scrollIntoView({ behavior: "smooth" });
   };
@@ -251,13 +248,33 @@ import type {
 
   const contactEnabled = systemSettings["module_contact"] !== "false";
 
-
   const formatUpdatedAt = lastUpdatedAt
     ? lastUpdatedAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
     : "nunca";
 
   return (
-    <section className="admin-dashboard">
+    <section className="finance-hub dash-hub" id="admin-dashboard">
+      <header className="finance-hub-header">
+        <div>
+          <span className="eyebrow w-fit">Visão operacional</span>
+          <h1>Dashboard</h1>
+          <p>Indicadores e atalhos do painel no mesmo padrão visual do Financeiro.</p>
+        </div>
+        <div className="finance-hub-kpis dash-stats-kpis">
+          {stats.map((stat) => (
+            <article className="finance-kpi" key={stat.label}>
+              <stat.icon size={18} />
+              <div>
+                <strong>{stat.value}</strong>
+                <span>
+                  {stat.label} · {stat.trend}
+                </span>
+              </div>
+            </article>
+          ))}
+        </div>
+      </header>
+
       <div className="admin-sync-bar">
         <span className={loading ? "admin-sync-indicator syncing" : "admin-sync-indicator"} aria-hidden="true">
           <RefreshCw size={15} className={loading ? "spin" : ""} />
@@ -273,19 +290,8 @@ import type {
         </button>
       </div>
 
-      <div className="stats-grid">
-        {stats.map((stat) => (
-          <article className="stat-card" key={stat.label}>
-            <stat.icon size={22} />
-            <span>{stat.label}</span>
-            <strong>{stat.value}</strong>
-            <small>{stat.trend}</small>
-          </article>
-        ))}
-      </div>
-
       <section className="admin-dashboard-grid">
-        <article className="table-panel dash-panel dash-panel-wide dash-revenue-panel">
+        <article className="table-panel finance-panel dash-panel-wide dash-revenue-panel">
           <div className={panelTitleClass}>
             <div>
               <h2>Receita confirmada</h2>
@@ -326,14 +332,14 @@ import type {
           </div>
         </article>
 
-        <article className="table-panel dash-panel dash-quick-panel">
+        <article className="table-panel finance-panel dash-quick-panel">
           <div className={panelTitleClass}>
             <div>
               <h2>Ações rápidas</h2>
               <p>Atalhos para as áreas operacionais do painel.</p>
             </div>
           </div>
-          <div className="dash-quick-actions">
+          <div className="dash-quick-actions dash-quick-actions--stack">
             <button type="button" onClick={() => onNavigate("finance")}>
               <CircleDollarSign size={18} />
               <span>
@@ -362,7 +368,7 @@ import type {
         </article>
 
         {commercialEnabled && (
-          <article className="table-panel dash-panel dash-panel-wide">
+          <article className="table-panel finance-panel dash-panel-wide">
             <div className={panelTitleClass}>
               <div>
                 <h2>Comercial</h2>
@@ -417,7 +423,7 @@ import type {
           </article>
         )}
 
-        <article className="table-panel dash-panel">
+        <article className="table-panel finance-panel">
           <div className={panelTitleClass}>
             <div>
               <h2>Pagamentos pendentes</h2>
@@ -450,7 +456,7 @@ import type {
           </button>
         </article>
 
-        <article className="table-panel dash-panel">
+        <article className="table-panel finance-panel">
           <div className={panelTitleClass}>
             <div>
               <h2>Matrículas a vencer</h2>
@@ -481,7 +487,7 @@ import type {
           </button>
         </article>
 
-        <article className="table-panel dash-panel">
+        <article className="table-panel finance-panel">
           <div className={panelTitleClass}>
             <div>
               <h2>Atendimentos abertos</h2>
@@ -514,7 +520,7 @@ import type {
         </article>
 
         {contactEnabled && (
-          <article className="table-panel dash-panel">
+          <article className="table-panel finance-panel">
             <div className={panelTitleClass}>
               <div>
                 <h2>Mensagens de contato</h2>
@@ -545,7 +551,7 @@ import type {
           </article>
         )}
 
-        <article className="table-panel dash-panel">
+        <article className="table-panel finance-panel">
           <div className={panelTitleClass}>
             <div>
               <h2>Próximos eventos</h2>
@@ -575,7 +581,7 @@ import type {
           </button>
         </article>
 
-        <article className="table-panel dash-panel">
+        <article className="table-panel finance-panel">
           <div className={panelTitleClass}>
             <div>
               <h2>Últimos alunos</h2>
