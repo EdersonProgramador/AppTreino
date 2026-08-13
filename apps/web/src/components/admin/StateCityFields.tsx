@@ -15,16 +15,25 @@ export function StateCityFields({
   withLabels = false
 }: StateCityFieldsProps) {
   const [uf, setUf] = useState(stateDefault ?? "");
+  const [city, setCity] = useState(cityDefault ?? "");
 
   useEffect(() => {
     setUf(stateDefault ?? "");
-  }, [stateDefault]);
+    setCity(cityDefault ?? "");
+  }, [stateDefault, cityDefault]);
+
+  const cities = CITIES_BY_STATE[uf] ?? [];
 
   const stateSelect = (
     <select
       name="state"
-      defaultValue={stateDefault ?? ""}
-      onChange={(event) => setUf(event.target.value)}
+      value={uf}
+      onChange={(event) => {
+        const nextUf = event.target.value;
+        setUf(nextUf);
+        const nextCities = CITIES_BY_STATE[nextUf] ?? [];
+        setCity((current) => (nextCities.includes(current) ? current : ""));
+      }}
       disabled={disabled}
     >
       <option value="">Selecione o estado</option>
@@ -37,16 +46,17 @@ export function StateCityFields({
   );
 
   const citySelect = (
-    <select name="city" defaultValue={cityDefault ?? ""} disabled={disabled}>
-      <option value="">Selecione a cidade</option>
-      {cityDefault &&
-        uf === (stateDefault ?? "") &&
-        !(CITIES_BY_STATE[uf] ?? []).includes(cityDefault) && (
-          <option value={cityDefault}>{cityDefault}</option>
-        )}
-      {(CITIES_BY_STATE[uf] ?? []).map((city) => (
-        <option key={city} value={city}>
-          {city}
+    <select
+      name="city"
+      value={city}
+      onChange={(event) => setCity(event.target.value)}
+      disabled={disabled || !uf}
+    >
+      <option value="">{uf ? "Selecione a cidade" : "Selecione o estado primeiro"}</option>
+      {city && !cities.includes(city) && <option value={city}>{city}</option>}
+      {cities.map((item) => (
+        <option key={item} value={item}>
+          {item}
         </option>
       ))}
     </select>

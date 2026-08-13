@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { SoundProvider } from "react-sounds";
 import { AuthProvider } from "./auth/AuthContext";
-import { AdminPage, HomePage, LoginPage, StudentPage } from "./auth/pages";
+import { AdminPage, DownloadPage, HomePage, LoginPage, StudentPage } from "./auth/pages";
 import { GuestRoute, ProtectedRoute, RoleHomeRedirect, SessionGate } from "./auth/RouteGuards";
 import { paths } from "./auth/paths";
 import { useUiPrefsStore } from "./stores/uiPrefsStore";
@@ -13,6 +13,7 @@ const AppRoutes = () => (
     <div className="app-view-stage is-visible">
       <Routes>
         <Route path={paths.home} element={<HomePage />} />
+        <Route path={paths.download} element={<DownloadPage />} />
 
         <Route element={<GuestRoute />}>
           <Route path={paths.login} element={<LoginPage />} />

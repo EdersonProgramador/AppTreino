@@ -27,9 +27,11 @@ import { ThemeModeSwitch } from "../shared/ThemeModeSwitch";
 
 export function HomeView({
   onStart,
+  onDownloadApp,
   onLogin
 }: {
   onStart: (planCode?: string) => void;
+  onDownloadApp: () => void;
   onLogin: () => void;
 }) {
   const [stickyVisible, setStickyVisible] = useState(false);
@@ -76,7 +78,7 @@ export function HomeView({
             ))}
           </nav>
           <div className="flex items-center gap-2 sm:gap-3">
-            <ThemeModeSwitch compact className="hidden min-w-[168px] sm:grid" />
+            <ThemeModeSwitch compact className="hidden sm:flex" />
             <button
               type="button"
               className="home-muted hidden border-0 bg-transparent text-sm font-bold transition hover:text-brand-gold sm:inline-flex"
@@ -84,7 +86,7 @@ export function HomeView({
             >
               Entrar
             </button>
-            <button type="button" className="ui-btn-primary !min-h-11 !px-4 !text-sm" onClick={() => onStart()}>
+            <button type="button" className="ui-btn-primary !min-h-11 !px-4 !text-sm" onClick={onDownloadApp}>
               Baixar App
               <ArrowRight size={16} />
             </button>
@@ -292,7 +294,7 @@ export function HomeView({
             {testimonials.map((item) => (
               <figure
                 key={item.name}
-                className="grid gap-4 rounded-3xl border border-[color:var(--app-border)] bg-ink/50 p-6"
+                className="grid gap-4 rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-panel)] p-6"
               >
                 <div className="inline-flex text-brand-gold" aria-label="5 estrelas">
                   {Array.from({ length: 5 }).map((_, index) => (
@@ -412,7 +414,7 @@ export function HomeView({
             {faqItems.map((item) => (
               <details
                 key={item.question}
-                className="group rounded-2xl border border-[color:var(--app-border)] bg-ink/50 px-5 py-4 open:border-brand-gold/30"
+                className="group rounded-2xl border border-[color:var(--app-border)] bg-[color:var(--app-panel)] px-5 py-4 open:border-brand-gold/30"
               >
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-display text-lg text-sand">
                   <h3 className="text-base font-semibold sm:text-lg">{item.question}</h3>

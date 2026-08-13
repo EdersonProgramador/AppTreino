@@ -14,6 +14,7 @@ describe("session role routing", () => {
   it("marks guest paths for redirect after login", () => {
     assert.equal(isGuestPath("/"), true);
     assert.equal(isGuestPath("/login"), true);
+    assert.equal(isGuestPath("/baixar-app"), true);
     assert.equal(isGuestPath("/aluno"), false);
     assert.equal(isGuestPath("/admin"), false);
   });

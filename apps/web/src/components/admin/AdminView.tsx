@@ -168,7 +168,7 @@ const AdminSoundToggle = () => {
           aria-pressed={!soundEnabled}
           className={`rounded-2xl border px-4 py-3 text-sm font-extrabold transition ${
             !soundEnabled
-              ? "border-brand-gold/50 bg-gradient-to-r from-ink-elev to-ink-panel text-sand"
+              ? "border-brand-gold/50 bg-gradient-to-r from-[var(--app-elev)] to-[var(--app-panel)] text-[color:var(--app-text)]"
               : "border-[color:var(--app-border)] bg-[var(--app-fill)] text-sand-muted"
           }`}
           onClick={() => {
@@ -296,7 +296,8 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   ) => {
     if (section === "trash") uiSounds.trash();
     else uiSounds.pageChange();
-    setAdminSection(section);
+    // Favoritos e avaliações compartilham a mesma tela.
+    setAdminSection(section === "favorites" ? "ratings" : section);
   };
 
   const [summary, setSummary] = useState({
@@ -442,6 +443,8 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   const [selectedAdminStudentId, setSelectedAdminStudentId] = useState<string | null>(null);
   const [selectedAdminStudent, setSelectedAdminStudent] = useState<AdminStudentOverview | null>(null);
   const [studentOverviewLoading, setStudentOverviewLoading] = useState(false);
+  const [savingStudentProfile, setSavingStudentProfile] = useState(false);
+  const [adminStudentProfileFormKey, setAdminStudentProfileFormKey] = useState(0);
   const [managedUserSearch, setManagedUserSearch] = useState("");
   const [userSearch, setUserSearch] = useState("");
   const [userRoleFilter, setUserRoleFilter] = useState<"ALL" | AdminUser["role"]>("ALL");
@@ -913,37 +916,67 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     try {
       await apiPut(`/admin/users/${userId}`, { status }, token);
       await refreshAdminStudentOverview();
+      setSuccess(status === "ACTIVE" ? "Usuário ativado." : "Usuário desativado.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o status do usuário."));
     }
+  }
+
+  function openAdminStudentManager(studentId: string) {
+    if (studentId !== selectedAdminStudentId) {
+      setSelectedAdminStudent(null);
+    }
+    setSelectedAdminStudentId(studentId);
+    setAdminStudentProfileFormKey((key) => key + 1);
+    window.requestAnimationFrame(() => {
+      document.getElementById("admin-user-manager")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   async function handleUpdateAdminStudentProfile(event: FormEvent<HTMLFormElement>, studentId: string) {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
+    const name = String(data.get("name") ?? "").trim();
+    const email = String(data.get("email") ?? "").trim();
 
+    if (name.length < 2) {
+      setFeedback("Informe um nome válido (mínimo 2 caracteres).");
+      return;
+    }
+    if (!email) {
+      setFeedback("Informe um e-mail válido.");
+      return;
+    }
+
+    setSavingStudentProfile(true);
+    setFeedback(null);
     try {
       await apiPut(
         `/admin/users/${studentId}`,
         {
-          name: String(data.get("name") ?? ""),
-          email: String(data.get("email") ?? ""),
-          phone: String(data.get("phone") ?? ""),
-          document: String(data.get("document") ?? ""),
+          name,
+          email,
+          phone: String(data.get("phone") ?? "").trim() || undefined,
+          document: String(data.get("document") ?? "").trim() || undefined,
           gender: String(data.get("gender") ?? ""),
-          objective: String(data.get("objective") ?? ""),
-          level: String(data.get("level") ?? ""),
-          city: String(data.get("city") ?? ""),
-          state: String(data.get("state") ?? ""),
+          objective: String(data.get("objective") ?? "").trim() || undefined,
+          level: String(data.get("level") ?? "").trim() || undefined,
+          city: String(data.get("city") ?? "").trim() || undefined,
+          state: String(data.get("state") ?? "").trim() || undefined,
           status: String(data.get("status") ?? "ACTIVE"),
-          locationId: String(data.get("locationId") ?? "")
+          locationId: String(data.get("locationId") ?? "").trim() || ""
         },
         token
       );
       await refreshAdminStudentOverview();
+      setAdminStudentProfileFormKey((key) => key + 1);
+      setSuccess("Perfil do aluno atualizado com sucesso.");
+      uiSounds.success();
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o perfil do aluno."));
+    } finally {
+      setSavingStudentProfile(false);
     }
   }
 
@@ -2495,8 +2528,12 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     { key: "module_qr", label: "QR Code", description: "Check-in por QR Code na academia." },
     { key: "module_cards", label: "Meus Cartões", description: "Cartões salvos para cobranças." },
     { key: "module_contact", label: "Contato", description: "Mensagens recebidas dos visitantes." },
-    { key: "module_favorites", label: "Favoritos", description: "Favoritos dos alunos." },
-    { key: "module_ratings", label: "Avaliar treino", description: "Notas de produtos e treinos." }
+    {
+      key: "module_ratings",
+      label: "Favoritos e avaliações",
+      description: "Favoritos e notas de produtos/treinos (ativa os dois módulos juntos).",
+      syncKeys: ["module_ratings", "module_favorites"]
+    }
   ];
 
   const nowForStats = new Date();
@@ -2739,13 +2776,9 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
             <span className="sidebar-label">Contato</span>
             {unreadTicketsCount > 0 && <span className="admin-nav-badge">{unreadTicketsCount}</span>}
           </button>
-          <button className={adminSection === "favorites" ? "active" : ""} onClick={() => goAdminSection("favorites")}>
-            <Star size={18} />
-            <span className="sidebar-label">Favoritos</span>
-          </button>
           <button className={adminSection === "ratings" ? "active" : ""} onClick={() => goAdminSection("ratings")}>
-            <Sparkles size={18} />
-            <span className="sidebar-label">Avaliar</span>
+            <Star size={18} />
+            <span className="sidebar-label">Favoritos e avaliações</span>
           </button>
 
           <span className="admin-nav-group-label">Sistema</span>
@@ -2791,7 +2824,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           </h1>
         </div>
         <div className="dashboard-actions flex flex-wrap justify-end gap-2.5">
-          <ThemeModeSwitch compact className="min-w-[220px]" />
+          <ThemeModeSwitch compact />
           <button className="outline-button compact-button" onClick={() => void loadAdminData()} disabled={loading}>
             {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
             Atualizar
@@ -2852,7 +2885,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           <div className={panelTitleClass}>
             <div>
               <h2>Usuários</h2>
-              <p>Cadastro e gestão de alunos e administradores da academia.</p>
+              <p>Cadastre novos usuários e use Editar para alterar os dados do aluno abaixo.</p>
             </div>
             <span>{filteredAdminUsers.length}/{users.length}</span>
           </div>
@@ -2948,8 +2981,8 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                     <td>
                       <div className="admin-users-actions">
                         {item.role === "USER" && (
-                          <button type="button" onClick={() => setSelectedAdminStudentId(item.id)}>
-                            Gerenciar
+                          <button type="button" onClick={() => openAdminStudentManager(item.id)}>
+                            Editar
                           </button>
                         )}
                         <button aria-label="Excluir usuário" onClick={() => setPendingCmsDelete({ kind: "users", id: item.id, name: item.name })}>
@@ -2987,14 +3020,14 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         <article className="table-panel wide-panel admin-student-control-panel" id="admin-user-manager">
             <div className={panelTitleClass}>
               <div>
-                <h2>Perfil do aluno</h2>
-                <p>Filtre um aluno e edite as informações completas sincronizadas com o painel do aluno.</p>
+                <h2>Editar aluno</h2>
+                <p>Selecione um aluno na lista acima (botão Editar) ou pelo seletor abaixo para alterar o cadastro.</p>
               </div>
-              <span>{studentOverviewLoading ? "Carregando" : selectedAdminStudent?.student.name ?? "Selecione um usuário"}</span>
+              <span>{studentOverviewLoading ? "Carregando…" : selectedAdminStudent?.student.name ?? "Nenhum aluno selecionado"}</span>
             </div>
             <div className="admin-student-toolbar">
               <label className="admin-student-filter">
-                Filtrar usuário
+                Buscar aluno
                 <input
                   value={managedUserSearch}
                   onChange={(event) => setManagedUserSearch(event.target.value)}
@@ -3004,9 +3037,16 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               <select
                 aria-label="Selecionar aluno"
                 value={selectedAdminStudentId ?? ""}
-                onChange={(event) => setSelectedAdminStudentId(event.target.value)}
+                onChange={(event) => {
+                  const nextId = event.target.value;
+                  if (!nextId) {
+                    setSelectedAdminStudentId(null);
+                    return;
+                  }
+                  openAdminStudentManager(nextId);
+                }}
               >
-                <option value="">Selecione um usuário</option>
+                <option value="">Selecione um aluno</option>
                 {managerUserOptions.map((item) => (
                   <option value={item.id} key={item.id}>
                     {item.name}
@@ -3016,14 +3056,22 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               {selectedAdminStudentId && (
                 <button className="outline-button compact-button" type="button" onClick={() => setSelectedAdminStudentId(null)}>
                   <ChevronLeft size={18} />
-                  Limpar seleção
+                  Fechar edição
                 </button>
               )}
             </div>
-            {selectedAdminStudent ? (
+            {studentOverviewLoading && !selectedAdminStudent ? (
+              <div className="settings-card">
+                <Loader2 className="spin" size={20} />
+                <span>
+                  <strong>Carregando aluno…</strong>
+                  Aguarde enquanto buscamos o cadastro completo.
+                </span>
+              </div>
+            ) : selectedAdminStudent && selectedAdminStudent.student.id === selectedAdminStudentId ? (
               <>
             <div className="admin-student-summary-grid">
-              <span><UserRound size={18} /><strong>{selectedAdminStudent.student.status}</strong><small>Perfil</small></span>
+              <span><UserRound size={18} /><strong>{selectedAdminStudent.student.status === "ACTIVE" ? "Ativo" : "Inativo"}</strong><small>Status</small></span>
               <span><Dumbbell size={18} /><strong>{selectedAdminStudent.summary.completedWorkoutSessions}</strong><small>Treinos concluídos</small></span>
               <span><CalendarDays size={18} /><strong>{selectedAdminStudent.summary.attendanceThisMonth}</strong><small>Frequência no mês</small></span>
               <span><CreditCard size={18} /><strong>{selectedAdminStudent.summary.pendingPayments}</strong><small>Pagamentos pendentes</small></span>
@@ -3031,42 +3079,74 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
             </div>
 
             <section className="admin-student-section-grid">
-              <article className="admin-student-module">
+              <article className="admin-student-module admin-student-module--profile">
                 <div className="admin-student-module-title">
                   <UserRound size={18} />
-                  <strong>Perfil</strong>
+                  <strong>Dados cadastrais</strong>
                 </div>
-                <form className={`${crudFormClass} admin-student-profile-form`} onSubmit={(event) => handleUpdateAdminStudentProfile(event, selectedAdminStudent.student.id)}>
-                  <input name="name" defaultValue={selectedAdminStudent.student.name} placeholder="Nome" required />
-                  <input name="email" type="email" defaultValue={selectedAdminStudent.student.email ?? ""} placeholder="E-mail" required />
-                  <input name="phone" defaultValue={selectedAdminStudent.student.phone ?? selectedAdminStudent.student.profile?.phone ?? ""} placeholder="Telefone" />
-                  <input name="document" defaultValue={selectedAdminStudent.student.profile?.document ?? ""} placeholder="Documento" />
-                  <select name="gender" defaultValue={selectedAdminStudent.student.profile?.gender ?? ""}>
-                    <option value="">Sexo</option>
-                    <option value="MALE">Masculino</option>
-                    <option value="FEMALE">Feminino</option>
-                  </select>
-                  <select name="status" defaultValue={selectedAdminStudent.student.status}>
-                    <option value="ACTIVE">Ativo</option>
-                    <option value="INACTIVE">Inativo</option>
-                  </select>
-                  <input name="objective" defaultValue={selectedAdminStudent.student.profile?.objective ?? ""} placeholder="Objetivo" />
-                  <input name="level" defaultValue={selectedAdminStudent.student.profile?.level ?? ""} placeholder="Nível" />
+                <form
+                  key={`admin-student-profile-${selectedAdminStudent.student.id}-${adminStudentProfileFormKey}`}
+                  className={`${crudFormClass} admin-student-profile-form`}
+                  onSubmit={(event) => void handleUpdateAdminStudentProfile(event, selectedAdminStudent.student.id)}
+                >
+                  <label>
+                    Nome
+                    <input name="name" defaultValue={selectedAdminStudent.student.name} placeholder="Nome completo" required minLength={2} />
+                  </label>
+                  <label>
+                    E-mail
+                    <input name="email" type="email" defaultValue={selectedAdminStudent.student.email ?? ""} placeholder="E-mail" required />
+                  </label>
+                  <label>
+                    Telefone
+                    <input name="phone" defaultValue={selectedAdminStudent.student.phone ?? selectedAdminStudent.student.profile?.phone ?? ""} placeholder="Telefone" />
+                  </label>
+                  <label>
+                    Documento
+                    <input name="document" defaultValue={selectedAdminStudent.student.profile?.document ?? ""} placeholder="CPF / documento" />
+                  </label>
+                  <label>
+                    Sexo
+                    <select name="gender" defaultValue={selectedAdminStudent.student.profile?.gender ?? ""}>
+                      <option value="">Não informado</option>
+                      <option value="MALE">Masculino</option>
+                      <option value="FEMALE">Feminino</option>
+                    </select>
+                  </label>
+                  <label>
+                    Status
+                    <select name="status" defaultValue={selectedAdminStudent.student.status}>
+                      <option value="ACTIVE">Ativo</option>
+                      <option value="INACTIVE">Inativo</option>
+                    </select>
+                  </label>
+                  <label>
+                    Objetivo
+                    <input name="objective" defaultValue={selectedAdminStudent.student.profile?.objective ?? ""} placeholder="Ex.: Hipertrofia" />
+                  </label>
+                  <label>
+                    Nível
+                    <input name="level" defaultValue={selectedAdminStudent.student.profile?.level ?? ""} placeholder="Ex.: Iniciante" />
+                  </label>
                   <StateCityFields
+                    withLabels
                     stateDefault={selectedAdminStudent.student.profile?.state ?? ""}
                     cityDefault={selectedAdminStudent.student.profile?.city ?? ""}
                   />
-                  <select name="locationId" defaultValue={selectedAdminStudent.student.profile?.locationId ?? ""}>
-                    <option value="">Localidade</option>
-                    {cmsLocations.filter((item) => item.isActive).map((item) => (
-                      <option value={item.id} key={item.id}>
-                        {item.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button className="primary-button">
-                    <Save size={18} />
-                    Salvar perfil
+                  <label className={wideFieldClass}>
+                    Unidade
+                    <select name="locationId" defaultValue={selectedAdminStudent.student.profile?.locationId ?? ""}>
+                      <option value="">Sem unidade</option>
+                      {cmsLocations.filter((item) => item.isActive).map((item) => (
+                        <option value={item.id} key={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button className="primary-button" type="submit" disabled={savingStudentProfile || studentOverviewLoading}>
+                    {savingStudentProfile ? <Loader2 className="spin" size={18} /> : <Save size={18} />}
+                    {savingStudentProfile ? "Salvando…" : "Salvar alterações"}
                   </button>
                 </form>
               </article>
@@ -3213,32 +3293,11 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 ))}
               </article>
             </section>
-
-            <section className="admin-student-placeholder-grid">
-              {[
-                { icon: Package, title: "Produtos", text: "Catálogo ainda não possui entidade própria no banco." },
-                { icon: ShoppingCart, title: "Compras", text: "Depende do CRUD de pedidos/produtos." },
-                { icon: QrCode, title: "QR Code", text: `Código do aluno: ${selectedAdminStudent.student.id.slice(-8).toUpperCase()}` },
-                { icon: CreditCard, title: "Meus Cartões", text: "Cartões não são armazenados localmente; ficam no gateway." },
-                { icon: Settings, title: "Configurações", text: "Status, sexo, objetivo, nível e assinatura já editáveis acima." },
-                { icon: MessageCircle, title: "Contato", text: selectedAdminStudent.student.phone ?? selectedAdminStudent.student.email },
-                { icon: Star, title: "Favoritos", text: "Ainda sem tabela de favoritos vinculada ao aluno." },
-                { icon: Trophy, title: "Avaliar", text: "Avaliações físicas estão integradas; nota/review ainda não existe." }
-              ].map((item) => (
-                <div className="settings-card" key={item.title}>
-                  <item.icon size={20} />
-                  <span>
-                    <strong>{item.title}</strong>
-                    {item.text}
-                  </span>
-                </div>
-              ))}
-            </section>
               </>
             ) : (
               <div className="admin-student-picker-grid">
                 {managerUserOptions.slice(0, 12).map((item) => (
-                  <button type="button" key={item.id} onClick={() => setSelectedAdminStudentId(item.id)}>
+                  <button type="button" key={item.id} onClick={() => openAdminStudentManager(item.id)}>
                     <UserRound size={18} />
                     <span>
                       <strong>{item.name}</strong>
@@ -3251,7 +3310,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                     <Search size={20} />
                     <span>
                       <strong>Nenhum usuário encontrado</strong>
-                      Ajuste o filtro para localizar o aluno que deseja gerenciar.
+                      Ajuste a busca ou use o botão Editar na lista de usuários.
                     </span>
                   </div>
                 )}
@@ -6280,12 +6339,12 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         )}
       </section>}
 
-      {adminSection === "favorites" && <section className="admin-grid phase-three-grid" id="admin-favorites">
+      {adminSection === "ratings" && <section className="admin-grid phase-three-grid" id="admin-ratings">
         <article className="table-panel">
           <div className={panelTitleClass}>
             <div>
-              <h2>Favoritos dos alunos</h2>
-              <p>Produtos e conteúdos marcados como favoritos.</p>
+              <h2>Favoritos</h2>
+              <p>Favoritos e avaliações · produtos marcados pelos alunos.</p>
             </div>
             <span>{favorites.length}</span>
           </div>
@@ -6317,14 +6376,11 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
             />
           )}
         </article>
-      </section>}
-
-      {adminSection === "ratings" && <section className="admin-grid phase-three-grid" id="admin-ratings">
         <article className="table-panel">
           <div className={panelTitleClass}>
             <div>
               <h2>Avaliações</h2>
-              <p>Notas e comentários dos alunos sobre produtos e treinos.</p>
+              <p>Notas e comentários sobre produtos e treinos.</p>
             </div>
             <span>{ratings.length}</span>
           </div>
@@ -6418,7 +6474,11 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               <select
                 aria-label={`Módulo ${module.label}`}
                 value={systemSettings[module.key] ?? "true"}
-                onChange={(event) => setSystemSettingValue(module.key, event.target.value)}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  const keys = "syncKeys" in module && module.syncKeys ? module.syncKeys : [module.key];
+                  keys.forEach((key) => setSystemSettingValue(key, value));
+                }}
               >
                 <option value="true">Ativo</option>
                 <option value="false">Inativo</option>

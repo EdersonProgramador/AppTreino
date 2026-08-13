@@ -11,6 +11,7 @@
  * | Conteúdo unitário     | Exercício         |
  * | Avaliação corporal    | Avaliação física  |
  * | Nota/estrelas         | Avaliar treino    |
+ * | Favoritos + notas     | Favoritos e avaliações |
  */
 
 export const trainingCopy = {
@@ -25,6 +26,7 @@ export const trainingCopy = {
   exercise: "Exercício",
   exercises: "Exercícios",
   physicalAssessment: "Avaliação física",
+  favoritesAndRatings: "Favoritos e avaliações",
   rateWorkout: "Avaliar treino",
   todayWorkout: "Treino de hoje",
   continueWorkout: "Continuar treino",

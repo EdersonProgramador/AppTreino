@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { LogIn } from "lucide-react";
 import { LoginView } from "../components/auth/LoginView";
+import { AppDownloadSoonView } from "../components/home/AppDownloadSoonView";
 import { HomeView } from "../components/home/HomeView";
 import { assetUrl } from "../lib/urls";
 import { useAuth } from "./AuthContext";
@@ -30,9 +31,24 @@ export function HomePage() {
   return (
     <HomeView
       onStart={(planCode) => navigate(loginPath(planCode))}
+      onDownloadApp={() => navigate(paths.download)}
       onLogin={() => navigate(paths.login)}
     />
   );
+}
+
+export function DownloadPage() {
+  const { user, token, isTransitioning, transitionMessage } = useAuth();
+
+  if (isTransitioning) {
+    return <TransitionScreen message={transitionMessage} />;
+  }
+
+  if (user && token) {
+    return <Navigate to={homePathForRole(user.role)} replace />;
+  }
+
+  return <AppDownloadSoonView />;
 }
 
 export function LoginPage() {

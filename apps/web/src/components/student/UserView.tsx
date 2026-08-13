@@ -39,6 +39,7 @@ import {
   X
 } from "lucide-react";
 import { lazy, Suspense, type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { formatPriceInBRL, initialPlans } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { BRAZILIAN_STATES, CITIES_BY_STATE } from "../../brazil-data";
@@ -430,7 +431,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const goToSection = (section: StudentPanelSection) => {
     uiSounds.studentPage();
     uiSounds.pageChange();
-    setStudentSection(section);
+    // Favoritos e avaliações compartilham a mesma tela.
+    setStudentSection(section === "favorites" ? "ratings" : section);
   };
 
   const openTrainingCatalog = () => {
@@ -828,7 +830,6 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     const name = String(data.get("name") ?? "").trim();
     const phone = String(data.get("phone") ?? "").trim();
     const document = String(data.get("document") ?? "").trim();
-    const gender = String(data.get("gender") ?? "");
     const birthDate = String(data.get("birthDate") ?? "").trim();
     const objective = String(data.get("objective") ?? "").trim();
     const level = String(data.get("level") ?? "").trim();
@@ -851,13 +852,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         avatarUrl = uploaded.file.url;
       }
 
+      // Sexo não é enviado na edição: só cadastro/onboarding (quando ainda vazio) ou admin.
       const response = await apiPut<{ profile: StudentProfile }>(
         "/user/profile",
         {
           name,
           phone: phone || undefined,
           document: document || undefined,
-          gender: gender === "MALE" || gender === "FEMALE" ? gender : null,
           birthDate: birthDate ? `${birthDate}T12:00:00.000Z` : undefined,
           objective: objective || undefined,
           level: level || undefined,
@@ -896,7 +897,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         {
           name: payload.name,
           phone: payload.phone || undefined,
-          gender: payload.gender,
+          ...(profile?.gender ? {} : { gender: payload.gender }),
           birthDate: `${payload.birthDate}T12:00:00.000Z`,
           objective: payload.objective,
           level: levelLabel(payload.level),
@@ -1703,13 +1704,18 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   return (
     <main className="student-app-shell">
       <section className="student-app-header">
-        <div className="student-avatar">
+        <button
+          type="button"
+          className="student-avatar"
+          aria-label="Abrir perfil"
+          onClick={() => goToSection("profile")}
+        >
           {profile?.avatarUrl ? (
             <img src={profile.avatarUrl} alt="" />
           ) : (
             <UserRound size={34} />
           )}
-        </div>
+        </button>
         <div>
           <strong>{profile?.name ?? "Aluno"}</strong>
           <span>Código: {studentCode}</span>
@@ -1737,53 +1743,73 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             </button>
             {notificationsOpen && (
               <section className="student-notification-panel" aria-label="Notificações publicadas">
-                <div>
-                  <strong>Notificações</strong>
-                  <span>{mergedNotifications.length}</span>
-                </div>
-                {mergedNotifications.length > 0 ? (
-                  mergedNotifications.map((notification) => (
-                    <article
-                      key={notification.id}
-                      className={notification.kind === "sync" ? "student-sync-notification" : undefined}
-                    >
-                      <strong>{notification.title}</strong>
-                      {notification.origin && <em className="student-sync-origin">{notification.origin}</em>}
-                      <span>{notification.message}</span>
-                      <small>{new Date(notification.publishedAt).toLocaleString("pt-BR")}</small>
-                      {notification.kind === "sync" && notification.targets[0] && (
-                        <button
-                          type="button"
-                          className="student-sync-open"
-                          onClick={() => {
-                            markNotificationRead(notification.id);
-                            setStudentSection(notification.targets[0] as StudentPanelSection);
-                            setNotificationsOpen(false);
-                          }}
+                <header className="student-notification-panel-head">
+                  <div>
+                    <strong>Notificações</strong>
+                    <span>{mergedNotifications.length}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="student-notification-close"
+                    aria-label="Fechar notificações"
+                    onClick={() => {
+                      uiSounds.popupClose();
+                      setNotificationsOpen(false);
+                    }}
+                  >
+                    <X size={18} strokeWidth={2.75} />
+                  </button>
+                </header>
+                <div className="student-notification-panel-list">
+                  {mergedNotifications.length > 0 ? (
+                    mergedNotifications.map((notification) => {
+                      const targetLabels: Record<string, string> = {
+                        payments: "Pagamentos",
+                        membership: "Matrículas",
+                        status: "Frequência",
+                        locations: "Localidades",
+                        support: "Atendimento",
+                        ratings: trainingCopy.favoritesAndRatings,
+                        training: trainingCopy.workout,
+                        assessments: trainingCopy.physicalAssessment
+                      };
+                      const primaryTarget = notification.targets[0];
+                      const openLabel = primaryTarget
+                        ? targetLabels[primaryTarget] ?? primaryTarget
+                        : null;
+
+                      return (
+                        <article
+                          key={notification.id}
+                          className={notification.kind === "sync" ? "student-sync-notification" : undefined}
                         >
-                          Abrir {notification.targets.map((target) => {
-                            const labels: Record<string, string> = {
-                              payments: "Pagamentos",
-                              membership: "Matrículas",
-                              status: "Frequência",
-                              locations: "Localidades",
-                              support: "Atendimento",
-                              ratings: trainingCopy.rateWorkout,
-                              training: trainingCopy.workout,
-                              assessments: trainingCopy.physicalAssessment
-                            };
-                            return labels[target] ?? target;
-                          }).join(" / ")}
-                        </button>
-                      )}
+                          <strong>{notification.title}</strong>
+                          {notification.origin && <em className="student-sync-origin">{notification.origin}</em>}
+                          <span>{notification.message}</span>
+                          <small>{new Date(notification.publishedAt).toLocaleString("pt-BR")}</small>
+                          {notification.kind === "sync" && primaryTarget && openLabel && (
+                            <button
+                              type="button"
+                              className="student-sync-open"
+                              onClick={() => {
+                                markNotificationRead(notification.id);
+                                setStudentSection(primaryTarget as StudentPanelSection);
+                                setNotificationsOpen(false);
+                              }}
+                            >
+                              Abrir {openLabel}
+                            </button>
+                          )}
+                        </article>
+                      );
+                    })
+                  ) : (
+                    <article>
+                      <strong>Nenhuma publicação</strong>
+                      <span>Novidades publicadas pelo admin e sincronizações entre módulos aparecerão aqui.</span>
                     </article>
-                  ))
-                ) : (
-                  <article>
-                    <strong>Nenhuma publicação</strong>
-                    <span>Novidades publicadas pelo admin e sincronizações entre módulos aparecerão aqui.</span>
-                  </article>
-                )}
+                  )}
+                </div>
               </section>
             )}
           </div>
@@ -1899,53 +1925,6 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   </button>
                 </div>
               )}
-            </section>
-
-            <h2 className="student-section-title">Mais do app</h2>
-            <section className="student-feature-grid">
-              {[
-                { icon: UserRound, title: "Perfil", text: "Dados cadastrais", section: "profile" as const },
-                { icon: Dumbbell, title: trainingCopy.workout, text: "Sessões e exercícios", section: "training" as const },
-                { icon: ShieldCheck, title: "Matrículas", text: "Seu plano e vigência", section: "membership" as const },
-                { icon: CreditCard, title: "Pagamentos", text: "Central de cobranças", section: "payments" as const },
-                { icon: Ruler, title: trainingCopy.physicalAssessment, text: "Medidas e evolução", section: "assessments" as const },
-                { icon: CalendarDays, title: "Frequência", text: "Consulte seus acessos", section: "status" as const },
-                { icon: CalendarPlus, title: "Eventos", text: "Veja os eventos", section: "events" as const },
-                { icon: MapPin, title: "Unidades", text: "Academias e clubes", section: "locations" as const },
-                { icon: Headphones, title: "Atendimento", text: "Histórico de conversas", section: "support" as const },
-                ...(publicConfig["module_products"] !== "false"
-                  ? [{ icon: Package, title: "Produtos", text: "Vitrine online", section: "products" as const }]
-                  : []),
-                ...(publicConfig["module_purchases"] !== "false"
-                  ? [{ icon: ShoppingCart, title: "Compras", text: "Seu histórico de compras", section: "purchases" as const }]
-                  : []),
-                ...(publicConfig["module_favorites"] !== "false"
-                  ? [{ icon: Star, title: "Favoritos", text: "Treinos salvos", section: "favorites" as const }]
-                  : []),
-                ...(publicConfig["module_ratings"] !== "false"
-                  ? [{ icon: Trophy, title: trainingCopy.rateWorkout, text: "Nota para seus treinos", section: "ratings" as const }]
-                  : [])
-              ].map((item) => {
-                const synced = highlightedSections.includes(item.section as PanelDestination);
-                return (
-                  <button
-                    className={`student-feature-card${synced ? " student-feature-synced" : ""}`}
-                    key={item.title}
-                    onClick={() => {
-                      if (item.section === "training") {
-                        openTrainingCatalog();
-                        return;
-                      }
-                      setStudentSection(item.section);
-                    }}
-                  >
-                    <span><item.icon size={25} /></span>
-                    <strong>{item.title}</strong>
-                    <small>{item.text}</small>
-                    {synced && <em className="student-feature-sync-badge">Sync</em>}
-                  </button>
-                );
-              })}
             </section>
           </>
         )}
@@ -2320,13 +2299,43 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   </button>
                 </div>
                 {showAddCardForm && (
-                  <form className="student-info-card student-card-form" onSubmit={handleAddStudentCard}>
-                    <input name="brand" placeholder="Bandeira" />
-                    <input name="lastFour" placeholder="Últimos 4 dígitos" maxLength={4} pattern="[0-9]{4}" required />
-                    <input name="holderName" placeholder="Nome no cartão" />
-                    <label className="admin-checkbox">
+                  <form className="student-card-form" onSubmit={handleAddStudentCard}>
+                    <header className="student-card-form-header">
+                      <CreditCard size={20} aria-hidden />
+                      <div>
+                        <strong>Novo cartão</strong>
+                        <span>Dados para cobrança recorrente</span>
+                      </div>
+                    </header>
+                    <div className="student-card-form-grid">
+                      <label className="student-card-field">
+                        <span>Bandeira</span>
+                        <input name="brand" placeholder="Visa, Mastercard…" autoComplete="cc-type" />
+                      </label>
+                      <label className="student-card-field">
+                        <span>Últimos 4 dígitos</span>
+                        <input
+                          name="lastFour"
+                          placeholder="0000"
+                          maxLength={4}
+                          pattern="[0-9]{4}"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          required
+                        />
+                      </label>
+                      <label className="student-card-field student-card-field-full">
+                        <span>Nome impresso no cartão</span>
+                        <input
+                          name="holderName"
+                          placeholder="Como aparece no cartão"
+                          autoComplete="cc-name"
+                        />
+                      </label>
+                    </div>
+                    <label className="student-card-checkbox">
                       <input name="isDefault" type="checkbox" />
-                      Cartão principal
+                      Definir como cartão principal
                     </label>
                     <button className="student-green-button" type="submit">
                       Salvar cartão
@@ -2335,18 +2344,21 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 )}
                 {studentPaymentCards.length > 0 ? (
                   studentPaymentCards.map((card) => (
-                    <article className="student-info-card" key={card.id}>
-                      <CreditCard size={22} />
-                      <div>
-                        <strong>{card.holderName ?? "Cartão"} •••• {card.lastFour}</strong>
-                        <span>
-                          {card.brand ?? "Cartão"}
-                          {card.isDefault ? " · principal" : ""}
-                        </span>
+                    <article className="student-payment-card" key={card.id}>
+                      <div className="student-payment-card-icon" aria-hidden>
+                        <CreditCard size={22} />
+                      </div>
+                      <div className="student-payment-card-body">
+                        <strong>
+                          {(card.brand ?? "Cartão").toUpperCase()} •••• {card.lastFour}
+                        </strong>
+                        <span>{card.holderName ?? "Titular não informado"}</span>
+                        {card.isDefault ? <em>Principal</em> : null}
                       </div>
                       <button
                         className="student-delete-button"
                         aria-label="Remover cartão"
+                        type="button"
                         onClick={() => void handleDeleteStudentCard(card.id)}
                       >
                         <Trash2 size={17} />
@@ -2450,13 +2462,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           </section>
         )}
 
-        {studentSection === "favorites" && (
+        {studentSection === "ratings" && (
           <section className="student-sheet">
             <div className="student-sheet-heading">
-              <span>Favoritos</span>
-              <h1>Treinos favoritos</h1>
-              <p>{studentWorkoutFavorites.length} favorito(s)</p>
+              <span>Engajamento</span>
+              <h1>{trainingCopy.favoritesAndRatings}</h1>
+              <p>
+                {studentWorkoutFavorites.length} favorito(s) · {publishedWorkouts.length} treino(s) para avaliar
+              </p>
             </div>
+
+            <h2 className="student-sheet-subtitle">Favoritos</h2>
             {studentWorkoutFavorites.length > 0 ? (
               <div className="student-favorites-grid">
                 {studentWorkoutFavorites.map((favorite) => (
@@ -2485,55 +2501,60 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               </div>
             ) : (
               <article className="student-empty-state">
-                <Star size={34} />
+                <Star size={28} />
                 <strong>Nenhum favorito ainda</strong>
-                <span>Toque em "Favoritar treino" no treino para guardá-lo aqui.</span>
+                <span>Ao avaliar um treino, ele também pode ser salvo aqui automaticamente.</span>
               </article>
             )}
-          </section>
-        )}
 
-        {studentSection === "ratings" && (
-          <section className="student-sheet">
-            <div className="student-sheet-heading">
-              <span>{trainingCopy.rateWorkout}</span>
-              <h1>Avalie seus treinos</h1>
-              <p>{publishedWorkouts.length} treino(s) disponíveis</p>
-            </div>
+            <h2 className="student-sheet-subtitle">{trainingCopy.rateWorkout}</h2>
             {publishedWorkouts.length > 0 ? (
               publishedWorkouts.map((programWorkout) => {
                 const draft = ratingDraft[programWorkout.programId];
                 const alreadyRated = programWorkout.ratedByMe;
                 return (
-                  <article className="student-info-card student-rating-card" key={`${programWorkout.programId}-${programWorkout.dayNumber}`}>
-                    <div>
-                      <strong>{programWorkout.programTitle}</strong>
-                      <span>{programWorkout.modality ?? "Hipertrofia"}</span>
-                    </div>
-                    {alreadyRated ? (
-                      <span className="student-rating-done"><Check size={16} /> Avaliado</span>
-                    ) : (
-                      <div className="student-rating-form">
-                        <div className="student-rating-stars">
-                          {[1, 2, 3, 4, 5].map((score) => (
-                            <button
-                              key={score}
-                              type="button"
-                              aria-label={`${score} estrelas`}
-                              className={draft && score <= draft.score ? "active" : ""}
-                              onClick={() =>
-                                setRatingDraft((current) => ({
-                                  ...current,
-                                  [programWorkout.programId]: { score, comment: current[programWorkout.programId]?.comment ?? "" }
-                                }))
-                              }
-                            >
-                              <Star size={24} fill={draft && score <= draft.score ? "currentColor" : "none"} />
-                            </button>
-                          ))}
+                  <article
+                    className="student-rating-card"
+                    data-theme-surface="card"
+                    key={`${programWorkout.programId}-${programWorkout.dayNumber}`}
+                  >
+                    <div className="student-rating-top">
+                      <div className="student-rating-heading">
+                        <strong>{programWorkout.programTitle}</strong>
+                        <span>{programWorkout.modality ?? "Hipertrofia"}</span>
+                      </div>
+                      {alreadyRated ? (
+                        <span className="student-rating-done"><Check size={16} /> Avaliado</span>
+                      ) : (
+                        <div className="student-rating-stars" role="group" aria-label="Nota do treino">
+                          {[1, 2, 3, 4, 5].map((score) => {
+                            const selected = Boolean(draft && score <= draft.score);
+                            return (
+                              <button
+                                key={score}
+                                type="button"
+                                aria-label={score === 1 ? "1 estrela" : `${score} estrelas`}
+                                aria-pressed={selected}
+                                className={selected ? "active" : undefined}
+                                onClick={() =>
+                                  setRatingDraft((current) => ({
+                                    ...current,
+                                    [programWorkout.programId]: { score, comment: current[programWorkout.programId]?.comment ?? "" }
+                                  }))
+                                }
+                              >
+                                <Star size={18} fill={selected ? "currentColor" : "none"} />
+                              </button>
+                            );
+                          })}
                         </div>
+                      )}
+                    </div>
+                    {!alreadyRated && (
+                      <div className="student-rating-form">
                         <input
                           type="text"
+                          className="ui-input"
                           placeholder="Comentário (opcional)"
                           value={draft?.comment ?? ""}
                           onChange={(event) =>
@@ -2544,7 +2565,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                           }
                         />
                         <button
-                          className="student-green-button"
+                          className="ui-btn-primary student-rating-submit"
                           type="button"
                           disabled={!draft || draft.score < 1 || submittingRatingId === programWorkout.programId}
                           onClick={() => void handleSubmitWorkoutProgramRating(programWorkout.programId, programWorkout.assignmentId)}
@@ -2558,7 +2579,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               })
             ) : (
               <article className="student-empty-state">
-                <Trophy size={34} />
+                <Trophy size={28} />
                 <strong>Nenhum treino para avaliar</strong>
                 <span>Os treinos publicados aparecerão aqui para você avaliar.</span>
               </article>
@@ -2850,8 +2871,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         {studentSection === "support" && (
           <section className="student-sheet">
             <div className="student-sheet-heading">
-              <span>Atendimento</span>
-              <h1>Suporte</h1>
+              <span>Central de ajuda</span>
+              <h1>Atendimento</h1>
               <p>{tickets.length} chamado(s)</p>
             </div>
 
@@ -2975,129 +2996,188 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         )}
 
         {studentSection === "profile" && (
-          <section className="student-sheet">
+          <section className="student-sheet student-profile-sheet">
             <div className="student-sheet-heading">
               <span>Perfil</span>
               <h1>Dados cadastrais</h1>
-              <p>Complete seus dados para personalizar sua experiência e seus treinos.</p>
+              <p>Atualize suas informações para treinos e contato com a academia.</p>
             </div>
-            <article className="student-profile-note">
-              <ShieldCheck size={18} />
-              <span>
-                Nome, e-mail, telefone e sexo já foram informados na contratação do plano. Complete o restante quando
-                quiser.
-              </span>
-            </article>
+
             <form
               key={`student-profile-form-${studentProfileFormKey}`}
               id="student-profile-form"
               className={`student-profile-form${studentProfileEditing ? "" : " student-profile-locked"}`}
               onSubmit={handleUpdateStudentProfile}
             >
-              <label className="student-avatar-field wide-field">
-                Foto de perfil
-                <span className="student-avatar-preview">
-                  {studentAvatarPreview ?? profile?.avatarUrl ? (
-                    <img src={studentAvatarPreview ?? profile?.avatarUrl ?? ""} alt="" />
-                  ) : (
-                    <UserRound size={34} className="student-avatar-placeholder" />
-                  )}
-                </span>
-                <input
-                  name="avatar"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  onChange={handleStudentAvatarChange}
-                  disabled={!studentProfileEditing}
-                />
-                <small>Formatos JPG, PNG, WEBP ou GIF.</small>
-              </label>
-              <label>
-                Nome
-                <input name="name" defaultValue={profile?.name ?? ""} minLength={2} required placeholder="Seu nome completo" disabled={!studentProfileEditing} />
-              </label>
-              <label>
-                E-mail
-                <input name="email" type="email" value={profile?.email ?? ""} readOnly disabled placeholder="seuemail@exemplo.com" />
-              </label>
-              <label>
-                Telefone
-                <input name="phone" type="tel" defaultValue={profile?.phone ?? ""} placeholder="+55 11 99999-9999" disabled={!studentProfileEditing} />
-              </label>
-              <label>
-                CPF
-                <input name="document" defaultValue={profile?.document ?? ""} placeholder="000.000.000-00" disabled={!studentProfileEditing} />
-              </label>
-              <label>
-                Data de nascimento
-                <input
-                  name="birthDate"
-                  type="date"
-                  defaultValue={profile?.birthDate ? profile.birthDate.slice(0, 10) : ""}
-                  disabled={!studentProfileEditing}
-                />
-              </label>
-              <label>
-                Sexo
-                <select name="gender" defaultValue={profile?.gender ?? ""} disabled={!studentProfileEditing}>
-                  <option value="">Selecione</option>
-                  <option value="MALE">Masculino</option>
-                  <option value="FEMALE">Feminino</option>
-                </select>
-              </label>
-              <label className="wide-field">
-                Estado
-                <select
-                  name="state"
-                  defaultValue={profile?.state ?? ""}
-                  onChange={(event) => setStudentProfileUf(event.target.value)}
-                  disabled={!studentProfileEditing}
-                >
-                  <option value="">Selecione seu estado</option>
-                  {BRAZILIAN_STATES.map((state) => (
-                    <option key={state.uf} value={state.uf}>
-                      {state.name} ({state.uf})
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="wide-field">
-                Cidade
-                <select name="city" defaultValue={profile?.city ?? ""} disabled={!studentProfileEditing}>
-                  <option value="">Selecione sua cidade</option>
-                  {profile?.city &&
-                    studentProfileUf === profile?.state &&
-                    !(CITIES_BY_STATE[studentProfileUf] ?? []).includes(profile.city) && (
-                      <option value={profile.city}>{profile.city}</option>
+              <div className="student-profile-identity">
+                <label className="student-avatar-field">
+                  <span className="student-avatar-preview">
+                    {studentAvatarPreview ?? profile?.avatarUrl ? (
+                      <img src={studentAvatarPreview ?? profile?.avatarUrl ?? ""} alt="" />
+                    ) : (
+                      <UserRound size={32} className="student-avatar-placeholder" />
                     )}
-                  {(CITIES_BY_STATE[studentProfileUf] ?? []).map((city) => (
-                    <option key={city} value={city}>
-                      {city}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Objetivo
-                <select name="objective" defaultValue={profile?.objective ?? ""} disabled={!studentProfileEditing}>
-                  <option value="">Selecione seu objetivo</option>
-                  <option value="Hipertrofia">Hipertrofia</option>
-                  <option value="Emagrecimento">Emagrecimento</option>
-                  <option value="Condicionamento">Condicionamento</option>
-                  <option value="Saúde">Saúde</option>
-                  <option value="Definição">Definição</option>
-                </select>
-              </label>
-              <label>
-                Nível
-                <select name="level" defaultValue={profile?.level ?? ""} disabled={!studentProfileEditing}>
-                  <option value="">Selecione seu nível</option>
-                  <option value="Iniciante">Iniciante</option>
-                  <option value="Intermediário">Intermediário</option>
-                  <option value="Avançado">Avançado</option>
-                </select>
-              </label>
+                  </span>
+                  {studentProfileEditing && (
+                    <>
+                      <input
+                        name="avatar"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        onChange={handleStudentAvatarChange}
+                      />
+                      <small>JPG, PNG, WEBP ou GIF</small>
+                    </>
+                  )}
+                </label>
+                <div className="student-profile-identity-copy">
+                  <strong>{profile?.name ?? "Aluno"}</strong>
+                  <span>{profile?.email ?? "—"}</span>
+                  <em>
+                    {profile?.gender === "MALE"
+                      ? "Masculino"
+                      : profile?.gender === "FEMALE"
+                        ? "Feminino"
+                        : "Sexo não informado"}
+                  </em>
+                </div>
+              </div>
+
+              <fieldset className="student-profile-group">
+                <legend>Identificação</legend>
+                <label>
+                  Nome completo
+                  <input
+                    name="name"
+                    defaultValue={profile?.name ?? ""}
+                    minLength={2}
+                    required
+                    placeholder="Como no documento"
+                    disabled={!studentProfileEditing}
+                  />
+                </label>
+                <label>
+                  E-mail
+                  <input
+                    name="email"
+                    type="email"
+                    value={profile?.email ?? ""}
+                    readOnly
+                    disabled
+                    placeholder="seuemail@exemplo.com"
+                  />
+                </label>
+                <label>
+                  CPF
+                  <input
+                    name="document"
+                    defaultValue={profile?.document ?? ""}
+                    placeholder="000.000.000-00"
+                    disabled={!studentProfileEditing}
+                  />
+                </label>
+                <label>
+                  Data de nascimento
+                  <input
+                    name="birthDate"
+                    type="date"
+                    defaultValue={profile?.birthDate ? profile.birthDate.slice(0, 10) : ""}
+                    disabled={!studentProfileEditing}
+                  />
+                </label>
+                <label className="student-profile-locked-field">
+                  Sexo
+                  <select
+                    name="gender"
+                    defaultValue={profile?.gender ?? ""}
+                    disabled
+                    aria-readonly="true"
+                    title="Definido no cadastro. Somente a academia pode alterar."
+                  >
+                    <option value="">Não informado</option>
+                    <option value="MALE">Masculino</option>
+                    <option value="FEMALE">Feminino</option>
+                  </select>
+                  <small>Definido no cadastro · só a academia altera</small>
+                </label>
+              </fieldset>
+
+              <fieldset className="student-profile-group">
+                <legend>Contato e localização</legend>
+                <label>
+                  Telefone
+                  <input
+                    name="phone"
+                    type="tel"
+                    defaultValue={profile?.phone ?? ""}
+                    placeholder="+55 11 99999-9999"
+                    disabled={!studentProfileEditing}
+                  />
+                </label>
+                <label>
+                  Estado
+                  <select
+                    name="state"
+                    defaultValue={profile?.state ?? ""}
+                    onChange={(event) => setStudentProfileUf(event.target.value)}
+                    disabled={!studentProfileEditing}
+                  >
+                    <option value="">Selecione</option>
+                    {BRAZILIAN_STATES.map((state) => (
+                      <option key={state.uf} value={state.uf}>
+                        {state.name} ({state.uf})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="student-profile-wide">
+                  Cidade
+                  <select name="city" defaultValue={profile?.city ?? ""} disabled={!studentProfileEditing}>
+                    <option value="">Selecione</option>
+                    {profile?.city &&
+                      studentProfileUf === profile?.state &&
+                      !(CITIES_BY_STATE[studentProfileUf] ?? []).includes(profile.city) && (
+                        <option value={profile.city}>{profile.city}</option>
+                      )}
+                    {(CITIES_BY_STATE[studentProfileUf] ?? []).map((city) => (
+                      <option key={city} value={city}>
+                        {city}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </fieldset>
+
+              <fieldset className="student-profile-group">
+                <legend>Treino</legend>
+                <label>
+                  Objetivo
+                  <select name="objective" defaultValue={profile?.objective ?? ""} disabled={!studentProfileEditing}>
+                    <option value="">Selecione</option>
+                    <option value="Hipertrofia">Hipertrofia</option>
+                    <option value="Emagrecimento">Emagrecimento</option>
+                    <option value="Condicionamento">Condicionamento</option>
+                    <option value="Saúde">Saúde</option>
+                    <option value="Definição">Definição</option>
+                  </select>
+                </label>
+                <label>
+                  Nível
+                  <select name="level" defaultValue={profile?.level ?? ""} disabled={!studentProfileEditing}>
+                    <option value="">Selecione</option>
+                    <option value="Iniciante">Iniciante</option>
+                    <option value="Intermediário">Intermediário</option>
+                    <option value="Avançado">Avançado</option>
+                  </select>
+                </label>
+              </fieldset>
+
+              <article className="student-profile-note">
+                <ShieldCheck size={16} />
+                <span>Sexo não pode ser alterado pelo aluno. Solicite correção à academia, se necessário.</span>
+              </article>
             </form>
+
             <div className="student-profile-actions">
               {studentProfileEditing ? (
                 <>
@@ -3109,7 +3189,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                       if (form instanceof HTMLFormElement) void saveStudentProfile(form);
                     }}
                   >
-                    Salvar dados cadastrais
+                    Salvar alterações
                   </button>
                   <button className="student-outline-button" type="button" onClick={handleCancelStudentProfileEdit}>
                     Cancelar
@@ -3117,7 +3197,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 </>
               ) : (
                 <button className="student-green-button" type="button" onClick={() => setStudentProfileEditing(true)}>
-                  Editar Informações
+                  Editar informações
                 </button>
               )}
             </div>
@@ -3223,9 +3303,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               { icon: QrCode, title: "QR Code", action: () => { goToSection("home"); setShowStudentQr(true); } },
               { icon: CreditCard, title: "Meus Cartões", action: () => goToSection("payments") },
               { icon: Settings, title: "Configurações", action: () => goToSection("settings") },
-              { icon: MessageCircle, title: "Contato", action: () => goToSection("support") },
-              { icon: Star, title: "Favoritos", action: () => goToSection("favorites") },
-              { icon: Trophy, title: trainingCopy.rateWorkout, action: () => goToSection("ratings") }
+              { icon: Star, title: trainingCopy.favoritesAndRatings, action: () => goToSection("ratings") }
             ].map((item) => (
               <button className="student-menu-item" key={item.title} onClick={item.action}>
                 <item.icon size={24} />
@@ -3304,80 +3382,96 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           </section>
         )}
 
-      {streakCalendarOpen && (
-        <div className="student-streak-modal-backdrop" role="presentation" onClick={() => {
-          uiSounds.popupClose();
-          setStreakCalendarOpen(false);
-        }}>
-          <section
-            className="student-streak-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Calendario da ofensiva"
-            onClick={(event) => event.stopPropagation()}
+      {streakCalendarOpen &&
+        createPortal(
+          <div
+            className="student-streak-modal-backdrop"
+            role="presentation"
+            onClick={() => {
+              uiSounds.popupClose();
+              setStreakCalendarOpen(false);
+            }}
           >
-            <div className="student-streak-modal-header">
-              <div>
-                <span>Ano atual: {currentYear}</span>
-                <strong>{currentStreak} dia(s)</strong>
-                <small>consecutivo(s)</small>
-              </div>
-              <button className="student-icon-button" aria-label="Fechar calendário" onClick={() => {
-                uiSounds.popupClose();
-                setStreakCalendarOpen(false);
-              }}>
-                <Check size={20} />
-              </button>
-            </div>
-            <div className="student-consistency-calendar in-modal">
-              <div className="student-consistency-heading">
-                <button
-                  className="student-calendar-arrow"
-                  aria-label="Mes anterior"
-                  disabled={streakCalendarMonth <= 1}
-                  onClick={() => setStreakCalendarMonth((month) => Math.max(1, month - 1))}
-                >
-                  <ChevronLeft size={20} />
-                </button>
+            <section
+              className="student-streak-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Calendario da ofensiva"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="student-streak-modal-header">
                 <div>
-                  <span>Histórico</span>
-                  <strong>{monthLabel(currentMonth.year, currentMonth.month)}</strong>
+                  <span>Ano atual: {currentYear}</span>
+                  <strong>{currentStreak} dia(s)</strong>
+                  <small>consecutivo(s)</small>
                 </div>
                 <button
-                  className="student-calendar-arrow"
-                  aria-label="Próximo mês"
-                  disabled={streakCalendarMonth >= currentCalendarMonth}
-                  onClick={() => setStreakCalendarMonth((month) => Math.min(currentCalendarMonth, month + 1))}
+                  className="student-streak-modal-close"
+                  type="button"
+                  aria-label="Fechar calendário"
+                  onClick={() => {
+                    uiSounds.popupClose();
+                    setStreakCalendarOpen(false);
+                  }}
                 >
-                  <ChevronRight size={20} />
+                  <X size={18} strokeWidth={2.75} />
                 </button>
-                <small>{completedDateSet.size} treino(s) no mês</small>
               </div>
-              <div className="student-calendar-weekdays" aria-hidden="true">
-                {["D", "S", "T", "Q", "Q", "S", "S"].map((day, index) => (
-                  <span key={`${day}-${index}`}>{day}</span>
-                ))}
-              </div>
-              <div className="student-calendar-grid">
-                {calendarCells.map((cell, index) => {
-                  const isCompleted = Boolean(cell.isoDate && completedDateSet.has(cell.isoDate));
-                  const isToday = cell.isoDate === todayIsoDate;
+              <div className="student-consistency-calendar in-modal">
+                <div className="student-consistency-heading">
+                  <button
+                    className="student-calendar-arrow"
+                    type="button"
+                    aria-label="Mes anterior"
+                    disabled={streakCalendarMonth <= 1}
+                    onClick={() => setStreakCalendarMonth((month) => Math.max(1, month - 1))}
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <div>
+                    <span>Histórico</span>
+                    <strong>{monthLabel(currentMonth.year, currentMonth.month)}</strong>
+                  </div>
+                  <button
+                    className="student-calendar-arrow"
+                    type="button"
+                    aria-label="Próximo mês"
+                    disabled={streakCalendarMonth >= currentCalendarMonth}
+                    onClick={() => setStreakCalendarMonth((month) => Math.min(currentCalendarMonth, month + 1))}
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                  <small>{completedDateSet.size} treino(s) no mês</small>
+                </div>
+                <div className="student-calendar-weekdays" aria-hidden="true">
+                  {["D", "S", "T", "Q", "Q", "S", "S"].map((day, index) => (
+                    <span key={`${day}-${index}`}>{day}</span>
+                  ))}
+                </div>
+                <div className="student-calendar-grid">
+                  {calendarCells.map((cell, index) => {
+                    const isCompleted = Boolean(cell.isoDate && completedDateSet.has(cell.isoDate));
+                    const isToday = cell.isoDate === todayIsoDate;
 
-                  return (
-                    <span
-                      className={`${cell.day ? "" : "empty"} ${isCompleted ? "completed" : ""} ${isToday ? "today" : ""}`}
-                      key={`${cell.isoDate ?? "modal-empty"}-${index}`}
-                    >
-                      {cell.day}
-                    </span>
-                  );
-                })}
+                    return (
+                      <span
+                        className={`${cell.day ? "" : "empty"} ${isCompleted ? "completed" : ""} ${isToday ? "today" : ""}`}
+                        key={`${cell.isoDate ?? "modal-empty"}-${index}`}
+                      >
+                        {cell.day}
+                      </span>
+                    );
+                  })}
+                </div>
+                <p>
+                  Dias marcados representam treinos concluídos em {currentYear}. O calendário mostra o mês atual e meses
+                  anteriores.
+                </p>
               </div>
-              <p>Dias marcados representam treinos concluídos em {currentYear}. O calendário mostra o mês atual e meses anteriores.</p>
-            </div>
-          </section>
-        </div>
-      )}
+            </section>
+          </div>,
+          document.body
+        )}
 
       {studentLightbox && (
         <div

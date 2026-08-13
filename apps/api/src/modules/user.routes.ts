@@ -322,11 +322,27 @@ export async function registerUserRoutes(app: FastifyInstance) {
     locationId: z.string().optional().or(z.literal(""))
   });
 
-  app.put("/user/profile", async (request) => {
+  app.put("/user/profile", async (request, reply) => {
     requireDatabase();
     const user = await requireAuth(app, request);
     const body = updateProfileSchema.parse(request.body);
     const birthDate = body.birthDate ? new Date(body.birthDate) : undefined;
+
+    const current = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { profile: { select: { gender: true } } }
+    });
+    const currentGender = current?.profile?.gender ?? null;
+
+    // Sexo só pode ser definido uma vez pelo aluno (cadastro/onboarding). Depois só admin altera.
+    if (currentGender && body.gender !== undefined && body.gender !== null && body.gender !== currentGender) {
+      return reply.code(403).send({
+        message: "O sexo só pode ser definido no cadastro. Peça à academia para alterar, se necessário."
+      });
+    }
+
+    const genderForCreate = body.gender || null;
+    const genderForUpdate = currentGender ? undefined : body.gender === undefined ? undefined : body.gender || null;
 
     const updated = await prisma.user.update({
       where: { id: user.id },
@@ -338,7 +354,7 @@ export async function registerUserRoutes(app: FastifyInstance) {
             create: {
               phone: body.phone,
               document: body.document,
-              gender: body.gender || null,
+              gender: genderForCreate,
               birthDate,
               objective: body.objective,
               level: body.level,
@@ -352,7 +368,7 @@ export async function registerUserRoutes(app: FastifyInstance) {
             update: {
               phone: body.phone,
               document: body.document,
-              gender: body.gender || null,
+              ...(genderForUpdate !== undefined ? { gender: genderForUpdate } : {}),
               birthDate,
               objective: body.objective,
               level: body.level,

@@ -45,7 +45,7 @@ export const PANEL_SECTION_LABEL: Record<PanelDestination, string> = {
   status: "Frequência",
   locations: "Unidades",
   support: "Atendimento",
-  ratings: "Avaliar treino",
+  ratings: "Favoritos e avaliações",
   training: "Treino",
   assessments: "Avaliação física"
 };
@@ -79,8 +79,8 @@ export const EVENT_FLOW_META: Record<
     notificationTitle: "Mensagem sincronizada"
   },
   AVALIACAO_SUBMETIDA: {
-    origin: "Avaliar treino",
-    syncAction: "Envia feedback de instrutores, treinos ou infraestrutura para o painel do aluno.",
+    origin: "Favoritos e avaliações",
+    syncAction: "Envia feedback de instrutores, treinos ou infraestrutura e atualiza favoritos no painel do aluno.",
     notificationTitle: "Avaliação sincronizada"
   },
   PROGRAMA_PUBLICADO: {

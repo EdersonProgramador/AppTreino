@@ -27,22 +27,22 @@ const SoundToggle = ({
     className={`group relative flex w-full items-center justify-between gap-4 rounded-2xl border px-5 py-4 text-left transition duration-300 ${
       active
         ? "border-brand-gold/40 bg-gradient-to-r from-brand-gold/20 via-brand-coral/10 to-transparent shadow-glow"
-        : "border-[color:var(--app-border)] bg-ink-elev/60 hover:border-[color:var(--app-border-strong)]"
+        : "border-[color:var(--app-border)] bg-[color:var(--app-elev)] hover:border-[color:var(--app-border-strong)]"
     }`}
   >
     <span className="flex min-w-0 items-center gap-3">
       <span
         className={`grid h-11 w-11 place-items-center rounded-xl ${
-          active ? "bg-brand-gold/20 text-brand-gold" : "bg-[var(--app-fill)] text-sand-muted"
+          active ? "bg-brand-gold/20 text-brand-gold" : "bg-[var(--app-fill)] text-[color:var(--app-text-muted)]"
         }`}
       >
         {active ? <FiVolume2 size={22} /> : <FiVolumeX size={22} />}
       </span>
       <span className="grid min-w-0 gap-0.5">
-        <strong className="text-base font-extrabold text-sand">
+        <strong className="text-base font-extrabold text-[color:var(--app-text)]">
           {active ? "Com efeitos sonoros" : "Sem efeitos sonoros"}
         </strong>
-        <span className="text-sm text-sand-faint">{active ? "Ativado" : "Desativado"}</span>
+        <span className="text-sm text-[color:var(--app-text-faint)]">{active ? "Ativado" : "Desativado"}</span>
       </span>
     </span>
     <span
@@ -51,8 +51,10 @@ const SoundToggle = ({
       }`}
     >
       <span
-        className={`block h-6 w-6 rounded-full bg-sand shadow transition ${
-          active ? "translate-x-6" : "translate-x-0"
+        className={`block h-6 w-6 rounded-full shadow transition ${
+          active
+            ? "translate-x-6 bg-[color:var(--app-panel)]"
+            : "translate-x-0 bg-[color:var(--app-panel)] ring-1 ring-[color:var(--app-border)]"
         }`}
       />
     </span>
@@ -79,7 +81,7 @@ export const StudentSettingsPanel = ({ onBack }: StudentSettingsPanelProps) => {
       className="animate-fade-up mx-auto grid w-full max-w-2xl gap-6 p-4 sm:p-6 md:p-8"
       aria-label="Configurações do aluno"
     >
-      <header className="relative overflow-hidden rounded-3xl border border-[color:var(--app-border)] bg-gradient-to-br from-ink-elev via-ink-panel to-ink p-6 sm:p-8">
+      <header className="relative overflow-hidden rounded-3xl border border-[color:var(--app-border)] bg-gradient-to-br from-[var(--app-elev)] via-[var(--app-panel)] to-[var(--app-bg-soft)] p-6 sm:p-8">
         <div
           className="pointer-events-none absolute inset-0 opacity-70"
           style={{
@@ -114,11 +116,11 @@ export const StudentSettingsPanel = ({ onBack }: StudentSettingsPanelProps) => {
         </div>
       </header>
 
-      <div className="grid gap-4 rounded-3xl border border-[color:var(--app-border)] bg-ink-soft/80 p-4 sm:p-6">
+      <div className="grid gap-4 rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-panel)] p-4 sm:p-6">
         <ThemeModeSwitch />
       </div>
 
-      <div className="grid gap-4 rounded-3xl border border-[color:var(--app-border)] bg-gradient-to-b from-ink-elev/90 to-ink-panel/80 p-4 sm:p-6">
+      <div className="grid gap-4 rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-panel)] p-4 sm:p-6">
         <div className="grid gap-1 px-1">
           <h3 className="m-0 text-lg font-extrabold text-sand">Efeitos sonoros</h3>
           <p className="m-0 text-sm text-sand-faint">

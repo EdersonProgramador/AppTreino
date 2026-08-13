@@ -11,6 +11,7 @@ export const TOKEN_KEY = "app-treino-token";
 export const paths = {
   home: "/",
   login: "/login",
+  download: "/baixar-app",
   admin: "/admin",
   student: "/aluno",
   app: "/app"
@@ -30,7 +31,13 @@ export function homePathForRole(role: UserRole) {
 }
 
 export function isGuestPath(pathname: string) {
-  return pathname === paths.home || pathname === paths.login || pathname === "" || pathname === "/";
+  return (
+    pathname === paths.home ||
+    pathname === paths.login ||
+    pathname === paths.download ||
+    pathname === "" ||
+    pathname === "/"
+  );
 }
 
 export function isAdminPath(pathname: string) {

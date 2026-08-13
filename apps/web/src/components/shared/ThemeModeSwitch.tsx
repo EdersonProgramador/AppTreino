@@ -21,35 +21,37 @@ export const ThemeModeSwitch = ({ className = "", compact = false }: ThemeModeSw
   };
 
   return (
-    <div className={`theme-mode-switch grid gap-3 ${className}`} role="group" aria-label="Modo Claro ou Escuro">
+    <div
+      className={`theme-mode-switch ${compact ? "theme-mode-switch-compact" : "grid gap-3"} ${className}`}
+      role="group"
+      aria-label="Modo Claro ou Escuro"
+    >
       {!compact && (
         <div className="grid gap-1">
           <h3 className="theme-mode-title m-0 text-lg font-extrabold">Aparência</h3>
           <p className="theme-mode-copy m-0 text-sm">Escolha o modo Claro ou Escuro do sistema.</p>
         </div>
       )}
-      <div className="grid grid-cols-2 gap-3">
+      <div className={`theme-mode-options ${compact ? "theme-mode-options-compact" : ""}`}>
         <button
           type="button"
+          aria-label="Modo claro"
           aria-pressed={theme === "light"}
+          title="Claro"
           onClick={() => selectTheme("light")}
-          className={`theme-mode-option theme-mode-option-light flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-extrabold transition duration-300 ease-theme ${
-            theme === "light" ? "is-active" : ""
-          }`}
+          className={`theme-mode-option theme-mode-option-light ${theme === "light" ? "is-active" : ""}`}
         >
-          <FiSun size={18} />
-          Claro
+          <FiSun size={compact ? 16 : 18} aria-hidden="true" />
         </button>
         <button
           type="button"
+          aria-label="Modo escuro"
           aria-pressed={theme === "dark"}
+          title="Escuro"
           onClick={() => selectTheme("dark")}
-          className={`theme-mode-option theme-mode-option-dark flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-extrabold transition duration-300 ease-theme ${
-            theme === "dark" ? "is-active" : ""
-          }`}
+          className={`theme-mode-option theme-mode-option-dark ${theme === "dark" ? "is-active" : ""}`}
         >
-          <FiMoon size={18} />
-          Escuro
+          <FiMoon size={compact ? 16 : 18} aria-hidden="true" />
         </button>
       </div>
     </div>

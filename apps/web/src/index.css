@@ -26,6 +26,8 @@
     --app-fill-strong: rgba(255, 255, 255, 0.09);
     --app-input: rgba(7, 8, 10, 0.72);
     --on-accent: #151a22;
+    --app-card-bg: #1a202a;
+    --app-card-shine: none;
     --shadow-panel: 0 28px 80px rgba(0, 0, 0, 0.42);
     --shadow-soft: 0 12px 40px rgba(0, 0, 0, 0.22);
     --hero-grid: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.08) 1px, transparent 0);
@@ -34,6 +36,24 @@
       radial-gradient(circle at 80% 0%, rgba(224, 106, 60, 0.16), transparent 42%),
       linear-gradient(160deg, #07080a 0%, #10131a 48%, #0b0f14 100%);
     --body-bg: radial-gradient(circle at top right, rgba(240, 180, 90, 0.08), transparent 28%);
+    /* Student portal type scale (rem @ 16px) — shared fallback */
+    --st-2xs: 0.625rem;
+    --st-xs: 0.6875rem;
+    --st-sm: 0.75rem;
+    --st-caption: 0.8125rem;
+    --st-body: 0.875rem;
+    --st-body-lg: 0.9375rem;
+    --st-title-sm: 1rem;
+    --st-title: 1.125rem;
+    --st-title-lg: 1.25rem;
+    --st-display: 1.5rem;
+    --st-lh-tight: 1.2;
+    --st-lh-snug: 1.35;
+    --st-lh-body: 1.5;
+    --st-tracking-label: 0.08em;
+    --st-weight-body: 600;
+    --st-weight-title: 800;
+    --st-weight-label: 700;
   }
 
   html.light {
@@ -56,8 +76,10 @@
     --app-border-strong: rgba(21, 26, 34, 0.2);
     --app-fill: rgba(21, 26, 34, 0.04);
     --app-fill-strong: rgba(21, 26, 34, 0.08);
-    --app-input: rgba(255, 255, 255, 0.96);
+    --app-input: #ffffff;
     --on-accent: #151a22;
+    --app-card-bg: #ffffff;
+    --app-card-shine: none;
     --shadow-panel: 0 24px 60px rgba(45, 36, 24, 0.12);
     --shadow-soft: 0 10px 28px rgba(45, 36, 24, 0.08);
     --hero-grid: radial-gradient(circle at 1px 1px, rgba(21, 26, 34, 0.06) 1px, transparent 0);
@@ -740,7 +762,7 @@ summary:focus-visible {
   min-height: 76px;
   padding: 16px clamp(20px, 4vw, 64px);
   border-bottom: 1px solid var(--app-border);
-  background: rgba(8, 9, 11, 0.82);
+  background: var(--app-input);
   backdrop-filter: blur(18px);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
 }
@@ -819,7 +841,7 @@ summary:focus-visible {
   inset: 0;
   z-index: -2;
   background:
-    linear-gradient(90deg, rgba(8, 9, 11, 0.96) 0%, rgba(8, 9, 11, 0.72) 42%, rgba(8, 9, 11, 0.32) 100%),
+    linear-gradient(90deg, var(--app-input) 0%, var(--app-input) 42%, var(--app-input) 100%),
     url("https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1800&q=85");
   background-position: center;
   background-size: cover;
@@ -829,8 +851,8 @@ summary:focus-visible {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, transparent 0%, rgba(8, 9, 11, 0.1) 58%, var(--app-bg) 100%),
-    linear-gradient(90deg, rgba(8, 9, 11, 0.28), transparent 50%, rgba(8, 9, 11, 0.42));
+    linear-gradient(180deg, transparent 0%, var(--app-input) 58%, var(--app-bg) 100%),
+    linear-gradient(90deg, var(--app-input), transparent 50%, var(--app-input));
 }
 
 .hero-content {
@@ -982,8 +1004,8 @@ summary:focus-visible {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(90deg, rgba(8, 9, 11, 0.22), transparent 42%),
-    linear-gradient(180deg, transparent 60%, rgba(8, 9, 11, 0.28));
+    linear-gradient(90deg, var(--app-input), transparent 42%),
+    linear-gradient(180deg, transparent 60%, var(--app-input));
   content: "";
   pointer-events: none;
 }
@@ -1143,7 +1165,6 @@ summary:focus-visible {
   border-radius: 8px;
   padding: 22px;
   background:
-    linear-gradient(180deg, var(--app-border), rgba(255, 255, 255, 0.035)),
     var(--app-panel);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
   transition:
@@ -1212,7 +1233,7 @@ summary:focus-visible {
   border: 1px solid var(--app-border-strong);
   border-radius: 8px;
   padding: 18px;
-  background: rgba(8, 9, 11, 0.28);
+  background: var(--app-input);
   color: rgba(255, 248, 238, 0.78);
   font-weight: 800;
 }
@@ -1224,7 +1245,7 @@ summary:focus-visible {
 }
 
 .pricing {
-  background: #0c0f0e;
+  background: var(--app-bg-soft);
 }
 
 .pricing .section-heading {
@@ -1316,7 +1337,6 @@ summary:focus-visible {
   border-radius: 8px;
   padding: 24px;
   background:
-    linear-gradient(180deg, var(--app-border), rgba(255, 255, 255, 0.035)),
     var(--app-panel);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
   transition:
@@ -1373,7 +1393,7 @@ summary:focus-visible {
   justify-content: space-between;
   gap: 28px;
   background:
-    linear-gradient(90deg, rgba(8, 9, 11, 0.98), rgba(8, 9, 11, 0.66)),
+    linear-gradient(90deg, var(--app-input), var(--app-input)),
     url("https://images.unsplash.com/photo-1517963879433-6ad2b056d712?auto=format&fit=crop&w=1600&q=85");
   background-position: center;
   background-size: cover;
@@ -1466,7 +1486,7 @@ summary:focus-visible {
   min-height: calc(100vh - 76px);
   place-items: center;
   background:
-    linear-gradient(90deg, rgba(8, 9, 11, 0.92), rgba(8, 9, 11, 0.68)),
+    linear-gradient(90deg, var(--app-input), var(--app-input)),
     url("https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=1600&q=85");
   background-position: center;
   background-size: cover;
@@ -1559,7 +1579,7 @@ summary:focus-visible {
   border: 1px solid var(--app-border-strong);
   border-radius: 8px;
   padding: 0 14px;
-  background: rgba(8, 9, 11, 0.72);
+  background: var(--app-input);
   color: var(--app-text);
   outline: none;
 }
@@ -1667,7 +1687,7 @@ summary:focus-visible {
   border: 1px solid var(--app-border-strong);
   border-radius: 8px;
   padding: 0 14px;
-  background: rgba(8, 9, 11, 0.72);
+  background: var(--app-input);
   color: var(--app-text);
   outline: none;
 }
@@ -1788,7 +1808,7 @@ summary:focus-visible {
 .locked-card::after {
   position: absolute;
   inset: 0;
-  background: rgba(8, 9, 11, 0.34);
+  background: var(--app-input);
   content: "";
   pointer-events: none;
 }
@@ -2090,7 +2110,7 @@ summary:focus-visible {
   border: 1px solid var(--app-border);
   border-radius: 8px;
   padding: 14px;
-  background: rgba(8, 9, 11, 0.36);
+  background: var(--app-input);
   color: var(--app-text-muted);
   font-size: 12px;
   font-weight: 900;
@@ -2158,7 +2178,7 @@ summary:focus-visible {
   width: fit-content;
   border-radius: 999px;
   padding: 5px 8px;
-  background: rgba(8, 9, 11, 0.38);
+  background: var(--app-input);
   color: #f2b461;
 }
 
@@ -2574,7 +2594,7 @@ summary:focus-visible {
   cursor: grab;
   color: var(--app-text-muted);
   border-right: 1px solid var(--app-border);
-  background: rgba(8, 9, 11, 0.24);
+  background: var(--app-input);
 }
 
 .cms-program-header .cms-drag-handle:active {
@@ -2730,7 +2750,7 @@ summary:focus-visible {
   border: 1px solid var(--app-border);
   border-radius: 10px;
   padding: 10px 12px;
-  background: rgba(8, 9, 11, 0.28);
+  background: var(--app-input);
 }
 
 .cms-program-sessions em {
@@ -2857,7 +2877,7 @@ summary:focus-visible {
   border: 1px solid var(--app-border-strong);
   border-radius: 8px;
   padding: 0 10px;
-  background: rgba(8, 9, 11, 0.74);
+  background: var(--app-input);
   color: var(--app-text);
   font-weight: 800;
 }
@@ -2873,7 +2893,7 @@ summary:focus-visible {
   border: 1px solid var(--app-border-strong);
   border-radius: 8px;
   padding: 0 12px;
-  background: rgba(8, 9, 11, 0.74);
+  background: var(--app-input);
   color: var(--app-text);
 }
 
@@ -2920,7 +2940,7 @@ summary:focus-visible {
   padding: 18px;
   background:
     linear-gradient(180deg, rgba(242, 180, 97, 0.08), rgba(255, 255, 255, 0.035)),
-    rgba(8, 9, 11, 0.32);
+    var(--app-input);
   color: #f2b461;
 }
 
@@ -3318,7 +3338,7 @@ summary:focus-visible {
   border: 1px solid var(--app-border-strong);
   border-radius: 8px;
   padding: 0 12px;
-  background: rgba(8, 9, 11, 0.74);
+  background: var(--app-input);
   color: var(--app-text);
   font-weight: 900;
 }
@@ -3377,7 +3397,7 @@ summary:focus-visible {
   border: 1px solid var(--app-border-strong);
   border-radius: 8px;
   padding: 0 12px;
-  background: rgba(8, 9, 11, 0.74);
+  background: var(--app-input);
   color: var(--app-text);
   outline: none;
   transition:
@@ -3391,7 +3411,7 @@ summary:focus-visible {
 .crud-form textarea:focus,
 .data-row select:focus {
   border-color: rgba(242, 180, 97, 0.74);
-  background: rgba(8, 9, 11, 0.86);
+  background: var(--app-input);
   box-shadow: 0 0 0 3px rgba(242, 180, 97, 0.12);
 }
 
@@ -3496,7 +3516,7 @@ summary:focus-visible {
   border: 1px solid var(--app-border-strong);
   border-radius: 8px;
   padding: 0 10px;
-  background: rgba(8, 9, 11, 0.74);
+  background: var(--app-input);
   color: var(--app-text);
   font-weight: 800;
 }
@@ -3549,11 +3569,11 @@ summary:focus-visible {
   gap: 18px;
 }
 
-#admin-user-manager {
-  order: -1;
+#admin-users {
+  order: 1;
 }
 
-#admin-users {
+#admin-user-manager {
   order: 2;
 }
 
@@ -3584,7 +3604,7 @@ summary:focus-visible {
   border: 1px solid var(--app-border-strong);
   border-radius: 8px;
   padding: 0 12px;
-  background: rgba(8, 9, 11, 0.74);
+  background: var(--app-input);
   color: var(--app-text);
   font-weight: 900;
 }
@@ -3616,7 +3636,7 @@ summary:focus-visible {
   border: 1px solid var(--app-border-strong);
   border-radius: 8px;
   padding: 0 10px;
-  background: rgba(8, 9, 11, 0.74);
+  background: var(--app-input);
   color: var(--app-text);
   font-weight: 800;
 }
@@ -3808,6 +3828,28 @@ summary:focus-visible {
   margin-bottom: 0;
 }
 
+.admin-student-module--profile {
+  grid-column: 1 / -1;
+}
+
+.admin-student-profile-form label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.admin-student-profile-form label > input,
+.admin-student-profile-form label > select {
+  width: 100%;
+}
+
+.admin-student-section-grid .admin-student-module--profile ~ .admin-student-module {
+  min-height: 0;
+}
+
 .admin-student-placeholder-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -3889,7 +3931,7 @@ summary:focus-visible {
   padding: 16px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025)),
-    #0b0d0f;
+    var(--app-card-bg);
   color: var(--app-text);
   box-shadow: 0 24px 68px rgba(0, 0, 0, 0.32);
 }
@@ -3940,7 +3982,7 @@ summary:focus-visible {
   left: 10px;
   border-radius: 999px;
   padding: 7px 10px;
-  background: rgba(8, 9, 11, 0.74);
+  background: var(--app-input);
   color: var(--app-text);
   font-size: 12px;
   font-weight: 900;
@@ -4048,7 +4090,7 @@ summary:focus-visible {
   border: 1px solid var(--app-border-strong);
   border-radius: 8px;
   padding: 0 12px;
-  background: rgba(8, 9, 11, 0.74);
+  background: var(--app-input);
   color: var(--app-text);
   font-size: 18px;
   font-weight: 900;
@@ -4113,6 +4155,25 @@ summary:focus-visible {
 }
 
 .student-app-shell {
+  /* Type scale — portal do aluno (rem @ 16px) */
+  --st-2xs: 0.625rem; /* 10 — badges */
+  --st-xs: 0.6875rem; /* 11 — overlines */
+  --st-sm: 0.75rem; /* 12 — captions / meta */
+  --st-caption: 0.8125rem; /* 13 — helper */
+  --st-body: 0.875rem; /* 14 — body / buttons */
+  --st-body-lg: 0.9375rem; /* 15 — emphasized body */
+  --st-title-sm: 1rem; /* 16 — card title */
+  --st-title: 1.125rem; /* 18 — section title */
+  --st-title-lg: 1.25rem; /* 20 — sheet title */
+  --st-display: 1.5rem; /* 24 — page display */
+  --st-lh-tight: 1.2;
+  --st-lh-snug: 1.35;
+  --st-lh-body: 1.5;
+  --st-tracking-label: 0.08em;
+  --st-weight-body: 600;
+  --st-weight-title: 800;
+  --st-weight-label: 700;
+
   position: relative;
   width: min(100%, 430px);
   min-height: 100vh;
@@ -4123,7 +4184,11 @@ summary:focus-visible {
     radial-gradient(circle at 78% 0%, rgba(242, 180, 97, 0.13), transparent 26rem),
     var(--app-bg);
   color: var(--app-text);
+  font-size: var(--st-body);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-body);
   box-shadow: 0 0 0 1px var(--app-border), var(--shadow-soft);
+  -webkit-font-smoothing: antialiased;
 }
 
 .student-app-header {
@@ -4148,9 +4213,12 @@ summary:focus-visible {
   height: 42px;
   place-items: center;
   overflow: hidden;
+  padding: 0;
   border: 3px solid rgba(255, 255, 255, 0.82);
   border-radius: 50%;
   background: rgba(242, 180, 97, 0.16);
+  color: inherit;
+  cursor: pointer;
 }
 
 .student-avatar img {
@@ -4163,8 +4231,9 @@ summary:focus-visible {
 .student-app-header strong {
   display: block;
   overflow: hidden;
-  font-size: 18px;
-  line-height: 1.1;
+  font-size: var(--st-title-sm);
+  font-weight: var(--st-weight-title);
+  line-height: var(--st-lh-tight);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4172,9 +4241,10 @@ summary:focus-visible {
 .student-app-header span {
   display: block;
   margin-top: 2px;
-  font-size: 12px;
+  font-size: var(--st-sm);
   color: rgba(255, 255, 255, 0.84);
-  font-weight: 700;
+  font-weight: var(--st-weight-label);
+  line-height: var(--st-lh-snug);
 }
 
 .student-icon-button {
@@ -4217,42 +4287,86 @@ summary:focus-visible {
 
 .student-notification-panel {
   position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  z-index: 35;
+  top: calc(100% + 8px);
+  right: -8px;
+  left: auto;
+  z-index: 60;
   display: grid;
-  width: min(86vw, 320px);
-  max-height: 420px;
-  gap: 10px;
-  overflow-y: auto;
-  border: 1px solid rgba(242, 180, 97, 0.22);
-  border-radius: 14px;
-  padding: 14px;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(92vw, 360px);
+  max-height: min(70vh, 480px);
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgba(242, 180, 97, 0.28);
+  border-radius: 16px;
+  padding: 0;
   background: var(--app-bg-soft);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.38);
 }
 
-.student-notification-panel > div {
+.student-notification-panel-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid var(--app-border);
+  background: color-mix(in srgb, var(--app-panel) 88%, transparent);
 }
 
-.student-notification-panel > div strong {
+.student-notification-panel-head > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.student-notification-panel-head strong {
   color: var(--app-text);
+  font-size: 0.9375rem;
+  font-weight: 800;
 }
 
-.student-notification-panel > div span {
+.student-notification-panel-head > div > span {
   display: grid;
   min-width: 24px;
   height: 24px;
   place-items: center;
   border-radius: 50%;
-  background: rgba(242, 180, 97, 0.14);
+  background: rgba(242, 180, 97, 0.16);
   color: #f2b461;
   font-size: 12px;
   font-weight: 900;
+}
+
+.student-notification-close {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border: 1px solid rgba(223, 102, 60, 0.55);
+  border-radius: 10px;
+  background: linear-gradient(135deg, #e06a3c, #c73d2e);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(199, 61, 46, 0.35);
+  transition: transform 140ms ease, filter 140ms ease;
+}
+
+.student-notification-close:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.student-notification-close:active {
+  transform: translateY(0);
+}
+
+.student-notification-panel-list {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  overflow-y: auto;
 }
 
 .student-notification-panel article {
@@ -4265,15 +4379,25 @@ summary:focus-visible {
 
 .student-notification-panel article strong {
   color: var(--app-text);
-  font-size: 13px;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  line-height: 1.25;
 }
 
 .student-notification-panel article span,
 .student-notification-panel article small {
   margin: 0;
   color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.student-notification-panel .student-sync-open {
+  width: fit-content;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 0.75rem;
 }
 
 .student-streak-button {
@@ -4315,36 +4439,68 @@ summary:focus-visible {
 .student-streak-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 45;
+  z-index: 2400;
   display: grid;
-  place-items: end center;
-  padding: 18px;
+  align-content: start;
+  justify-items: center;
+  padding: max(10px, env(safe-area-inset-top, 0px)) 12px 20px;
   background: rgba(0, 0, 0, 0.62);
+  overflow-y: auto;
 }
 
 .student-streak-modal {
   display: grid;
-  width: min(100%, 430px);
-  gap: 14px;
-  border: 1px solid rgba(242, 180, 97, 0.18);
-  border-radius: 18px;
-  padding: 18px;
+  width: min(100%, 360px);
+  max-height: min(78vh, 560px);
+  margin-top: 6px;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgba(242, 180, 97, 0.28);
+  border-radius: 16px;
+  padding: 0;
   background: var(--app-bg-soft);
   color: var(--app-text);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.38);
 }
 
 .student-streak-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 12px;
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid var(--app-border);
+  background: color-mix(in srgb, var(--app-panel) 88%, transparent);
+}
+
+.student-streak-modal-close {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border: 1px solid rgba(223, 102, 60, 0.55) !important;
+  border-radius: 10px !important;
+  background: linear-gradient(135deg, #e06a3c, #c73d2e) !important;
+  color: #fff !important;
+  box-shadow: 0 6px 16px rgba(199, 61, 46, 0.35);
+  transition: transform 140ms ease, filter 140ms ease;
+}
+
+.student-streak-modal-close:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.student-streak-modal-close:active {
+  transform: translateY(0);
 }
 
 .student-streak-modal-header span {
   color: #f2b461;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -4352,17 +4508,26 @@ summary:focus-visible {
   display: block;
   margin-top: 4px;
   color: var(--app-text);
-  font-size: 28px;
-  line-height: 1;
+  font-size: 1.5rem;
+  line-height: 1.1;
+  font-weight: 800;
 }
 
 .student-streak-modal-header small {
   display: block;
-  margin-top: 3px;
+  margin-top: 2px;
   color: var(--app-text-muted);
-  font-size: 12px;
-  font-weight: 900;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.student-streak-modal .student-consistency-calendar.in-modal {
+  gap: 10px;
+  padding: 12px;
+  overflow-y: auto;
+  max-height: min(62vh, 460px);
 }
 
 .student-workout-history-modal,
@@ -4494,7 +4659,7 @@ summary:focus-visible {
   gap: 4px;
   border-radius: 10px;
   padding: 10px;
-  background: rgba(8, 9, 11, 0.38);
+  background: var(--app-input);
   color: var(--app-text);
   font-size: 13px;
   font-weight: 900;
@@ -4533,10 +4698,10 @@ summary:focus-visible {
 .student-sheet,
 .student-empty-state {
   border-radius: 16px;
-  background:
-    linear-gradient(180deg, var(--app-border), rgba(255, 255, 255, 0.035)),
-    var(--app-panel);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.24);
+  border: 1px solid var(--app-border);
+  background: var(--app-card-bg);
+  background-image: none;
+  box-shadow: var(--shadow-soft);
 }
 
 .student-hero-card {
@@ -4553,10 +4718,8 @@ summary:focus-visible {
   border: 1px solid rgba(242, 180, 97, 0.18);
   border-radius: 16px;
   padding: 18px;
-  background:
-    linear-gradient(180deg, var(--app-fill), var(--app-fill)),
-    var(--app-panel);
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.22);
+  background: var(--app-card-bg);
+  box-shadow: var(--shadow-soft);
 }
 
 .student-consistency-heading {
@@ -4596,8 +4759,9 @@ summary:focus-visible {
 .student-consistency-heading span,
 .student-consistency-heading small {
   color: #f2b461;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: var(--st-xs);
+  font-weight: var(--st-weight-label);
+  letter-spacing: var(--st-tracking-label);
   text-transform: uppercase;
 }
 
@@ -4605,7 +4769,8 @@ summary:focus-visible {
   display: block;
   margin-top: 4px;
   color: var(--app-text);
-  font-size: 20px;
+  font-size: var(--st-title);
+  font-weight: var(--st-weight-title);
   text-transform: capitalize;
 }
 
@@ -4618,8 +4783,8 @@ summary:focus-visible {
 
 .student-calendar-weekdays span {
   color: var(--app-text-muted);
-  font-size: 11px;
-  font-weight: 900;
+  font-size: var(--st-xs);
+  font-weight: var(--st-weight-label);
   text-align: center;
 }
 
@@ -4632,8 +4797,8 @@ summary:focus-visible {
   border-radius: 10px;
   background: var(--app-fill);
   color: var(--app-text-muted);
-  font-size: 13px;
-  font-weight: 900;
+  font-size: var(--st-caption);
+  font-weight: var(--st-weight-title);
 }
 
 .student-calendar-grid span.empty {
@@ -4655,8 +4820,9 @@ summary:focus-visible {
 .student-consistency-calendar p {
   margin: 0;
   color: var(--app-text-muted);
-  font-size: 13px;
-  font-weight: 800;
+  font-size: var(--st-caption);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-snug);
 }
 
 .student-consistency-calendar.in-modal {
@@ -4670,9 +4836,10 @@ summary:focus-visible {
 .student-hero-card > span,
 .student-section-title {
   color: var(--app-text);
-  font-size: 24px;
-  line-height: 1.15;
-  font-weight: 900;
+  font-size: var(--st-title-lg);
+  line-height: var(--st-lh-tight);
+  font-weight: var(--st-weight-title);
+  letter-spacing: -0.01em;
   overflow-wrap: anywhere;
 }
 
@@ -4697,8 +4864,9 @@ summary:focus-visible {
 .student-training-card h2 {
   margin: 0;
   color: var(--app-text);
-  font-size: 19px;
-  line-height: 1.18;
+  font-size: var(--st-title-sm);
+  font-weight: var(--st-weight-title);
+  line-height: var(--st-lh-tight);
   overflow-wrap: anywhere;
 }
 
@@ -4706,13 +4874,16 @@ summary:focus-visible {
 .student-training-card p {
   margin: 3px 0 0;
   color: var(--app-text-muted);
-  line-height: 1.35;
+  font-size: var(--st-caption);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-snug);
   overflow-wrap: anywhere;
 }
 
 .student-workout-summary > strong {
   color: var(--app-text);
-  font-size: 24px;
+  font-size: var(--st-title);
+  font-weight: var(--st-weight-title);
 }
 
 .student-progress-track {
@@ -4736,32 +4907,35 @@ summary:focus-visible {
   border-top: 1px solid #e8e8e8;
   padding: 16px 0 0;
   color: var(--app-text);
-  font-size: 17px;
-  line-height: 1.35;
+  font-size: var(--st-body);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-snug);
   list-style: none;
   overflow-wrap: anywhere;
 }
 
 .student-green-button {
-  min-height: 58px;
+  min-height: 48px;
   border: 0;
-  border-radius: 14px;
+  border-radius: 12px;
   background: linear-gradient(135deg, #f2b461, #df663c);
   color: #fff;
-  font-size: 18px;
-  font-weight: 950;
-  text-transform: uppercase;
+  font-size: var(--st-body);
+  font-weight: var(--st-weight-title);
+  letter-spacing: 0.02em;
+  text-transform: none;
 }
 
 .student-outline-button {
-  min-height: 58px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 14px;
+  min-height: 48px;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 12px;
   background: transparent;
   color: var(--app-text-muted);
-  font-size: 18px;
-  font-weight: 950;
-  text-transform: uppercase;
+  font-size: var(--st-body);
+  font-weight: var(--st-weight-title);
+  letter-spacing: 0.02em;
+  text-transform: none;
 }
 
 .student-outline-button:disabled {
@@ -4790,7 +4964,6 @@ summary:focus-visible {
   border-radius: 14px;
   padding: 18px;
   background:
-    linear-gradient(180deg, var(--app-border), rgba(255, 255, 255, 0.035)),
     var(--app-panel);
   color: var(--app-text);
   text-align: left;
@@ -4863,14 +5036,17 @@ summary:focus-visible {
 }
 
 .student-feature-card strong {
-  font-size: 19px;
-  line-height: 1.1;
+  font-size: var(--st-title-sm);
+  font-weight: var(--st-weight-title);
+  line-height: var(--st-lh-tight);
   overflow-wrap: anywhere;
 }
 
 .student-feature-card small {
   color: var(--app-text-muted);
-  font-size: 14px;
+  font-size: var(--st-caption);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-snug);
 }
 
 .student-sheet {
@@ -4884,24 +5060,40 @@ summary:focus-visible {
   text-align: center;
 }
 
+.student-sheet-subtitle {
+  margin: 8px 0 4px;
+  color: var(--app-text);
+  font-size: var(--st-title-sm);
+  font-weight: var(--st-weight-title);
+  line-height: var(--st-lh-tight);
+  letter-spacing: -0.01em;
+}
+
 .student-sheet-heading span {
   color: #f2b461;
-  font-weight: 900;
+  font-size: var(--st-xs);
+  font-weight: var(--st-weight-label);
+  letter-spacing: var(--st-tracking-label);
+  text-transform: uppercase;
+  line-height: var(--st-lh-snug);
 }
 
 .student-sheet-heading h1 {
   margin: 8px 0;
   color: var(--app-text);
-  font-size: clamp(26px, 7vw, 34px);
-  line-height: 1.1;
+  font-size: clamp(1.25rem, 5.5vw, 1.5rem);
+  font-weight: var(--st-weight-title);
+  line-height: var(--st-lh-tight);
+  letter-spacing: -0.02em;
   overflow-wrap: anywhere;
 }
 
 .student-sheet-heading p {
   margin: 0;
   color: var(--app-text-muted);
-  font-size: 16px;
-  line-height: 1.35;
+  font-size: var(--st-body);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-snug);
   overflow-wrap: anywhere;
 }
 
@@ -4918,15 +5110,14 @@ summary:focus-visible {
   column-gap: 12px;
   row-gap: 14px;
   box-sizing: border-box;
-  border: 1px solid transparent;
+  border: 1px solid var(--app-border);
   border-radius: 14px;
   padding: 16px;
-  background:
-    linear-gradient(180deg, var(--app-border), rgba(255, 255, 255, 0.035)),
-    var(--app-panel);
+  background: var(--app-card-bg);
+  background-image: none;
   color: var(--app-text);
   text-align: left;
-  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.075);
+  box-shadow: var(--shadow-soft);
 }
 
 .student-training-card > .student-card-icon,
@@ -4944,7 +5135,7 @@ summary:focus-visible {
   height: 58px;
   border-radius: 14px;
   object-fit: cover;
-  background: #0f1211;
+  background: var(--app-card-bg);
 }
 
 .student-training-card > .student-card-body,
@@ -5073,7 +5264,6 @@ summary:focus-visible {
   overflow: hidden;
   padding: 0;
   background:
-    linear-gradient(180deg, var(--app-border), rgba(255, 255, 255, 0.035)),
     var(--app-panel);
   color: var(--app-text);
   text-align: left;
@@ -5228,7 +5418,6 @@ summary:focus-visible {
 .student-training-sheet-card .student-training-card {
   border: 1px solid var(--app-border);
   background:
-    linear-gradient(180deg, var(--app-border), rgba(255, 255, 255, 0.035)),
     var(--app-panel);
   color: var(--app-text);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
@@ -5286,21 +5475,25 @@ summary:focus-visible {
   gap: 2px;
   min-width: 0;
   color: var(--app-text-muted);
-  font-size: 15px;
-  line-height: 1.25;
+  font-size: var(--st-caption);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-snug);
 }
 
 .student-training-info-grid strong {
   color: var(--app-text);
-  font-size: 17px;
+  font-size: var(--st-body-lg);
+  font-weight: var(--st-weight-title);
 }
 
 .student-training-card span {
   display: block;
   margin-bottom: 4px;
   color: #f2b461;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: var(--st-xs);
+  font-weight: var(--st-weight-label);
+  letter-spacing: var(--st-tracking-label);
+  text-transform: uppercase;
 }
 
 .student-training-card h2,
@@ -5331,8 +5524,9 @@ summary:focus-visible {
 .student-info-card strong,
 .student-menu-item span {
   color: var(--app-text);
-  font-size: 18px;
-  font-weight: 900;
+  font-size: var(--st-title-sm);
+  font-weight: var(--st-weight-title);
+  line-height: var(--st-lh-tight);
 }
 
 .student-exercise-card span,
@@ -5340,13 +5534,17 @@ summary:focus-visible {
   display: block;
   margin-top: 3px;
   color: var(--app-text-muted);
+  font-size: var(--st-caption);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-snug);
 }
 
 .student-exercise-card small {
   display: block;
   margin-top: 5px;
   color: #f2b461;
-  font-weight: 800;
+  font-size: var(--st-sm);
+  font-weight: var(--st-weight-label);
 }
 
 .student-toggle {
@@ -6642,7 +6840,7 @@ summary:focus-visible {
   border: 1px solid var(--app-border-strong);
   border-radius: 12px;
   padding: 0 14px;
-  background: rgba(8, 9, 11, 0.74);
+  background: var(--app-input);
   color: var(--app-text);
   font: inherit;
 }
@@ -6703,7 +6901,7 @@ summary:focus-visible {
   border: 1px solid var(--app-border-strong);
   border-radius: 12px;
   padding: 0 14px;
-  background: rgba(8, 9, 11, 0.74);
+  background: var(--app-input);
   color: var(--app-text);
   font: inherit;
 }
@@ -6804,7 +7002,7 @@ summary:focus-visible {
   border: 1px solid var(--app-border);
   border-radius: 12px;
   object-fit: cover;
-  background: rgba(8, 9, 11, 0.5);
+  background: var(--app-input);
 }
 
 .student-assessment-photo figcaption,
@@ -6872,7 +7070,7 @@ summary:focus-visible {
   width: 100%;
   height: 110px;
   object-fit: cover;
-  background: rgba(8, 9, 11, 0.6);
+  background: var(--app-input);
 }
 
 .student-product-fallback {
@@ -6960,70 +7158,133 @@ summary:focus-visible {
   cursor: not-allowed;
 }
 
-.student-rating-card {
-  grid-template-columns: 1fr;
-  align-items: start;
+.student-rating-card,
+.student-info-card.student-rating-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: none;
+  gap: 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--app-border);
+  border-radius: 1.5rem;
+  padding: 1.25rem;
+  background: var(--app-card-bg);
+  background-image: none;
+  color: var(--app-text);
+  box-shadow: var(--shadow-soft);
 }
 
-.student-rating-card > div:first-child {
+.student-rating-card > * {
+  grid-area: auto !important;
+  grid-column: auto !important;
+  grid-row: auto !important;
+}
+
+.student-rating-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.student-rating-heading {
   display: grid;
   gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
-.student-rating-card .student-rating-form,
-.student-rating-card .student-rating-done {
-  grid-column: 1 / -1;
-  min-width: 0;
+.student-rating-heading strong {
+  display: block;
+  color: var(--app-text);
+  font-size: var(--st-title-sm);
+  line-height: var(--st-lh-tight);
+  font-weight: var(--st-weight-title);
+  overflow-wrap: anywhere;
+}
+
+.student-rating-heading span {
+  display: block;
+  margin-top: 0;
+  color: var(--app-text-muted);
+  font-size: var(--st-caption);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-snug);
 }
 
 .student-rating-done {
   display: inline-flex;
+  flex: 0 0 auto;
+  width: fit-content;
   align-items: center;
   gap: 6px;
-  color: #5fd089;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(95, 208, 137, 0.35);
+  background: rgba(95, 208, 137, 0.12);
+  color: #2f9e5f;
   font-size: 13px;
   font-weight: 900;
+}
+
+html.dark .student-rating-done {
+  color: #5fd089;
 }
 
 .student-rating-form {
   display: grid;
   gap: 10px;
   width: 100%;
+  min-width: 0;
 }
 
-.student-rating-stars {
+.student-rating-card .student-rating-stars {
   display: flex;
-  gap: 4px;
+  flex: 0 0 auto;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
 }
 
-.student-rating-stars button {
-  border: 0;
-  background: none;
-  color: #6b6359;
+.student-rating-card .student-rating-stars button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border: 1px solid var(--app-border);
+  border-radius: 9px;
+  background: var(--app-fill);
+  color: var(--app-text-faint);
   cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
 }
 
-.student-rating-stars button.active {
+.student-rating-card .student-rating-stars button:hover {
+  border-color: rgba(242, 180, 97, 0.45);
   color: #f2b461;
 }
 
-.student-rating-form input {
+.student-rating-card .student-rating-stars button.active {
+  border-color: rgba(242, 180, 97, 0.55);
+  background: rgba(242, 180, 97, 0.16);
+  color: #f2b461;
+}
+
+.student-rating-form .ui-input {
   width: 100%;
-  min-height: 44px;
-  border: 1px solid var(--app-border-strong);
-  border-radius: 10px;
-  padding: 0 12px;
-  background: rgba(8, 9, 11, 0.74);
-  color: var(--app-text);
-  font: inherit;
+  min-height: 48px;
 }
 
-.student-rating-form .student-green-button {
-  min-height: 46px;
-  font-size: 14px;
+.student-rating-form .student-rating-submit {
+  width: 100%;
+  min-height: 48px;
 }
 
-.student-rating-form .student-green-button:disabled {
+.student-rating-form .student-rating-submit:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -7037,12 +7298,11 @@ summary:focus-visible {
 .student-favorite-card {
   display: grid;
   gap: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--app-border);
   border-radius: 14px;
   padding: 14px;
-  background:
-    linear-gradient(180deg, var(--app-border), rgba(255, 255, 255, 0.035)),
-    var(--app-panel);
+  background: var(--app-card-bg);
+  background-image: none;
   color: var(--app-text);
 }
 
@@ -7052,7 +7312,7 @@ summary:focus-visible {
   height: 84px;
   overflow: hidden;
   border-radius: 10px;
-  background: rgba(8, 9, 11, 0.6);
+  background: var(--app-fill-strong);
   color: #f2b461;
 }
 
@@ -7163,7 +7423,15 @@ summary:focus-visible {
 
 .student-empty-state strong {
   color: var(--app-text);
-  font-size: 22px;
+  font-size: var(--st-title);
+  font-weight: var(--st-weight-title);
+  line-height: var(--st-lh-tight);
+}
+
+.student-empty-state span {
+  font-size: var(--st-caption);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-snug);
 }
 
 .student-menu-item {
@@ -7206,8 +7474,10 @@ summary:focus-visible {
   border: 0;
   background: transparent;
   color: var(--app-text-muted);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--st-xs);
+  font-weight: var(--st-weight-label);
+  letter-spacing: 0.02em;
+  line-height: var(--st-lh-tight);
 }
 
 .student-bottom-nav button.active {
@@ -7967,7 +8237,7 @@ summary:focus-visible {
 
   .hero-media {
     background:
-      linear-gradient(180deg, rgba(8, 9, 11, 0.78), rgba(8, 9, 11, 0.97)),
+      linear-gradient(180deg, var(--app-input), var(--app-input)),
       url("https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1000&q=82");
     background-position: center;
     background-size: cover;
@@ -8243,7 +8513,7 @@ summary:focus-visible {
   position: relative;
   height: 150px;
   border-radius: 8px;
-  background: rgba(8, 9, 11, 0.42);
+  background: var(--app-input);
   overflow: hidden;
 }
 
@@ -8285,7 +8555,7 @@ summary:focus-visible {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   padding: 12px;
-  background: rgba(8, 9, 11, 0.32);
+  background: var(--app-input);
 }
 
 .dash-metric-strip svg {
@@ -8497,7 +8767,7 @@ summary:focus-visible {
 .reports-dist-track {
   height: 10px;
   border-radius: 999px;
-  background: rgba(8, 9, 11, 0.42);
+  background: var(--app-input);
   overflow: hidden;
 }
 
@@ -8641,7 +8911,7 @@ summary:focus-visible {
   border: 1px solid var(--app-border-strong);
   border-radius: 8px;
   padding: 0 12px;
-  background: rgba(8, 9, 11, 0.74);
+  background: var(--app-input);
   color: var(--app-text);
   font-size: 14px;
 }
@@ -8709,20 +8979,22 @@ summary:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 58px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 14px;
+  min-height: 48px;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 12px;
   padding: 0 16px;
   background: var(--app-fill);
   color: var(--app-text);
-  font-size: 15px;
-  font-weight: 900;
+  font-size: var(--st-body);
+  font-weight: var(--st-weight-title);
+  letter-spacing: 0.02em;
+  text-transform: none;
 }
 
 .student-qr-panel {
   display: grid;
   justify-items: center;
-  gap: 12px;
+  gap: 14px;
   margin-top: 4px;
   border: 1px solid rgba(242, 180, 97, 0.18);
   border-radius: 14px;
@@ -8730,11 +9002,37 @@ summary:focus-visible {
   background: rgba(242, 180, 97, 0.05);
 }
 
-.student-qr-panel span {
+.student-qr-panel .dash-qr-box {
+  width: 100%;
+  min-height: 0;
+  margin-top: 0;
+  padding: 16px;
+}
+
+.student-qr-panel .dash-qr-box img {
+  width: 180px;
+  height: 180px;
+}
+
+.student-qr-panel > span {
+  max-width: 26ch;
   color: var(--app-text-muted);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
   text-align: center;
+}
+
+.student-qr-panel .student-green-button {
+  width: 100%;
+  max-width: 280px;
+  min-height: 44px;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: none;
 }
 
 .student-rating-panel {
@@ -8765,22 +9063,30 @@ summary:focus-visible {
 
 .student-rating-stars {
   display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 6px;
 }
 
 .student-rating-stars button {
-  width: 46px;
-  height: 46px;
-  border: 0;
-  border-radius: 12px;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  place-items: center;
+  border: 1px solid var(--app-border);
+  border-radius: 0.75rem;
   background: var(--app-fill);
-  color: #7f8a82;
-  font-size: 26px;
+  color: var(--app-text-faint);
+  font-size: 1rem;
+  cursor: pointer;
 }
 
 .student-rating-stars button.active {
-  background: rgba(242, 180, 97, 0.16);
-  color: #f2b461;
+  border-color: rgba(240, 180, 90, 0.55);
+  background: rgba(240, 180, 90, 0.16);
+  color: #f0b45a;
 }
 
 .student-rating-panel textarea {
@@ -8788,10 +9094,14 @@ summary:focus-visible {
   border: 1px solid var(--app-border-strong);
   border-radius: 12px;
   padding: 12px;
-  background: rgba(8, 9, 11, 0.6);
+  background: var(--app-input);
   color: var(--app-text);
   font: inherit;
   resize: vertical;
+}
+
+.student-rating-panel textarea::placeholder {
+  color: var(--app-text-faint);
 }
 
 .student-section-title-row {
@@ -8808,37 +9118,205 @@ summary:focus-visible {
 }
 
 .student-section-title-row .student-outline-button {
-  min-height: 44px;
-  font-size: 13px;
+  min-height: 42px;
+  font-size: var(--st-caption);
 }
 
 .student-card-form {
   display: grid;
-  gap: 12px;
-  margin: 0 16px 16px;
-  border: 1px solid rgba(242, 180, 97, 0.18);
+  gap: 16px;
+  margin: 0 0 16px;
+  border: 1px solid var(--app-border);
   border-radius: 16px;
   padding: 18px;
-  background:
-    linear-gradient(180deg, var(--app-fill), var(--app-fill)),
-    var(--app-panel);
+  background: var(--app-panel);
+  box-shadow: var(--shadow-soft);
+  color: var(--app-text);
 }
 
-.student-card-form input {
-  min-height: 46px;
-  border: 1px solid var(--app-border-strong);
-  border-radius: 12px;
-  padding: 0 14px;
-  background: rgba(8, 9, 11, 0.6);
+.student-card-form-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.student-card-form-header > svg {
+  flex-shrink: 0;
+  color: var(--app-text-muted);
+}
+
+.student-card-form-header strong {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   color: var(--app-text);
-  font-size: 15px;
+  line-height: 1.25;
+}
+
+.student-card-form-header span {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--app-text-faint);
+  line-height: 1.3;
+}
+
+.student-card-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: 12px;
+}
+
+.student-card-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.student-card-field-full {
+  grid-column: 1 / -1;
+}
+
+.student-card-field > span {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+  line-height: 1.2;
+}
+
+.student-card-form .student-card-field input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 10px;
+  padding: 0 12px;
+  background: var(--app-input);
+  color: var(--app-text);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.student-card-form .student-card-field input[name="lastFour"] {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.18em;
+  font-weight: 700;
+}
+
+.student-card-form .student-card-field input[name="holderName"] {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.student-card-form .student-card-field input::placeholder {
+  color: var(--app-text-faint);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.85;
+}
+
+.student-card-form .student-card-field input:focus {
+  border-color: rgba(240, 180, 90, 0.55);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(240, 180, 90, 0.14);
+}
+
+.student-card-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  color: var(--app-text-muted);
+  line-height: 1.3;
+}
+
+.student-card-checkbox input {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  accent-color: #128f72;
 }
 
 .student-card-form .student-green-button {
-  min-height: 50px;
-  font-size: 15px;
+  min-height: 46px;
+  font-size: 0.875rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
 }
 
+.student-payment-card {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: var(--app-panel);
+  box-shadow: var(--shadow-soft);
+  color: var(--app-text);
+}
+
+.student-payment-card-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--app-fill);
+  color: var(--app-text-muted);
+}
+
+.student-payment-card-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.student-payment-card-body strong {
+  font-size: 0.9375rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text);
+  line-height: 1.25;
+}
+
+.student-payment-card-body span {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+  line-height: 1.3;
+}
+
+.student-payment-card-body em {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 4px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: rgba(18, 143, 114, 0.12);
+  color: #128f72;
+  font-size: 0.625rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.student-payment-card .student-delete-button,
 .student-info-card button.student-delete-button {
   grid-column: auto;
   width: 40px;
@@ -8850,116 +9328,83 @@ summary:focus-visible {
   color: #df663c;
 }
 
-/* ===== Aluno — Dados cadastrais (perfil) ===== */
-
-.student-profile-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 0 12px 12px;
-  border: 1px solid rgba(53, 212, 95, 0.22);
-  border-radius: 14px;
-  padding: 12px 14px;
-  background: rgba(53, 212, 95, 0.07);
-  color: #b8bfb4;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.5;
+@media (max-width: 520px) {
+  .student-card-form-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
-.student-profile-note svg {
-  flex: 0 0 auto;
-  margin-top: 2px;
-  color: #35d45f;
+html.light .student-card-form,
+html.light .student-payment-card {
+  background: #ffffff !important;
+  background-image: none !important;
+  border-color: rgba(21, 26, 34, 0.12) !important;
+  color: #0e1116 !important;
+}
+
+/* ===== Aluno — Dados cadastrais (perfil) ===== */
+
+.student-profile-sheet {
+  gap: 12px;
+  padding: 16px 14px 18px;
+}
+
+.student-profile-sheet .student-sheet-heading {
+  margin-bottom: 0;
+}
+
+.student-profile-sheet .student-sheet-heading h1 {
+  font-size: clamp(1.25rem, 5vw, 1.45rem);
+}
+
+.student-profile-sheet .student-sheet-heading p {
+  max-width: 34ch;
+  margin-inline: auto;
+  font-size: var(--st-caption);
+  line-height: var(--st-lh-snug);
 }
 
 .student-profile-form {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-  margin: 0 12px 20px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 14px;
+  margin: 0;
+  border: 1px solid var(--app-border);
   border-radius: 16px;
-  padding: 16px;
-  background:
-    linear-gradient(180deg, var(--app-fill), var(--app-fill)),
-    var(--app-panel);
+  padding: 14px;
+  background: var(--app-panel);
+  box-shadow: var(--shadow-soft);
 }
 
-.student-profile-form.student-profile-locked input:not(:disabled),
-.student-profile-form.student-profile-locked select:not(:disabled) {
-  opacity: 0.78;
-  cursor: not-allowed;
-}
-
-.student-profile-actions {
+.student-profile-identity {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-  margin: 0 12px 20px;
-}
-
-.student-profile-form label {
-  display: grid;
-  gap: 7px;
-  color: var(--app-text-muted);
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.student-profile-form input,
-.student-profile-form select {
-  width: 100%;
-  min-height: 46px;
-  border: 1px solid var(--app-border-strong);
-  border-radius: 12px;
-  padding: 0 14px;
-  background: rgba(8, 9, 11, 0.6);
-  color: var(--app-text);
-  font-size: 15px;
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-.student-profile-form input:disabled {
-  opacity: 0.55;
-}
-
-.student-profile-form select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23cfc7bb' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  padding-right: 36px;
-}
-
-.student-profile-actions .student-green-button,
-.student-profile-actions .student-outline-button {
-  grid-column: 1 / -1;
-  min-height: 54px;
-  margin-top: 4px;
-  font-size: 16px;
-}
-
-.student-profile-form .wide-field {
-  grid-column: 1 / -1;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--app-border);
 }
 
 .student-profile-form .student-avatar-field {
-  align-items: center;
+  display: grid;
+  gap: 6px;
   justify-items: center;
   text-align: center;
+  color: var(--app-text-faint);
+  font-size: var(--st-xs);
+  font-weight: var(--st-weight-body);
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .student-profile-form .student-avatar-preview {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 96px;
-  height: 96px;
-  border: 1px dashed rgba(255, 255, 255, 0.22);
-  border-radius: 50%;
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
   overflow: hidden;
-  background: rgba(8, 9, 11, 0.6);
+  border: 2px solid rgba(240, 180, 90, 0.35);
+  border-radius: 50%;
+  background: var(--app-fill);
 }
 
 .student-profile-form .student-avatar-preview img {
@@ -8970,30 +9415,207 @@ summary:focus-visible {
 }
 
 .student-profile-form .student-avatar-placeholder {
-  color: rgba(255, 255, 255, 0.28);
+  color: var(--app-text-faint);
 }
 
-.student-profile-form input[type="file"] {
-  padding: 8px 10px;
+.student-profile-form .student-avatar-field input[type="file"] {
+  width: 100%;
+  max-width: 148px;
+  min-height: 34px;
+  padding: 4px 6px;
+  font-size: var(--st-xs);
+  border-radius: 8px;
+}
+
+.student-profile-identity-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.student-profile-identity-copy strong {
+  color: var(--app-text);
+  font-size: var(--st-title-sm);
+  font-weight: var(--st-weight-title);
+  line-height: var(--st-lh-tight);
+  overflow-wrap: anywhere;
+}
+
+.student-profile-identity-copy span {
+  color: var(--app-text-muted);
+  font-size: var(--st-caption);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-snug);
+  overflow-wrap: anywhere;
+}
+
+.student-profile-identity-copy em {
+  margin-top: 2px;
+  color: var(--app-text-faint);
+  font-size: var(--st-xs);
+  font-style: normal;
+  font-weight: var(--st-weight-label);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.student-profile-group {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.student-profile-group legend {
+  margin: 0 0 2px;
+  padding: 0;
+  color: var(--app-text);
+  font-size: var(--st-caption);
+  font-weight: var(--st-weight-title);
+  letter-spacing: -0.01em;
+}
+
+.student-profile-form label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--app-text-muted);
+  font-size: var(--st-xs);
+  font-weight: var(--st-weight-label);
+  letter-spacing: var(--st-tracking-label);
+  text-transform: uppercase;
+  line-height: var(--st-lh-snug);
+}
+
+.student-profile-form input,
+.student-profile-form select {
+  width: 100%;
   min-height: 42px;
-  line-height: 1.4;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 10px;
+  padding: 0 12px;
+  background: var(--app-input);
+  color: var(--app-text);
+  font-size: var(--st-body);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-snug);
+  -webkit-appearance: none;
+  appearance: none;
 }
 
-@media (min-width: 560px) {
-  .student-profile-note {
-    margin: 0 16px 16px;
-    padding: 14px 16px;
-  }
+.student-profile-form input:focus,
+.student-profile-form select:focus {
+  border-color: rgba(240, 180, 90, 0.55);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(240, 180, 90, 0.14);
+}
 
-  .student-profile-form {
+.student-profile-form input:disabled,
+.student-profile-form select:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.student-profile-form label > small {
+  font-size: var(--st-xs);
+  font-weight: var(--st-weight-body);
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--app-text-faint);
+  line-height: var(--st-lh-snug);
+}
+
+.student-profile-form select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238f8376' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 34px;
+}
+
+.student-profile-form .wide-field,
+.student-profile-form .student-profile-wide {
+  grid-column: 1 / -1;
+}
+
+.student-profile-locked-field {
+  grid-column: 1 / -1;
+}
+
+.student-profile-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  border: 1px solid rgba(240, 180, 90, 0.22);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(240, 180, 90, 0.08);
+  color: var(--app-text-muted);
+  font-size: var(--st-caption);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-snug);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.student-profile-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #f0b45a;
+}
+
+.student-profile-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin: 0;
+}
+
+.student-profile-actions .student-green-button,
+.student-profile-actions .student-outline-button {
+  min-height: 44px;
+  margin: 0;
+  font-size: var(--st-body);
+  font-weight: var(--st-weight-title);
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+html.light .student-profile-form {
+  background: #ffffff !important;
+  border-color: rgba(21, 26, 34, 0.12) !important;
+}
+
+html.light .student-profile-note {
+  color: #44403a !important;
+}
+
+html.light .student-profile-identity-copy strong {
+  color: #0e1116 !important;
+}
+
+@media (min-width: 420px) {
+  .student-profile-group {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-    margin: 0 16px 20px;
-    padding: 18px;
   }
 
-  .student-profile-actions .student-green-button {
-    min-height: 54px;
+  .student-profile-group legend,
+  .student-profile-form .wide-field,
+  .student-profile-form .student-profile-wide,
+  .student-profile-locked-field,
+  .student-profile-note {
+    grid-column: 1 / -1;
+  }
+
+  .student-profile-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .student-profile-actions .student-green-button:only-child {
+    grid-column: 1 / -1;
   }
 }
 
@@ -9533,17 +10155,17 @@ summary:focus-visible {
   color: #15100b;
   font-size: 11px;
   font-weight: 900;
-  box-shadow: 0 0 0 2px rgba(8, 9, 11, 0.9);
+  box-shadow: 0 0 0 2px var(--app-input);
   animation: admin-badge-pulse 1.6s ease-in-out infinite;
 }
 
 @keyframes admin-badge-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 2px rgba(8, 9, 11, 0.9), 0 0 0 0 rgba(242, 180, 97, 0.45);
+    box-shadow: 0 0 0 2px var(--app-input), 0 0 0 0 rgba(242, 180, 97, 0.45);
   }
   50% {
-    box-shadow: 0 0 0 2px rgba(8, 9, 11, 0.9), 0 0 0 6px rgba(242, 180, 97, 0);
+    box-shadow: 0 0 0 2px var(--app-input), 0 0 0 6px rgba(242, 180, 97, 0);
   }
 }
 
@@ -9816,10 +10438,39 @@ summary:focus-visible {
   color: var(--app-text-muted);
 }
 
+.theme-mode-options {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.theme-mode-options-compact {
+  gap: 0.3rem;
+}
+
+.theme-mode-switch-compact {
+  display: inline-flex;
+  align-items: center;
+}
+
 .theme-mode-option {
-  border-color: var(--app-border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border-radius: 0.85rem;
+  border: 1px solid var(--app-border);
   background: var(--app-fill);
   color: var(--app-text-muted);
+  transition: border-color 180ms ease, background-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+
+.theme-mode-options-compact .theme-mode-option {
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 0.75rem;
 }
 
 .theme-mode-option:hover {
@@ -9831,14 +10482,14 @@ summary:focus-visible {
   border-color: rgba(240, 180, 90, 0.55);
   background: linear-gradient(135deg, rgba(240, 180, 90, 0.28), rgba(255, 255, 255, 0.72));
   color: var(--on-accent);
-  box-shadow: 0 10px 28px rgba(184, 116, 20, 0.18);
+  box-shadow: 0 8px 20px rgba(184, 116, 20, 0.16);
 }
 
 .theme-mode-option-dark.is-active {
   border-color: rgba(240, 180, 90, 0.5);
   background: linear-gradient(135deg, rgba(240, 180, 90, 0.22), rgba(21, 26, 34, 0.92));
   color: #f4ebe0;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24);
 }
 
 html.light .theme-mode-option-dark.is-active {
@@ -9848,6 +10499,67 @@ html.light .theme-mode-option-dark.is-active {
 
 html.light .theme-mode-option-light.is-active {
   color: var(--on-accent);
+}
+
+.app-download-soon {
+  background-color: var(--app-bg);
+  background-image: var(--shell-bg);
+  color: var(--app-text);
+}
+
+.app-download-copy {
+  color: var(--app-text-muted) !important;
+}
+
+.app-store-card {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-height: 4.5rem;
+  padding: 0.9rem 1.1rem;
+  border-radius: 1rem;
+  border: 1px solid var(--app-border);
+  background: color-mix(in srgb, var(--app-panel) 94%, transparent);
+  box-shadow: var(--shadow-soft);
+  color: var(--app-text);
+}
+
+.app-store-card small {
+  color: var(--app-text-faint) !important;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.app-store-card strong {
+  color: var(--app-text) !important;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.app-store-icon {
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  place-items: center;
+  border-radius: 0.85rem;
+  flex-shrink: 0;
+}
+
+.app-store-icon-play {
+  background: linear-gradient(135deg, rgba(18, 143, 114, 0.18), rgba(79, 214, 160, 0.22));
+  color: #128f72;
+}
+
+.app-store-icon-apple {
+  background: linear-gradient(135deg, rgba(21, 26, 34, 0.08), rgba(21, 26, 34, 0.16));
+  color: var(--app-text);
+}
+
+html.dark .app-store-icon-apple {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.14));
+  color: #f4ebe0;
 }
 
 .ui-btn-primary,
@@ -9966,12 +10678,14 @@ html.light .student-app-header {
   color: #fff;
 }
 
-html.light .student-app-header strong,
+html.light .student-app-header > strong,
+html.light .student-app-header .student-avatar + div strong,
 html.light .student-icon-button {
   color: #fff;
 }
 
-html.light .student-app-header span {
+html.light .student-app-header > div > span,
+html.light .student-app-header .student-avatar + div > span {
   color: rgba(255, 255, 255, 0.88);
 }
 
@@ -10131,14 +10845,84 @@ html.light .admin-workspace-shell .cms-studio-card {
 
 /* Header e CTAs do aluno: manter tipografia clara sobre o gradiente */
 html.light .student-app-header,
-html.light .student-app-header strong,
+html.light .student-app-header > strong,
+html.light .student-app-header .student-avatar + div strong,
 html.light .student-icon-button,
 html.light .student-app-header .student-streak-button {
   color: #fff !important;
 }
 
-html.light .student-app-header span {
+html.light .student-app-header > div > span,
+html.light .student-app-header .student-avatar + div span {
   color: rgba(255, 255, 255, 0.88) !important;
+}
+
+/* Notificações (dropdown): texto escuro no Claro — não herdar branco do header */
+html.light .student-notification-panel,
+html.light .student-notification-panel * {
+  color: #0e1116 !important;
+}
+
+html.light .student-notification-panel {
+  background: #ffffff !important;
+  border-color: rgba(21, 26, 34, 0.12) !important;
+}
+
+html.light .student-notification-panel article {
+  background: rgba(21, 26, 34, 0.04) !important;
+}
+
+html.light .student-notification-panel article span,
+html.light .student-notification-panel article small {
+  color: #44403a !important;
+}
+
+html.light .student-notification-panel-head > div > span {
+  color: #a86a10 !important;
+  background: rgba(240, 180, 90, 0.16) !important;
+}
+
+html.light .student-sync-origin {
+  color: #a86a10 !important;
+}
+
+html.light .student-sync-open {
+  color: #0e1116 !important;
+  border-color: rgba(168, 106, 16, 0.35) !important;
+  background: rgba(240, 180, 90, 0.14) !important;
+}
+
+html.light .student-notification-close,
+html.light .student-streak-modal-close {
+  color: #fff !important;
+  border-color: rgba(199, 61, 46, 0.55) !important;
+  background: linear-gradient(135deg, #e06a3c, #c73d2e) !important;
+  box-shadow: 0 6px 16px rgba(199, 61, 46, 0.28) !important;
+}
+
+html.light .student-streak-modal {
+  background: #ffffff !important;
+  border-color: rgba(21, 26, 34, 0.12) !important;
+  color: #0e1116 !important;
+}
+
+html.light .student-streak-modal-header {
+  background: #ffffff !important;
+  border-color: rgba(21, 26, 34, 0.1) !important;
+}
+
+html.light .student-streak-modal-header strong {
+  color: #0e1116 !important;
+}
+
+html.light .student-streak-modal-header small {
+  color: #44403a !important;
+}
+
+html.light .student-streak-modal-header span,
+html.light .student-streak-modal .student-consistency-heading span,
+html.light .student-streak-modal .student-consistency-heading small {
+  color: #a86a10 !important;
 }
 
 html.light .student-green-button,
@@ -10172,12 +10956,14 @@ html.light .student-calendar-grid span.completed {
 
 /* theme-header-lock: keep brand chrome readable on gradient headers */
 .student-app-header,
-.student-app-header strong,
+.student-app-header > strong,
+.student-app-header .student-avatar + div strong,
 .student-icon-button,
 .student-app-header .student-streak-button {
   color: #fff !important;
 }
-.student-app-header span {
+.student-app-header > div > span,
+.student-app-header .student-avatar + div > span {
   color: rgba(255, 255, 255, 0.88) !important;
 }
 .student-green-button,
@@ -10244,15 +11030,17 @@ html.light small {
   color: var(--app-text-faint) !important;
 }
 
-/* Brand chrome stays high-contrast on gradients */
+/* Brand chrome stays high-contrast on gradients (não incluir o dropdown de notificações) */
 html.light .student-app-header,
-html.light .student-app-header strong,
+html.light .student-app-header > strong,
+html.light .student-app-header .student-avatar + div strong,
 html.light .student-icon-button,
 html.light .student-app-header .student-streak-button {
   color: #fff !important;
 }
 
-html.light .student-app-header span {
+html.light .student-app-header > div > span,
+html.light .student-app-header .student-avatar + div > span {
   color: rgba(255, 255, 255, 0.9) !important;
 }
 
@@ -10285,5 +11073,374 @@ html.light .primary-button svg {
 
 html.light .text-brand-gold,
 html.light .home-landing .text-brand-gold {
+  color: #a86a10 !important;
+}
+
+/* Avaliar treino / student cards — token base */
+.student-rating-card .student-rating-heading strong,
+.student-rating-card > div > strong,
+.student-info-card.student-rating-card > div > strong {
+  color: var(--app-text) !important;
+}
+
+.student-rating-card .student-rating-heading span,
+.student-rating-card > div > span,
+.student-info-card.student-rating-card > div > span {
+  color: var(--app-text-muted) !important;
+}
+
+.student-rating-card .student-rating-stars button,
+.student-info-card.student-rating-card .student-rating-stars button {
+  border: 1px solid var(--app-border) !important;
+  background: var(--app-fill) !important;
+  color: var(--app-text-faint) !important;
+}
+
+.student-rating-card .student-rating-stars button.active,
+.student-rating-card .student-rating-stars button:hover,
+.student-info-card.student-rating-card .student-rating-stars button.active,
+.student-info-card.student-rating-card .student-rating-stars button:hover {
+  border-color: rgba(240, 180, 90, 0.55) !important;
+  background: rgba(240, 180, 90, 0.16) !important;
+  color: #f0b45a !important;
+}
+
+.student-rating-card .ui-input,
+.student-rating-card .student-rating-form input,
+.student-info-card.student-rating-card .student-rating-form input {
+  border-color: var(--app-border-strong) !important;
+  background: var(--app-input) !important;
+  color: var(--app-text) !important;
+}
+
+.student-rating-card .student-rating-submit,
+.student-rating-card .student-rating-submit span,
+.student-rating-card .student-rating-submit svg {
+  color: var(--on-accent) !important;
+}
+
+/* FINAL cascade: light mode must win — pure white cards, no black */
+html.light .student-hero-card,
+html.light .student-sheet,
+html.light .student-empty-state,
+html.light .student-training-card,
+html.light .student-exercise-card,
+html.light .student-info-card,
+html.light .student-menu-item,
+html.light .student-rating-card,
+html.light .student-info-card.student-rating-card,
+html.light .student-favorite-card,
+html.light .student-product-card,
+html.light .student-training-sheet-card,
+html.light .student-consistency-calendar,
+html.light .student-notification-panel,
+html.light .settings-card,
+html.light .student-rating-panel,
+html.light .student-app-shell .student-hero-card,
+html.light .student-app-shell .student-sheet,
+html.light .student-app-shell .student-empty-state,
+html.light .student-app-shell .student-training-card,
+html.light .student-app-shell .student-exercise-card,
+html.light .student-app-shell .student-info-card,
+html.light .student-app-shell .student-menu-item,
+html.light .student-app-shell .student-rating-card,
+html.light .student-app-shell .student-favorite-card,
+html.light .student-app-shell .student-product-card,
+html.light .student-app-shell .student-training-sheet-card,
+html.light .student-app-shell .student-consistency-calendar,
+html.light .student-app-shell .student-notification-panel,
+html.light .student-app-shell .settings-card,
+html.light .student-app-shell .student-rating-panel {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border-color: rgba(21, 26, 34, 0.12) !important;
+  color: #0e1116 !important;
+  box-shadow: 0 10px 28px rgba(45, 36, 24, 0.08) !important;
+}
+
+html.light .student-rating-card .student-rating-form input,
+html.light .student-info-card.student-rating-card .student-rating-form input,
+html.light .student-rating-card .ui-input,
+html.light .student-app-shell .student-rating-form input,
+html.light .student-app-shell input:not([type="checkbox"]):not([type="radio"]),
+html.light .student-app-shell select,
+html.light .student-app-shell textarea {
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border-color: rgba(21, 26, 34, 0.16) !important;
+  color: #0e1116 !important;
+}
+
+html.light .student-rating-card .student-rating-stars button,
+html.light .student-info-card.student-rating-card .student-rating-stars button {
+  background-color: rgba(21, 26, 34, 0.04) !important;
+  border-color: rgba(21, 26, 34, 0.12) !important;
+  color: #605a52 !important;
+}
+
+html.light .student-rating-card .student-rating-stars button.active,
+html.light .student-rating-card .student-rating-stars button:hover,
+html.light .student-info-card.student-rating-card .student-rating-stars button.active,
+html.light .student-info-card.student-rating-card .student-rating-stars button:hover {
+  background-color: rgba(240, 180, 90, 0.18) !important;
+  border-color: rgba(168, 106, 16, 0.45) !important;
+  color: #a86a10 !important;
+}
+
+html.light .student-rating-card > div > strong,
+html.light .student-info-card.student-rating-card > div > strong,
+html.light .student-rating-heading strong {
+  color: #0e1116 !important;
+}
+
+html.light .student-rating-card > div > span,
+html.light .student-info-card.student-rating-card > div > span,
+html.light .student-rating-heading span {
+  color: #44403a !important;
+}
+
+/* Absolute: remove black from student surfaces in Claro */
+html.light {
+  --app-bg: #f7f2ea !important;
+  --app-bg-soft: #ebe4d8 !important;
+  --app-panel: #ffffff !important;
+  --app-elev: #f3eee6 !important;
+  --app-card-bg: #ffffff !important;
+  --app-card-shine: none !important;
+  --app-input: #ffffff !important;
+  --ink-rgb: 247 242 234 !important;
+  --ink-soft-rgb: 235 228 216 !important;
+  --ink-panel-rgb: 255 255 255 !important;
+  --ink-elev-rgb: 243 238 230 !important;
+}
+
+html.light .student-app-shell,
+html.light .ui-shell .student-app-shell {
+  background: #f7f2ea !important;
+  background-image: radial-gradient(circle at 78% 0%, rgba(242, 180, 97, 0.14), transparent 26rem) !important;
+  color: #0e1116 !important;
+}
+
+html.light .student-app-shell article,
+html.light .student-app-shell .student-sheet,
+html.light .student-app-shell .student-info-card,
+html.light .student-app-shell .student-rating-card,
+html.light .student-app-shell .student-training-card,
+html.light .student-app-shell .student-exercise-card,
+html.light .student-app-shell .student-menu-item,
+html.light .student-app-shell .student-empty-state,
+html.light .student-app-shell .student-favorite-card,
+html.light .student-app-shell .student-hero-card,
+html.light .student-app-shell .student-consistency-calendar,
+html.light .student-app-shell .student-bottom-nav,
+html.light article.student-rating-card,
+html.light article.student-info-card {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+}
+
+html.light .student-app-shell .student-rating-form input,
+html.light .student-app-shell .ui-input,
+html.light article.student-rating-card input,
+html.light article.student-info-card input {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+}
+
+
+/* ===== Student type scale enforcement ===== */
+.student-app-shell {
+  font-size: var(--st-body);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-body);
+}
+
+.student-app-shell .student-sheet-heading span,
+.student-app-shell .student-training-card > span,
+.student-app-shell .student-card-field > span,
+.student-app-shell .student-profile-form label:not(.student-avatar-field),
+.student-app-shell .student-consistency-heading span,
+.student-app-shell .student-consistency-heading small {
+  font-size: var(--st-xs);
+  font-weight: var(--st-weight-label);
+  letter-spacing: var(--st-tracking-label);
+  text-transform: uppercase;
+  line-height: var(--st-lh-snug);
+}
+
+.student-app-shell .student-profile-form .student-avatar-field {
+  font-size: var(--st-xs);
+  font-weight: var(--st-weight-body);
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: var(--st-lh-snug);
+}
+
+.student-app-shell .student-profile-identity-copy strong {
+  font-size: var(--st-title-sm);
+  font-weight: var(--st-weight-title);
+  line-height: var(--st-lh-tight);
+}
+
+.student-app-shell .student-profile-identity-copy span {
+  font-size: var(--st-caption);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-snug);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.student-app-shell .student-profile-group legend {
+  font-size: var(--st-caption);
+  font-weight: var(--st-weight-title);
+  letter-spacing: -0.01em;
+  text-transform: none;
+  line-height: var(--st-lh-tight);
+}
+
+.student-app-shell .student-profile-note {
+  font-size: var(--st-caption);
+  font-weight: var(--st-weight-body);
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: var(--st-lh-snug);
+}
+
+.student-app-shell .student-app-header span,
+.student-app-shell .student-bottom-nav button,
+.student-app-shell .student-payment-card-body span,
+.student-app-shell .student-calendar-weekdays span {
+  font-size: var(--st-sm);
+  font-weight: var(--st-weight-label);
+  line-height: var(--st-lh-snug);
+}
+
+.student-app-shell .student-workout-summary p,
+.student-app-shell .student-training-card p,
+.student-app-shell .student-exercise-card span,
+.student-app-shell .student-info-card span,
+.student-app-shell .student-feature-card small,
+.student-app-shell .student-sheet-heading p,
+.student-app-shell .student-empty-state span,
+.student-app-shell .student-rating-heading span,
+.student-app-shell .student-qr-panel > span,
+.student-app-shell .student-consistency-calendar p,
+.student-app-shell .student-chat-hint {
+  font-size: var(--st-caption);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-snug);
+}
+
+.student-app-shell .student-green-button,
+.student-app-shell .student-outline-button,
+.student-app-shell .ui-btn-primary,
+.student-app-shell .student-card-form .student-green-button,
+.student-app-shell .student-qr-panel .student-green-button {
+  font-size: var(--st-body);
+  font-weight: var(--st-weight-title);
+  letter-spacing: 0.02em;
+  text-transform: none;
+  line-height: 1.2;
+}
+
+.student-app-shell .student-app-header strong,
+.student-app-shell .student-feature-card strong,
+.student-app-shell .student-exercise-card strong,
+.student-app-shell .student-info-card strong,
+.student-app-shell .student-menu-item span,
+.student-app-shell .student-workout-summary h2,
+.student-app-shell .student-training-card h2,
+.student-app-shell .student-rating-heading strong,
+.student-app-shell .student-payment-card-body strong,
+.student-app-shell .student-card-form-header strong {
+  font-size: var(--st-title-sm);
+  font-weight: var(--st-weight-title);
+  line-height: var(--st-lh-tight);
+}
+
+.student-app-shell .student-section-title,
+.student-app-shell .student-hero-card > span,
+.student-app-shell .student-empty-state strong,
+.student-app-shell .student-consistency-heading strong,
+.student-app-shell .student-workout-summary > strong {
+  font-size: var(--st-title-lg);
+  font-weight: var(--st-weight-title);
+  line-height: var(--st-lh-tight);
+  letter-spacing: -0.01em;
+}
+
+.student-app-shell .student-sheet-heading h1 {
+  font-size: clamp(var(--st-title-lg), 5.5vw, var(--st-display));
+  font-weight: var(--st-weight-title);
+  line-height: var(--st-lh-tight);
+  letter-spacing: -0.02em;
+}
+
+.student-app-shell input,
+.student-app-shell select,
+.student-app-shell textarea,
+.student-app-shell .ui-input {
+  font-size: var(--st-body);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-snug);
+}
+
+.student-app-shell .student-card-field input {
+  font-size: var(--st-body-lg);
+}
+
+.student-app-shell .student-profile-form input,
+.student-app-shell .student-profile-form select {
+  font-size: var(--st-body);
+  min-height: 42px;
+}
+
+.student-app-shell .student-profile-sheet .student-sheet-heading h1 {
+  font-size: clamp(1.25rem, 5vw, 1.45rem);
+}
+
+@media (max-width: 430px) {
+  .student-app-shell .student-bottom-nav button {
+    font-size: var(--st-2xs);
+  }
+}
+
+/* FINAL: notificações no Claro — preto legível (vence herança branca do header) */
+html.light .student-app-header .student-notification-panel,
+html.light .student-app-header .student-notification-panel strong,
+html.light .student-app-header .student-notification-panel span,
+html.light .student-app-header .student-notification-panel small,
+html.light .student-app-header .student-notification-panel em,
+html.light .student-app-header .student-notification-panel .student-sync-open,
+html.light .student-app-shell .student-notification-panel,
+html.light .student-app-shell .student-notification-panel strong,
+html.light .student-app-shell .student-notification-panel span,
+html.light .student-app-shell .student-notification-panel small,
+html.light .student-app-shell .student-notification-panel em,
+html.light .student-app-shell .student-notification-panel .student-sync-open {
+  color: #0e1116 !important;
+}
+
+html.light .student-app-header .student-notification-close,
+html.light .student-app-header .student-notification-close svg,
+html.light .student-app-shell .student-notification-close,
+html.light .student-app-shell .student-notification-close svg {
+  color: #fff !important;
+}
+
+html.light .student-app-header .student-notification-panel article span,
+html.light .student-app-header .student-notification-panel article small,
+html.light .student-app-shell .student-notification-panel article span,
+html.light .student-app-shell .student-notification-panel article small {
+  color: #44403a !important;
+}
+
+html.light .student-app-header .student-notification-panel .student-sync-origin,
+html.light .student-app-shell .student-notification-panel .student-sync-origin,
+html.light .student-app-header .student-notification-panel-head > div > span,
+html.light .student-app-shell .student-notification-panel-head > div > span {
   color: #a86a10 !important;
 }

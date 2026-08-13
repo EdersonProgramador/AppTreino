@@ -52,6 +52,8 @@ export function WorkoutOnboarding({
   const patchDraft = useOnboardingStore((state) => state.patchDraft);
   const resetDraft = useOnboardingStore((state) => state.reset);
 
+  const genderLocked = Boolean(initialValues?.gender);
+
   const defaultValues = useMemo<OnboardingFormValues>(
     () => ({
       name: "",
@@ -204,14 +206,26 @@ export function WorkoutOnboarding({
           <div className="grid gap-3.5">
             <label className="ui-label">
               Sexo
-              <select {...register("gender")} className="ui-input" defaultValue="">
+              <select
+                {...register("gender")}
+                className="ui-input"
+                defaultValue=""
+                disabled={genderLocked}
+                title={genderLocked ? "Definido no cadastro. Somente a academia pode alterar." : undefined}
+              >
                 <option value="" disabled>
                   Selecione
                 </option>
                 <option value="MALE">Masculino</option>
                 <option value="FEMALE">Feminino</option>
               </select>
-              {errors.gender && <span className="text-xs font-bold text-[#ff8f7a]">{errors.gender.message}</span>}
+              {genderLocked ? (
+                <span className="text-xs font-semibold text-sand-faint">
+                  Definido no cadastro · somente admin pode alterar
+                </span>
+              ) : (
+                errors.gender && <span className="text-xs font-bold text-[#ff8f7a]">{errors.gender.message}</span>
+              )}
             </label>
 
             <label className="ui-label">
