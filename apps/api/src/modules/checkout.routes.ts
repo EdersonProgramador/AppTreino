@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { initialPlans } from "@app-treino/shared";
 import { z } from "zod";
-import { hashPassword, requireAuth, toAuthUser } from "../auth.js";
+import { hashPassword, isAdminStudentPreview, requireAuth, toAuthUser } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 
@@ -161,6 +161,12 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
   app.post("/checkout/session", async (request, reply) => {
     requireDatabase();
     const authUser = await requireAuth(app, request);
+    if (isAdminStudentPreview(authUser)) {
+      return reply.code(403).send({
+        message: "Checkout indisponível no modo preview do administrador.",
+        code: "ADMIN_PREVIEW_READONLY"
+      });
+    }
     const body = checkoutSessionSchema.parse(request.body);
     const planSeed = initialPlans.find((plan) => plan.code === body.planCode);
 
@@ -330,6 +336,12 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     }
 
     const authUser = await requireAuth(app, request);
+    if (isAdminStudentPreview(authUser)) {
+      return reply.code(403).send({
+        message: "Checkout indisponível no modo preview do administrador.",
+        code: "ADMIN_PREVIEW_READONLY"
+      });
+    }
     const body = checkoutSandboxConfirmationSchema.parse(request.body);
 
     if (env.ASAAS_API_KEY && env.ALLOW_MANUAL_PAYMENT_CONFIRMATION !== "true") {

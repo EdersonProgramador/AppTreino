@@ -7,6 +7,7 @@ import { z } from "zod";
 import { hashPassword, requirePathRole, requireRole } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
+import { isImageUploadExtension, optimizeUploadedImage } from "../media-optimize.js";
 import { buildPublicUploadUrl, saveValidatedUpload, uploadsDir } from "../upload-security.js";
 import type { UploadGroup } from "../upload-security.js";
 import { autoCloseStaleTickets, FINALIZE_PROMPT, ticketInclude } from "./ticket.utils.js";
@@ -1088,6 +1089,121 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     await requirePathRole(app, request, "/admin", "ADMIN");
   });
 
+  const adminMeSchema = z.object({
+    name: z.string().min(2).optional(),
+    email: z.string().email().optional(),
+    phone: z.string().optional().or(z.literal("")),
+    document: z.string().optional().or(z.literal("")),
+    birthDate: z.string().optional().or(z.literal("")),
+    gender: z.enum(["MALE", "FEMALE"]).optional().or(z.literal("")),
+    city: z.string().optional().or(z.literal("")),
+    state: z.string().optional().or(z.literal("")),
+    password: z.string().min(6).optional().or(z.literal("")),
+    avatarUrl: z.string().optional().or(z.literal(""))
+  });
+
+  function toAdminMeProfile(user: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    role: string;
+    status: string;
+    provider: string | null;
+    createdAt: Date;
+    profile: {
+      phone: string | null;
+      document: string | null;
+      birthDate: Date | null;
+      gender: "MALE" | "FEMALE" | null;
+      city: string | null;
+      state: string | null;
+      avatarUrl: string | null;
+    } | null;
+  }) {
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email ?? "",
+      phone: user.phone ?? user.profile?.phone ?? null,
+      document: user.profile?.document ?? null,
+      birthDate: user.profile?.birthDate ? user.profile.birthDate.toISOString().slice(0, 10) : null,
+      gender: user.profile?.gender ?? null,
+      city: user.profile?.city ?? null,
+      state: user.profile?.state ?? null,
+      role: user.role,
+      status: user.status,
+      provider: user.provider ?? "EMAIL",
+      avatarUrl: user.profile?.avatarUrl ?? null,
+      createdAt: user.createdAt
+    };
+  }
+
+  app.get("/admin/me", async (request) => {
+    requireDatabase();
+    const authUser = await requireRole(app, request, "ADMIN");
+    const user = await prisma.user.findUnique({
+      where: { id: authUser.id },
+      include: { profile: true }
+    });
+
+    if (!user || user.deletedAt || user.status !== "ACTIVE") {
+      throw httpError(404, "Administrador não encontrado.");
+    }
+
+    return { profile: toAdminMeProfile(user) };
+  });
+
+  app.put("/admin/me", async (request) => {
+    requireDatabase();
+    const authUser = await requireRole(app, request, "ADMIN");
+    const body = adminMeSchema.parse(request.body);
+    const password = body.password?.trim() || undefined;
+    const birthDate =
+      body.birthDate === undefined
+        ? undefined
+        : body.birthDate
+          ? new Date(`${body.birthDate.slice(0, 10)}T12:00:00.000Z`)
+          : null;
+    const gender =
+      body.gender === undefined ? undefined : body.gender === "" ? null : body.gender;
+
+    const user = await prisma.user.update({
+      where: { id: authUser.id },
+      data: {
+        name: body.name,
+        email: body.email?.toLowerCase(),
+        phone: body.phone === undefined ? undefined : body.phone || null,
+        passwordHash: password ? await hashPassword(password) : undefined,
+        profile: {
+          upsert: {
+            create: {
+              phone: body.phone || null,
+              document: body.document || null,
+              birthDate: birthDate ?? null,
+              gender: gender ?? null,
+              city: body.city || null,
+              state: body.state || null,
+              avatarUrl: body.avatarUrl === undefined ? undefined : body.avatarUrl || null
+            },
+            update: {
+              phone: body.phone === undefined ? undefined : body.phone || null,
+              document: body.document === undefined ? undefined : body.document || null,
+              birthDate,
+              gender,
+              city: body.city === undefined ? undefined : body.city || null,
+              state: body.state === undefined ? undefined : body.state || null,
+              avatarUrl: body.avatarUrl === undefined ? undefined : body.avatarUrl || null
+            }
+          }
+        }
+      },
+      include: { profile: true }
+    });
+
+    return { profile: toAdminMeProfile(user) };
+  });
+
   app.post(
     "/admin/uploads",
     { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
@@ -1102,8 +1218,8 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     const targetDir = resolve(uploadsDir, group);
     mkdirSync(targetDir, { recursive: true });
 
-    const filename = `${Date.now()}-${randomUUID()}`;
-    const targetPath = resolve(targetDir, filename);
+    const baseFilename = `${Date.now()}-${randomUUID()}`;
+    const targetPath = resolve(targetDir, baseFilename);
     const extension = await saveValidatedUpload(
       file.file,
       targetPath,
@@ -1116,16 +1232,32 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       throw httpError(400, "Tipo de arquivo não permitido para o CMS Fitness.");
     }
 
-    const storedFilename = `${filename}.${extension}`;
-    await import("node:fs/promises").then(({ rename }) => rename(targetPath, resolve(targetDir, storedFilename)));
+    let storedFilename = `${baseFilename}.${extension}`;
+    let mimeType = file.mimetype;
+    let relativePath = `${group}/${storedFilename}`;
 
-    const relativePath = `${group}/${storedFilename}`;
+    if ((group === "images" || group === "lessons") && isImageUploadExtension(extension)) {
+      const optimized = await optimizeUploadedImage({
+        absolutePath: targetPath,
+        group,
+        baseFilename,
+        extension,
+        maxEdge: 1600,
+        quality: 78
+      });
+      storedFilename = optimized.filename;
+      mimeType = optimized.mimeType;
+      relativePath = optimized.relativePath;
+    } else {
+      const { rename } = await import("node:fs/promises");
+      await rename(targetPath, resolve(targetDir, storedFilename));
+    }
 
     return reply.code(201).send({
       file: {
         originalName: file.filename,
         filename: storedFilename,
-        mimeType: file.mimetype,
+        mimeType,
         url: buildPublicUploadUrl(relativePath),
         path: relativePath
       }

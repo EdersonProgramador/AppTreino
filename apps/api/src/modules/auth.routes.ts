@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { homePathForRole, permissionsFor, type UserRole } from "@app-treino/shared";
-import { getAuthUser, hashPassword, toAuthUser, verifyPassword } from "../auth.js";
+import { getAuthUser, hashPassword, isAdminStudentPreview, toAuthUser, verifyPassword } from "../auth.js";
 import { buildPasswordResetUrl, isDeliverableEmail, sendPasswordResetEmail } from "../email.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
@@ -554,6 +554,137 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     ok: true
   }));
 
+  /**
+   * ADMIN → sessão temporária como aluno (mesmo userId).
+   * Token curto; claims só válidos se o usuário continuar ADMIN no banco.
+   */
+  app.post(
+    "/auth/admin-preview/enter",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+      requireDatabase();
+      const session = await getAuthUser(app, request);
+
+      if (!session) {
+        return reply.code(401).send({ message: "Autenticação obrigatória." });
+      }
+
+      if (isAdminStudentPreview(session)) {
+        return reply.code(403).send({
+          message: "Você já está no modo preview do aluno.",
+          code: "ADMIN_PREVIEW_ACTIVE"
+        });
+      }
+
+      if (session.role !== "ADMIN") {
+        return reply.code(403).send({
+          message: "Somente administradores podem entrar no modo preview.",
+          code: "ADMIN_PREVIEW_FORBIDDEN"
+        });
+      }
+
+      const dbUser = await prisma.user.findUnique({
+        where: { id: session.id },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+          status: true,
+          deletedAt: true,
+          provider: true
+        }
+      });
+
+      if (!dbUser || dbUser.deletedAt || dbUser.status !== "ACTIVE" || dbUser.role !== "ADMIN") {
+        return reply.code(403).send({
+          message: "Conta administrativa inválida para preview.",
+          code: "ADMIN_PREVIEW_FORBIDDEN"
+        });
+      }
+
+      const previewUser = {
+        id: dbUser.id,
+        name: dbUser.name,
+        email: dbUser.email ?? dbUser.phone ?? "",
+        role: "USER" as const,
+        phone: dbUser.phone ?? null,
+        provider: dbUser.provider ?? "EMAIL",
+        previewMode: true,
+        adminId: dbUser.id,
+        canReturnToAdmin: true
+      };
+
+      const token = app.jwt.sign(previewUser, { expiresIn: "2h" });
+
+      return reply.send({
+        token,
+        user: previewUser
+      });
+    }
+  );
+
+  /**
+   * Sai do preview e restaura sessão ADMIN (mesmo userId).
+   * Só aceita token com claims de preview validados em getAuthUser.
+   */
+  app.post(
+    "/auth/admin-preview/exit",
+    { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+      requireDatabase();
+      const session = await getAuthUser(app, request);
+
+      if (!session) {
+        return reply.code(401).send({ message: "Autenticação obrigatória." });
+      }
+
+      if (!isAdminStudentPreview(session)) {
+        return reply.code(403).send({
+          message: "Sessão de preview inválida ou expirada.",
+          code: "ADMIN_PREVIEW_INVALID"
+        });
+      }
+
+      const dbUser = await prisma.user.findUnique({
+        where: { id: session.adminId ?? session.id },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+          status: true,
+          deletedAt: true,
+          provider: true
+        }
+      });
+
+      if (!dbUser || dbUser.deletedAt || dbUser.status !== "ACTIVE" || dbUser.role !== "ADMIN") {
+        return reply.code(403).send({
+          message: "Não foi possível restaurar o painel administrativo.",
+          code: "ADMIN_PREVIEW_RESTORE_FAILED"
+        });
+      }
+
+      if (dbUser.id !== session.id || dbUser.id !== session.adminId) {
+        return reply.code(403).send({
+          message: "Sessão de preview inconsistente.",
+          code: "ADMIN_PREVIEW_INVALID"
+        });
+      }
+
+      const authUser = toAuthUser(dbUser);
+      const token = app.jwt.sign(authUser);
+
+      return reply.send({
+        token,
+        user: authUser
+      });
+    }
+  );
+
   app.get("/me", async (request) => {
     const user = await getAuthUser(app, request);
 
@@ -571,7 +702,9 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       rbac: {
         role: user.role,
         permissions: permissionsFor(user.role),
-        homePath: homePathForRole(user.role)
+        homePath: homePathForRole(user.role),
+        previewMode: Boolean(user.previewMode),
+        canReturnToAdmin: Boolean(user.canReturnToAdmin)
       }
     };
   });

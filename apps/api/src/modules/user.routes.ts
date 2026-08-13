@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireAuth, requirePathRole, requestPathname } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
+import { isImageUploadExtension, optimizeUploadedImage } from "../media-optimize.js";
 import { buildPublicUploadUrl, saveValidatedUpload, uploadsDir } from "../upload-security.js";
 import { autoCloseStaleTickets, ticketInclude } from "./ticket.utils.js";
 import { calculateBodyFatEstimate, physicalAssessmentFormSchema } from "./physical-assessment.utils.js";
@@ -427,25 +428,40 @@ export async function registerUserRoutes(app: FastifyInstance) {
     const targetDir = resolve(uploadsDir, "images");
     mkdirSync(targetDir, { recursive: true });
 
-    const filename = `${Date.now()}-${randomUUID()}`;
-    const targetPath = resolve(targetDir, filename);
+    const baseFilename = `${Date.now()}-${randomUUID()}`;
+    const targetPath = resolve(targetDir, baseFilename);
     const extension = await saveValidatedUpload(file.file, targetPath, "images", file.mimetype, file.filename);
 
     if (!extension) {
       return reply.code(400).send({ error: "Tipo de arquivo não permitido." });
     }
 
-    const storedFilename = `${filename}.${extension}`;
-    const { rename } = await import("node:fs/promises");
-    await rename(targetPath, resolve(targetDir, storedFilename));
+    let storedFilename = `${baseFilename}.${extension}`;
+    let mimeType = file.mimetype;
+    let relativePath = `images/${storedFilename}`;
 
-    const relativePath = `images/${storedFilename}`;
+    if (isImageUploadExtension(extension)) {
+      const optimized = await optimizeUploadedImage({
+        absolutePath: targetPath,
+        group: "images",
+        baseFilename,
+        extension,
+        maxEdge: 1200,
+        quality: 76
+      });
+      storedFilename = optimized.filename;
+      mimeType = optimized.mimeType;
+      relativePath = optimized.relativePath;
+    } else {
+      const { rename } = await import("node:fs/promises");
+      await rename(targetPath, resolve(targetDir, storedFilename));
+    }
 
     return reply.code(201).send({
       file: {
         originalName: file.filename,
         filename: storedFilename,
-        mimeType: file.mimetype,
+        mimeType,
         url: buildPublicUploadUrl(relativePath),
         path: relativePath
       }

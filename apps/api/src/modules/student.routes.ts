@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { requireAuth, requirePathRole } from "../auth.js";
+import { requireAuth, requirePathRole, isAdminStudentPreview } from "../auth.js";
+import type { AuthTokenPayload } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { calculateProgramEndDate, isProgramComplete, parseProgramMetadata } from "./workout-program.utils.js";
@@ -182,6 +183,11 @@ async function getCurrentStudentMembership(userId: string) {
 
 async function requireActiveEnrollment(app: FastifyInstance, request: FastifyRequest) {
   const authUser = await requireAuth(app, request);
+
+  if (isAdminStudentPreview(authUser)) {
+    return authUser;
+  }
+
   const status = await getEnrollmentStatus(authUser.id);
   const gating = verifyEnrollmentGating(status, request.url);
 
@@ -197,6 +203,19 @@ async function requireActiveEnrollment(app: FastifyInstance, request: FastifyReq
   }
 
   return authUser;
+}
+
+/** Bloqueia cobranças / mutações financeiras no modo preview. */
+function assertNotAdminPreview(authUser: AuthTokenPayload) {
+  if (isAdminStudentPreview(authUser)) {
+    const error = new Error("Ação indisponível no modo preview do administrador.") as Error & {
+      statusCode: number;
+      code: string;
+    };
+    error.statusCode = 403;
+    error.code = "ADMIN_PREVIEW_READONLY";
+    throw error;
+  }
 }
 
 function mapWorkoutExercise(item: {
@@ -277,23 +296,33 @@ function mapWorkoutExercise(item: {
   };
 }
 
-export async function getTodayWorkout(userId: string, dayNumber: number) {
-  const status = await getEnrollmentStatus(userId);
-
-  if (status !== "ACTIVE") {
-    return null;
+export async function getTodayWorkout(
+  userId: string,
+  dayNumber: number,
+  options?: { bypassEnrollment?: boolean }
+) {
+  if (!options?.bypassEnrollment) {
+    const status = await getEnrollmentStatus(userId);
+    if (status !== "ACTIVE") {
+      return null;
+    }
   }
 
-  const workouts = await getPublishedWorkouts(userId, dayNumber);
+  const workouts = await getPublishedWorkouts(userId, dayNumber, options);
 
   return workouts[0] ?? null;
 }
 
-export async function getPublishedWorkouts(userId: string, dayNumber: number) {
-  const status = await getEnrollmentStatus(userId);
-
-  if (status !== "ACTIVE") {
-    return [];
+export async function getPublishedWorkouts(
+  userId: string,
+  dayNumber: number,
+  options?: { bypassEnrollment?: boolean }
+) {
+  if (!options?.bypassEnrollment) {
+    const status = await getEnrollmentStatus(userId);
+    if (status !== "ACTIVE") {
+      return [];
+    }
   }
 
   const student = await prisma.user.findUnique({
@@ -739,10 +768,65 @@ export async function registerStudentRoutes(app: FastifyInstance) {
     await requirePathRole(app, request, "/student", "USER");
   });
 
+  /** Catálogo visual para aluno sem assinatura ativa (primeira experiência). */
+  app.get("/student/catalog/modalities", async (request) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    const student = await prisma.user.findUnique({
+      where: { id: authUser.id },
+      select: {
+        profile: {
+          select: { gender: true }
+        }
+      }
+    });
+    const studentGender = student?.profile?.gender ?? null;
+
+    const modalities = await prisma.modality.findMany({
+      where: {
+        isActive: true,
+        deletedAt: null,
+        programs: {
+          some: {
+            status: "PUBLISHED",
+            isActive: true,
+            deletedAt: null,
+            ...(studentGender
+              ? {
+                  OR: [{ targetGender: "ALL" as const }, { targetGender: studentGender }]
+                }
+              : {
+                  targetGender: "ALL"
+                })
+          }
+        }
+      },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        imageUrl: true
+      }
+    });
+
+    return {
+      modalities: modalities.map((item) => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        imageUrl: item.imageUrl,
+        locked: true
+      }))
+    };
+  });
+
   app.get("/student/workout/programs", async (request) => {
     requireDatabase();
     const authUser = await requireActiveEnrollment(app, request);
-    const workouts = await getPublishedWorkouts(authUser.id, 1);
+    const workouts = await getPublishedWorkouts(authUser.id, 1, {
+      bypassEnrollment: isAdminStudentPreview(authUser)
+    });
     const [favoritedProgramIds, ratedAssignmentIds] = await Promise.all([
       prisma.workoutFavorite.findMany({
         where: {
@@ -911,7 +995,9 @@ export async function registerStudentRoutes(app: FastifyInstance) {
   app.get("/student/workout/today", async (request, reply) => {
     requireDatabase();
     const authUser = await requireActiveEnrollment(app, request);
-    const workout = await getTodayWorkout(authUser.id, 1);
+    const workout = await getTodayWorkout(authUser.id, 1, {
+      bypassEnrollment: isAdminStudentPreview(authUser)
+    });
 
     if (!workout) {
       return reply.code(404).send({
@@ -1369,6 +1455,7 @@ export async function registerStudentRoutes(app: FastifyInstance) {
   app.post("/student/payment-cards", async (request, reply) => {
     requireDatabase();
     const authUser = await requireAuth(app, request);
+    assertNotAdminPreview(authUser);
     const body = studentPaymentCardSchema.parse(request.body);
     if (body.isDefault) {
       await prisma.paymentCard.updateMany({
@@ -1386,6 +1473,7 @@ export async function registerStudentRoutes(app: FastifyInstance) {
   app.delete("/student/payment-cards/:id", async (request) => {
     requireDatabase();
     const authUser = await requireAuth(app, request);
+    assertNotAdminPreview(authUser);
     const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
     await prisma.paymentCard.deleteMany({ where: { id, userId: authUser.id } });
 
@@ -1539,6 +1627,7 @@ export async function registerStudentRoutes(app: FastifyInstance) {
   app.post("/student/purchases", async (request, reply) => {
     requireDatabase();
     const authUser = await requireAuth(app, request);
+    assertNotAdminPreview(authUser);
     const body = studentPurchaseSchema.parse(request.body);
     const product = await prisma.product.findFirstOrThrow({
       where: {

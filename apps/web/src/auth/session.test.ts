@@ -56,4 +56,33 @@ describe("session role routing", () => {
     assert.equal(user.role, "USER");
     assert.equal(homePathForRole(normalizeRole(user.role)), "/aluno");
   });
+
+  it("normalizeAuthUser keeps hardened admin preview claims", () => {
+    const preview = normalizeAuthUser({
+      id: "admin-1",
+      name: "Admin",
+      email: "admin@apptreino.com",
+      role: "USER",
+      previewMode: true,
+      adminId: "admin-1",
+      canReturnToAdmin: true
+    });
+    assert.equal(preview.previewMode, true);
+    assert.equal(preview.canReturnToAdmin, true);
+    assert.equal(preview.adminId, "admin-1");
+    assert.equal(preview.role, "USER");
+  });
+
+  it("normalizeAuthUser drops incomplete preview claims", () => {
+    const forged = normalizeAuthUser({
+      id: "user-1",
+      name: "Aluno",
+      email: "aluno@apptreino.com",
+      role: "USER",
+      previewMode: true,
+      canReturnToAdmin: false
+    });
+    assert.equal(forged.previewMode, undefined);
+    assert.equal(forged.canReturnToAdmin, undefined);
+  });
 });

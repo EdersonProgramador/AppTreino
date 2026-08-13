@@ -21,6 +21,21 @@ export interface AuthTokenPayload {
   role: UserRole;
   phone?: string | null;
   provider?: string;
+  /** Sessão temporária: admin autenticado atuando como aluno. */
+  previewMode?: boolean;
+  adminId?: string;
+  canReturnToAdmin?: boolean;
+}
+
+export function isAdminStudentPreview(user: AuthTokenPayload | null | undefined): boolean {
+  return Boolean(
+    user &&
+      user.previewMode === true &&
+      user.canReturnToAdmin === true &&
+      typeof user.adminId === "string" &&
+      user.adminId === user.id &&
+      user.role === "USER"
+  );
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -112,11 +127,37 @@ export async function getAuthUser(
     return null;
   }
 
+  const dbRole = normalizeRole(dbUser.role);
+
+  // Preview só é válido se o usuário no banco continua ADMIN e os claims batem.
+  const validPreview =
+    payload.previewMode === true &&
+    payload.canReturnToAdmin === true &&
+    typeof payload.adminId === "string" &&
+    payload.adminId === dbUser.id &&
+    payload.id === dbUser.id &&
+    dbRole === "ADMIN";
+
+  if (validPreview) {
+    return {
+      id: dbUser.id,
+      name: dbUser.name,
+      email: dbUser.email ?? dbUser.phone ?? "",
+      role: "USER",
+      phone: dbUser.phone ?? null,
+      provider: dbUser.provider ?? "EMAIL",
+      previewMode: true,
+      adminId: dbUser.id,
+      canReturnToAdmin: true
+    };
+  }
+
+  // Nunca aceite claims de preview forjados.
   return {
     id: dbUser.id,
     name: dbUser.name,
     email: dbUser.email ?? dbUser.phone ?? "",
-    role: normalizeRole(dbUser.role),
+    role: dbRole,
     phone: dbUser.phone ?? null,
     provider: dbUser.provider ?? "EMAIL"
   };

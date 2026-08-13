@@ -42,6 +42,7 @@ import { lazy, Suspense, type ChangeEvent, type FormEvent, useEffect, useMemo, u
 import { createPortal } from "react-dom";
 import { formatPriceInBRL, initialPlans } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
+import { useAuth } from "../../auth/AuthContext";
 import { BRAZILIAN_STATES, CITIES_BY_STATE } from "../../brazil-data";
 import { levelLabel } from "../onboarding/onboarding.schema";
 import { calculateBodyFatEstimate } from "../../lib/body-composition";
@@ -51,6 +52,7 @@ import { assetUrl, mediaUrl } from "../../lib/urls";
 import { studentLocationLabel } from "../../lib/locations";
 import { sessionLabelFromBlock, trainingCopy } from "../../lib/training-copy";
 import { AnimatedList } from "../shared/AnimatedList";
+import { MediaImg } from "../shared/MediaImg";
 import {
   useStudentSyncStore,
   type StudentPanelSection
@@ -96,6 +98,9 @@ const WorkoutPlayer = lazy(async () => {
 });
 
 export function UserView({ token, onLogout }: { token: string | null; onLogout: () => void }) {
+  const { user: authUser, exitAdminPreview } = useAuth();
+  const isAdminPreview = Boolean(authUser?.previewMode && authUser?.canReturnToAdmin);
+  const [previewExiting, setPreviewExiting] = useState(false);
   const emitSystemEvent = useStudentSyncStore((state) => state.emit);
   const syncNavigateTo = useStudentSyncStore((state) => state.navigateTo);
   const syncPendingRefresh = useStudentSyncStore((state) => state.pendingRefresh);
@@ -111,6 +116,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [workout, setWorkout] = useState<WorkoutRow | null>(null);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkoutResponse["workout"] | null>(null);
   const [publishedWorkouts, setPublishedWorkouts] = useState<TodayWorkoutResponse["workout"][]>([]);
+  const [lockedPreviewModalities, setLockedPreviewModalities] = useState<
+    Array<{ id: string; name: string; description: string | null; imageUrl: string | null; locked: boolean }>
+  >([]);
   const [selectedWorkoutModality, setSelectedWorkoutModality] = useState<string | null>(null);
   const [selectedWorkoutProgramId, setSelectedWorkoutProgramId] = useState<string | null>(null);
   const [workoutSession, setWorkoutSession] = useState<WorkoutSessionResponse["session"] | null>(null);
@@ -245,8 +253,24 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         setNotifications([]);
         setNotificationsOpen(false);
         setAiPlans([]);
+        try {
+          const catalog = await apiGet<{
+            modalities: Array<{
+              id: string;
+              name: string;
+              description: string | null;
+              imageUrl: string | null;
+              locked: boolean;
+            }>;
+          }>("/student/catalog/modalities", token);
+          setLockedPreviewModalities(catalog.modalities);
+        } catch {
+          setLockedPreviewModalities([]);
+        }
         return;
       }
+
+      setLockedPreviewModalities([]);
 
       const [
         workoutResponse,
@@ -1289,8 +1313,43 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const latestAiPlan = aiPlans[0];
   const hasActiveMembership = membership?.status === "ACTIVE";
   const hasAdminEnrollment = profile?.enrollmentStatus === "ACTIVE";
-  /** Liberação só após bootstrap: membership ACTIVE (Asaas) ou enrollment ACTIVE (admin). */
-  const hasStudentAreaAccess = hasActiveMembership || hasAdminEnrollment;
+  /** Liberação: membership/enrollment ativos, ou admin em modo preview blindado. */
+  const hasStudentAreaAccess = hasActiveMembership || hasAdminEnrollment || isAdminPreview;
+
+  async function handleExitAdminPreview() {
+    if (previewExiting) return;
+    setPreviewExiting(true);
+    setError(null);
+    try {
+      await exitAdminPreview();
+    } catch (exitError) {
+      setError(exitError instanceof ApiError ? exitError.message : "Não foi possível voltar ao painel admin.");
+      setPreviewExiting(false);
+    }
+  }
+
+  const adminPreviewBanner = isAdminPreview ? (
+    <div className="admin-preview-banner" role="status">
+      <div className="admin-preview-banner-copy">
+        <Eye size={16} />
+        <span>
+          <strong>Modo preview</strong>
+          · você está vendo o app como aluno com a sua conta
+        </span>
+      </div>
+      <button
+        type="button"
+        className="admin-preview-banner-action"
+        disabled={previewExiting}
+        onClick={() => {
+          void handleExitAdminPreview();
+        }}
+      >
+        {previewExiting ? <Loader2 className="spin" size={16} /> : <ShieldCheck size={16} />}
+        Voltar ao admin
+      </button>
+    </div>
+  ) : null;
   const needsOnboarding = Boolean(profile && (!profile.gender || !profile.objective || !profile.level));
   const currentCheckoutPayment = checkoutPayment ?? pendingPayment;
   const lockedFeatures = [
@@ -1500,6 +1559,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   if (needsOnboarding) {
     return (
       <main className="auth-layout">
+        {adminPreviewBanner}
         <section className="auth-panel">
           <span className="eyebrow">Personalização</span>
           <h1>Complete seu perfil de treino</h1>
@@ -1535,9 +1595,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
   if (!hasStudentAreaAccess) {
     return (
-      <main className="workspace-shell grid min-h-screen grid-cols-[280px_minmax(0,1fr)] bg-ink text-sand">
+      <div className="admin-preview-shell-wrap">
+        {adminPreviewBanner}
+      <main className="workspace-shell grid min-h-screen grid-cols-[280px_minmax(0,1fr)] bg-ink text-sand max-[980px]:grid-cols-1">
         <aside
-          className="workspace-sidebar sticky top-0 grid min-h-screen content-start gap-[22px] self-start border-r border-[color:var(--app-border)] bg-gradient-to-b from-[var(--app-fill)] to-transparent bg-ink-soft px-[18px] py-[22px]"
+          className="workspace-sidebar sticky top-0 grid min-h-0 content-start gap-[22px] self-start border-r border-[color:var(--app-border)] bg-gradient-to-b from-[var(--app-fill)] to-transparent bg-ink-soft px-[18px] py-[22px] min-[981px]:min-h-screen"
           aria-label="Menu do aluno"
         >
           <div className="workspace-sidebar-brand flex min-w-0 items-center gap-3 border-b border-[color:var(--app-border)] pb-[18px]">
@@ -1564,7 +1626,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             </button>
           </nav>
           <button
-            className="workspace-logout mt-3 flex w-full min-h-[44px] items-center justify-start gap-2.5 rounded-lg border border-brand-ember/20 bg-brand-ember/10 px-3 text-left font-extrabold text-[#ffd8d4] transition hover:border-brand-ember/35 hover:bg-brand-ember/15"
+            className="workspace-logout mt-3 flex w-full min-h-[44px] items-center justify-start gap-2.5 rounded-lg border border-brand-ember/20 bg-brand-ember/10 px-3 text-left font-extrabold transition hover:border-brand-ember/35 hover:bg-brand-ember/15"
             onClick={() => {
               uiSounds.disconnect();
               onLogout();
@@ -1669,27 +1731,62 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         {studentSection === "locked" && <section className="locked-content" aria-label="Funcionalidades bloqueadas">
           <LockedOverlay onCheckout={() => goToSection("subscription")} />
           <div className="section-heading locked-heading">
-            <span className="eyebrow">Acesso apos pagamento</span>
-            <h2>Conteúdos bloqueados enquando sua assinatura não for confirmada.</h2>
+            <span className="eyebrow">Prévia do app</span>
+            <h2>Modalidades disponíveis para o seu perfil</h2>
+            <p className="locked-heading-copy">
+              Conteúdo filtrado pelo seu sexo cadastrado. Assine para liberar os treinos.
+            </p>
           </div>
-          <div className="locked-grid">
-            {lockedFeatures.map((feature) => (
-              <article className="locked-card" key={feature.title}>
-                <div className="locked-card-header">
-                  <feature.icon size={22} />
-                  <LockKeyhole size={18} />
-                </div>
-                <h3>{feature.title}</h3>
-                <p>{feature.text}</p>
-              </article>
-            ))}
-          </div>
+          {lockedPreviewModalities.length > 0 ? (
+            <div className="student-modality-list locked-modality-preview">
+              {lockedPreviewModalities.map((item) => (
+                <button
+                  className="student-modality-card is-locked"
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    uiSounds.blocked();
+                    goToSection("subscription");
+                  }}
+                >
+                  <span className={`student-modality-media ${item.imageUrl ? "with-image" : ""}`}>
+                    {item.imageUrl ? (
+                      <MediaImg src={item.imageUrl} width={480} alt="" aria-hidden="true" />
+                    ) : (
+                      <Dumbbell size={26} />
+                    )}
+                    <span className="student-modality-lock-badge" aria-hidden="true">
+                      <LockKeyhole size={16} />
+                    </span>
+                  </span>
+                  <span className="student-modality-copy">
+                    <strong>{item.name}</strong>
+                    <small>{item.description?.trim() || "Bloqueado · finalize a assinatura"}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="locked-grid">
+              {lockedFeatures.map((feature) => (
+                <article className="locked-card" key={feature.title}>
+                  <div className="locked-card-header">
+                    <feature.icon size={22} />
+                    <LockKeyhole size={18} />
+                  </div>
+                  <h3>{feature.title}</h3>
+                  <p>{feature.text}</p>
+                </article>
+              ))}
+            </div>
+          )}
         </section>}
         {studentSection === "settings" && (
           <StudentSettingsPanel onBack={() => goToSection("subscription")} />
         )}
         </section>
       </main>
+      </div>
     );
   }
 
@@ -1703,6 +1800,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
   return (
     <main className="student-app-shell">
+      {adminPreviewBanner}
       <section className="student-app-header">
         <button
           type="button"
@@ -1953,7 +2051,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                       >
                         <span className={`student-modality-media ${item.imageUrl ? "with-image" : ""}`}>
                           {item.imageUrl ? (
-                            <img src={mediaUrl(item.imageUrl)} alt="" aria-hidden="true" />
+                            <MediaImg src={item.imageUrl} width={480} alt="" aria-hidden="true" />
                           ) : (
                             <Dumbbell size={26} />
                           )}
@@ -2012,9 +2110,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                         <article className="student-program-card" key={programWorkout.programId}>
                           <div className={`student-training-card${isToday ? " active" : ""}`}>
                             {programWorkout.modalityImageUrl ? (
-                              <img
+                              <MediaImg
                                 className="student-card-image"
-                                src={mediaUrl(programWorkout.modalityImageUrl)}
+                                src={programWorkout.modalityImageUrl}
+                                width={640}
                                 alt=""
                               />
                             ) : (
@@ -2156,7 +2255,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                       <article className="student-program-card" key={`${programWorkout.programId}-${programWorkout.dayNumber}`}>
                         <div className={`student-training-card${isCurrent ? " active" : ""}`}>
                           {cardImage ? (
-                            <img className="student-card-image" src={mediaUrl(cardImage)} alt={blockLabel} />
+                            <MediaImg className="student-card-image" src={cardImage} width={640} alt={blockLabel} />
                           ) : (
                             <div className="student-card-icon">
                               <Dumbbell size={24} />
@@ -2479,7 +2578,12 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   <article className="student-favorite-card" key={favorite.id}>
                     <span className="student-favorite-media">
                       {favorite.program.modalityImageUrl ? (
-                        <img src={mediaUrl(favorite.program.modalityImageUrl)} alt="" aria-hidden="true" />
+                        <MediaImg
+                          src={favorite.program.modalityImageUrl}
+                          width={360}
+                          alt=""
+                          aria-hidden="true"
+                        />
                       ) : (
                         <Dumbbell size={24} />
                       )}

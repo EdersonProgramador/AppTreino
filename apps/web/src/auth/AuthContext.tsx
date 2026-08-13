@@ -49,6 +49,8 @@ type AuthContextValue = {
   submitRegisterOnboarding: (payload: WorkoutOnboardingSubmitPayload) => Promise<void>;
   submitForgotPassword: (formData: FormData) => Promise<void>;
   submitResetPassword: (formData: FormData) => Promise<void>;
+  enterAdminPreview: () => Promise<void>;
+  exitAdminPreview: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -198,7 +200,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     useAuthStore.getState().clearSession();
+    // Página de vendas / home pública (evita ficar em /login após sair do aluno).
     navigate(paths.home, { replace: true });
+  }, [navigate]);
+
+  const enterAdminPreview = useCallback(async () => {
+    const store = useAuthStore.getState();
+    if (!store.token) {
+      throw new Error("Sessão administrativa inválida.");
+    }
+
+    const response = await apiPost<{ user: AuthUser; token: string }>(
+      "/auth/admin-preview/enter",
+      {},
+      store.token
+    );
+    store.switchSession(response, paths.student);
+    preloadStudentPanel();
+    navigate(paths.student, { replace: true });
+  }, [navigate]);
+
+  const exitAdminPreview = useCallback(async () => {
+    const store = useAuthStore.getState();
+    if (!store.token) {
+      throw new Error("Sessão de preview inválida.");
+    }
+
+    const response = await apiPost<{ user: AuthUser; token: string }>(
+      "/auth/admin-preview/exit",
+      {},
+      store.token
+    );
+    store.switchSession(response, paths.admin);
+    preloadAdminPanel();
+    navigate(paths.admin, { replace: true });
   }, [navigate]);
 
   const setSelectedPlanCode = useCallback((plan: PlanCode | null) => {
@@ -433,7 +468,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       submitAuth,
       submitRegisterOnboarding,
       submitForgotPassword,
-      submitResetPassword
+      submitResetPassword,
+      enterAdminPreview,
+      exitAdminPreview
     }),
     [
       phase,
@@ -455,7 +492,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       submitAuth,
       submitRegisterOnboarding,
       submitForgotPassword,
-      submitResetPassword
+      submitResetPassword,
+      enterAdminPreview,
+      exitAdminPreview
     ]
   );
 

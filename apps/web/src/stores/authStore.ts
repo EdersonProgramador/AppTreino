@@ -44,6 +44,8 @@ type AuthStore = {
   failSignIn: (message: string) => void;
 
   establishSession: (response: { user: AuthUser; token: string }) => string;
+  /** Troca de token sem limpar a sessão (preview enter/exit). */
+  switchSession: (response: { user: AuthUser; token: string }, destination: string) => void;
   clearSession: () => void;
 };
 
@@ -100,6 +102,18 @@ export const useAuthStore = create<AuthStore>((set) => ({
       selectedPlanCode: null
     });
     return destination;
+  },
+
+  switchSession: (response, destination) => {
+    const user = normalizeAuthUser(response.user);
+    window.localStorage.setItem(TOKEN_KEY, response.token);
+    set({
+      token: response.token,
+      user,
+      phase: "redirecting",
+      pendingDestination: destination,
+      loginError: null
+    });
   },
 
   clearSession: () => {

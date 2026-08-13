@@ -18,6 +18,7 @@ import {
   Wrench,
   X
 } from "lucide-react";
+import { mediaUrl as appMediaUrl } from "../../lib/urls";
 import { uiSounds } from "../../lib/ui-sounds";
 
 export type WorkoutStructureType =
@@ -185,19 +186,25 @@ function intensityLabel(exercise: WorkoutPlayerExercise) {
 }
 
 function resolveMediaUrl(path?: string | null) {
-  if (!path) return "";
-  if (/^https?:\/\//i.test(path)) return path;
-  return `${import.meta.env.BASE_URL}${path.replace(/^\/+/, "")}`;
+  return appMediaUrl(path);
+}
+
+function isImageMedia(url: string) {
+  if (/^data:image\//i.test(url)) return true;
+  const pathOnly = url.split(/[?#]/)[0] ?? url;
+  return /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(pathOnly);
 }
 
 function isVideoMedia(url: string) {
   if (/^data:video\//i.test(url)) return true;
   if (isYouTubeUrl(url)) return true;
-  return /\.(mp4|webm|ogg|ogv|mov|m4v|mkv|mpg|mpeg|m3u8|ts)(\?|#|$)/i.test(url);
+  if (isImageMedia(url)) return false;
+  const pathOnly = url.split(/[?#]/)[0] ?? url;
+  return /\.(mp4|webm|ogg|ogv|mov|m4v|mkv|mpg|mpeg|m3u8|ts)$/i.test(pathOnly);
 }
 
 function isYouTubeUrl(url: string) {
-  return /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(url);
+  return /^https?:\/\/(www\.)?(youtube\.com|youtu\.be|m\.youtube\.com)\//i.test(url);
 }
 
 function getYouTubeVideoId(url: string) {
@@ -266,7 +273,7 @@ function MediaBlock({ exercise, expanded = false, resting = false, lesson = fals
           <img src={youtubeThumbUrl} alt={mediaAlt(exercise)} />
         )
       ) : mediaUrl ? (
-        isVideoMedia(mediaUrl) ? (
+        isVideoMedia(mediaUrl) && !isImageMedia(mediaUrl) ? (
           <video
             src={mediaUrl}
             controls={expanded}
@@ -914,7 +921,7 @@ export function WorkoutPlayer({
                       {mediaUrl ? (
                         isYouTubeUrl(mediaUrl) ? (
                           <img src={getYouTubeThumbnailUrl(mediaUrl)} alt={mediaAlt(resolvedExercise)} onClick={() => openExerciseFromSequence(index)} />
-                        ) : isVideoMedia(mediaUrl) ? (
+                        ) : isVideoMedia(mediaUrl) && !isImageMedia(mediaUrl) ? (
                           <video src={mediaUrl} muted playsInline onClick={() => openExerciseFromSequence(index)} />
                         ) : (
                           <img src={mediaUrl} alt={mediaAlt(resolvedExercise)} onClick={() => openExerciseFromSequence(index)} />

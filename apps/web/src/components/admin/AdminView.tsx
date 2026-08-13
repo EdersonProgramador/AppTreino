@@ -130,12 +130,50 @@ import type { WorkoutIntensityType, WorkoutPrescriptionType } from "../student/W
 import { ThemeModeSwitch } from "../shared/ThemeModeSwitch";
 import { uiSounds } from "../../lib/ui-sounds";
 import { useUiPrefsStore } from "../../stores/uiPrefsStore";
+import { useAuth } from "../../auth/AuthContext";
+import { useAuthStore } from "../../stores/authStore";
 import { publish as publishSystemEvent } from "../../lib/event-bus";
 import { PhysicalAssessmentFormView } from "../shared/PhysicalAssessmentFormView";
 import { StateCityFields } from "./StateCityFields";
 import { AdminDashboardOverview } from "./AdminDashboardOverview";
 import { AdminPaginationBar } from "./AdminPaginationBar";
 import { AdminReports } from "./AdminReports";
+
+type AdminSelfProfile = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  document: string | null;
+  birthDate: string | null;
+  gender: "MALE" | "FEMALE" | null;
+  city: string | null;
+  state: string | null;
+  role: string;
+  status: string;
+  provider: string;
+  avatarUrl: string | null;
+  createdAt?: string;
+};
+
+type AdminSection =
+  | "overview"
+  | "training"
+  | "users"
+  | "finance"
+  | "programs"
+  | "settings"
+  | "profile"
+  | "products"
+  | "purchases"
+  | "qr"
+  | "cards"
+  | "contact"
+  | "favorites"
+  | "ratings"
+  | "assessments"
+  | "events"
+  | "trash";
 
 const AdminSoundToggle = () => {
   const soundEnabled = useUiPrefsStore((state) => state.soundEnabled);
@@ -256,48 +294,17 @@ function draftFromCmsExercise(entry: CmsWorkoutBlockRow["exercises"][number]): C
 }
 
 export function AdminView({ token, onLogout }: { token: string | null; onLogout: () => void }) {
-  const [adminSection, setAdminSection] = useState<
-    | "overview"
-    | "training"
-    | "users"
-    | "finance"
-    | "programs"
-    | "settings"
-    | "products"
-    | "purchases"
-    | "qr"
-    | "cards"
-    | "contact"
-    | "favorites"
-    | "ratings"
-    | "assessments"
-    | "events"
-    | "trash"
-  >("overview");
+  const { enterAdminPreview } = useAuth();
+  const authUser = useAuthStore((state) => state.user);
+  const [adminSection, setAdminSection] = useState<AdminSection>("overview");
+  const [adminPreviewEntering, setAdminPreviewEntering] = useState(false);
 
-  const goAdminSection = (
-    section:
-      | "overview"
-      | "training"
-      | "users"
-      | "finance"
-      | "programs"
-      | "settings"
-      | "products"
-      | "purchases"
-      | "qr"
-      | "cards"
-      | "contact"
-      | "favorites"
-      | "ratings"
-      | "assessments"
-      | "events"
-      | "trash"
-  ) => {
+  const goAdminSection = (section: AdminSection) => {
     if (section === "trash") uiSounds.trash();
     else uiSounds.pageChange();
     // Favoritos e avaliações compartilham a mesma tela.
     setAdminSection(section === "favorites" ? "ratings" : section);
+    setAdminNavOpen(false);
   };
 
   const [summary, setSummary] = useState({
@@ -611,7 +618,135 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   const [success, setSuccess] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [adminNavOpen, setAdminNavOpen] = useState(false);
   const [cmsStep, setCmsStep] = useState<"locations" | "modalities" | "lessons" | "blocks" | "publish">("locations");
+  const [adminProfile, setAdminProfile] = useState<AdminSelfProfile | null>(null);
+  const [adminProfileEditing, setAdminProfileEditing] = useState(false);
+  const [adminAvatarPreview, setAdminAvatarPreview] = useState<string | null>(null);
+  const [adminProfileFormKey, setAdminProfileFormKey] = useState(0);
+  const [adminProfileSaving, setAdminProfileSaving] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 980px)");
+    const syncCompactLayout = () => {
+      if (media.matches) {
+        setSidebarCollapsed(false);
+      } else {
+        setAdminNavOpen(false);
+      }
+    };
+    syncCompactLayout();
+    media.addEventListener("change", syncCompactLayout);
+    return () => media.removeEventListener("change", syncCompactLayout);
+  }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    void (async () => {
+      try {
+        const response = await apiGet<{ profile: AdminSelfProfile }>("/admin/me", token);
+        setAdminProfile(response.profile);
+      } catch {
+        /* keep sidebar fallback from authUser */
+      }
+    })();
+  }, [token]);
+
+  function handleAdminAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setAdminAvatarPreview(null);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setAdminAvatarPreview(String(reader.result ?? ""));
+    reader.readAsDataURL(file);
+  }
+
+  function handleCancelAdminProfileEdit() {
+    setAdminProfileEditing(false);
+    setAdminAvatarPreview(null);
+    setAdminProfileFormKey((value) => value + 1);
+  }
+
+  async function saveAdminProfile(form: HTMLFormElement) {
+    if (!token) return;
+    const data = new FormData(form);
+    const name = String(data.get("name") ?? "").trim();
+    const email = String(data.get("email") ?? "").trim();
+    const phone = String(data.get("phone") ?? "").trim();
+    const document = String(data.get("document") ?? "").trim();
+    const birthDate = String(data.get("birthDate") ?? "").trim();
+    const gender = String(data.get("gender") ?? "").trim();
+    const city = String(data.get("city") ?? "").trim();
+    const state = String(data.get("state") ?? "").trim();
+    const password = String(data.get("password") ?? "").trim();
+    const avatarFile = data.get("avatar");
+
+    if (!name) {
+      setFeedback("Informe o nome do administrador.");
+      return;
+    }
+    if (!email) {
+      setFeedback("Informe o e-mail do administrador.");
+      return;
+    }
+
+    setAdminProfileSaving(true);
+    setFeedback(null);
+    try {
+      let avatarUrl: string | undefined;
+      if (avatarFile instanceof File && avatarFile.size > 0) {
+        const uploadData = new FormData();
+        uploadData.append("file", avatarFile);
+        const uploaded = await apiUpload<UploadResponse>("/admin/uploads?group=images", uploadData, token);
+        uiSounds.screenshot();
+        avatarUrl = uploaded.file.url;
+      }
+
+      const response = await apiPut<{ profile: AdminSelfProfile }>(
+        "/admin/me",
+        {
+          name,
+          email,
+          phone: phone || "",
+          document: document || "",
+          birthDate: birthDate || "",
+          gender: gender || "",
+          city: city || "",
+          state: state || "",
+          password: password || undefined,
+          avatarUrl
+        },
+        token
+      );
+      setAdminProfile(response.profile);
+      useAuthStore.setState((state) => ({
+        user: state.user
+          ? {
+              ...state.user,
+              name: response.profile.name,
+              email: response.profile.email,
+              phone: response.profile.phone
+            }
+          : state.user
+      }));
+      setAdminProfileEditing(false);
+      setAdminAvatarPreview(null);
+      setAdminProfileFormKey((value) => value + 1);
+      setSuccess("Perfil do administrador atualizado.");
+      uiSounds.success();
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o perfil."));
+    } finally {
+      setAdminProfileSaving(false);
+    }
+  }
+
+  function handleUpdateAdminProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void saveAdminProfile(event.currentTarget);
+  }
 
   function getApiErrorMessage(error: unknown, fallback: string) {
     return error instanceof ApiError ? error.message : fallback;
@@ -1005,11 +1140,15 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
 
   function cmsMediaKind(url: string): "youtube" | "image" | "video" | "audio" | "pdf" | "file" {
     const lower = url.toLowerCase();
-    if (/youtu\.?be/i.test(lower)) return "youtube";
-    if (lower.startsWith("data:image") || /\.(png|jpe?g|gif|webp|svg|bmp|avif)(\?|#|$)/i.test(lower)) return "image";
-    if (lower.startsWith("data:video") || /\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/i.test(lower)) return "video";
-    if (lower.startsWith("data:audio") || /\.(mp3|wav|oga|m4a|aac)(\?|#|$)/i.test(lower)) return "audio";
-    if (/\.pdf(\?|#|$)/i.test(lower)) return "pdf";
+    // Ignora querystring ao detectar extensão (.gif?resize=... continua imagem).
+    const pathOnly = lower.split(/[?#]/)[0] ?? lower;
+    if (/youtu\.?be/.test(lower)) return "youtube";
+    if (lower.startsWith("data:image") || /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/.test(pathOnly)) return "image";
+    if (lower.startsWith("data:video") || /\.(mp4|webm|ogg|ogv|mov|m4v)$/.test(pathOnly)) return "video";
+    if (lower.startsWith("data:audio") || /\.(mp3|wav|oga|m4a|aac)$/.test(pathOnly)) return "audio";
+    if (/\.pdf$/.test(pathOnly)) return "pdf";
+    // URL http(s) sem extensão clara: tenta como imagem (GIFs/CDNs comuns).
+    if (/^https?:\/\//.test(lower)) return "image";
     return "file";
   }
 
@@ -1019,7 +1158,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   }
 
   function cmsExerciseThumbSrc(videoUrl?: string | null) {
-    const url = String(videoUrl ?? "");
+    const url = String(videoUrl ?? "").trim();
     if (!url) return "";
 
     const kind = cmsMediaKind(url);
@@ -1027,10 +1166,8 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       const id = cmsYouTubeVideoId(url);
       return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : "";
     }
-    if (kind === "image" || kind === "video") {
-      return url.startsWith("data:") ? url : mediaUrl(url);
-    }
-    return "";
+    // Mantém qualquer URL cadastrada visível (externa, upload, assets).
+    return url.startsWith("data:") ? url : mediaUrl(url);
   }
 
   function cmsPreviewMedia(src: string, label: string) {
@@ -2684,27 +2821,46 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
 
   return (
     <main
-      className={
+      className={[
+        "admin-workspace-shell grid min-h-screen bg-hero-grid text-sand max-[980px]:grid-cols-1",
         sidebarCollapsed
-          ? "admin-workspace-shell sidebar-collapsed grid min-h-screen grid-cols-[78px_minmax(0,1fr)] bg-hero-grid text-sand max-[980px]:grid-cols-1"
-          : "admin-workspace-shell grid min-h-screen grid-cols-[280px_minmax(0,1fr)] bg-hero-grid text-sand max-[980px]:grid-cols-1"
-      }
+          ? "sidebar-collapsed grid-cols-[78px_minmax(0,1fr)]"
+          : "grid-cols-[280px_minmax(0,1fr)]",
+        adminNavOpen ? "admin-nav-open" : ""
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       <aside
-        className="workspace-sidebar sticky top-0 grid max-h-screen min-h-screen grid-rows-[auto_auto_1fr_auto_auto] content-stretch gap-[22px] self-start overflow-y-auto border-r border-[color:var(--app-border)] bg-gradient-to-br from-ink-panel/90 to-ink px-[18px] py-[22px] shadow-[inset_-1px_0_rgba(240,180,90,0.08)]"
+        className="workspace-sidebar sticky top-0 grid max-h-screen min-h-0 content-stretch gap-[22px] self-start overflow-y-auto border-r border-[color:var(--app-border)] bg-gradient-to-br from-ink-panel/90 to-ink px-[18px] py-[22px] shadow-[inset_-1px_0_rgba(240,180,90,0.08)] min-[981px]:min-h-screen min-[981px]:grid-rows-[auto_1fr_auto]"
         aria-label="Menu administrativo"
       >
         <div className="workspace-sidebar-brand flex min-w-0 items-center gap-3 border-b-0 pb-2">
-          <img
-            className="h-[46px] w-[46px] shrink-0"
-            src={assetUrl("assets/app-treino-mark.svg")}
-            alt=""
-            aria-hidden="true"
-          />
-          <div className="grid min-w-0 gap-0.5">
-            <strong className="text-lg uppercase text-sand">App Treino</strong>
-            <span className="truncate text-[11px] font-extrabold uppercase tracking-wide text-sand-muted">Admin</span>
-          </div>
+          <button
+            type="button"
+            className="admin-brand-profile flex min-w-0 flex-1 items-center gap-3 border-0 bg-transparent p-0 text-left text-sand transition hover:text-brand-gold"
+            onClick={() => goAdminSection("profile")}
+            aria-label="Abrir perfil do administrador"
+            title="Meu perfil"
+          >
+            <span className="admin-brand-avatar grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-[color:var(--app-border-strong)] bg-gradient-to-br from-brand-gold/20 to-[var(--app-fill)]">
+              {adminProfile?.avatarUrl ? (
+                <img src={mediaUrl(adminProfile.avatarUrl)} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <UserRound size={18} />
+              )}
+            </span>
+            <div className="admin-brand-copy grid min-w-0 flex-1 gap-0.5">
+              <strong className="truncate text-[15px] font-extrabold leading-tight text-sand normal-case">
+                {adminProfile?.name ?? authUser?.name ?? "Admin"}
+              </strong>
+              <span className="truncate text-[11px] font-extrabold uppercase tracking-wide text-sand-muted">
+                {adminProfile?.role === "ADMIN" || authUser?.role === "ADMIN"
+                  ? "Administrador"
+                  : "Operador"}
+              </span>
+            </div>
+          </button>
           <button
             type="button"
             className="sidebar-toggle ml-auto grid h-8 w-8 shrink-0 place-items-center rounded-lg border-0 bg-transparent text-sand-muted transition hover:bg-brand-gold/10 hover:text-brand-gold max-[980px]:hidden"
@@ -2714,8 +2870,20 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           >
             {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           </button>
+          <div className="admin-mobile-toolbar ml-auto shrink-0 items-center gap-[15px]">
+            {adminSection !== "settings" && <ThemeModeSwitch compact />}
+            <button
+              type="button"
+              className="admin-mobile-menu-toggle grid h-10 w-10 place-items-center rounded-lg border border-[color:var(--app-border)] bg-[color:var(--app-fill)] text-sand transition hover:border-brand-gold/40 hover:text-brand-gold"
+              aria-label={adminNavOpen ? "Fechar menu" : "Abrir menu"}
+              aria-expanded={adminNavOpen}
+              onClick={() => setAdminNavOpen((value) => !value)}
+            >
+              {adminNavOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
+          </div>
         </div>
-        <nav className="workspace-nav grid gap-2">
+        <nav className="workspace-nav grid gap-2" id="admin-workspace-nav">
           <span className="admin-nav-group-label">Principal</span>
           <button className={adminSection === "overview" ? "active" : ""} onClick={() => goAdminSection("overview")}>
             <Home size={18} />
@@ -2782,6 +2950,10 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           </button>
 
           <span className="admin-nav-group-label">Sistema</span>
+          <button className={adminSection === "profile" ? "active" : ""} onClick={() => goAdminSection("profile")}>
+            <UserRound size={18} />
+            <span className="sidebar-label">Meu perfil</span>
+          </button>
           <button className={adminSection === "trash" ? "active" : ""} onClick={() => goAdminSection("trash")}>
             <Trash2 size={18} />
             <span className="sidebar-label">Lixeira</span>
@@ -2793,7 +2965,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           </button>
         </nav>
         <button
-          className="workspace-logout mt-3 flex w-full min-h-[44px] items-center justify-start gap-2.5 rounded-lg border border-brand-ember/35 bg-brand-ember/10 px-3 text-left text-[13px] font-extrabold text-[#ffb4b4] transition hover:border-brand-ember/55 hover:bg-brand-ember/15"
+            className="workspace-logout mt-3 flex w-full min-h-[44px] items-center justify-start gap-2.5 rounded-lg border border-brand-ember/35 bg-brand-ember/10 px-3 text-left text-[13px] font-extrabold transition hover:border-brand-ember/55 hover:bg-brand-ember/15"
           onClick={() => {
             uiSounds.disconnect();
             onLogout();
@@ -2802,19 +2974,10 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           <LogOut size={18} />
           <span className="sidebar-label">Sair</span>
         </button>
-        <div className="workspace-sidebar-user flex min-w-0 items-center gap-2.5 border-t border-[color:var(--app-border)] pt-[18px] text-sand">
-          <span className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-full border border-[color:var(--app-border-strong)] bg-gradient-to-br from-brand-gold/20 to-[var(--app-fill)]">
-            <UserRound size={18} />
-          </span>
-          <div className="sidebar-user-info grid min-w-0 gap-0.5">
-            <strong className="truncate text-[13px] font-extrabold">Admin</strong>
-            <small className="text-[11px] font-extrabold text-sand-faint">Administrador</small>
-          </div>
-        </div>
       </aside>
       <section className="workspace-content admin-workspace-content min-w-0 p-[clamp(28px,4vw,48px)]">
       <section
-        className="dashboard-heading mb-[22px] grid grid-cols-[minmax(0,1fr)_auto] items-start gap-[18px]"
+        className={`dashboard-heading mb-[22px] grid grid-cols-[minmax(0,1fr)_auto] items-start gap-[18px]${adminSection === "profile" ? " hidden" : ""}`}
         id="admin-overview"
       >
         <div className="grid gap-3">
@@ -2824,7 +2987,9 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           </h1>
         </div>
         <div className="dashboard-actions flex flex-wrap justify-end gap-2.5">
-          <ThemeModeSwitch compact />
+          {adminSection !== "settings" && (
+            <ThemeModeSwitch compact className="admin-desktop-theme-switch" />
+          )}
           <button className="outline-button compact-button" onClick={() => void loadAdminData()} disabled={loading}>
             {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
             Atualizar
@@ -2832,7 +2997,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           <button
             className="primary-button compact-button admin-publish-shortcut"
             onClick={() => {
-              setAdminSection("training");
+              goAdminSection("training");
               setCmsStep("publish");
             }}
             type="button"
@@ -3884,7 +4049,13 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                     {thumbSrc && thumbKind === "video" ? (
                       <video className={cmsDataRowThumbClass} src={thumbSrc} muted preload="metadata" />
                     ) : thumbSrc ? (
-                      <img className={cmsDataRowThumbClass} src={thumbSrc} alt={cmsExerciseLabel(item)} />
+                      <img
+                        className={cmsDataRowThumbClass}
+                        src={thumbSrc}
+                        alt={cmsExerciseLabel(item)}
+                        loading="lazy"
+                        decoding="async"
+                      />
                     ) : null}
                     <span>
                       <strong>{item.title ?? item.name ?? "Exercício"}</strong>
@@ -6414,6 +6585,277 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           )}
         </article>
       </section>}
+
+      {adminSection === "profile" && (
+        <section className="admin-profile-sheet" id="admin-profile">
+          <div className="dashboard-heading mb-[18px] grid gap-2">
+            <span className="eyebrow w-fit">Conta administrativa</span>
+            <h1 className="font-display m-0 text-[clamp(26px,3vw,36px)] font-semibold uppercase leading-tight tracking-tight text-sand">
+              Meu perfil
+            </h1>
+            <p className="m-0 max-w-xl text-sm text-sand-muted">
+              Gerencie seus dados de acesso e atalhos das funções do administrador do sistema.
+            </p>
+          </div>
+
+          <form
+            key={`admin-profile-form-${adminProfileFormKey}`}
+            id="admin-profile-form"
+            className={`admin-profile-form${adminProfileEditing ? "" : " admin-profile-locked"}`}
+            onSubmit={handleUpdateAdminProfile}
+          >
+            <div className="admin-profile-identity">
+              <label className="admin-profile-avatar-field">
+                <span className="admin-profile-avatar-preview">
+                  {adminAvatarPreview ?? adminProfile?.avatarUrl ? (
+                    <img
+                      src={adminAvatarPreview ?? mediaUrl(adminProfile?.avatarUrl ?? "")}
+                      alt=""
+                    />
+                  ) : (
+                    <UserRound size={32} className="admin-profile-avatar-placeholder" />
+                  )}
+                </span>
+                {adminProfileEditing && (
+                  <>
+                    <input
+                      name="avatar"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      onChange={handleAdminAvatarChange}
+                    />
+                    <small>JPG, PNG, WEBP ou GIF</small>
+                  </>
+                )}
+              </label>
+              <div className="admin-profile-identity-copy">
+                <strong>{adminProfile?.name ?? authUser?.name ?? "Administrador"}</strong>
+                <span>{adminProfile?.email ?? authUser?.email ?? "—"}</span>
+                <em>
+                  {adminProfile?.gender === "MALE"
+                    ? "Masculino"
+                    : adminProfile?.gender === "FEMALE"
+                      ? "Feminino"
+                      : "Sexo não informado"}
+                  {" · "}
+                  {adminProfile?.role === "ADMIN" || authUser?.role === "ADMIN"
+                    ? "Administrador"
+                    : "Operador"}
+                </em>
+              </div>
+            </div>
+
+            <fieldset className="admin-profile-group">
+              <legend>Identificação</legend>
+              <label>
+                Nome completo
+                <input
+                  name="name"
+                  defaultValue={adminProfile?.name ?? authUser?.name ?? ""}
+                  minLength={2}
+                  required
+                  disabled={!adminProfileEditing}
+                  placeholder="Nome do administrador"
+                />
+              </label>
+              <label>
+                E-mail
+                <input
+                  name="email"
+                  type="email"
+                  defaultValue={adminProfile?.email ?? authUser?.email ?? ""}
+                  required
+                  disabled={!adminProfileEditing}
+                  placeholder="admin@apptreino.com"
+                />
+              </label>
+              <label>
+                CPF
+                <input
+                  name="document"
+                  defaultValue={adminProfile?.document ?? ""}
+                  disabled={!adminProfileEditing}
+                  placeholder="000.000.000-00"
+                />
+              </label>
+              <label>
+                Data de nascimento
+                <input
+                  name="birthDate"
+                  type="date"
+                  defaultValue={adminProfile?.birthDate ?? ""}
+                  disabled={!adminProfileEditing}
+                />
+              </label>
+              <label className="admin-profile-wide">
+                Sexo
+                <select
+                  name="gender"
+                  defaultValue={adminProfile?.gender ?? ""}
+                  disabled={!adminProfileEditing}
+                >
+                  <option value="">Não informado</option>
+                  <option value="MALE">Masculino</option>
+                  <option value="FEMALE">Feminino</option>
+                </select>
+              </label>
+            </fieldset>
+
+            <fieldset className="admin-profile-group">
+              <legend>Contato e localização</legend>
+              <label>
+                Telefone
+                <input
+                  name="phone"
+                  type="tel"
+                  defaultValue={adminProfile?.phone ?? authUser?.phone ?? ""}
+                  disabled={!adminProfileEditing}
+                  placeholder="+55 11 99999-9999"
+                />
+              </label>
+              <StateCityFields
+                key={`admin-profile-location-${adminProfileFormKey}`}
+                stateDefault={adminProfile?.state}
+                cityDefault={adminProfile?.city}
+                disabled={!adminProfileEditing}
+                withLabels
+              />
+            </fieldset>
+
+            <fieldset className="admin-profile-group">
+              <legend>Segurança</legend>
+              <label className="admin-profile-wide">
+                Nova senha
+                <input
+                  name="password"
+                  type="password"
+                  minLength={6}
+                  disabled={!adminProfileEditing}
+                  placeholder={adminProfileEditing ? "Deixe em branco para manter" : "••••••••"}
+                  autoComplete="new-password"
+                />
+                <small>Mínimo 6 caracteres · só altera se preencher</small>
+              </label>
+            </fieldset>
+
+            <article className="admin-profile-note">
+              <ShieldCheck size={16} />
+              <span>
+                Este perfil controla o acesso ao painel. Alterações de e-mail e senha afetam o login imediato.
+              </span>
+            </article>
+          </form>
+
+          <div className="admin-profile-actions">
+            {adminProfileEditing ? (
+              <>
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={adminProfileSaving}
+                  onClick={() => {
+                    const form = document.getElementById("admin-profile-form");
+                    if (form instanceof HTMLFormElement) void saveAdminProfile(form);
+                  }}
+                >
+                  {adminProfileSaving ? <Loader2 className="spin" size={18} /> : <Save size={18} />}
+                  Salvar alterações
+                </button>
+                <button className="outline-button" type="button" onClick={handleCancelAdminProfileEdit} disabled={adminProfileSaving}>
+                  Cancelar
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="primary-button" type="button" onClick={() => setAdminProfileEditing(true)}>
+                  <Pencil size={18} />
+                  Editar perfil
+                </button>
+                <button
+                  className="outline-button"
+                  type="button"
+                  disabled={adminPreviewEntering}
+                  onClick={() => {
+                    void (async () => {
+                      setAdminPreviewEntering(true);
+                      setFeedback(null);
+                      try {
+                        await enterAdminPreview();
+                      } catch (error) {
+                        setFeedback(getApiErrorMessage(error, "Não foi possível abrir o modo preview do aluno."));
+                        setAdminPreviewEntering(false);
+                      }
+                    })();
+                  }}
+                >
+                  {adminPreviewEntering ? <Loader2 className="spin" size={18} /> : <Eye size={18} />}
+                  Ver como aluno
+                </button>
+              </>
+            )}
+          </div>
+
+          <div className="admin-profile-functions">
+            <div className="admin-profile-functions-heading">
+              <h2>Funções do administrador</h2>
+              <p>Atalhos para as principais operações do sistema.</p>
+            </div>
+            <div className="admin-profile-function-grid">
+              <button
+                type="button"
+                className="admin-profile-function-card"
+                disabled={adminPreviewEntering}
+                onClick={() => {
+                  void (async () => {
+                    setAdminPreviewEntering(true);
+                    setFeedback(null);
+                    try {
+                      await enterAdminPreview();
+                    } catch (error) {
+                      setFeedback(getApiErrorMessage(error, "Não foi possível abrir o modo preview do aluno."));
+                      setAdminPreviewEntering(false);
+                    }
+                  })();
+                }}
+              >
+                <Eye size={20} />
+                <strong>Ver como aluno</strong>
+                <span>Abre o app do aluno com a sua conta (modo preview seguro)</span>
+              </button>
+              <button type="button" className="admin-profile-function-card" onClick={() => goAdminSection("training")}>
+                <Dumbbell size={20} />
+                <strong>CMS de treinos</strong>
+                <span>Unidades, modalidades, blocos e publicação</span>
+              </button>
+              <button type="button" className="admin-profile-function-card" onClick={() => goAdminSection("users")}>
+                <UsersRound size={20} />
+                <strong>Dados do usuário</strong>
+                <span>Cadastro, perfil e vínculo de alunos</span>
+              </button>
+              <button type="button" className="admin-profile-function-card" onClick={() => goAdminSection("finance")}>
+                <CircleDollarSign size={20} />
+                <strong>Financeiro</strong>
+                <span>Planos, pagamentos e assinaturas</span>
+              </button>
+              <button type="button" className="admin-profile-function-card" onClick={() => goAdminSection("settings")}>
+                <Settings size={20} />
+                <strong>Configurações</strong>
+                <span>Aparência, sons e módulos do app</span>
+              </button>
+              <button type="button" className="admin-profile-function-card" onClick={() => goAdminSection("contact")}>
+                <MessageCircle size={20} />
+                <strong>Atendimento</strong>
+                <span>Tickets e mensagens dos alunos</span>
+              </button>
+              <button type="button" className="admin-profile-function-card" onClick={() => goAdminSection("trash")}>
+                <Trash2 size={20} />
+                <strong>Lixeira</strong>
+                <span>Restaurar ou excluir itens removidos</span>
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {adminSection === "settings" && <section className="admin-grid phase-three-grid" id="admin-settings">
         <article className="table-panel">

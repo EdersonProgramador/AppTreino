@@ -4,6 +4,7 @@ import {
   Check,
   ChevronRight,
   Lock,
+  Menu,
   ShieldCheck,
   Star,
   X,
@@ -35,6 +36,7 @@ export function HomeView({
   onLogin: () => void;
 }) {
   const [stickyVisible, setStickyVisible] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const monthly = initialPlans.find((plan) => plan.code === "monthly")!;
   const annual = initialPlans.find((plan) => plan.code === "annual")!;
   const annualAnchorCents = monthly.priceInCents * 12;
@@ -48,6 +50,16 @@ export function HomeView({
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1024px)");
+    const closeOnDesktop = () => {
+      if (media.matches) setMobileNavOpen(false);
+    };
+    closeOnDesktop();
+    media.addEventListener("change", closeOnDesktop);
+    return () => media.removeEventListener("change", closeOnDesktop);
+  }, []);
+
   return (
     <main className="home-landing">
       {/* 01. Top bar — urgência */}
@@ -57,14 +69,14 @@ export function HomeView({
 
       {/* 02. Navbar fixa */}
       <header className="home-header sticky top-0 z-40 border-b backdrop-blur-md">
-        <div className="mx-auto flex min-h-[72px] max-w-6xl items-center justify-between gap-4 px-5 sm:px-8 md:px-12">
-          <a href="#topo" className="inline-flex items-center gap-2 no-underline" aria-label="App Treino">
+        <div className="mx-auto flex min-h-[64px] max-w-6xl items-center justify-between gap-3 px-4 sm:min-h-[72px] sm:gap-4 sm:px-8 md:px-12">
+          <a href="#topo" className="inline-flex min-w-0 items-center gap-2 no-underline" aria-label="App Treino">
             <img
               src={assetUrl("assets/app-treino-logo.svg")}
               alt="App Treino"
-              className="h-auto w-[clamp(140px,14vw,190px)]"
+              className="h-auto w-[clamp(120px,28vw,190px)]"
             />
-            <Zap className="hidden h-4 w-4 text-brand-gold sm:block" aria-hidden="true" />
+            <Zap className="hidden h-4 w-4 shrink-0 text-brand-gold sm:block" aria-hidden="true" />
           </a>
           <nav className="hidden items-center gap-5 lg:flex" aria-label="Navegação principal">
             {landingNav.map((item) => (
@@ -77,8 +89,8 @@ export function HomeView({
               </a>
             ))}
           </nav>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <ThemeModeSwitch compact className="hidden sm:flex" />
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
+            <ThemeModeSwitch compact />
             <button
               type="button"
               className="home-muted hidden border-0 bg-transparent text-sm font-bold transition hover:text-brand-gold sm:inline-flex"
@@ -86,16 +98,55 @@ export function HomeView({
             >
               Entrar
             </button>
-            <button type="button" className="ui-btn-primary !min-h-11 !px-4 !text-sm" onClick={onDownloadApp}>
+            <button
+              type="button"
+              className="ui-btn-primary !min-h-10 !px-3 !text-xs sm:!min-h-11 sm:!px-4 sm:!text-sm"
+              onClick={onDownloadApp}
+            >
               Baixar App
-              <ArrowRight size={16} />
+              <ArrowRight size={16} className="hidden sm:inline" />
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[color:var(--app-border)] bg-[color:var(--app-fill)] text-sand transition hover:border-brand-gold/40 hover:text-brand-gold lg:hidden"
+              aria-label={mobileNavOpen ? "Fechar menu" : "Abrir menu"}
+              aria-expanded={mobileNavOpen}
+              onClick={() => setMobileNavOpen((value) => !value)}
+            >
+              {mobileNavOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
           </div>
         </div>
+        {mobileNavOpen && (
+          <nav
+            className="home-mobile-nav border-t border-[color:var(--app-border)] px-4 py-4 lg:hidden"
+            aria-label="Navegação mobile"
+          >
+            <div className="mx-auto grid max-w-6xl gap-1">
+              {landingNav.map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  className="home-muted rounded-lg px-3 py-3 text-sm font-bold transition hover:bg-[color:var(--app-fill)] hover:text-brand-gold"
+                  onClick={() => setMobileNavOpen(false)}
+                >
+                  {item.label}
+                </a>
+              ))}
+              <button
+                type="button"
+                className="home-muted mt-1 rounded-lg border-0 bg-transparent px-3 py-3 text-left text-sm font-bold transition hover:bg-[color:var(--app-fill)] hover:text-brand-gold sm:hidden"
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  onLogin();
+                }}
+              >
+                Entrar
+              </button>
+            </div>
+          </nav>
+        )}
       </header>
-      <div className="home-header border-b px-4 py-2 sm:hidden">
-        <ThemeModeSwitch compact />
-      </div>
 
       {/* 03. Hero */}
       <section id="topo" className="relative isolate overflow-hidden">
@@ -107,7 +158,7 @@ export function HomeView({
         <div className="home-hero-overlay-x absolute inset-0" aria-hidden="true" />
         <div className="home-hero-overlay-y absolute inset-0" aria-hidden="true" />
 
-        <div className="relative z-10 mx-auto grid min-h-[calc(100vh-118px)] max-w-6xl items-center gap-10 px-5 py-16 sm:px-8 md:grid-cols-[1.15fr_0.85fr] md:px-12 md:py-20">
+        <div className="relative z-10 mx-auto grid min-h-[calc(100vh-110px)] max-w-6xl items-center gap-8 px-4 py-12 sm:gap-10 sm:px-8 sm:py-16 md:grid-cols-[1.15fr_0.85fr] md:px-12 md:py-20">
           <div className="animate-fade-up max-w-2xl">
             <p className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.14em] text-brand-gold">
               <span className="inline-flex text-brand-gold" aria-hidden="true">
@@ -452,7 +503,7 @@ export function HomeView({
 
       {/* 13. Footer */}
       <footer className="border-t border-[color:var(--app-border)] px-5 py-12 sm:px-8 md:px-12">
-        <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-[1.5fr_repeat(3,1fr)]">
+        <div className="mx-auto grid max-w-6xl gap-10 sm:grid-cols-2 lg:grid-cols-[1.5fr_repeat(3,1fr)]">
           <div className="flex gap-3">
             <img src={assetUrl("assets/app-treino-mark.svg")} alt="" aria-hidden="true" className="h-10 w-10" />
             <div>
@@ -522,7 +573,7 @@ export function HomeView({
             <p className="truncate text-sm font-extrabold text-sand">Comece agora com garantia de 7 dias</p>
             <p className="truncate text-xs text-sand-muted">Acesso imediato · cancele quando quiser</p>
           </div>
-          <button type="button" className="ui-btn-primary ml-auto !min-h-11 shrink-0 !px-4 !text-sm" onClick={() => onStart()}>
+          <button type="button" className="ui-btn-primary w-full sm:ml-auto sm:w-auto !min-h-11 shrink-0 !px-4 !text-sm" onClick={() => onStart()}>
             Quero treinar agora
             <ArrowRight size={16} />
           </button>

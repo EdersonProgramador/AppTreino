@@ -12,7 +12,7 @@ export const LockedOverlay = ({ onCheckout }: LockedOverlayProps) => {
   }, []);
 
   return (
-    <article className="mb-[18px] grid max-w-[760px] justify-items-center gap-3 rounded-xl border border-brand-gold/25 bg-ink-panel p-[clamp(24px,5vw,38px)] text-center shadow-soft [background-image:linear-gradient(180deg,rgba(240,180,90,0.12),rgba(255,255,255,0.035))]">
+    <article className="student-locked-hero mb-[18px] grid max-w-[760px] justify-items-center gap-3 rounded-xl border border-brand-gold/25 bg-[color:var(--app-panel)] p-[clamp(24px,5vw,38px)] text-center shadow-soft">
       <div className="grid h-[72px] w-[72px] place-items-center rounded-full border border-brand-gold/35 bg-brand-gold/10 text-brand-gold">
         <LockKeyhole size={34} />
       </div>

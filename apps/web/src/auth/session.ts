@@ -20,9 +20,15 @@ export const paths = {
 export { normalizeRole, canAccessPanel };
 
 export function normalizeAuthUser(user: AuthUser): AuthUser {
+  const role = normalizeRole(user.role);
+  const previewMode = Boolean(user.previewMode && user.canReturnToAdmin && role === "USER");
+
   return {
     ...user,
-    role: normalizeRole(user.role)
+    role,
+    previewMode: previewMode || undefined,
+    adminId: previewMode ? user.adminId ?? user.id : undefined,
+    canReturnToAdmin: previewMode || undefined
   };
 }
 

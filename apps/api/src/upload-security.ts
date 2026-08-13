@@ -10,8 +10,9 @@ export const uploadsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../u
 export type UploadGroup = "lessons" | "materials" | "images" | "audio";
 
 const GROUP_TO_EXTENSIONS: Record<UploadGroup, string[]> = {
-  lessons: ["mp4", "webm", "ogv", "mov"],
-  materials: ["pdf", "doc", "docx", "xls", "xlsx", "csv"],
+  // Exercícios aceitam vídeo e imagem/GIF (UI do CMS).
+  lessons: ["mp4", "webm", "ogv", "mov", "jpg", "jpeg", "png", "webp", "gif"],
+  materials: ["pdf", "doc", "docx", "xls", "xlsx", "csv", "jpg", "jpeg", "png", "webp", "gif"],
   images: ["jpg", "jpeg", "png", "webp", "gif"],
   audio: ["mp3", "wav", "ogg"]
 };

@@ -43,6 +43,10 @@ export interface AuthUser {
   role: UserRole;
   phone?: string | null;
   provider?: string;
+  /** Admin atuando temporariamente como aluno. */
+  previewMode?: boolean;
+  adminId?: string;
+  canReturnToAdmin?: boolean;
 }
 
 export interface WorkoutExercise {

@@ -69,7 +69,14 @@ export function ProtectedRoute({ role }: { role: UserRole }) {
   }
 
   if (!user || !token) {
-    return <Navigate to={paths.login} replace state={{ from: location }} />;
+    // Aluno sem sessão → página de vendas (home). Evita corrida do logout cair em /login.
+    return (
+      <Navigate
+        to={role === "USER" ? paths.home : paths.login}
+        replace
+        state={{ from: location }}
+      />
+    );
   }
 
   // Session exists but still settling onto role home
@@ -93,7 +100,7 @@ export function RoleHomeRedirect() {
   }
 
   if (!user || !token) {
-    return <Navigate to={paths.login} replace />;
+    return <Navigate to={paths.home} replace />;
   }
 
   return <Navigate to={homePathForRole(user.role)} replace />;

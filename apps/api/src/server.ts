@@ -11,10 +11,12 @@ import { fileURLToPath } from "node:url";
 import { ZodError } from "zod";
 import { env } from "./env.js";
 import { prisma } from "./prisma.js";
+import { mediaCacheControl } from "./media-optimize.js";
 import { registerAdminRoutes } from "./modules/admin.routes.js";
 import { registerAsaasRoutes } from "./modules/asaas.routes.js";
 import { registerAuthRoutes } from "./modules/auth.routes.js";
 import { registerCheckoutRoutes } from "./modules/checkout.routes.js";
+import { registerMediaRoutes } from "./modules/media.routes.js";
 import { registerPublicRoutes } from "./modules/public.routes.js";
 import { registerStudentRoutes } from "./modules/student.routes.js";
 import { registerUserRoutes } from "./modules/user.routes.js";
@@ -120,9 +122,14 @@ await app.register(multipart, {
 await app.register(staticFiles, {
   root: uploadsDir,
   prefix: "/uploads/",
-  setHeaders: (response) => {
+  // Filenames já são únicos (timestamp + uuid) → cache longo seguro.
+  setHeaders: (response, filePath) => {
     response.setHeader("X-Content-Type-Options", "nosniff");
     response.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+    response.setHeader("Cache-Control", mediaCacheControl(true));
+    if (/\.(mp4|webm|ogv|mov)$/i.test(filePath)) {
+      response.setHeader("Accept-Ranges", "bytes");
+    }
   }
 });
 
@@ -153,6 +160,7 @@ app.get("/health", async (request, reply) => {
 });
 
 await registerPublicRoutes(app);
+await registerMediaRoutes(app);
 await registerAuthRoutes(app);
 await registerCheckoutRoutes(app);
 await registerAdminRoutes(app);

@@ -32,7 +32,7 @@ export const ThemeModeSwitch = ({ className = "", compact = false }: ThemeModeSw
           <p className="theme-mode-copy m-0 text-sm">Escolha o modo Claro ou Escuro do sistema.</p>
         </div>
       )}
-      <div className={`theme-mode-options ${compact ? "theme-mode-options-compact" : ""}`}>
+      <div className={`theme-mode-options ${compact ? "theme-mode-options-compact" : "theme-mode-options-labeled"}`}>
         <button
           type="button"
           aria-label="Modo claro"
@@ -42,6 +42,7 @@ export const ThemeModeSwitch = ({ className = "", compact = false }: ThemeModeSw
           className={`theme-mode-option theme-mode-option-light ${theme === "light" ? "is-active" : ""}`}
         >
           <FiSun size={compact ? 16 : 18} aria-hidden="true" />
+          {!compact && <span>Claro</span>}
         </button>
         <button
           type="button"
@@ -52,6 +53,7 @@ export const ThemeModeSwitch = ({ className = "", compact = false }: ThemeModeSw
           className={`theme-mode-option theme-mode-option-dark ${theme === "dark" ? "is-active" : ""}`}
         >
           <FiMoon size={compact ? 16 : 18} aria-hidden="true" />
+          {!compact && <span>Escuro</span>}
         </button>
       </div>
     </div>
