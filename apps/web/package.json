@@ -7,7 +7,10 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test src/auth/session.test.ts src/stores/authStore.test.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@app-treino/shared": "*",
@@ -17,22 +20,28 @@
     "@tanstack/react-query": "^5.101.4",
     "@vitejs/plugin-react": "^4.3.1",
     "axios": "^1.19.0",
+    "howler": "^2.2.4",
     "lucide-react": "^0.468.0",
     "motion": "^13.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.85.0",
+    "react-icons": "^5.7.0",
     "react-router-dom": "^7.18.2",
+    "react-sounds": "^1.0.30",
     "vite": "^5.3.5",
     "zod": "^3.25.76",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@playwright/test": "^1.54.2",
+    "@types/howler": "^2.2.13",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.5.4",
     "postcss": "^8.5.25",
     "tailwindcss": "^3.4.19",
+    "tsx": "^4.16.2",
     "typescript": "^5.5.4"
   }
 }

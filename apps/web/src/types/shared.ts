@@ -1,9 +1,11 @@
+import type { UserRole } from "@app-treino/shared";
+
 export interface AdminUser {
   id: string;
   name: string;
   email: string;
   phone?: string | null;
-  role: "ADMIN" | "USER";
+  role: UserRole;
   status: "ACTIVE" | "INACTIVE";
   enrollmentStatus: "PENDING" | "ACTIVE" | "CANCELED";
   createdAt?: string | null;

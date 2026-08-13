@@ -57,6 +57,8 @@ export interface StudentProfile {
   state?: string | null;
   avatarUrl?: string | null;
   locationId?: string | null;
+  /** Liberação administrativa (sem membership Asaas) ou espelho pós-pagamento. */
+  enrollmentStatus?: "PENDING" | "ACTIVE" | "CANCELED";
 }
 
 export interface NotificationRow {

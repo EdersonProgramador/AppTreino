@@ -2,19 +2,20 @@ import type { Config } from "tailwindcss";
 
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
         ink: {
-          DEFAULT: "#07080a",
-          soft: "#10131a",
-          panel: "#151a22",
-          elev: "#1c2330"
+          DEFAULT: "rgb(var(--ink-rgb) / <alpha-value>)",
+          soft: "rgb(var(--ink-soft-rgb) / <alpha-value>)",
+          panel: "rgb(var(--ink-panel-rgb) / <alpha-value>)",
+          elev: "rgb(var(--ink-elev-rgb) / <alpha-value>)"
         },
         sand: {
-          DEFAULT: "#f4ebe0",
-          muted: "#c9bbaa",
-          faint: "#8f8376"
+          DEFAULT: "rgb(var(--sand-rgb) / <alpha-value>)",
+          muted: "rgb(var(--sand-muted-rgb) / <alpha-value>)",
+          faint: "rgb(var(--sand-faint-rgb) / <alpha-value>)"
         },
         brand: {
           gold: "#f0b45a",
@@ -31,14 +32,12 @@ export default {
       },
       boxShadow: {
         glow: "0 24px 80px rgba(224, 106, 60, 0.22)",
-        panel: "0 28px 80px rgba(0, 0, 0, 0.42)",
-        soft: "0 12px 40px rgba(0, 0, 0, 0.28)"
+        panel: "var(--shadow-panel)",
+        soft: "var(--shadow-soft)"
       },
       backgroundImage: {
-        "hero-grid":
-          "radial-gradient(circle at 20% 20%, rgba(240,180,90,0.18), transparent 38%), radial-gradient(circle at 80% 0%, rgba(224,106,60,0.16), transparent 42%), linear-gradient(160deg, #07080a 0%, #10131a 48%, #0b0f14 100%)",
-        "panel-shine":
-          "linear-gradient(180deg, rgba(255,255,255,0.04), transparent 40%), linear-gradient(135deg, rgba(240,180,90,0.08), transparent 55%)"
+        "hero-grid": "var(--hero-grid)",
+        "panel-shine": "var(--panel-shine)"
       },
       keyframes: {
         "fade-up": {
@@ -53,6 +52,9 @@ export default {
       animation: {
         "fade-up": "fade-up 0.45s ease-out both",
         "pulse-soft": "pulse-soft 2.4s ease-in-out infinite"
+      },
+      transitionTimingFunction: {
+        theme: "cubic-bezier(0.22, 1, 0.36, 1)"
       }
     }
   },

@@ -43,8 +43,12 @@ function authHeaders(token?: string | null): Record<string, string> {
     : {};
 }
 
-async function parseResponse<T>(response: Response): Promise<T> {
-  if (response.status === 401) {
+/**
+ * Only session-authenticated 401s should wipe the SPA session.
+ * Login/register/forgot failures also return 401 and must NOT bounce to Home.
+ */
+async function parseResponse<T>(response: Response, hadSessionToken: boolean): Promise<T> {
+  if (response.status === 401 && hadSessionToken) {
     unauthorizedHandler?.();
   }
 
@@ -60,7 +64,7 @@ export async function apiGet<T>(path: string, token?: string | null): Promise<T>
     headers: authHeaders(token)
   });
 
-  return parseResponse<T>(response);
+  return parseResponse<T>(response, Boolean(token));
 }
 
 export async function apiPost<T>(path: string, body: unknown, token?: string | null): Promise<T> {
@@ -73,7 +77,7 @@ export async function apiPost<T>(path: string, body: unknown, token?: string | n
     body: JSON.stringify(body)
   });
 
-  return parseResponse<T>(response);
+  return parseResponse<T>(response, Boolean(token));
 }
 
 export async function apiPut<T>(path: string, body: unknown, token?: string | null): Promise<T> {
@@ -86,7 +90,7 @@ export async function apiPut<T>(path: string, body: unknown, token?: string | nu
     body: JSON.stringify(body)
   });
 
-  return parseResponse<T>(response);
+  return parseResponse<T>(response, Boolean(token));
 }
 
 export async function apiDelete<T>(path: string, token?: string | null): Promise<T> {
@@ -95,7 +99,7 @@ export async function apiDelete<T>(path: string, token?: string | null): Promise
     headers: authHeaders(token)
   });
 
-  return parseResponse<T>(response);
+  return parseResponse<T>(response, Boolean(token));
 }
 
 export async function apiUpload<T>(path: string, body: FormData, token?: string | null): Promise<T> {
@@ -105,5 +109,5 @@ export async function apiUpload<T>(path: string, body: FormData, token?: string 
     body
   });
 
-  return parseResponse<T>(response);
+  return parseResponse<T>(response, Boolean(token));
 }

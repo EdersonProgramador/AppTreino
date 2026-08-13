@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { requireAuth } from "../auth.js";
+import { requireAuth, requirePathRole, requestPathname } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { buildPublicUploadUrl, saveValidatedUpload, uploadsDir } from "../upload-security.js";
@@ -147,23 +147,30 @@ async function recordDailyAttendance(userId: string) {
 }
 
 async function requireActiveMembership(userId: string) {
-  const membership = await prisma.membership.findFirst({
-    where: {
-      userId,
-      status: "ACTIVE",
-      deletedAt: null
-    }
-  });
+  const [membership, user] = await Promise.all([
+    prisma.membership.findFirst({
+      where: {
+        userId,
+        status: "ACTIVE",
+        deletedAt: null
+      }
+    }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { enrollmentStatus: true }
+    })
+  ]);
 
-  if (!membership) {
-    const error = new Error("Assinatura ativa obrigatória para acessar esta funcionalidade.") as Error & {
-      statusCode: number;
-    };
-    error.statusCode = 402;
-    throw error;
+  // Liberação: pagamento Asaas (membership ACTIVE) OU autorização admin (enrollment ACTIVE).
+  if (membership || user?.enrollmentStatus === "ACTIVE") {
+    return membership;
   }
 
-  return membership;
+  const error = new Error("Assinatura ativa obrigatória para acessar esta funcionalidade.") as Error & {
+    statusCode: number;
+  };
+  error.statusCode = 402;
+  throw error;
 }
 
 async function getCurrentUserMembership(userId: string) {
@@ -252,18 +259,19 @@ function buildAiWorkoutPlan(input: {
 
 export async function registerUserRoutes(app: FastifyInstance) {
   app.addHook("preHandler", async (request) => {
-    if (request.url.startsWith("/user")) {
-      const user = await requireAuth(app, request);
-      if (
-        env.DATABASE_URL &&
-        !request.url.startsWith("/user/profile") &&
-        !request.url.startsWith("/user/membership") &&
-        !request.url.startsWith("/user/payments") &&
-        !request.url.startsWith("/user/uploads") &&
-        !request.url.startsWith("/user/physical-assessments")
-      ) {
-        await Promise.all([requireActiveMembership(user.id), recordDailyAttendance(user.id)]);
-      }
+    const authUser = await requirePathRole(app, request, "/user", "USER");
+    if (!authUser) return;
+
+    const pathname = requestPathname(request);
+    if (
+      env.DATABASE_URL &&
+      !pathname.startsWith("/user/profile") &&
+      !pathname.startsWith("/user/membership") &&
+      !pathname.startsWith("/user/payments") &&
+      !pathname.startsWith("/user/uploads") &&
+      !pathname.startsWith("/user/physical-assessments")
+    ) {
+      await Promise.all([requireActiveMembership(authUser.id), recordDailyAttendance(authUser.id)]);
     }
   });
 
@@ -292,7 +300,8 @@ export async function registerUserRoutes(app: FastifyInstance) {
         city: profile.profile?.city ?? null,
         state: profile.profile?.state ?? null,
         avatarUrl: profile.profile?.avatarUrl ?? null,
-        locationId: profile.profile?.locationId ?? null
+        locationId: profile.profile?.locationId ?? null,
+        enrollmentStatus: profile.enrollmentStatus
       }
     };
   });

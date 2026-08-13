@@ -1,10 +1,16 @@
+import { useEffect } from "react";
 import { LockKeyhole } from "lucide-react";
+import { uiSounds } from "../../lib/ui-sounds";
 
 interface LockedOverlayProps {
   onCheckout: () => void;
 }
 
-export function LockedOverlay({ onCheckout }: LockedOverlayProps) {
+export const LockedOverlay = ({ onCheckout }: LockedOverlayProps) => {
+  useEffect(() => {
+    uiSounds.blocked();
+  }, []);
+
   return (
     <article className="mb-[18px] grid max-w-[760px] justify-items-center gap-3 rounded-xl border border-brand-gold/25 bg-ink-panel p-[clamp(24px,5vw,38px)] text-center shadow-soft [background-image:linear-gradient(180deg,rgba(240,180,90,0.12),rgba(255,255,255,0.035))]">
       <div className="grid h-[72px] w-[72px] place-items-center rounded-full border border-brand-gold/35 bg-brand-gold/10 text-brand-gold">
@@ -16,9 +22,15 @@ export function LockedOverlay({ onCheckout }: LockedOverlayProps) {
       <p className="mb-2 max-w-[520px] text-sand-muted leading-relaxed">
         Finalize a assinatura pendente para liberar o player e as funcionalidades do aluno.
       </p>
-      <button className="primary-button" onClick={onCheckout}>
+      <button
+        className="primary-button"
+        onClick={() => {
+          uiSounds.click();
+          onCheckout();
+        }}
+      >
         Finalizar meu pagamento pendente
       </button>
     </article>
   );
-}
+};

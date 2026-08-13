@@ -1,7 +1,14 @@
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import type { UserRole } from "@app-treino/shared";
+import {
+  can,
+  hasAnyRole,
+  hasRole,
+  normalizeRole,
+  type Permission,
+  type UserRole
+} from "@app-treino/shared";
 import { prisma } from "./prisma.js";
 
 const scrypt = promisify(scryptCallback);
@@ -52,7 +59,7 @@ export function toAuthUser(user: {
     id: user.id,
     name: user.name,
     email: user.email ?? user.phone ?? "",
-    role: user.role,
+    role: normalizeRole(user.role),
     phone: user.phone ?? null,
     provider: user.provider ?? "EMAIL"
   };
@@ -63,6 +70,10 @@ function httpError(statusCode: number, message: string) {
   error.statusCode = statusCode;
 
   return error;
+}
+
+export function requestPathname(request: FastifyRequest) {
+  return (request.url.split("?")[0] ?? request.url) || "/";
 }
 
 export async function getAuthUser(
@@ -105,7 +116,7 @@ export async function getAuthUser(
     id: dbUser.id,
     name: dbUser.name,
     email: dbUser.email ?? dbUser.phone ?? "",
-    role: dbUser.role,
+    role: normalizeRole(dbUser.role),
     phone: dbUser.phone ?? null,
     provider: dbUser.provider ?? "EMAIL"
   };
@@ -128,9 +139,62 @@ export async function requireRole(
 ) {
   const user = await requireAuth(app, request);
 
-  if (user.role !== role) {
+  if (!hasRole(user.role, role)) {
     throw httpError(403, "Perfil sem permissão para acessar este recurso.");
   }
 
   return user;
+}
+
+export async function requireAnyRole(
+  app: FastifyInstance,
+  request: FastifyRequest,
+  roles: readonly UserRole[]
+) {
+  const user = await requireAuth(app, request);
+
+  if (!hasAnyRole(user.role, roles)) {
+    throw httpError(403, "Perfil sem permissão para acessar este recurso.");
+  }
+
+  return user;
+}
+
+export async function requirePermission(
+  app: FastifyInstance,
+  request: FastifyRequest,
+  permission: Permission
+) {
+  const user = await requireAuth(app, request);
+
+  if (!can(user.role, permission)) {
+    throw httpError(403, "Perfil sem permissão para acessar este recurso.");
+  }
+
+  return user;
+}
+
+/** Gate helper for URL-prefix plugins (admin / user / student). */
+export async function requirePathRole(
+  app: FastifyInstance,
+  request: FastifyRequest,
+  prefix: string,
+  role: UserRole
+) {
+  if (!requestPathname(request).startsWith(prefix)) {
+    return null;
+  }
+  return requireRole(app, request, role);
+}
+
+export async function requirePathPermission(
+  app: FastifyInstance,
+  request: FastifyRequest,
+  prefix: string,
+  permission: Permission
+) {
+  if (!requestPathname(request).startsWith(prefix)) {
+    return null;
+  }
+  return requirePermission(app, request, permission);
 }

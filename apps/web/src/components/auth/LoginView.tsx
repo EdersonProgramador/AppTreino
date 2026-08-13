@@ -9,8 +9,9 @@ import { formatPriceInBRL, initialPlans } from "@app-treino/shared";
 import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
 import type { AuthMode, PlanCode } from "../../types/auth";
 import { googleClientId } from "../../lib/urls";
+import { uiSounds } from "../../lib/ui-sounds";
 
-export function LoginView({
+export const LoginView = ({
   loading,
   error,
   success,
@@ -32,7 +33,7 @@ export function LoginView({
   onForgotPassword: (formData: FormData) => Promise<void>;
   onResetPassword: (formData: FormData) => Promise<void>;
   onClearResetToken: () => void;
-}) {
+}) => {
   const [mode, setMode] = useState<AuthMode>(resetToken ? "reset" : selectedPlanCode ? "register" : "login");
   const formRef = useRef<HTMLFormElement | null>(null);
   const googleButtonRef = useRef<HTMLDivElement | null>(null);
@@ -109,8 +110,9 @@ export function LoginView({
     return () => script.removeEventListener("load", renderGoogleButton);
   }, [mode, onSubmit]);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    uiSounds.submit();
 
     if (mode === "forgot") {
       void onForgotPassword(new FormData(event.currentTarget));
@@ -123,7 +125,7 @@ export function LoginView({
     }
 
     void onSubmit(mode, new FormData(event.currentTarget), "EMAIL");
-  }
+  };
 
   function handleGoogleSubmit() {
     if (!formRef.current) return;
@@ -172,13 +174,13 @@ export function LoginView({
 
         {(mode === "login" || mode === "register") && (
           <div
-            className="mt-6 grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-ink/50 p-1"
+            className="mt-6 grid grid-cols-2 gap-2 rounded-xl border border-[color:var(--app-border)] bg-ink/50 p-1"
             role="tablist"
             aria-label="Modo de acesso"
           >
             <button
               className={`min-h-[42px] rounded-lg text-sm font-extrabold transition ${
-                mode === "login" ? "bg-brand-gold text-ink" : "text-sand-muted hover:text-sand"
+                mode === "login" ? "bg-brand-gold text-[color:var(--on-accent)]" : "text-sand-muted hover:text-sand"
               }`}
               onClick={() => setMode("login")}
               role="tab"
@@ -188,7 +190,7 @@ export function LoginView({
             </button>
             <button
               className={`min-h-[42px] rounded-lg text-sm font-extrabold transition ${
-                mode === "register" ? "bg-brand-gold text-ink" : "text-sand-muted hover:text-sand"
+                mode === "register" ? "bg-brand-gold text-[color:var(--on-accent)]" : "text-sand-muted hover:text-sand"
               }`}
               onClick={() => setMode("register")}
               role="tab"
@@ -266,7 +268,7 @@ export function LoginView({
             )}
             {mode === "login" &&
               (googleClientId ? (
-                <div className="flex justify-center [&>div]:w-full [&>div>div]:w-full" ref={googleButtonRef} />
+                <div className="google-identity-button" ref={googleButtonRef} />
               ) : (
                 <button className="ui-btn-secondary w-full" type="button" onClick={handleGoogleSubmit} disabled={isSubmitting}>
                   {loading === "submitting" ? <Loader2 className="animate-spin" size={18} /> : <UserRound size={18} />}
@@ -304,4 +306,4 @@ export function LoginView({
       </section>
     </main>
   );
-}
+};

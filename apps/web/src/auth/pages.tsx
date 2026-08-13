@@ -1,16 +1,15 @@
 import { useEffect } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { LogIn } from "lucide-react";
-import { AdminView } from "../components/admin/AdminView";
 import { LoginView } from "../components/auth/LoginView";
 import { HomeView } from "../components/home/HomeView";
-import { UserView } from "../components/student/UserView";
 import { assetUrl } from "../lib/urls";
 import { useAuth } from "./AuthContext";
+import { AdminPanel, StudentPanel, TransitionScreen } from "./RouteGuards";
 import { homePathForRole, loginPath, paths } from "./paths";
 
 export function HomePage() {
-  const { isAuthenticated, user } = useAuth();
+  const { user, token, isTransitioning, transitionMessage } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -20,7 +19,11 @@ export function HomePage() {
     navigate(`${paths.login}?reset=${encodeURIComponent(reset)}`, { replace: true });
   }, [navigate, searchParams]);
 
-  if (isAuthenticated && user) {
+  if (isTransitioning) {
+    return <TransitionScreen message={transitionMessage} />;
+  }
+
+  if (user && token) {
     return <Navigate to={homePathForRole(user.role)} replace />;
   }
 
@@ -34,8 +37,10 @@ export function HomePage() {
 
 export function LoginPage() {
   const {
-    isAuthenticated,
     user,
+    token,
+    isTransitioning,
+    transitionMessage,
     loginState,
     loginError,
     loginSuccess,
@@ -68,8 +73,11 @@ export function LoginPage() {
     }
   }, [searchParams, setSelectedPlanCode]);
 
-  // Extra guard: never paint login chrome after session is live.
-  if (isAuthenticated && user) {
+  if (isTransitioning) {
+    return <TransitionScreen message={transitionMessage} />;
+  }
+
+  if (user && token) {
     return <Navigate to={homePathForRole(user.role)} replace />;
   }
 
@@ -97,7 +105,7 @@ export function LoginPage() {
 
 function GuestChrome() {
   return (
-    <header className="sticky top-0 z-20 grid min-h-[76px] grid-cols-[minmax(150px,1fr)_auto_minmax(150px,1fr)] items-center gap-6 border-b border-white/10 bg-ink/80 px-5 backdrop-blur-md sm:px-8 md:px-12">
+    <header className="guest-chrome sticky top-0 z-20 grid min-h-[76px] grid-cols-[minmax(150px,1fr)_auto_minmax(150px,1fr)] items-center gap-6 border-b px-5 backdrop-blur-md sm:px-8 md:px-12">
       <Link className="inline-flex items-center border-0 bg-transparent p-0" to={paths.home} aria-label="Ir para início">
         <img
           className="block h-auto w-[clamp(158px,16vw,218px)] rounded-lg drop-shadow-lg"
@@ -106,18 +114,15 @@ function GuestChrome() {
         />
       </Link>
       <nav className="hidden items-center gap-6 md:flex" aria-label="Navegação principal">
-        <Link className="text-sm font-bold text-sand-muted transition hover:-translate-y-px hover:text-sand" to={`${paths.home}#recursos`}>
+        <Link className="guest-chrome-link text-sm font-bold transition hover:-translate-y-px" to={`${paths.home}#recursos`}>
           Recursos
         </Link>
-        <Link className="text-sm font-bold text-sand-muted transition hover:-translate-y-px hover:text-sand" to={`${paths.home}#planos`}>
+        <Link className="guest-chrome-link text-sm font-bold transition hover:-translate-y-px" to={`${paths.home}#planos`}>
           Planos
         </Link>
       </nav>
       <div className="flex items-center justify-end gap-3.5">
-        <Link
-          className="inline-flex items-center gap-2 border-0 bg-transparent text-sm font-bold text-sand-muted transition hover:-translate-y-px hover:text-sand"
-          to={paths.login}
-        >
+        <Link className="guest-chrome-link inline-flex items-center gap-2 border-0 bg-transparent text-sm font-bold transition hover:-translate-y-px" to={paths.login}>
           <LogIn size={18} />
           Entrar
         </Link>
@@ -127,23 +132,9 @@ function GuestChrome() {
 }
 
 export function AdminPage() {
-  const { token, user, logout } = useAuth();
-  if (!token || !user) {
-    return <Navigate to={paths.login} replace />;
-  }
-  if (user.role !== "ADMIN") {
-    return <Navigate to={paths.student} replace />;
-  }
-  return <AdminView token={token} onLogout={logout} />;
+  return <AdminPanel />;
 }
 
 export function StudentPage() {
-  const { token, user, logout } = useAuth();
-  if (!token || !user) {
-    return <Navigate to={paths.login} replace />;
-  }
-  if (user.role === "ADMIN") {
-    return <Navigate to={paths.admin} replace />;
-  }
-  return <UserView token={token} onLogout={logout} />;
+  return <StudentPanel />;
 }

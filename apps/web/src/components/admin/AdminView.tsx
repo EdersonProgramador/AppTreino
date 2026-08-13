@@ -54,7 +54,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { formatPriceInBRL } from "@app-treino/shared";
+import { formatPriceInBRL, parseBRLMoneyToCents } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { BRAZILIAN_STATES, CITIES_BY_STATE } from "../../brazil-data";
 import {
@@ -154,7 +154,7 @@ const AdminSoundToggle = () => {
           className={`rounded-2xl border px-4 py-3 text-sm font-extrabold transition ${
             soundEnabled
               ? "border-brand-gold/50 bg-gradient-to-r from-brand-gold/25 to-brand-coral/15 text-sand"
-              : "border-white/10 bg-white/5 text-sand-muted"
+              : "border-[color:var(--app-border)] bg-[var(--app-fill)] text-sand-muted"
           }`}
           onClick={() => {
             setSoundEnabled(true);
@@ -169,7 +169,7 @@ const AdminSoundToggle = () => {
           className={`rounded-2xl border px-4 py-3 text-sm font-extrabold transition ${
             !soundEnabled
               ? "border-brand-gold/50 bg-gradient-to-r from-ink-elev to-ink-panel text-sand"
-              : "border-white/10 bg-white/5 text-sand-muted"
+              : "border-[color:var(--app-border)] bg-[var(--app-fill)] text-sand-muted"
           }`}
           onClick={() => {
             uiSounds.toggleOff();
@@ -182,6 +182,78 @@ const AdminSoundToggle = () => {
     </div>
   );
 };
+
+type CmsBlockExerciseDraft = {
+  clientKey: string;
+  exerciseId: string;
+  sets: number;
+  repsRange: string;
+  prescriptionType: WorkoutPrescriptionType;
+  repsMin: string;
+  repsMax: string;
+  durationSeconds: string;
+  distanceMeters: string;
+  rounds: string;
+  workSeconds: string;
+  intensityType: WorkoutIntensityType;
+  intensityValue: string;
+  tempo: string;
+  side: string;
+  executionNotes: string;
+  initialLoad: string;
+  restSeconds: string;
+  supportMaterialUrl: string;
+};
+
+function createCmsBlockExerciseDraft(
+  seed?: Partial<CmsBlockExerciseDraft> & { exerciseId?: string }
+): CmsBlockExerciseDraft {
+  return {
+    clientKey: seed?.clientKey ?? `ex-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    exerciseId: seed?.exerciseId ?? "",
+    sets: seed?.sets ?? 3,
+    repsRange: seed?.repsRange ?? "10-12",
+    prescriptionType: seed?.prescriptionType ?? "REPETITIONS",
+    repsMin: seed?.repsMin ?? "",
+    repsMax: seed?.repsMax ?? "",
+    durationSeconds: seed?.durationSeconds ?? "",
+    distanceMeters: seed?.distanceMeters ?? "",
+    rounds: seed?.rounds ?? "",
+    workSeconds: seed?.workSeconds ?? "",
+    intensityType: seed?.intensityType ?? "NONE",
+    intensityValue: seed?.intensityValue ?? "",
+    tempo: seed?.tempo ?? "",
+    side: seed?.side ?? "",
+    executionNotes: seed?.executionNotes ?? "",
+    initialLoad: seed?.initialLoad ?? "",
+    restSeconds: seed?.restSeconds ?? "",
+    supportMaterialUrl: seed?.supportMaterialUrl ?? ""
+  };
+}
+
+function draftFromCmsExercise(entry: CmsWorkoutBlockRow["exercises"][number]): CmsBlockExerciseDraft {
+  return createCmsBlockExerciseDraft({
+    clientKey: entry.id,
+    exerciseId: entry.exercise.id,
+    sets: entry.sets,
+    repsRange: entry.repsRange,
+    prescriptionType: entry.prescriptionType,
+    repsMin: entry.repsMin != null ? String(entry.repsMin) : "",
+    repsMax: entry.repsMax != null ? String(entry.repsMax) : "",
+    durationSeconds: entry.durationSeconds != null ? String(entry.durationSeconds) : "",
+    distanceMeters: entry.distanceMeters != null ? String(entry.distanceMeters) : "",
+    rounds: entry.rounds != null ? String(entry.rounds) : "",
+    workSeconds: entry.workSeconds != null ? String(entry.workSeconds) : "",
+    intensityType: entry.intensityType ?? "NONE",
+    intensityValue: entry.intensityValue ?? "",
+    tempo: entry.tempo ?? "",
+    side: entry.side ?? "",
+    executionNotes: entry.executionNotes ?? "",
+    initialLoad: entry.initialLoad ?? "",
+    restSeconds: entry.restSeconds != null ? String(entry.restSeconds) : "",
+    supportMaterialUrl: entry.supportMaterialUrl ?? ""
+  });
+}
 
 export function AdminView({ token, onLogout }: { token: string | null; onLogout: () => void }) {
   const [adminSection, setAdminSection] = useState<
@@ -267,7 +339,9 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   const [cmsBlocksModalityFilter, setCmsBlocksModalityFilter] = useState("");
   const [cmsBlocksPage, setCmsBlocksPage] = useState(1);
   const [cmsBlockFormModality, setCmsBlockFormModality] = useState("");
-  const [cmsWorkoutExerciseRows, setCmsWorkoutExerciseRows] = useState(1);
+  const [cmsBlockExerciseDrafts, setCmsBlockExerciseDrafts] = useState<CmsBlockExerciseDraft[]>(() => [
+    createCmsBlockExerciseDraft()
+  ]);
   const [editingCmsProgram, setEditingCmsProgram] = useState<CmsProgramRow | null>(null);
   const [cmsProgramFormOpen, setCmsProgramFormOpen] = useState(false);
   const [assigningCmsProgramId, setAssigningCmsProgramId] = useState<string | null>(null);
@@ -1303,65 +1377,64 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     }
   }
 
-  function parseCmsWorkoutBlockExercises(data: FormData) {
-    const rowCount = Math.max(1, Number(data.get("exerciseRowCount") ?? 1));
-    const optionalNumber = (name: string) => {
-      const value = String(data.get(name) ?? "").trim();
-      return value === "" ? undefined : Number(value);
+  function parseCmsWorkoutBlockExercisesFromDrafts(drafts: CmsBlockExerciseDraft[]) {
+    const optionalNumber = (value: string) => {
+      const trimmed = value.trim();
+      return trimmed === "" ? undefined : Number(trimmed);
     };
 
-    return Array.from({ length: rowCount })
-      .map((_, index) => {
-        const row = index + 1;
-        const exerciseId = String(data.get(`exerciseId${row}`) ?? "").trim();
+    return drafts
+      .filter((draft) => draft.exerciseId.trim())
+      .map((draft, index) => ({
+        exerciseId: draft.exerciseId.trim(),
+        sets: Number(draft.sets) || 3,
+        repsRange: draft.repsRange.trim() || "10-12",
+        prescriptionType: draft.prescriptionType,
+        repsMin: optionalNumber(draft.repsMin),
+        repsMax: optionalNumber(draft.repsMax),
+        durationSeconds: optionalNumber(draft.durationSeconds),
+        distanceMeters: optionalNumber(draft.distanceMeters),
+        rounds: optionalNumber(draft.rounds),
+        workSeconds: optionalNumber(draft.workSeconds),
+        intensityType: draft.intensityType,
+        intensityValue: draft.intensityValue.trim(),
+        tempo: draft.tempo.trim(),
+        side: draft.side.trim(),
+        executionNotes: draft.executionNotes.trim(),
+        initialLoad: draft.initialLoad.trim(),
+        restSeconds: optionalNumber(draft.restSeconds),
+        supportMaterialUrl: draft.supportMaterialUrl.trim(),
+        order: index + 1
+      }));
+  }
 
-        if (!exerciseId) {
-          return null;
-        }
+  function updateCmsBlockExerciseDraft(
+    clientKey: string,
+    patch: Partial<CmsBlockExerciseDraft>
+  ) {
+    setCmsBlockExerciseDrafts((current) =>
+      current.map((draft) => (draft.clientKey === clientKey ? { ...draft, ...patch } : draft))
+    );
+  }
 
-        return {
-          exerciseId,
-          sets: Number(data.get(`sets${row}`) ?? 3),
-          repsRange: String(data.get(`repsRange${row}`) ?? "10-12").trim(),
-          prescriptionType: String(data.get(`prescriptionType${row}`) ?? "REPETITIONS") as WorkoutPrescriptionType,
-          repsMin: optionalNumber(`repsMin${row}`),
-          repsMax: optionalNumber(`repsMax${row}`),
-          durationSeconds: optionalNumber(`durationSeconds${row}`),
-          distanceMeters: optionalNumber(`distanceMeters${row}`),
-          rounds: optionalNumber(`rounds${row}`),
-          workSeconds: optionalNumber(`workSeconds${row}`),
-          intensityType: String(data.get(`intensityType${row}`) ?? "NONE") as WorkoutIntensityType,
-          intensityValue: String(data.get(`intensityValue${row}`) ?? "").trim(),
-          tempo: String(data.get(`tempo${row}`) ?? "").trim(),
-          side: String(data.get(`side${row}`) ?? "").trim(),
-          executionNotes: String(data.get(`executionNotes${row}`) ?? "").trim(),
-          initialLoad: String(data.get(`initialLoad${row}`) ?? "").trim(),
-          restSeconds: String(data.get(`restSeconds${row}`) ?? "").trim() === "" ? undefined : Number(data.get(`restSeconds${row}`)),
-          supportMaterialUrl: String(data.get(`supportMaterialUrl${row}`) ?? "").trim(),
-          order: row
-        };
-      })
-      .filter((exercise): exercise is {
-        exerciseId: string;
-        sets: number;
-        repsRange: string;
-        prescriptionType: WorkoutPrescriptionType;
-        repsMin: number | undefined;
-        repsMax: number | undefined;
-        durationSeconds: number | undefined;
-        distanceMeters: number | undefined;
-        rounds: number | undefined;
-        workSeconds: number | undefined;
-        intensityType: WorkoutIntensityType;
-        intensityValue: string;
-        tempo: string;
-        side: string;
-        executionNotes: string;
-        initialLoad: string;
-        restSeconds: number | undefined;
-        supportMaterialUrl: string;
-        order: number;
-      } => Boolean(exercise));
+  function addCmsBlockExerciseDraft() {
+    setCmsBlockExerciseDrafts((current) => {
+      if (current.length >= 20) return current;
+      return [...current, createCmsBlockExerciseDraft()];
+    });
+  }
+
+  function removeCmsBlockExerciseDraft(clientKey: string) {
+    setCmsBlockExerciseDrafts((current) => {
+      if (current.length <= 1) {
+        return [createCmsBlockExerciseDraft()];
+      }
+      return current.filter((draft) => draft.clientKey !== clientKey);
+    });
+  }
+
+  function resetCmsBlockExerciseDrafts() {
+    setCmsBlockExerciseDrafts([createCmsBlockExerciseDraft()]);
   }
 
   function parseCmsProgramDays(data: FormData) {
@@ -1469,6 +1542,11 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         setFeedback("Selecione a modalidade da divisão antes de salvar.");
         return;
       }
+      const exercises = parseCmsWorkoutBlockExercisesFromDrafts(cmsBlockExerciseDrafts);
+      if (exercises.length === 0) {
+        setFeedback("Cadastre ao menos um exercício na divisão.");
+        return;
+      }
       const payload = {
         title: String(data.get("title") ?? ""),
         identifier: String(data.get("identifier") || data.get("title") || ""),
@@ -1481,7 +1559,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         timeCapSeconds: String(data.get("timeCapSeconds") ?? "").trim() === "" ? undefined : Number(data.get("timeCapSeconds")),
         instructions: String(data.get("instructions") ?? "").trim(),
         modalityId: selectedModalityId,
-        exercises: parseCmsWorkoutBlockExercises(data)
+        exercises
       };
 
       if (editingCmsWorkoutBlock) {
@@ -1489,7 +1567,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         form.reset();
         setEditingCmsWorkoutBlock(null);
         setCmsBlockFormModality("");
-        setCmsWorkoutExerciseRows(1);
+        resetCmsBlockExerciseDrafts();
         await applyAdminChange(["workoutBlocks", "programs"], "Divisão atualizada com sucesso.");
         return;
       }
@@ -1497,7 +1575,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       await apiPost("/admin/cms/workout-blocks", payload, token);
       form.reset();
       setCmsBlockFormModality("");
-      setCmsWorkoutExerciseRows(1);
+      resetCmsBlockExerciseDrafts();
       await applyAdminChange(["workoutBlocks", "programs"], "Divisão cadastrada com sucesso.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível salvar a divisão."));
@@ -1507,13 +1585,15 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   function startEditCmsWorkoutBlock(item: CmsWorkoutBlockRow) {
     setEditingCmsWorkoutBlock(item);
     setCmsBlockFormModality(item.modality?.id ?? "");
-    setCmsWorkoutExerciseRows(Math.max(1, item.exercises.length));
+    setCmsBlockExerciseDrafts(
+      item.exercises.length > 0 ? item.exercises.map(draftFromCmsExercise) : [createCmsBlockExerciseDraft()]
+    );
   }
 
   function handleCancelCmsWorkoutBlockEdit() {
     setEditingCmsWorkoutBlock(null);
     setCmsBlockFormModality("");
-    setCmsWorkoutExerciseRows(1);
+    resetCmsBlockExerciseDrafts();
   }
 
   async function handlePublishCmsWorkoutBlock(
@@ -1823,6 +1903,12 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
+    const priceInCents = parseBRLMoneyToCents(String(data.get("price") ?? ""));
+
+    if (priceInCents == null || priceInCents < 1) {
+      setFeedback("Informe um valor válido (ex.: 0,10 ou 29,90).");
+      return;
+    }
 
     try {
       await apiPost(
@@ -1830,7 +1916,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         {
           code: String(data.get("code") ?? ""),
           name: String(data.get("name") ?? ""),
-          priceInCents: Math.round(Number(data.get("price") ?? 0) * 100),
+          priceInCents,
           billingCycle: String(data.get("billingCycle") ?? "MONTHLY")
         },
         token
@@ -1887,13 +1973,19 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
+    const amountInCents = parseBRLMoneyToCents(String(data.get("amount") ?? ""));
+
+    if (amountInCents == null || amountInCents < 1) {
+      setFeedback("Informe um valor válido (ex.: 0,10 ou 29,90).");
+      return;
+    }
 
     try {
       await apiPost(
         "/admin/payments",
         {
           membershipId: String(data.get("membershipId") ?? ""),
-          amountInCents: Math.round(Number(data.get("amount") ?? 0) * 100),
+          amountInCents,
           dueDate: String(data.get("dueDate") ?? new Date().toISOString().slice(0, 10)),
           billingType: String(data.get("billingType") ?? "UNDEFINED")
         },
@@ -2562,7 +2654,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       }
     >
       <aside
-        className="workspace-sidebar sticky top-0 grid max-h-screen min-h-screen grid-rows-[auto_auto_1fr_auto_auto] content-stretch gap-[22px] self-start overflow-y-auto border-r border-white/10 bg-gradient-to-br from-ink-panel/90 to-ink px-[18px] py-[22px] shadow-[inset_-1px_0_rgba(240,180,90,0.08)]"
+        className="workspace-sidebar sticky top-0 grid max-h-screen min-h-screen grid-rows-[auto_auto_1fr_auto_auto] content-stretch gap-[22px] self-start overflow-y-auto border-r border-[color:var(--app-border)] bg-gradient-to-br from-ink-panel/90 to-ink px-[18px] py-[22px] shadow-[inset_-1px_0_rgba(240,180,90,0.08)]"
         aria-label="Menu administrativo"
       >
         <div className="workspace-sidebar-brand flex min-w-0 items-center gap-3 border-b-0 pb-2">
@@ -2573,7 +2665,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
             aria-hidden="true"
           />
           <div className="grid min-w-0 gap-0.5">
-            <strong className="text-lg uppercase text-white">App Treino</strong>
+            <strong className="text-lg uppercase text-sand">App Treino</strong>
             <span className="truncate text-[11px] font-extrabold uppercase tracking-wide text-sand-muted">Admin</span>
           </div>
           <button
@@ -2677,8 +2769,8 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           <LogOut size={18} />
           <span className="sidebar-label">Sair</span>
         </button>
-        <div className="workspace-sidebar-user flex min-w-0 items-center gap-2.5 border-t border-white/10 pt-[18px] text-white">
-          <span className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-full border border-white/15 bg-gradient-to-br from-brand-gold/20 to-white/10">
+        <div className="workspace-sidebar-user flex min-w-0 items-center gap-2.5 border-t border-[color:var(--app-border)] pt-[18px] text-sand">
+          <span className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-full border border-[color:var(--app-border-strong)] bg-gradient-to-br from-brand-gold/20 to-[var(--app-fill)]">
             <UserRound size={18} />
           </span>
           <div className="sidebar-user-info grid min-w-0 gap-0.5">
@@ -2694,7 +2786,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       >
         <div className="grid gap-3">
           <span className="eyebrow w-fit">Painel administrativo</span>
-          <h1 className="font-display m-0 text-[clamp(28px,3vw,40px)] font-semibold uppercase leading-tight tracking-tight text-white">
+          <h1 className="font-display m-0 text-[clamp(28px,3vw,40px)] font-semibold uppercase leading-tight tracking-tight text-sand">
             Operação do App Treino
           </h1>
         </div>
@@ -3883,65 +3975,81 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   </div>
                 </div>
                 <div className="cms-builder-list wide-field">
-                  <input type="hidden" name="exerciseRowCount" value={cmsWorkoutExerciseRows} readOnly />
                   <div className="cms-execution-toolbar">
                     <div>
-                      <strong>{cmsWorkoutExerciseRows} exercício(s) na divisão</strong>
-                      <span>Adicione somente as linhas necessárias para esta divisão.</span>
+                      <strong>{cmsBlockExerciseDrafts.length} exercício(s) na divisão</strong>
+                      <span>Adicione, edite ou remova linhas livremente nesta divisão.</span>
                     </div>
                     <div className="cms-execution-actions">
                       <button
                         type="button"
-                        onClick={() => setCmsWorkoutExerciseRows((count) => Math.min(20, count + 1))}
-                        disabled={cmsWorkoutExerciseRows >= 20}
+                        onClick={addCmsBlockExerciseDraft}
+                        disabled={cmsBlockExerciseDrafts.length >= 20}
                       >
                         <Plus size={17} />
                         Adicionar exercício
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setCmsWorkoutExerciseRows((count) => Math.max(1, count - 1))}
-                        disabled={cmsWorkoutExerciseRows <= 1}
-                      >
-                        <Trash2 size={17} />
-                        Remover último
-                      </button>
                     </div>
                   </div>
                   <div className="cms-exercise-editor-list">
-                    {Array.from({ length: cmsWorkoutExerciseRows }).map((_, index) => {
+                    {cmsBlockExerciseDrafts.map((draft, index) => {
                       const row = index + 1;
-                      const editRow = editingCmsWorkoutBlock?.exercises.find((entry) => entry.order === row);
+                      const selectedExercise = cmsBlockModalityExercises.find((item) => item.id === draft.exerciseId)
+                        ?? (editingCmsWorkoutBlock?.exercises.find((entry) => entry.exercise.id === draft.exerciseId)?.exercise ?? null);
 
                       return (
-                        <div className="cms-exercise-editor" key={`block-exercise-${row}`}>
+                        <div className="cms-exercise-editor" key={draft.clientKey}>
                           <div className="cms-exercise-editor-heading">
                             <span>{row}</span>
                             <div>
                               <strong>Exercício {row}</strong>
                               <small>{row === 1 ? "Obrigatório" : "Opcional"}</small>
                             </div>
+                            <button
+                              type="button"
+                              className="outline-button"
+                              aria-label={`Remover exercício ${row}`}
+                              title="Remover este exercício"
+                              onClick={() => removeCmsBlockExerciseDraft(draft.clientKey)}
+                            >
+                              <Trash2 size={16} />
+                              Remover
+                            </button>
                           </div>
                           <label className="cms-exercise-main-field">
                             Exercício
-                            <select name={`exerciseId${row}`} required={row === 1} defaultValue={editRow?.exercise.id ?? ""}>
+                            <select
+                              value={draft.exerciseId}
+                              required={row === 1}
+                              onChange={(event) =>
+                                updateCmsBlockExerciseDraft(draft.clientKey, { exerciseId: event.target.value })
+                              }
+                            >
                               <option value="">{row === 1 ? "Selecione o primeiro exercício" : "Selecione um exercício"}</option>
                               {cmsBlockModalityExercises.map((exercise) => (
                                 <option value={exercise.id} key={exercise.id}>
                                   {cmsExerciseLabel(exercise)}
                                 </option>
                               ))}
-                              {editRow && !cmsBlockModalityExercises.some((exercise) => exercise.id === editRow.exercise.id) && (
-                                <option value={editRow.exercise.id}>
-                                  {cmsExerciseLabel(editRow.exercise)}
-                                </option>
-                              )}
+                              {selectedExercise &&
+                                !cmsBlockModalityExercises.some((exercise) => exercise.id === selectedExercise.id) && (
+                                  <option value={selectedExercise.id}>
+                                    {cmsExerciseLabel(selectedExercise)}
+                                  </option>
+                                )}
                             </select>
                           </label>
                            <div className="cms-exercise-prescription-grid">
                              <label>
                                Tipo de prescrição
-                               <select name={`prescriptionType${row}`} defaultValue={editRow?.prescriptionType ?? "REPETITIONS"}>
+                               <select
+                                 value={draft.prescriptionType}
+                                 onChange={(event) =>
+                                   updateCmsBlockExerciseDraft(draft.clientKey, {
+                                     prescriptionType: event.target.value as WorkoutPrescriptionType
+                                   })
+                                 }
+                               >
                                  <option value="REPETITIONS">Repetições</option>
                                  <option value="DURATION">Duração</option>
                                  <option value="DISTANCE">Distância</option>
@@ -3953,47 +4061,136 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                              </label>
                              <label>
                                Séries/ciclos
-                               <input name={`sets${row}`} type="number" min="1" defaultValue={editRow?.sets ?? 3} />
+                               <input
+                                 type="number"
+                                 min="1"
+                                 value={draft.sets}
+                                 onChange={(event) =>
+                                   updateCmsBlockExerciseDraft(draft.clientKey, {
+                                     sets: Number(event.target.value) || 1
+                                   })
+                                 }
+                               />
                              </label>
                              <label>
                                Alvo exibido ao aluno
-                               <input name={`repsRange${row}`} placeholder="10-12, até a falha ou execução livre" defaultValue={editRow?.repsRange ?? "10-12"} />
+                               <input
+                                 placeholder="10-12, até a falha ou execução livre"
+                                 value={draft.repsRange}
+                                 onChange={(event) =>
+                                   updateCmsBlockExerciseDraft(draft.clientKey, { repsRange: event.target.value })
+                                 }
+                               />
                              </label>
                              <label>
                                Repetições mínimas
-                               <input name={`repsMin${row}`} type="number" min="1" defaultValue={editRow?.repsMin ?? ""} placeholder="Opcional" />
+                               <input
+                                 type="number"
+                                 min="1"
+                                 value={draft.repsMin}
+                                 placeholder="Opcional"
+                                 onChange={(event) =>
+                                   updateCmsBlockExerciseDraft(draft.clientKey, { repsMin: event.target.value })
+                                 }
+                               />
                              </label>
                              <label>
                                Repetições máximas
-                               <input name={`repsMax${row}`} type="number" min="1" defaultValue={editRow?.repsMax ?? ""} placeholder="Opcional" />
+                               <input
+                                 type="number"
+                                 min="1"
+                                 value={draft.repsMax}
+                                 placeholder="Opcional"
+                                 onChange={(event) =>
+                                   updateCmsBlockExerciseDraft(draft.clientKey, { repsMax: event.target.value })
+                                 }
+                               />
                              </label>
                              <label>
                                Duração/permanência (segundos)
-                               <input name={`durationSeconds${row}`} type="number" min="1" defaultValue={editRow?.durationSeconds ?? ""} placeholder="Tempo-alvo" />
+                               <input
+                                 type="number"
+                                 min="1"
+                                 value={draft.durationSeconds}
+                                 placeholder="Tempo-alvo"
+                                 onChange={(event) =>
+                                   updateCmsBlockExerciseDraft(draft.clientKey, {
+                                     durationSeconds: event.target.value
+                                   })
+                                 }
+                               />
                              </label>
                              <label>
                                Distância (metros)
-                               <input name={`distanceMeters${row}`} type="number" min="0" step="0.01" defaultValue={editRow?.distanceMeters ?? ""} placeholder="Distância-alvo" />
+                               <input
+                                 type="number"
+                                 min="0"
+                                 step="0.01"
+                                 value={draft.distanceMeters}
+                                 placeholder="Distância-alvo"
+                                 onChange={(event) =>
+                                   updateCmsBlockExerciseDraft(draft.clientKey, {
+                                     distanceMeters: event.target.value
+                                   })
+                                 }
+                               />
                              </label>
                              <label>
                                Rounds
-                               <input name={`rounds${row}`} type="number" min="1" defaultValue={editRow?.rounds ?? ""} placeholder="Quantidade" />
+                               <input
+                                 type="number"
+                                 min="1"
+                                 value={draft.rounds}
+                                 placeholder="Quantidade"
+                                 onChange={(event) =>
+                                   updateCmsBlockExerciseDraft(draft.clientKey, { rounds: event.target.value })
+                                 }
+                               />
                              </label>
                              <label>
                                Trabalho do intervalo (segundos)
-                               <input name={`workSeconds${row}`} type="number" min="1" defaultValue={editRow?.workSeconds ?? ""} placeholder="Tempo ativo" />
+                               <input
+                                 type="number"
+                                 min="1"
+                                 value={draft.workSeconds}
+                                 placeholder="Tempo ativo"
+                                 onChange={(event) =>
+                                   updateCmsBlockExerciseDraft(draft.clientKey, { workSeconds: event.target.value })
+                                 }
+                               />
                              </label>
                              <label>
                                Carga inicial (opcional)
-                               <input name={`initialLoad${row}`} placeholder="Ex.: 20kg" defaultValue={editRow?.initialLoad ?? ""} />
+                               <input
+                                 placeholder="Ex.: 20kg"
+                                 value={draft.initialLoad}
+                                 onChange={(event) =>
+                                   updateCmsBlockExerciseDraft(draft.clientKey, { initialLoad: event.target.value })
+                                 }
+                               />
                             </label>
                             <label>
                               Descanso (segundos)
-                               <input name={`restSeconds${row}`} type="number" min="0" placeholder="Ex.: 60" defaultValue={editRow?.restSeconds ?? ""} />
+                               <input
+                                 type="number"
+                                 min="0"
+                                 placeholder="Ex.: 60"
+                                 value={draft.restSeconds}
+                                 onChange={(event) =>
+                                   updateCmsBlockExerciseDraft(draft.clientKey, { restSeconds: event.target.value })
+                                 }
+                               />
                              </label>
                              <label>
                                Controle de intensidade
-                               <select name={`intensityType${row}`} defaultValue={editRow?.intensityType ?? "NONE"}>
+                               <select
+                                 value={draft.intensityType}
+                                 onChange={(event) =>
+                                   updateCmsBlockExerciseDraft(draft.clientKey, {
+                                     intensityType: event.target.value as WorkoutIntensityType
+                                   })
+                                 }
+                               >
                                  <option value="NONE">Não informado</option>
                                  <option value="LOAD">Carga</option>
                                  <option value="RPE">RPE</option>
@@ -4006,29 +4203,65 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                              </label>
                              <label>
                                Intensidade-alvo
-                               <input name={`intensityValue${row}`} defaultValue={editRow?.intensityValue ?? ""} placeholder="Ex.: RPE 8, Z2, 5:30/km" />
+                               <input
+                                 value={draft.intensityValue}
+                                 placeholder="Ex.: RPE 8, Z2, 5:30/km"
+                                 onChange={(event) =>
+                                   updateCmsBlockExerciseDraft(draft.clientKey, {
+                                     intensityValue: event.target.value
+                                   })
+                                 }
+                               />
                              </label>
                              <label>
                                Tempo do movimento
-                               <input name={`tempo${row}`} defaultValue={editRow?.tempo ?? ""} placeholder="Ex.: 3-1-1-0" />
+                               <input
+                                 value={draft.tempo}
+                                 placeholder="Ex.: 3-1-1-0"
+                                 onChange={(event) =>
+                                   updateCmsBlockExerciseDraft(draft.clientKey, { tempo: event.target.value })
+                                 }
+                               />
                              </label>
                              <label>
                                Lado
-                               <input name={`side${row}`} defaultValue={editRow?.side ?? ""} placeholder="Ex.: bilateral ou cada lado" />
+                               <input
+                                 value={draft.side}
+                                 placeholder="Ex.: bilateral ou cada lado"
+                                 onChange={(event) =>
+                                   updateCmsBlockExerciseDraft(draft.clientKey, { side: event.target.value })
+                                 }
+                               />
                              </label>
                            </div>
                            <label>
                              Orientação específica (opcional)
-                             <textarea name={`executionNotes${row}`} defaultValue={editRow?.executionNotes ?? ""} placeholder="Técnica, respiração, progressão ou critério de interrupção" />
+                             <textarea
+                               value={draft.executionNotes}
+                               placeholder="Técnica, respiração, progressão ou critério de interrupção"
+                               onChange={(event) =>
+                                 updateCmsBlockExerciseDraft(draft.clientKey, {
+                                   executionNotes: event.target.value
+                                 })
+                               }
+                             />
                            </label>
                           <label>
                             Material de apoio (opcional)
                             <input
-                              name={`supportMaterialUrl${row}`}
                               type="text"
                               list="cms-support-materials"
-                              placeholder={editRow?.exercise.materialUrl ? "Material do exercício ou outra URL" : "Selecione um material ou informe a URL"}
-                              defaultValue={editRow?.supportMaterialUrl ?? ""}
+                              placeholder={
+                                selectedExercise?.materialUrl
+                                  ? "Material do exercício ou outra URL"
+                                  : "Selecione um material ou informe a URL"
+                              }
+                              value={draft.supportMaterialUrl}
+                              onChange={(event) =>
+                                updateCmsBlockExerciseDraft(draft.clientKey, {
+                                  supportMaterialUrl: event.target.value
+                                })
+                              }
                             />
                           </label>
                         </div>
@@ -4855,7 +5088,14 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           <form className={crudFormClass} onSubmit={handleCreatePlan}>
             <input name="code" placeholder="Código" required />
             <input name="name" placeholder="Nome" required />
-            <input name="price" type="number" step="0.01" min="1" placeholder="Valor" required />
+            <input
+              name="price"
+              type="text"
+              inputMode="decimal"
+              placeholder="Valor (ex.: 0,10)"
+              title="Use vírgula para centavos, ex.: 0,10 ou 29,90"
+              required
+            />
             <select name="billingCycle" defaultValue="MONTHLY">
               <option value="MONTHLY">Mensal</option>
               <option value="YEARLY">Anual</option>
@@ -4966,7 +5206,14 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 </option>
               ))}
             </select>
-            <input name="amount" type="number" step="0.01" min="1" placeholder="Valor" required />
+            <input
+              name="amount"
+              type="text"
+              inputMode="decimal"
+              placeholder="Valor (ex.: 0,10)"
+              title="Use vírgula para centavos, ex.: 0,10 ou 29,90"
+              required
+            />
             <input name="dueDate" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
             <select name="billingType" defaultValue="UNDEFINED">
               <option value="UNDEFINED">Escolha do aluno</option>

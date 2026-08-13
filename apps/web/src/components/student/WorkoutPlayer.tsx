@@ -18,6 +18,7 @@ import {
   Wrench,
   X
 } from "lucide-react";
+import { uiSounds } from "../../lib/ui-sounds";
 
 export type WorkoutStructureType =
   | "NORMAL"
@@ -577,8 +578,10 @@ export function WorkoutPlayer({
     const nextCompletedIds = new Set(completedIds);
 
     if (nextCompleted) {
+      uiSounds.itemSelect();
       nextCompletedIds.add(instanceKey);
     } else {
+      uiSounds.itemDeselect();
       nextCompletedIds.delete(instanceKey);
       setDayCompleted(false);
       setFinishOpen(false);
@@ -634,6 +637,7 @@ export function WorkoutPlayer({
     setSubstituteOpen(false);
     setWorkoutReadyToComplete(true);
     setFinishOpen(true);
+    uiSounds.popupOpen();
   }
 
   async function completeSet() {
@@ -730,6 +734,7 @@ export function WorkoutPlayer({
     if (isRunning) {
       if (panel === "sequence") {
         setCancelOpen(true);
+        uiSounds.popupOpen();
         return;
       }
 
@@ -744,6 +749,7 @@ export function WorkoutPlayer({
   function handleRunnerCancelButton() {
     if (isRunning) {
       setCancelOpen(true);
+      uiSounds.popupOpen();
       return;
     }
 
@@ -772,6 +778,7 @@ export function WorkoutPlayer({
     }));
     setSubstituteOptions(localOptions);
     setSubstituteOpen(true);
+    uiSounds.popupOpen();
 
     if (localOptions.length === 0) {
       void loadSubstitutes();
@@ -813,9 +820,11 @@ export function WorkoutPlayer({
   async function completeWorkout() {
     if (!workoutReadyToComplete || !allCompleted || dayCompleted) return;
 
+    uiSounds.submit();
     setDayCompleted(true);
     try {
       await onWorkoutComplete?.();
+      uiSounds.workoutComplete();
       setIsRunning(false);
       setIsPaused(false);
       setElapsedSeconds(0);
@@ -825,6 +834,7 @@ export function WorkoutPlayer({
       setShareOpen(false);
       setWorkoutReadyToComplete(false);
     } catch {
+      uiSounds.error();
       setDayCompleted(false);
     }
   }
@@ -834,6 +844,7 @@ export function WorkoutPlayer({
     setIsPaused(true);
     setFinishOpen(false);
     setShareOpen(true);
+    uiSounds.popupOpen();
   }
 
   async function shareWorkout() {
@@ -1258,6 +1269,7 @@ export function WorkoutPlayer({
               setPhase("idle");
               if (isRunning) {
                 setCancelOpen(true);
+        uiSounds.popupOpen();
                 return;
               }
               onBack();
@@ -1363,15 +1375,24 @@ export function WorkoutPlayer({
       </footer>
 
       {cancelOpen && (
-        <div className="runner-confirm-backdrop" role="presentation" onClick={() => setCancelOpen(false)}>
+        <div className="runner-confirm-backdrop" role="presentation" onClick={() => {
+          uiSounds.popupClose();
+          setCancelOpen(false);
+        }}>
           <section className="runner-confirm-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
             <h2>Deseja cancelar o treino?</h2>
             <p>Ao confirmar, a execução atual será cancelada.</p>
             <div>
-              <button className="confirm-yes" onClick={() => void confirmCancel()}>
+              <button className="confirm-yes" onClick={() => {
+                uiSounds.void();
+                void confirmCancel();
+              }}>
                 SIM
               </button>
-              <button className="confirm-no" onClick={() => setCancelOpen(false)}>
+              <button className="confirm-no" onClick={() => {
+                uiSounds.popupClose();
+                setCancelOpen(false);
+              }}>
                 Não
               </button>
             </div>

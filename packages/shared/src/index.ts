@@ -1,4 +1,22 @@
-export type UserRole = "ADMIN" | "USER";
+import type { UserRole } from "./rbac";
+
+export type { UserRole, RbacResource, RbacAction, Permission } from "./rbac";
+export {
+  USER_ROLES,
+  ROLE_HOME_PATH,
+  ROLE_PERMISSIONS,
+  isUserRole,
+  normalizeRole,
+  permissionsFor,
+  can,
+  canAny,
+  canAll,
+  hasRole,
+  hasAnyRole,
+  canAccessPanel,
+  homePathForRole,
+  assertCan
+} from "./rbac";
 
 export type MembershipStatus = "ACTIVE" | "PENDING" | "OVERDUE" | "CANCELED";
 
@@ -75,4 +93,29 @@ export function formatPriceInBRL(priceInCents: number): string {
     style: "currency",
     currency: "BRL"
   }).format(priceInCents / 100);
+}
+
+/** Aceita "0,10", "10,50", "1.234,56" ou "10.50" e devolve o valor em reais. */
+export function parseBRLMoney(raw: string | number | null | undefined): number | null {
+  if (raw == null) return null;
+  const text = String(raw).trim();
+  if (!text) return null;
+
+  let normalized = text.replace(/[R$\s]/gi, "");
+  if (normalized.includes(",") && normalized.includes(".")) {
+    normalized = normalized.replace(/\./g, "").replace(",", ".");
+  } else if (normalized.includes(",")) {
+    normalized = normalized.replace(",", ".");
+  }
+
+  const value = Number(normalized);
+  if (!Number.isFinite(value) || value < 0) return null;
+  return value;
+}
+
+/** Converte valor monetário BR para centavos (ex.: "0,10" → 10). */
+export function parseBRLMoneyToCents(raw: string | number | null | undefined): number | null {
+  const reais = parseBRLMoney(raw);
+  if (reais == null) return null;
+  return Math.round(reais * 100);
 }

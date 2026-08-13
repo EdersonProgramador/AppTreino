@@ -1486,14 +1486,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   if (!accessReady) {
     return (
       <main className="relative grid min-h-screen place-items-center overflow-hidden bg-ink p-6 text-sand">
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 20% 20%, rgba(240,180,90,0.22), transparent 36%), radial-gradient(circle at 80% 0%, rgba(224,106,60,0.18), transparent 42%), linear-gradient(160deg, #07080a 0%, #10131a 48%, #0b0f14 100%)"
-          }}
-        />
-        <div className="relative grid animate-fade-up gap-4 rounded-3xl border border-white/10 bg-ink-elev/70 px-8 py-10 text-center shadow-panel backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-0 [background-image:var(--shell-bg)]" aria-hidden="true" />
+        <div className="relative grid animate-fade-up gap-4 rounded-3xl border border-[color:var(--app-border)] bg-ink-elev/70 px-8 py-10 text-center shadow-panel backdrop-blur-sm">
           <Loader2 className="mx-auto animate-spin text-brand-gold" size={36} />
           <span className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand-gold">área do aluno</span>
           <p className="m-0 text-sand-muted">Verificando sua liberação de acesso...</p>
@@ -1542,10 +1536,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     return (
       <main className="workspace-shell grid min-h-screen grid-cols-[280px_minmax(0,1fr)] bg-ink text-sand">
         <aside
-          className="workspace-sidebar sticky top-0 grid min-h-screen content-start gap-[22px] self-start border-r border-white/10 bg-gradient-to-b from-white/[0.045] to-transparent bg-ink-soft px-[18px] py-[22px]"
+          className="workspace-sidebar sticky top-0 grid min-h-screen content-start gap-[22px] self-start border-r border-[color:var(--app-border)] bg-gradient-to-b from-[var(--app-fill)] to-transparent bg-ink-soft px-[18px] py-[22px]"
           aria-label="Menu do aluno"
         >
-          <div className="workspace-sidebar-brand flex min-w-0 items-center gap-3 border-b border-white/10 pb-[18px]">
+          <div className="workspace-sidebar-brand flex min-w-0 items-center gap-3 border-b border-[color:var(--app-border)] pb-[18px]">
             <img
               className="h-[42px] w-[42px] shrink-0 rounded-lg bg-brand-gold/10"
               src={assetUrl("assets/app-treino-mark.svg")}

@@ -23,6 +23,7 @@ import {
   testimonials,
   workoutRows
 } from "../../lib/home-content";
+import { ThemeModeSwitch } from "../shared/ThemeModeSwitch";
 
 export function HomeView({
   onStart,
@@ -46,14 +47,14 @@ export function HomeView({
   }, []);
 
   return (
-    <main className="bg-ink text-sand pb-20">
+    <main className="home-landing">
       {/* 01. Top bar — urgência */}
-      <div className="border-b border-brand-gold/25 bg-gradient-to-r from-brand-ember/90 via-brand-coral to-brand-amber px-4 py-2.5 text-center text-[12px] font-extrabold leading-snug text-ink sm:text-sm">
+      <div className="home-topbar border-b border-brand-gold/25 bg-gradient-to-r from-brand-ember/90 via-brand-coral to-brand-amber px-4 py-2.5 text-center text-[12px] font-extrabold leading-snug sm:text-sm">
         Condição especial: garanta seu plano hoje e receba acesso imediato + garantia de 7 dias sem risco.
       </div>
 
       {/* 02. Navbar fixa */}
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-ink/90 backdrop-blur-md">
+      <header className="home-header sticky top-0 z-40 border-b backdrop-blur-md">
         <div className="mx-auto flex min-h-[72px] max-w-6xl items-center justify-between gap-4 px-5 sm:px-8 md:px-12">
           <a href="#topo" className="inline-flex items-center gap-2 no-underline" aria-label="App Treino">
             <img
@@ -68,16 +69,17 @@ export function HomeView({
               <a
                 key={item.href}
                 href={item.href}
-                className="text-sm font-bold text-sand-muted transition hover:text-sand"
+                className="home-muted text-sm font-bold transition hover:text-brand-gold"
               >
                 {item.label}
               </a>
             ))}
           </nav>
           <div className="flex items-center gap-2 sm:gap-3">
+            <ThemeModeSwitch compact className="hidden min-w-[168px] sm:grid" />
             <button
               type="button"
-              className="hidden border-0 bg-transparent text-sm font-bold text-sand-muted transition hover:text-sand sm:inline-flex"
+              className="home-muted hidden border-0 bg-transparent text-sm font-bold transition hover:text-brand-gold sm:inline-flex"
               onClick={onLogin}
             >
               Entrar
@@ -89,6 +91,9 @@ export function HomeView({
           </div>
         </div>
       </header>
+      <div className="home-header border-b px-4 py-2 sm:hidden">
+        <ThemeModeSwitch compact />
+      </div>
 
       {/* 03. Hero */}
       <section id="topo" className="relative isolate overflow-hidden">
@@ -97,8 +102,8 @@ export function HomeView({
           style={{ backgroundImage: `url(${assetUrl("assets/hero-banner-app-treino.png")})` }}
           aria-hidden="true"
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/90 to-ink/45" aria-hidden="true" />
-        <div className="absolute inset-0 bg-gradient-to-t from-ink via-transparent to-ink/50" aria-hidden="true" />
+        <div className="home-hero-overlay-x absolute inset-0" aria-hidden="true" />
+        <div className="home-hero-overlay-y absolute inset-0" aria-hidden="true" />
 
         <div className="relative z-10 mx-auto grid min-h-[calc(100vh-118px)] max-w-6xl items-center gap-10 px-5 py-16 sm:px-8 md:grid-cols-[1.15fr_0.85fr] md:px-12 md:py-20">
           <div className="animate-fade-up max-w-2xl">
@@ -146,8 +151,8 @@ export function HomeView({
           </div>
 
           <div className="animate-fade-up mx-auto w-full max-w-[320px] md:max-w-none" style={{ animationDelay: "120ms" }}>
-            <div className="relative rounded-[2rem] border border-white/15 bg-ink-panel/90 p-4 shadow-panel backdrop-blur-sm">
-              <div className="rounded-[1.4rem] border border-white/10 bg-ink-soft p-4">
+            <div className="relative rounded-[2rem] border home-panel p-4 shadow-panel backdrop-blur-sm">
+              <div className="home-surface rounded-[1.4rem] border p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-brand-gold">Sessão A</p>
@@ -161,7 +166,7 @@ export function HomeView({
                   {workoutRows.map((row) => (
                     <div
                       key={row.name}
-                      className="grid grid-cols-[1fr_auto] gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5"
+                      className="grid grid-cols-[1fr_auto] gap-2 rounded-xl border border-[color:var(--app-border)] bg-[var(--app-fill)] px-3 py-2.5"
                     >
                       <div>
                         <strong className="text-sm text-sand">{row.name}</strong>
@@ -173,7 +178,7 @@ export function HomeView({
                     </div>
                   ))}
                 </div>
-                <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
+                <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--app-fill-strong)]">
                   <div className="h-full w-[68%] rounded-full bg-gradient-to-r from-brand-gold to-brand-coral" />
                 </div>
                 <p className="mt-2 text-xs font-bold text-sand-muted">3 de 5 exercícios · cargas atualizadas</p>
@@ -184,7 +189,7 @@ export function HomeView({
       </section>
 
       {/* 04. Prova social */}
-      <section className="border-y border-white/10 bg-ink-soft/90" aria-label="Prova social">
+      <section className="home-band border-y" aria-label="Prova social">
         <div className="mx-auto grid max-w-6xl gap-6 px-5 py-10 sm:grid-cols-2 sm:px-8 md:grid-cols-4 md:px-12">
           {socialProofMetrics.map((item) => (
             <div key={item.label} className="flex items-start gap-3">
@@ -206,7 +211,7 @@ export function HomeView({
             Ainda treina no modo automático sem ver mudanças reais?
           </h2>
           <div className="mt-10 grid gap-4 md:grid-cols-2">
-            <div className="rounded-3xl border border-white/10 bg-ink/50 p-6">
+            <div className="home-panel rounded-3xl border p-6">
               <p className="mb-5 inline-flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-sand-faint">
                 <X size={16} className="text-brand-ember" />
                 Sem o App Treino
@@ -239,7 +244,7 @@ export function HomeView({
       </section>
 
       {/* 06. Para quem é */}
-      <section id="para-quem" className="border-y border-white/10 bg-ink-panel/35 px-5 py-16 sm:px-8 md:px-12">
+      <section id="para-quem" className="home-band border-y px-5 py-16 sm:px-8 md:px-12">
         <div className="mx-auto max-w-6xl">
           <span className="ui-eyebrow">Segmentação</span>
           <h2 className="ui-display mt-4 max-w-3xl text-[clamp(1.8rem,4vw,3rem)]">
@@ -247,7 +252,7 @@ export function HomeView({
           </h2>
           <div className="mt-10 grid gap-8 md:grid-cols-3">
             {audienceSegments.map((item) => (
-              <article key={item.title} className="grid gap-3 border-t border-white/10 pt-5">
+              <article key={item.title} className="grid gap-3 border-t border-[color:var(--app-border)] pt-5">
                 <item.icon className="text-brand-gold" size={24} />
                 <h3 className="font-display text-xl text-sand">{item.title}</h3>
                 <p className="text-sm leading-relaxed text-sand-muted">{item.text}</p>
@@ -266,7 +271,7 @@ export function HomeView({
           </h2>
           <div className="mt-10 grid gap-6 sm:grid-cols-2">
             {resources.map((resource) => (
-              <article key={resource.title} className="grid gap-3 border-t border-white/10 pt-5">
+              <article key={resource.title} className="grid gap-3 border-t border-[color:var(--app-border)] pt-5">
                 <resource.icon className="text-brand-coral" size={24} />
                 <h3 className="font-display text-xl text-sand">{resource.title}</h3>
                 <p className="text-sm leading-relaxed text-sand-muted">{resource.text}</p>
@@ -277,7 +282,7 @@ export function HomeView({
       </section>
 
       {/* 08. Depoimentos */}
-      <section id="resultados" className="border-y border-white/10 bg-ink-soft/80 px-5 py-16 sm:px-8 md:px-12">
+      <section id="resultados" className="home-band border-y px-5 py-16 sm:px-8 md:px-12">
         <div className="mx-auto max-w-6xl">
           <span className="ui-eyebrow">Resultados reais</span>
           <h2 className="ui-display mt-4 max-w-3xl text-[clamp(1.8rem,4vw,3rem)]">
@@ -287,7 +292,7 @@ export function HomeView({
             {testimonials.map((item) => (
               <figure
                 key={item.name}
-                className="grid gap-4 rounded-3xl border border-white/10 bg-ink/50 p-6"
+                className="grid gap-4 rounded-3xl border border-[color:var(--app-border)] bg-ink/50 p-6"
               >
                 <div className="inline-flex text-brand-gold" aria-label="5 estrelas">
                   {Array.from({ length: 5 }).map((_, index) => (
@@ -316,10 +321,10 @@ export function HomeView({
           </p>
 
           <div className="mt-10 grid gap-5 lg:grid-cols-2">
-            <article className="grid gap-4 rounded-3xl border border-white/10 bg-ink/50 p-6 sm:p-8">
+            <article className="home-plan-card grid gap-4 rounded-3xl border border-[color:var(--app-border)] p-6 sm:p-8">
               <div>
-                <h3 className="font-display text-2xl text-sand">Plano Mensal</h3>
-                <p className="mt-1 text-sm text-sand-muted">Flexibilidade para treinar mês a mês.</p>
+                <h3 className="home-plan-title font-display text-2xl">Plano Mensal</h3>
+                <p className="home-plan-copy mt-1 text-sm">Flexibilidade para treinar mês a mês.</p>
               </div>
               <div>
                 <strong className="font-display text-4xl text-brand-gold">
@@ -329,7 +334,7 @@ export function HomeView({
               </div>
               <ul className="grid gap-2.5">
                 {monthlyPlanPerks.map((perk) => (
-                  <li key={perk} className="flex gap-2 text-sm text-sand-muted">
+                  <li key={perk} className="home-plan-copy flex gap-2 text-sm">
                     <Check size={16} className="mt-0.5 shrink-0 text-brand-mint" />
                     {perk}
                   </li>
@@ -341,27 +346,27 @@ export function HomeView({
               </button>
             </article>
 
-            <article className="relative grid gap-4 rounded-3xl border border-brand-gold/50 bg-gradient-to-br from-brand-gold/15 via-ink/70 to-ink p-6 shadow-glow sm:p-8">
-              <span className="absolute right-4 top-4 rounded-full bg-brand-gold px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-ink">
+            <article className="home-plan-featured relative grid gap-4 rounded-3xl border border-brand-gold/50 p-6 shadow-glow sm:p-8">
+              <span className="absolute right-4 top-4 rounded-full bg-brand-gold px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-[color:var(--on-accent)]">
                 Mais vendido · melhor custo
               </span>
               <div className="pr-28">
-                <h3 className="font-display text-2xl text-sand">Plano Anual</h3>
-                <p className="mt-1 text-sm text-sand-muted">Para quem está comprometido com resultados de longo prazo.</p>
+                <h3 className="home-plan-title font-display text-2xl">Plano Anual</h3>
+                <p className="home-plan-copy mt-1 text-sm">Para quem está comprometido com resultados de longo prazo.</p>
               </div>
               <div>
-                <p className="text-sm text-sand-faint line-through">{formatPriceInBRL(annualAnchorCents)}</p>
+                <p className="home-plan-faint text-sm line-through">{formatPriceInBRL(annualAnchorCents)}</p>
                 <strong className="font-display text-4xl text-brand-gold">
                   12x de {formatPriceInBRL(annualInstallmentCents)}
                 </strong>
-                <p className="mt-1 text-sm text-sand-muted">
+                <p className="home-plan-copy mt-1 text-sm">
                   ou {formatPriceInBRL(annual.priceInCents)} à vista — você economiza{" "}
                   {formatPriceInBRL(annualSavingsCents)}
                 </p>
               </div>
               <ul className="grid gap-2.5">
                 {annualPlanPerks.map((perk) => (
-                  <li key={perk} className="flex gap-2 text-sm text-sand">
+                  <li key={perk} className="home-plan-title flex gap-2 text-sm">
                     <Check size={16} className="mt-0.5 shrink-0 text-brand-mint" />
                     {perk}
                   </li>
@@ -371,7 +376,7 @@ export function HomeView({
                 Garantir aproveitamento e economizar
                 <ArrowRight size={18} />
               </button>
-              <p className="text-[11px] text-sand-faint">
+              <p className="home-plan-faint text-[11px]">
                 Economia de {formatPriceInBRL(annualSavingsCents)} em relação a 12 mensalidades no preço de lista.
               </p>
             </article>
@@ -380,7 +385,7 @@ export function HomeView({
       </section>
 
       {/* 10. Garantia */}
-      <section className="border-y border-white/10 bg-ink-panel/40 px-5 py-16 sm:px-8 md:px-12">
+      <section className="border-y border-[color:var(--app-border)] bg-ink-panel/40 px-5 py-16 sm:px-8 md:px-12">
         <div className="mx-auto flex max-w-4xl flex-col items-start gap-5 rounded-3xl border border-brand-mint/25 bg-brand-mint/5 p-6 sm:p-10 md:flex-row md:items-center">
           <div className="grid h-16 w-16 place-items-center rounded-full bg-brand-mint/15 text-brand-mint">
             <ShieldCheck size={30} />
@@ -407,7 +412,7 @@ export function HomeView({
             {faqItems.map((item) => (
               <details
                 key={item.question}
-                className="group rounded-2xl border border-white/10 bg-ink/40 px-5 py-4 open:border-brand-gold/30"
+                className="group rounded-2xl border border-[color:var(--app-border)] bg-ink/50 px-5 py-4 open:border-brand-gold/30"
               >
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-display text-lg text-sand">
                   <h3 className="text-base font-semibold sm:text-lg">{item.question}</h3>
@@ -424,14 +429,14 @@ export function HomeView({
       </section>
 
       {/* 12. CTA final */}
-      <section className="border-t border-white/10 bg-gradient-to-br from-brand-coral/25 via-ink to-ink px-5 py-16 sm:px-8 md:px-12">
+      <section className="home-cta-band border-t border-[color:var(--app-border)] px-5 py-16 sm:px-8 md:px-12">
         <div className="mx-auto flex max-w-6xl flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div className="max-w-2xl">
             <span className="ui-eyebrow">Último passo</span>
-            <h2 className="ui-display mt-4 text-[clamp(1.8rem,4vw,3rem)]">
+            <h2 className="home-cta-title ui-display mt-4 text-[clamp(1.8rem,4vw,3rem)]">
               Sua próxima ida à academia pode ser totalmente diferente
             </h2>
-            <p className="mt-3 text-sm text-sand-muted sm:text-base">
+            <p className="home-cta-copy mt-3 text-sm sm:text-base">
               Não perca mais tempo treinando sem rumo. Escolha seu plano, entre no app e comece hoje a construir a sua
               melhor versão.
             </p>
@@ -444,7 +449,7 @@ export function HomeView({
       </section>
 
       {/* 13. Footer */}
-      <footer className="border-t border-white/10 px-5 py-12 sm:px-8 md:px-12">
+      <footer className="border-t border-[color:var(--app-border)] px-5 py-12 sm:px-8 md:px-12">
         <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-[1.5fr_repeat(3,1fr)]">
           <div className="flex gap-3">
             <img src={assetUrl("assets/app-treino-mark.svg")} alt="" aria-hidden="true" className="h-10 w-10" />
@@ -498,7 +503,7 @@ export function HomeView({
             </a>
           </nav>
         </div>
-        <div className="mx-auto mt-10 flex max-w-6xl flex-col gap-2 border-t border-white/10 pt-6 text-xs text-sand-faint sm:flex-row sm:justify-between">
+        <div className="mx-auto mt-10 flex max-w-6xl flex-col gap-2 border-t border-[color:var(--app-border)] pt-6 text-xs text-sand-faint sm:flex-row sm:justify-between">
           <span>© 2026 App Treino Ltda. Todos os direitos reservados.</span>
           <span>CNPJ: 00.000.000/0001-00</span>
         </div>
@@ -506,7 +511,7 @@ export function HomeView({
 
       {/* CTA sticky */}
       <div
-        className={`fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-ink/95 px-4 py-3 backdrop-blur-md transition duration-300 ${
+        className={`home-sticky-cta fixed inset-x-0 bottom-0 z-50 border-t px-4 py-3 backdrop-blur-md transition duration-300 ${
           stickyVisible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-full opacity-0"
         }`}
       >

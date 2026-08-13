@@ -1,57 +1,149 @@
 import { Loader2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { can, canAccessPanel, type UserRole } from "@app-treino/shared";
 import { assetUrl } from "../lib/urls";
 import { useAuth } from "./AuthContext";
-import { homePathForRole, paths } from "./paths";
+import { canAccessRoleRoute, homePathForRole, isRoleHomePath, mustRedirectForRole } from "./session";
+import { paths } from "./paths";
 
-export function BootScreen() {
+export function TransitionScreen({ message }: { message?: string }) {
   return (
     <div className="ui-shell app-boot-screen" role="status" aria-live="polite">
       <img src={assetUrl("assets/app-treino-logo.svg")} alt="App Treino" className="app-boot-logo" />
       <Loader2 className="app-boot-spinner animate-spin" size={28} aria-hidden="true" />
-      <p>Preparando sua área...</p>
+      <p>{message ?? "Preparando sua área..."}</p>
     </div>
   );
 }
 
-/** Blocks every route until local token is validated (no Home/Login ghost). */
-export function SessionGate({ children }: { children: ReactNode }) {
-  const { status } = useAuth();
+export function BootScreen() {
+  return <TransitionScreen />;
+}
 
-  if (status === "booting") {
-    return <BootScreen />;
+/**
+ * Blocks every app shell until:
+ * - anonymous (guest may browse), or
+ * - authenticated AND already on the role home (/aluno or /admin).
+ *
+ * This is what prevents Home/Login/Admin ghosts during student login.
+ */
+export function SessionGate({ children }: { children: ReactNode }) {
+  const { phase, user, isTransitioning, transitionMessage } = useAuth();
+  const location = useLocation();
+
+  if (isTransitioning || phase === "restoring") {
+    return <TransitionScreen message={transitionMessage} />;
+  }
+
+  // Credentials settled but URL still guest/wrong panel → keep blocking
+  if (phase === "authenticated" && user && mustRedirectForRole(location.pathname, user.role)) {
+    return (
+      <TransitionScreen
+        message={user.role === "ADMIN" ? "Abrindo painel admin..." : "Abrindo seu painel..."}
+      />
+    );
   }
 
   return <>{children}</>;
 }
 
 export function GuestRoute() {
-  const { isAuthenticated, user } = useAuth();
+  const { user, token } = useAuth();
   const location = useLocation();
 
-  if (isAuthenticated && user) {
+  // Any live session leaves guest routes immediately (do not wait for phase)
+  if (user && token) {
     return <Navigate to={homePathForRole(user.role)} replace state={{ from: location }} />;
   }
 
   return <Outlet />;
 }
 
-export function ProtectedRoute({ role }: { role: "ADMIN" | "USER" }) {
-  const { isAuthenticated, user, token } = useAuth();
+export function ProtectedRoute({ role }: { role: UserRole }) {
+  const { user, token, isTransitioning, phase } = useAuth();
   const location = useLocation();
 
-  if (!isAuthenticated || !user || !token) {
+  if (isTransitioning) {
+    return <TransitionScreen />;
+  }
+
+  if (!user || !token) {
     return <Navigate to={paths.login} replace state={{ from: location }} />;
   }
 
-  if (role === "ADMIN" && user.role !== "ADMIN") {
-    return <Navigate to={paths.student} replace />;
+  // Session exists but still settling onto role home
+  if (phase !== "authenticated" && !isRoleHomePath(location.pathname, user.role)) {
+    return <TransitionScreen message="Abrindo seu painel..." />;
   }
 
-  if (role === "USER" && user.role === "ADMIN") {
-    return <Navigate to={paths.admin} replace />;
+  if (!canAccessRoleRoute(user.role, role)) {
+    return <Navigate to={homePathForRole(user.role)} replace />;
   }
 
   return <Outlet />;
+}
+
+/** Resolves /app → role home without ever mounting Admin/Student shells. */
+export function RoleHomeRedirect() {
+  const { user, token, isTransitioning, transitionMessage } = useAuth();
+
+  if (isTransitioning) {
+    return <TransitionScreen message={transitionMessage} />;
+  }
+
+  if (!user || !token) {
+    return <Navigate to={paths.login} replace />;
+  }
+
+  return <Navigate to={homePathForRole(user.role)} replace />;
+}
+
+const AdminViewLazy = lazy(() =>
+  import("../components/admin/AdminView").then((module) => ({ default: module.AdminView }))
+);
+
+const UserViewLazy = lazy(() =>
+  import("../components/student/UserView").then((module) => ({ default: module.UserView }))
+);
+
+/** Warm the student chunk as soon as a USER session is established. */
+export function preloadStudentPanel() {
+  void import("../components/student/UserView");
+}
+
+export function preloadAdminPanel() {
+  void import("../components/admin/AdminView");
+}
+
+export function AdminPanel() {
+  const { token, user, logout } = useAuth();
+
+  if (!token || !user || !canAccessPanel(user.role, "admin") || !can(user.role, "admin_panel:access")) {
+    return <Navigate to={user ? homePathForRole(user.role) : paths.login} replace />;
+  }
+
+  return (
+    <Suspense fallback={<TransitionScreen message="Abrindo painel admin..." />}>
+      <AdminViewLazy token={token} onLogout={logout} />
+    </Suspense>
+  );
+}
+
+export function StudentPanel() {
+  const { token, user, logout } = useAuth();
+
+  if (!token || !user) {
+    return <Navigate to={paths.login} replace />;
+  }
+
+  if (!canAccessPanel(user.role, "student") || !can(user.role, "student_panel:access")) {
+    return <Navigate to={homePathForRole(user.role)} replace />;
+  }
+
+  return (
+    <Suspense fallback={<TransitionScreen message="Abrindo seu painel..." />}>
+      <UserViewLazy token={token} onLogout={logout} />
+    </Suspense>
+  );
 }

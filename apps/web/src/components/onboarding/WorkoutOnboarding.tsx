@@ -149,7 +149,7 @@ export function WorkoutOnboarding({
         {[1, 2, 3, 4].map((item) => (
           <span
             key={item}
-            className={`h-1.5 rounded-full transition ${step >= item ? "bg-brand-gold" : "bg-white/10"}`}
+            className={`h-1.5 rounded-full transition ${step >= item ? "bg-brand-gold" : "bg-[var(--app-fill-strong)]"}`}
           />
         ))}
       </div>

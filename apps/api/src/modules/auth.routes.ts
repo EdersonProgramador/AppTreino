@@ -1,10 +1,19 @@
 import type { FastifyInstance } from "fastify";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
+import { homePathForRole, permissionsFor, type UserRole } from "@app-treino/shared";
 import { getAuthUser, hashPassword, toAuthUser, verifyPassword } from "../auth.js";
 import { buildPasswordResetUrl, isDeliverableEmail, sendPasswordResetEmail } from "../email.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
+import {
+  findUserByPhone,
+  loginAccountNotFoundMessage,
+  loginInvalidPasswordMessage,
+  normalizeEmail,
+  normalizePhone,
+  resolveLoginIdentifierKind
+} from "./auth.utils.js";
 
 type AuthProvider = "EMAIL" | "GOOGLE";
 type AuthRouteUser = {
@@ -13,7 +22,7 @@ type AuthRouteUser = {
   email?: string | null;
   phone?: string | null;
   passwordHash?: string | null;
-  role: "ADMIN" | "USER";
+  role: UserRole;
   status: "ACTIVE" | "INACTIVE";
   provider?: string | null;
   googleId?: string | null;
@@ -121,14 +130,6 @@ function todayUtcOnly() {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
-function normalizeEmail(value?: string | null) {
-  return value?.trim().toLowerCase() || null;
-}
-
-function normalizePhone(value?: string | null) {
-  return value?.trim() || null;
-}
-
 function buildSyntheticEmail(phone: string) {
   return `phone-${phone.replace(/[^a-z0-9]+/gi, "").toLowerCase()}@app-treino.local`;
 }
@@ -184,7 +185,7 @@ async function verifyGoogleIdToken(idToken?: string | null) {
   };
 }
 
-async function recordDailyAttendance(userId: string, role: "ADMIN" | "USER") {
+async function recordDailyAttendance(userId: string, role: UserRole) {
   if (role !== "USER") return;
 
   try {
@@ -215,6 +216,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     const credentials = loginSchema.parse(request.body);
     const email = normalizeEmail(credentials.email);
     const phone = normalizePhone(credentials.phone);
+    const identifierKind = resolveLoginIdentifierKind(email, phone);
 
     if (credentials.provider !== "EMAIL") {
       return reply.code(400).send({
@@ -228,21 +230,18 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           omit: { passwordHash: false }
         })
       : phone
-        ? await prisma.user.findUnique({
-            where: { phone },
-            omit: { passwordHash: false }
-          })
+        ? await findUserByPhone(prisma, phone)
         : null;
 
     if (!user) {
       return reply.code(401).send({
-        message: "E-mail ou senha inválidos."
+        message: loginAccountNotFoundMessage(identifierKind)
       });
     }
 
     if (!user.passwordHash || !(await verifyPassword(credentials.password ?? "", user.passwordHash))) {
       return reply.code(401).send({
-        message: "E-mail ou senha inválidos."
+        message: loginInvalidPasswordMessage(identifierKind)
       });
     }
 
@@ -255,6 +254,14 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     if (user.status !== "ACTIVE") {
       return reply.code(403).send({
         message: "Usuário inativo."
+      });
+    }
+
+    // Heal legacy formatted phones to digits-only after successful login
+    if (phone && user.phone && user.phone !== phone) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { phone }
       });
     }
 
@@ -288,7 +295,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     const existingUser = email
       ? await prisma.user.findUnique({ where: { email } })
       : phone
-        ? await prisma.user.findUnique({ where: { phone } })
+        ? await findUserByPhone(prisma, phone)
         : null;
 
     if (existingUser) {
@@ -444,10 +451,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
             omit: { passwordHash: false }
           })
         : phone
-          ? await prisma.user.findUnique({
-              where: { phone },
-              omit: { passwordHash: false }
-            })
+          ? await findUserByPhone(prisma, phone)
           : null;
 
       if (
@@ -555,14 +559,20 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
     if (!user) {
       return {
-        user: null
+        user: null,
+        rbac: null
       };
     }
 
     await recordDailyAttendance(user.id, user.role);
 
     return {
-      user
+      user,
+      rbac: {
+        role: user.role,
+        permissions: permissionsFor(user.role),
+        homePath: homePathForRole(user.role)
+      }
     };
   });
 }

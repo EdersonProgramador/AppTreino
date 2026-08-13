@@ -5,9 +5,13 @@ import { App } from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppQueryProvider } from "./lib/query-client";
 import { wireStudentSyncBus } from "./stores/studentSyncStore";
+import { wireEventBusBroadcast } from "./lib/event-bus";
+import { useUiPrefsStore } from "./stores/uiPrefsStore";
 import "./index.css";
 
 wireStudentSyncBus();
+wireEventBusBroadcast();
+useUiPrefsStore.getState().hydrate();
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
 

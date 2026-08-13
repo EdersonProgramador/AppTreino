@@ -5,7 +5,6 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
   type ReactNode
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -14,19 +13,30 @@ import { ApiError, apiGet, apiPost, setUnauthorizedHandler } from "../api";
 import type { AuthMode, PlanCode } from "../types/auth";
 import type { WorkoutOnboardingSubmitPayload } from "../components/onboarding/WorkoutOnboarding";
 import { levelLabel } from "../components/onboarding/onboarding.schema";
-import { homePathForRole, paths } from "./paths";
-
-type LoginState = "idle" | "submitting";
-
-/** Single source of truth for what the UI may render. */
-export type AuthStatus = "booting" | "anonymous" | "authenticated";
+import {
+  selectAuthModeLabel,
+  selectIsAuthenticated,
+  selectIsTransitioning,
+  useAuthStore
+} from "../stores/authStore";
+import {
+  homePathForRole,
+  isRoleHomePath,
+  mustRedirectForRole,
+  normalizeAuthUser
+} from "./session";
+import { paths } from "./paths";
+import { preloadAdminPanel, preloadStudentPanel } from "./RouteGuards";
 
 type AuthContextValue = {
-  status: AuthStatus;
+  phase: ReturnType<typeof useAuthStore.getState>["phase"];
+  status: "booting" | "anonymous" | "authenticated" | "transitioning";
   user: AuthUser | null;
   token: string | null;
   isAuthenticated: boolean;
-  loginState: LoginState;
+  isTransitioning: boolean;
+  transitionMessage: string;
+  loginState: "idle" | "submitting";
   loginError: string | null;
   loginSuccess: string | null;
   resetToken: string | null;
@@ -34,7 +44,6 @@ type AuthContextValue = {
   setSelectedPlanCode: (plan: PlanCode | null) => void;
   setResetToken: (token: string | null) => void;
   clearLoginMessages: () => void;
-  applySession: (response: { user: AuthUser; token: string }) => void;
   logout: () => void;
   submitAuth: (mode: AuthMode, formData: FormData, provider?: "EMAIL" | "GOOGLE") => Promise<void>;
   submitRegisterOnboarding: (payload: WorkoutOnboardingSubmitPayload) => Promise<void>;
@@ -44,145 +53,170 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const TOKEN_KEY = "app-treino-token";
-
-function readStoredToken() {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(TOKEN_KEY);
-}
-
-function isGuestPath(pathname: string) {
-  return pathname === paths.home || pathname === paths.login || pathname === "";
-}
-
-function needsRoleRedirect(pathname: string, role: AuthUser["role"]) {
-  if (isGuestPath(pathname)) return true;
-  if (role === "ADMIN" && pathname.startsWith(paths.student)) return true;
-  if (role === "USER" && pathname.startsWith(paths.admin)) return true;
-  return false;
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const locationRef = useRef(location.pathname);
-  locationRef.current = location.pathname;
+  const pathnameRef = useRef(location.pathname);
+  pathnameRef.current = location.pathname;
 
-  const initialToken = readStoredToken();
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(() => initialToken);
-  const [bootstrapping, setBootstrapping] = useState(() => Boolean(initialToken));
-  const [loginState, setLoginState] = useState<LoginState>("idle");
-  const [loginError, setLoginError] = useState<string | null>(null);
-  const [loginSuccess, setLoginSuccess] = useState<string | null>(null);
-  const [resetToken, setResetToken] = useState<string | null>(null);
-  const [selectedPlanCode, setSelectedPlanCode] = useState<PlanCode | null>(null);
+  const phase = useAuthStore((s) => s.phase);
+  const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.token);
+  const loginError = useAuthStore((s) => s.loginError);
+  const loginSuccess = useAuthStore((s) => s.loginSuccess);
+  const resetToken = useAuthStore((s) => s.resetToken);
+  const selectedPlanCode = useAuthStore((s) => s.selectedPlanCode);
+  const pendingDestination = useAuthStore((s) => s.pendingDestination);
+  const isAuthenticated = useAuthStore(selectIsAuthenticated);
+  const isTransitioning = useAuthStore(selectIsTransitioning);
+  const transitionMessage = useAuthStore(selectAuthModeLabel);
 
-  /** True after applySession — skip boot redirect; only soft-validate /me. */
-  const hydratedFromLoginRef = useRef(false);
+  const status: AuthContextValue["status"] =
+    phase === "restoring"
+      ? "booting"
+      : phase === "signingIn" || phase === "redirecting"
+        ? "transitioning"
+        : phase === "authenticated"
+          ? "authenticated"
+          : "anonymous";
 
-  const status: AuthStatus = bootstrapping
-    ? "booting"
-    : user && token
-      ? "authenticated"
-      : "anonymous";
+  const loginState: "idle" | "submitting" =
+    phase === "signingIn" || phase === "redirecting" ? "submitting" : "idle";
 
-  const clearSessionLocal = useCallback(() => {
-    window.localStorage.removeItem(TOKEN_KEY);
-    hydratedFromLoginRef.current = false;
-    setToken(null);
-    setUser(null);
-    setBootstrapping(false);
-  }, []);
-
-  const logout = useCallback(() => {
-    clearSessionLocal();
-    navigate(paths.home, { replace: true });
-  }, [clearSessionLocal, navigate]);
-
-  const enterAuthedArea = useCallback(
-    (nextUser: AuthUser) => {
-      if (needsRoleRedirect(locationRef.current, nextUser.role)) {
-        navigate(homePathForRole(nextUser.role), { replace: true });
-      }
-    },
-    [navigate]
-  );
-
-  const applySession = useCallback(
-    (response: { user: AuthUser; token: string }) => {
-      hydratedFromLoginRef.current = true;
-      window.localStorage.setItem(TOKEN_KEY, response.token);
-      setToken(response.token);
-      setUser(response.user);
-      setBootstrapping(false);
-      navigate(homePathForRole(response.user.role), { replace: true });
-    },
-    [navigate]
-  );
-
+  // Wire 401 → clear session
   useEffect(() => {
     setUnauthorizedHandler(() => {
-      clearSessionLocal();
+      useAuthStore.getState().clearSession();
       navigate(paths.home, { replace: true });
     });
-
     return () => setUnauthorizedHandler(null);
-  }, [clearSessionLocal, navigate]);
+  }, [navigate]);
 
+  // Restore session from stored token (cold boot)
   useEffect(() => {
-    if (!token) {
-      hydratedFromLoginRef.current = false;
-      setBootstrapping(false);
-      setUser(null);
+    const store = useAuthStore.getState();
+    if (!store.token) {
+      if (store.phase !== "anonymous") store.clearSession();
       return;
     }
 
-    let cancelled = false;
-    const fromLogin = hydratedFromLoginRef.current;
-
-    if (!fromLogin) {
-      setBootstrapping(true);
+    // Login just established session — soft-validate without tearing down the redirect
+    if (store.phase === "redirecting" || store.phase === "authenticated") {
+      let cancelled = false;
+      apiGet<{ user: AuthUser | null }>("/me", store.token)
+        .then((response) => {
+          if (cancelled) return;
+          if (!response.user) {
+            store.clearSession();
+            navigate(paths.login, { replace: true });
+            return;
+          }
+          const nextUser = normalizeAuthUser(response.user);
+          useAuthStore.setState({ user: nextUser });
+          // If /me corrects the role, bounce to the right panel under the gate
+          const destination = homePathForRole(nextUser.role);
+          if (mustRedirectForRole(pathnameRef.current, nextUser.role)) {
+            store.beginRedirect(destination);
+            navigate(destination, { replace: true });
+          }
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          // Only drop session on hard auth failure — never bounce to Home mid-login
+          if (error instanceof ApiError && error.status === 401) {
+            store.clearSession();
+            navigate(paths.login, { replace: true });
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
     }
 
-    apiGet<{ user: AuthUser | null }>("/me", token)
+    let cancelled = false;
+    store.beginRestore();
+
+    apiGet<{ user: AuthUser | null }>("/me", store.token)
       .then((response) => {
         if (cancelled) return;
-
         if (!response.user) {
-          clearSessionLocal();
-          navigate(paths.home, { replace: true });
+          store.clearSession();
+          navigate(paths.login, { replace: true });
           return;
         }
 
-        setUser(response.user);
-        setBootstrapping(false);
+        const nextUser = normalizeAuthUser(response.user);
+        const destination = homePathForRole(nextUser.role);
+        useAuthStore.setState({ user: nextUser });
 
-        if (!fromLogin) {
-          enterAuthedArea(response.user);
+        if (mustRedirectForRole(location.pathname, nextUser.role)) {
+          store.beginRedirect(destination);
+          navigate(destination, { replace: true });
+          return;
         }
+
+        store.completeRedirect();
       })
       .catch(() => {
         if (cancelled) return;
-        clearSessionLocal();
-        navigate(paths.home, { replace: true });
+        store.clearSession();
+        navigate(paths.login, { replace: true });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [token, clearSessionLocal, navigate, enterAuthedArea]);
+    // Only on mount / token identity change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  // Settle redirecting → authenticated ONLY when URL is the role home (no timeout ghost)
+  useEffect(() => {
+    if (phase !== "redirecting" || !user) return;
+
+    const target = pendingDestination ?? homePathForRole(user.role);
+    if (isRoleHomePath(location.pathname, user.role) || location.pathname === target) {
+      useAuthStore.getState().completeRedirect();
+      return;
+    }
+
+    navigate(target, { replace: true });
+  }, [phase, user, pendingDestination, location.pathname, navigate]);
+
+  // Keep students off /admin (and admins off /aluno) while session is live
+  useEffect(() => {
+    if (!user || !token) return;
+    if (phase === "restoring" || phase === "signingIn") return;
+    if (!mustRedirectForRole(location.pathname, user.role)) return;
+
+    const destination = homePathForRole(user.role);
+    if (phase !== "redirecting") {
+      useAuthStore.getState().beginRedirect(destination);
+    }
+    navigate(destination, { replace: true });
+  }, [user, token, phase, location.pathname, navigate]);
+
+  const logout = useCallback(() => {
+    useAuthStore.getState().clearSession();
+    navigate(paths.home, { replace: true });
+  }, [navigate]);
+
+  const setSelectedPlanCode = useCallback((plan: PlanCode | null) => {
+    useAuthStore.getState().setSelectedPlanCode(plan);
+  }, []);
+
+  const setResetToken = useCallback((value: string | null) => {
+    useAuthStore.getState().setResetToken(value);
+  }, []);
 
   const clearLoginMessages = useCallback(() => {
-    setLoginError(null);
-    setLoginSuccess(null);
+    useAuthStore.getState().clearLoginMessages();
   }, []);
 
   const submitAuth = useCallback(
     async (mode: AuthMode, formData: FormData, provider: "EMAIL" | "GOOGLE" = "EMAIL") => {
-      setLoginError(null);
-      setLoginSuccess(null);
-      setLoginState("submitting");
+      const store = useAuthStore.getState();
+      store.beginSignIn();
 
       const name = String(formData.get("name") ?? "").trim();
       const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -198,7 +232,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const billingType = String(formData.get("billingType") ?? "UNDEFINED");
       const idToken = String(formData.get("idToken") ?? "").trim();
       const credential = String(formData.get("credential") ?? "").trim();
-      const isCheckoutRegister = mode === "register" && selectedPlanCode;
+      const planCode = store.selectedPlanCode;
+      const isCheckoutRegister = mode === "register" && planCode;
       const endpoint =
         provider === "GOOGLE"
           ? "/auth/google"
@@ -245,7 +280,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   daysPerWeek,
                   equipmentTags,
                   password,
-                  planCode: selectedPlanCode,
+                  planCode,
                   billingType
                 }
               : {
@@ -271,24 +306,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           endpoint,
           payload
         );
-        applySession(response);
+
+        const destination = store.establishSession(response);
+        if (response.user.role === "ADMIN") {
+          preloadAdminPanel();
+        } else {
+          preloadStudentPanel();
+        }
+        navigate(destination, { replace: true });
+
         if (isCheckoutRegister && response.payment?.paymentUrl) {
           window.open(response.payment.paymentUrl, "_blank");
         }
-        setSelectedPlanCode(null);
       } catch (error) {
         const message = error instanceof ApiError ? error.message : null;
-        setLoginError(
+        store.failSignIn(
           message ??
             (mode === "login"
               ? "E-mail, telefone ou senha inválidos, ou API indisponível."
               : "Não foi possível criar a conta. Verifique os dados e tente novamente.")
         );
-      } finally {
-        setLoginState("idle");
       }
     },
-    [applySession, selectedPlanCode]
+    [navigate]
   );
 
   const submitRegisterOnboarding = useCallback(
@@ -314,73 +354,73 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const email = String(formData.get("email") ?? "").trim().toLowerCase();
     const phone = String(formData.get("phone") ?? "").trim();
     const identifier = String(formData.get("identifier") ?? "").trim();
+    const store = useAuthStore.getState();
 
-    setLoginError(null);
-    setLoginSuccess(null);
-    setLoginState("submitting");
+    store.clearLoginMessages();
+    store.beginSignIn();
 
     try {
       const response = await apiPost<{ message: string }>("/auth/forgot-password", {
         email: email || (identifier.includes("@") ? identifier : undefined),
         phone: phone || (!identifier.includes("@") ? identifier : undefined)
       });
-      setLoginSuccess(
-        response.message ??
+      useAuthStore.setState({
+        phase: "anonymous",
+        loginSuccess:
+          response.message ??
           "Se o e-mail ou telefone estiver cadastrado, você receberá instruções para redefinir sua senha."
-      );
+      });
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;
-      setLoginError(message ?? "Não foi possível processar a recuperação de senha neste momento.");
-    } finally {
-      setLoginState("idle");
+      store.failSignIn(message ?? "Não foi possível processar a recuperação de senha neste momento.");
     }
   }, []);
 
-  const submitResetPassword = useCallback(
-    async (formData: FormData) => {
-      const password = String(formData.get("password") ?? "");
-      const confirmPassword = String(formData.get("confirmPassword") ?? "");
+  const submitResetPassword = useCallback(async (formData: FormData) => {
+    const password = String(formData.get("password") ?? "");
+    const confirmPassword = String(formData.get("confirmPassword") ?? "");
+    const store = useAuthStore.getState();
 
-      setLoginError(null);
-      setLoginSuccess(null);
+    store.clearLoginMessages();
 
-      if (!resetToken) {
-        setLoginError("Link de redefinição inválido ou expirado.");
-        return;
-      }
+    if (!store.resetToken) {
+      store.setLoginError("Link de redefinição inválido ou expirado.");
+      return;
+    }
 
-      if (password !== confirmPassword) {
-        setLoginError("As senhas informadas não coincidem.");
-        return;
-      }
+    if (password !== confirmPassword) {
+      store.setLoginError("As senhas informadas não coincidem.");
+      return;
+    }
 
-      setLoginState("submitting");
+    store.beginSignIn();
 
-      try {
-        const response = await apiPost<{ message: string }>("/auth/reset-password", {
-          token: resetToken,
-          password
-        });
-        setResetToken(null);
-        setLoginSuccess(
+    try {
+      const response = await apiPost<{ message: string }>("/auth/reset-password", {
+        token: store.resetToken,
+        password
+      });
+      useAuthStore.setState({
+        phase: "anonymous",
+        resetToken: null,
+        loginSuccess:
           response.message ?? "Senha redefinida com sucesso. Você já pode entrar com a nova senha."
-        );
-      } catch (error) {
-        const message = error instanceof ApiError ? error.message : null;
-        setLoginError(message ?? "Não foi possível redefinir a senha neste momento.");
-      } finally {
-        setLoginState("idle");
-      }
-    },
-    [resetToken]
-  );
+      });
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : null;
+      store.failSignIn(message ?? "Não foi possível redefinir a senha neste momento.");
+    }
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
+      phase,
       status,
       user,
       token,
-      isAuthenticated: status === "authenticated",
+      isAuthenticated,
+      isTransitioning,
+      transitionMessage,
       loginState,
       loginError,
       loginSuccess,
@@ -389,7 +429,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSelectedPlanCode,
       setResetToken,
       clearLoginMessages,
-      applySession,
       logout,
       submitAuth,
       submitRegisterOnboarding,
@@ -397,16 +436,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       submitResetPassword
     }),
     [
+      phase,
       status,
       user,
       token,
+      isAuthenticated,
+      isTransitioning,
+      transitionMessage,
       loginState,
       loginError,
       loginSuccess,
       resetToken,
       selectedPlanCode,
+      setSelectedPlanCode,
+      setResetToken,
       clearLoginMessages,
-      applySession,
       logout,
       submitAuth,
       submitRegisterOnboarding,

@@ -1,14 +1,10 @@
-import type { AuthUser } from "@app-treino/shared";
+import type { UserRole } from "@app-treino/shared";
+import { homePathForRole as resolveHomePath, paths as sessionPaths } from "./session";
 
-export const paths = {
-  home: "/",
-  login: "/login",
-  admin: "/admin",
-  student: "/aluno"
-} as const;
+export const paths = sessionPaths;
 
-export function homePathForRole(role: AuthUser["role"]) {
-  return role === "ADMIN" ? paths.admin : paths.student;
+export function homePathForRole(role: UserRole) {
+  return resolveHomePath(role);
 }
 
 export function loginPath(planCode?: string | null) {
