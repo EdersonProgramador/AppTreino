@@ -22,8 +22,8 @@ const substituteSchema = z.object({
 });
 
 const completeWorkoutSchema = z.object({
-  assignmentId: z.string().min(1).optional(),
-  sessionId: z.string().min(1).optional()
+  assignmentId: z.string().min(1),
+  sessionId: z.string().min(1)
 });
 
 const startWorkoutSessionSchema = z.object({
@@ -49,6 +49,77 @@ const exerciseProgressSchema = z.object({
   perceivedExertion: z.coerce.number().min(0).max(10).optional(),
   notes: z.string().max(1000).optional()
 });
+
+async function resetAbandonedSessionsForUser(userId: string, assignmentId?: string) {
+  const actives = await prisma.workoutSession.findMany({
+    where: {
+      userId,
+      status: "IN_PROGRESS",
+      ...(assignmentId ? { assignmentId } : {})
+    },
+    select: { id: true }
+  });
+
+  for (const active of actives) {
+    await prisma.$transaction(async (tx) => {
+      await tx.userProgress.deleteMany({ where: { sessionId: active.id, userId } });
+      await tx.workoutSession.update({
+        where: { id: active.id },
+        data: { status: "CANCELED", finishedAt: new Date() }
+      });
+    });
+  }
+
+  return actives.length;
+}
+
+async function assertSessionProgressComplete(sessionId: string, workoutBlockId: string | null) {
+  if (!workoutBlockId) {
+    throw httpError(400, "Sessão sem bloco de treino vinculado.");
+  }
+
+  const block = await prisma.workoutBlock.findFirst({
+    where: { id: workoutBlockId },
+    include: {
+      exercises: {
+        include: { exercise: { select: { deletedAt: true } } },
+        orderBy: { order: "asc" }
+      }
+    }
+  });
+  if (!block) {
+    throw httpError(400, "Bloco de treino não encontrado.");
+  }
+
+  const prescriptions = filterActiveBlockExercises(block.exercises);
+  if (prescriptions.length === 0) {
+    throw httpError(400, "Não há exercícios ativos neste treino.");
+  }
+
+  const progressRows = await prisma.userProgress.findMany({
+    where: { sessionId },
+    select: { workoutBlockExerciseId: true, seriesIndex: true }
+  });
+
+  const seriesByPrescription = new Map<string, Set<number>>();
+  for (const row of progressRows) {
+    if (!row.workoutBlockExerciseId) continue;
+    const bucket = seriesByPrescription.get(row.workoutBlockExerciseId) ?? new Set<number>();
+    bucket.add(row.seriesIndex);
+    seriesByPrescription.set(row.workoutBlockExerciseId, bucket);
+  }
+
+  for (const prescription of prescriptions) {
+    const requiredSets = Math.max(1, prescription.sets);
+    const done = seriesByPrescription.get(prescription.id)?.size ?? 0;
+    if (done < requiredSets) {
+      throw httpError(
+        400,
+        "Conclua todas as séries de cada exercício antes de finalizar o treino."
+      );
+    }
+  }
+}
 
 const consistencyQuerySchema = z.object({
   year: z.coerce.number().int().min(2020).max(2100).optional(),
@@ -1033,38 +1104,33 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       }
     });
 
+    const requestedDay = body.dayNumber ?? assignment.currentDay;
+    if (requestedDay !== assignment.currentDay) {
+      throw httpError(400, "Conclua o dia atual antes de iniciar outro treino.");
+    }
+
     const programDay = await prisma.programDayWorkout.findFirstOrThrow({
       where: {
         programId: assignment.programId,
-        dayNumber: body.dayNumber ?? assignment.currentDay
+        dayNumber: requestedDay
       },
       orderBy: {
         order: "asc"
       }
     });
 
-    const activeSession = await prisma.workoutSession.findFirst({
-      where: {
+    // Sem resume: qualquer IN_PROGRESS anterior é resetado; sempre começa limpo.
+    await resetAbandonedSessionsForUser(authUser.id, assignment.id);
+
+    const session = await prisma.workoutSession.create({
+      data: {
         userId: authUser.id,
         assignmentId: assignment.id,
-        status: "IN_PROGRESS"
-      },
-      orderBy: {
-        startedAt: "desc"
+        programId: assignment.programId,
+        workoutBlockId: programDay.workoutBlockId,
+        dayNumber: programDay.dayNumber
       }
     });
-
-    const session =
-      activeSession ??
-      (await prisma.workoutSession.create({
-        data: {
-          userId: authUser.id,
-          assignmentId: assignment.id,
-          programId: assignment.programId,
-          workoutBlockId: programDay.workoutBlockId,
-          dayNumber: programDay.dayNumber
-        }
-      }));
 
     return { session };
   });
@@ -1074,23 +1140,38 @@ export async function registerStudentRoutes(app: FastifyInstance) {
     const authUser = await requireActiveEnrollment(app, request);
     const body = cancelWorkoutSessionSchema.parse(request.body);
 
-    const currentSession = await prisma.workoutSession.findFirstOrThrow({
+    const currentSession = await prisma.workoutSession.findFirst({
       where: {
         id: body.sessionId,
-        userId: authUser.id
+        userId: authUser.id,
+        status: "IN_PROGRESS"
       }
     });
+
+    if (!currentSession) {
+      return { session: null, reset: false };
+    }
+
+    await prisma.userProgress.deleteMany({
+      where: { sessionId: currentSession.id, userId: authUser.id }
+    });
+
     const session = await prisma.workoutSession.update({
-      where: {
-        id: currentSession.id
-      },
+      where: { id: currentSession.id },
       data: {
         status: "CANCELED",
         finishedAt: new Date()
       }
     });
 
-    return { session };
+    return { session, reset: true };
+  });
+
+  app.post("/student/workout/reset-abandoned", async (request) => {
+    requireDatabase();
+    const authUser = await requireActiveEnrollment(app, request);
+    const resetCount = await resetAbandonedSessionsForUser(authUser.id);
+    return { ok: true, resetCount };
   });
 
   app.post("/student/workout/exercise-progress", async (request) => {
@@ -1324,7 +1405,7 @@ export async function registerStudentRoutes(app: FastifyInstance) {
 
     const assignment = await prisma.userProgram.findFirstOrThrow({
       where: {
-        id: body.assignmentId ?? undefined,
+        id: body.assignmentId,
         userId: authUser.id,
         status: "ACTIVE",
         program: {
@@ -1341,25 +1422,41 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       }
     });
 
+    const session = await prisma.workoutSession.findFirst({
+      where: {
+        id: body.sessionId,
+        userId: authUser.id,
+        assignmentId: assignment.id,
+        status: "IN_PROGRESS"
+      }
+    });
+
+    if (!session) {
+      throw httpError(409, "Nenhum treino em andamento para concluir.");
+    }
+
+    if (session.dayNumber !== assignment.currentDay) {
+      throw httpError(400, "Esta sessão não corresponde ao dia atual do programa.");
+    }
+
+    await assertSessionProgressComplete(session.id, session.workoutBlockId);
+
     const finishedAt = new Date();
-    const session = body.sessionId
-      ? await prisma.workoutSession.findFirst({
-          where: {
-            id: body.sessionId,
-            userId: authUser.id,
-            status: "IN_PROGRESS"
-          }
-        })
-      : null;
-    const completedDayNumber = session?.dayNumber ?? assignment.currentDay;
-    const programDays = [...assignment.program.days].sort((first, second) => first.dayNumber - second.dayNumber || first.order - second.order);
+    const completedDayNumber = session.dayNumber;
+    const programDays = [...assignment.program.days].sort(
+      (first, second) => first.dayNumber - second.dayNumber || first.order - second.order
+    );
     const totalDays = programDays.length;
     const currentIndex = Math.max(
       0,
       programDays.findIndex((day) => day.dayNumber === completedDayNumber)
     );
-    const nextDayNumber = programDays[(currentIndex + 1) % totalDays]?.dayNumber ?? completedDayNumber;
-    const countCanExceedTarget = assignment.program.completionMode === "BY_DATE" || assignment.program.completionMode === "MANUAL";
+    const nextDayNumber =
+      totalDays > 0
+        ? programDays[(currentIndex + 1) % totalDays]?.dayNumber ?? completedDayNumber
+        : completedDayNumber;
+    const countCanExceedTarget =
+      assignment.program.completionMode === "BY_DATE" || assignment.program.completionMode === "MANUAL";
     const completedWorkouts = countCanExceedTarget
       ? assignment.completedWorkouts + 1
       : Math.min(assignment.completedWorkouts + 1, assignment.totalWorkouts);
@@ -1370,60 +1467,56 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       plannedEndsAt: assignment.plannedEndsAt,
       now: finishedAt
     });
-    const updatedAssignment = await prisma.userProgram.update({
-      where: {
-        id: assignment.id
-      },
-      data: {
-        currentDay: isLastWorkout ? completedDayNumber : nextDayNumber,
-        completedWorkouts,
-        status: isLastWorkout ? "COMPLETED" : "ACTIVE",
-        completedAt: isLastWorkout ? new Date() : null
-      }
-    });
 
-    const completedSession = session
-      ? await prisma.workoutSession.update({
-          where: {
-            id: session.id
-          },
-          data: {
-            status: "COMPLETED",
-            finishedAt,
-            durationSeconds: Math.max(1, Math.round((finishedAt.getTime() - session.startedAt.getTime()) / 1000))
-          }
-        })
-      : await prisma.workoutSession.create({
-          data: {
-            userId: authUser.id,
-            assignmentId: assignment.id,
-            programId: assignment.programId,
-            dayNumber: completedDayNumber,
-            startedAt: finishedAt,
-            finishedAt,
-            durationSeconds: 1,
-            status: "COMPLETED"
-          }
-        });
-
-    await prisma.attendanceRecord.upsert({
-      where: {
-        userId_date: {
-          userId: authUser.id,
-          date: new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()))
+    const [updatedAssignment, completedSession] = await prisma.$transaction([
+      prisma.userProgram.update({
+        where: { id: assignment.id },
+        data: {
+          currentDay: isLastWorkout ? completedDayNumber : nextDayNumber,
+          completedWorkouts,
+          status: isLastWorkout ? "COMPLETED" : "ACTIVE",
+          completedAt: isLastWorkout ? finishedAt : null
         }
-      },
-      create: {
-        userId: authUser.id,
-        date: new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()))
-      },
-      update: {}
-    });
+      }),
+      prisma.workoutSession.update({
+        where: { id: session.id },
+        data: {
+          status: "COMPLETED",
+          finishedAt,
+          durationSeconds: Math.max(
+            1,
+            Math.round((finishedAt.getTime() - session.startedAt.getTime()) / 1000)
+          )
+        }
+      })
+    ]);
+
+    try {
+      const today = new Date(
+        Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())
+      );
+      await prisma.attendanceRecord.upsert({
+        where: {
+          userId_date: {
+            userId: authUser.id,
+            date: today
+          }
+        },
+        create: {
+          userId: authUser.id,
+          date: today
+        },
+        update: {}
+      });
+    } catch (attendanceError) {
+      request.log.warn({ err: attendanceError }, "Falha ao registrar presença após concluir treino.");
+    }
 
     return {
       assignment: updatedAssignment,
       session: completedSession,
-      completed: isLastWorkout
+      completed: isLastWorkout,
+      nextDayNumber: isLastWorkout ? null : nextDayNumber
     };
   });
 

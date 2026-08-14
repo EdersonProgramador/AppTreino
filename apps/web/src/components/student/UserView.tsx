@@ -58,7 +58,7 @@ import {
   labelMembershipStatus,
   labelPaymentStatus
 } from "../../lib/finance";
-import { labelProductKind, labelPurchaseStatus, labelOrderStatus, labelShippingMethod, purchaseStatusTone, shippingMethodLabel } from "../../lib/commerce";
+import { labelProductKind, labelPurchaseStatus, labelOrderStatus, labelShippingMethod, purchaseStatusTone } from "../../lib/commerce";
 import { labelLocationType, studentLocationLabel } from "../../lib/locations";
 import { sessionLabelFromBlock, trainingCopy } from "../../lib/training-copy";
 import { AnimatedList } from "../shared/AnimatedList";
@@ -102,7 +102,6 @@ import { LockedOverlay } from "./LockedOverlay";
 import { StudentSettingsPanel } from "./StudentSettingsPanel";
 import { PhysicalAssessmentFormView } from "../shared/PhysicalAssessmentFormView";
 import { uiSounds } from "../../lib/ui-sounds";
-import type { WorkoutPlayerExercise } from "./WorkoutPlayer";
 
 const WorkoutPlayer = lazy(async () => {
   const module = await import("./WorkoutPlayer");
@@ -124,6 +123,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const markAllNotificationsRead = useStudentSyncStore((state) => state.markAllNotificationsRead);
   const clearSectionHighlight = useStudentSyncStore((state) => state.clearSectionHighlight);
   const [studentSection, setStudentSection] = useState<StudentPanelSection>("home");
+  const studentSectionRef = useRef(studentSection);
+  studentSectionRef.current = studentSection;
+  const [playerSessionActive, setPlayerSessionActive] = useState(false);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [workout, setWorkout] = useState<WorkoutRow | null>(null);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkoutResponse["workout"] | null>(null);
@@ -190,14 +192,23 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [submittingRatingId, setSubmittingRatingId] = useState<string | null>(null);
   const [favoritingProgramId, setFavoritingProgramId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorTone, setErrorTone] = useState<"error" | "warning">("error");
   const [errorTick, setErrorTick] = useState(0);
   const [success, setSuccess] = useState<string | null>(null);
   const [completingOnboarding, setCompletingOnboarding] = useState(false);
 
   function flashError(message: string) {
     setSuccess(null);
+    setErrorTone("error");
     setErrorTick((tick) => tick + 1);
     setError(message);
+  }
+
+  function flashStockLimit() {
+    setSuccess(null);
+    setErrorTone("warning");
+    setErrorTick((tick) => tick + 1);
+    setError("😅 Esse é o máximo disponível por enquanto.");
   }
 
   useEffect(() => {
@@ -209,10 +220,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
   useEffect(() => {
     if (!error) return;
-    uiSounds.error();
-    const timer = window.setTimeout(() => setError(null), 2000);
+    if (errorTone === "warning") {
+      uiSounds.info();
+    } else {
+      uiSounds.error();
+    }
+    const timer = window.setTimeout(() => setError(null), errorTone === "warning" ? 3000 : 2000);
     return () => window.clearTimeout(timer);
-  }, [error, errorTick]);
+  }, [error, errorTick, errorTone]);
 
   useEffect(() => {
     if (!accessReady) return;
@@ -314,20 +329,34 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         workoutFavoritesResponse,
         locationsResponse
       ] = await Promise.all([
-        apiGet<{ workout: WorkoutRow | null }>("/user/workout", token),
-        apiGet<{ records: Array<{ id: string; date: string }> }>("/user/attendance", token),
-        apiGet<{ assessments: PhysicalAssessmentRow[] }>("/user/physical-assessments", token),
-        apiGet<{ events: EventRow[] }>("/user/events", token),
-        apiGet<{ tickets: SupportTicketRow[] }>("/user/support-tickets", token),
-        apiGet<{ notifications: NotificationRow[] }>("/user/notifications", token),
-        apiGet<{ plans: AiWorkoutPlanRow[] }>("/user/ai-workout-plans", token),
+        apiGet<{ workout: WorkoutRow | null }>("/user/workout", token).catch(() => ({ workout: null })),
+        apiGet<{ records: Array<{ id: string; date: string }> }>("/user/attendance", token).catch(() => ({
+          records: [] as Array<{ id: string; date: string }>
+        })),
+        apiGet<{ assessments: PhysicalAssessmentRow[] }>("/user/physical-assessments", token).catch(() => ({
+          assessments: [] as PhysicalAssessmentRow[]
+        })),
+        apiGet<{ events: EventRow[] }>("/user/events", token).catch(() => ({ events: [] as EventRow[] })),
+        apiGet<{ tickets: SupportTicketRow[] }>("/user/support-tickets", token).catch(() => ({
+          tickets: [] as SupportTicketRow[]
+        })),
+        apiGet<{ notifications: NotificationRow[] }>("/user/notifications", token).catch(() => ({
+          notifications: [] as NotificationRow[]
+        })),
+        apiGet<{ plans: AiWorkoutPlanRow[] }>("/user/ai-workout-plans", token).catch(() => ({
+          plans: [] as AiWorkoutPlanRow[]
+        })),
         apiGet<WorkoutConsistencyResponse>("/student/workout/consistency", token).catch(() => null),
         apiGet<{ products: ProductRow[] }>("/student/products", token).catch(() => ({ products: [] as ProductRow[] })),
         apiGet<{ purchases: PurchaseRow[] }>("/student/purchases", token).catch(() => ({ purchases: [] as PurchaseRow[] })),
         apiGet<{ cart: CartRow }>("/student/cart", token).catch(() => ({ cart: null })),
         apiGet<{ orders: OrderRow[] }>("/student/orders", token).catch(() => ({ orders: [] as OrderRow[] })),
-        apiGet<{ favorites: StudentFavoriteRow[] }>("/student/workout/favorites", token),
-        apiGet<{ locations: StudentLocationRow[] }>("/student/locations", token)
+        apiGet<{ favorites: StudentFavoriteRow[] }>("/student/workout/favorites", token).catch(() => ({
+          favorites: [] as StudentFavoriteRow[]
+        })),
+        apiGet<{ locations: StudentLocationRow[] }>("/student/locations", token).catch(() => ({
+          locations: [] as StudentLocationRow[]
+        }))
       ]);
 
       setWorkout(workoutResponse.workout);
@@ -350,7 +379,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       }
       setStudentOrders(ordersResponse.orders);
       setStudentWorkoutFavorites(workoutFavoritesResponse.favorites);
+
+      // Refresh/abandono: sem resume — reseta sessões órfãs fora do player.
+      if (studentSectionRef.current !== "player") {
+        await apiPost("/student/workout/reset-abandoned", {}, token).catch(() => {});
+        setWorkoutSession(null);
+      }
     } catch (error) {
+      if (error instanceof ApiError && error.status === 401) return;
       const message = error instanceof ApiError ? error.message : null;
       setError(message ?? "Não foi possível carregar sua área. Verifique API e banco.");
       setAccessReady(true);
@@ -501,11 +537,30 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     });
   }, [publishedWorkouts]);
 
+  useEffect(() => {
+    if (studentSection !== "player") {
+      setPlayerSessionActive(false);
+    }
+  }, [studentSection]);
+
+  const hideStudentChrome =
+    studentSection === "player" && (playerSessionActive || Boolean(workoutSession));
+
   const goToSection = (section: StudentPanelSection) => {
+    const nextSection = section === "favorites" ? "ratings" : section;
+    if (studentSection === "player" && nextSection !== "player") {
+      // Sair sem concluir = reset do treino do dia.
+      void (async () => {
+        await handleCancelWorkoutSession();
+        uiSounds.studentPage();
+        uiSounds.pageChange();
+        setStudentSection(nextSection);
+      })();
+      return;
+    }
     uiSounds.studentPage();
     uiSounds.pageChange();
-    // Favoritos e avaliações compartilham a mesma tela.
-    setStudentSection(section === "favorites" ? "ratings" : section);
+    setStudentSection(nextSection);
   };
 
   const openTrainingCatalog = () => {
@@ -753,18 +808,16 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     }
   }
 
-  async function handleRequestSubstitutes(exerciseId: string) {
-    const response = await apiPost<{ alternatives: WorkoutPlayerExercise["alternatives"] }>(
-      "/student/workout/substitute",
-      { exerciseId },
-      token
-    );
-
-    return response.alternatives;
-  }
-
   const handleStartWorkoutSession = async (workoutToStart = todayWorkout) => {
     if (!workoutToStart) return;
+    const currentDayForProgram =
+      publishedWorkouts.find((item) => item.programId === workoutToStart.programId)?.dayNumber ??
+      todayWorkout?.dayNumber ??
+      null;
+    if (currentDayForProgram != null && workoutToStart.dayNumber !== currentDayForProgram) {
+      flashError("Conclua o dia atual antes de iniciar outro treino.");
+      return;
+    }
 
     uiSounds.open();
     setTodayWorkout(workoutToStart);
@@ -786,21 +839,28 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       );
       setWorkoutSession(response.session);
       return response.session;
-    } catch {
-      setError("Não foi possível iniciar o cronômetro do treino.");
-      throw new Error("Não foi possível iniciar o cronômetro do treino.");
+    } catch (startError) {
+      const message =
+        startError instanceof ApiError
+          ? startError.message
+          : "Não foi possível iniciar o cronômetro do treino.";
+      setError(message);
+      throw new Error(message);
     }
   }
 
   const handleCompleteWorkoutDay = async () => {
-    if (!todayWorkout) return;
+    if (!todayWorkout || !workoutSession?.id) {
+      setError("Inicie o treino antes de concluir.");
+      return;
+    }
 
     try {
       await apiPost(
         "/student/workout/complete-day",
         {
           assignmentId: todayWorkout.assignmentId,
-          sessionId: workoutSession?.id
+          sessionId: workoutSession.id
         },
         token
       );
@@ -808,9 +868,16 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       await loadUserData();
       setStudentSection("training");
       setSelectedWorkoutModality(todayWorkout.modality ?? selectedWorkoutModality);
-    } catch {
+      setSuccess("Treino concluído! Próximo dia liberado.");
+      setPlayerSessionActive(false);
+    } catch (completeError) {
       uiSounds.error();
-      setError("Não foi possível concluir o treino agora.");
+      setError(
+        completeError instanceof ApiError
+          ? completeError.message
+          : "Não foi possível concluir o treino agora."
+      );
+      throw completeError;
     }
   };
 
@@ -832,7 +899,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       uiSounds.void();
       setWorkoutSession(null);
     } catch {
-      setError("Não foi possível cancelar o treino agora.");
+      setError("Não foi possível resetar o treino agora.");
     }
   }
 
@@ -1198,13 +1265,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     }
   }
 
-  async function refreshStudentCart(shippingMethod?: "PICKUP" | "DELIVERY" | "DIGITAL") {
+  async function refreshStudentCart() {
     if (!token) return null;
-    const method = shippingMethod ?? cartShippingMethod;
-    const response = await apiGet<{ cart: CartRow }>(
-      `/student/cart?shippingMethod=${encodeURIComponent(method)}`,
-      token
-    );
+    const response = await apiGet<{ cart: CartRow }>("/student/cart", token);
     setStudentCart(response.cart);
     setCartShippingMethod(response.cart.shippingMethod);
     if (response.cart.couponCode) {
@@ -1222,9 +1285,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       const inCart = studentCart?.items.find((item) => item.productId === productId);
       const nextQty = (inCart?.quantity ?? 0) + 1;
       if (product?.stock != null && nextQty > product.stock) {
-        flashError(
-          `Limite de estoque: no máximo ${product.stock} unidade(s) disponível(is) para "${product.name}".`
-        );
+        flashStockLimit();
         return;
       }
 
@@ -1233,14 +1294,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       setCartShippingMethod(response.cart.shippingMethod);
       goToSection("cart");
       if (product?.stock != null && nextQty >= product.stock) {
-        flashError(
-          `Limite de estoque: no máximo ${product.stock} unidade(s) disponível(is) para "${product.name}".`
-        );
+        flashStockLimit();
       } else {
         setSuccess("Adicionado ao carrinho.");
       }
     } catch (cartError) {
-      flashError(cartError instanceof ApiError ? cartError.message : "Não foi possível adicionar ao carrinho.");
+      const message = cartError instanceof ApiError ? cartError.message : "Não foi possível adicionar ao carrinho.";
+      if (/estoque|stock|máximo disponível/i.test(message)) {
+        flashStockLimit();
+      } else {
+        flashError(message);
+      }
     } finally {
       setPurchasingProductId(null);
     }
@@ -1251,9 +1315,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     const item = studentCart?.items.find((entry) => entry.productId === productId);
     const nextQty = Math.max(0, quantity);
     if (item?.product.stock != null && nextQty > item.product.stock) {
-      flashError(
-        `Limite de estoque: no máximo ${item.product.stock} unidade(s) disponível(is) para "${item.product.name}".`
-      );
+      flashStockLimit();
       return;
     }
 
@@ -1266,14 +1328,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         { quantity: nextQty },
         token
       );
-      await refreshStudentCart(cartShippingMethod);
+      await refreshStudentCart();
       if (item?.product.stock != null && nextQty >= item.product.stock) {
-        flashError(
-          `Limite de estoque: no máximo ${item.product.stock} unidade(s) disponível(is) para "${item.product.name}".`
-        );
+        flashStockLimit();
       }
     } catch (qtyError) {
-      flashError(qtyError instanceof ApiError ? qtyError.message : "Não foi possível atualizar a quantidade.");
+      const message = qtyError instanceof ApiError ? qtyError.message : "Não foi possível atualizar a quantidade.";
+      if (/estoque|stock|máximo disponível/i.test(message)) {
+        flashStockLimit();
+      } else {
+        flashError(message);
+      }
     } finally {
       setCartQtyBusyId(null);
     }
@@ -1287,20 +1352,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         { code: cartCouponInput.trim() || null },
         token
       );
-      await refreshStudentCart(cartShippingMethod);
+      await refreshStudentCart();
       setSuccess(cartCouponInput.trim() ? "Cupom aplicado." : "Cupom removido.");
     } catch (couponError) {
       flashError(couponError instanceof ApiError ? couponError.message : "Cupom inválido.");
-    }
-  }
-
-  async function handleCartShippingChange(method: "PICKUP" | "DELIVERY" | "DIGITAL") {
-    setCartShippingMethod(method);
-    setError(null);
-    try {
-      await refreshStudentCart(method);
-    } catch {
-      // Mantém a seleção local se o refresh falhar.
     }
   }
 
@@ -1310,7 +1365,6 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     setSuccess(null);
     try {
       const response = await apiPost<{ order: OrderRow }>("/student/cart/checkout", {
-        shippingMethod: cartShippingMethod,
         shippingAddress: cartAddress,
         billingType: "UNDEFINED"
       }, token);
@@ -1890,7 +1944,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           <button
             className="workspace-logout mt-3 flex w-full min-h-[44px] items-center justify-start gap-2.5 rounded-lg border border-brand-ember/20 bg-brand-ember/10 px-3 text-left font-extrabold transition hover:border-brand-ember/35 hover:bg-brand-ember/15"
             onClick={() => {
-              uiSounds.disconnect();
+              uiSounds.toggleOff();
               onLogout();
             }}
           >
@@ -2061,8 +2115,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   };
 
   return (
-    <main className="student-app-shell">
+    <main className={`student-app-shell ${hideStudentChrome ? "workout-immersive" : ""}`}>
       {adminPreviewBanner}
+      {!hideStudentChrome && (
       <section className="student-app-header">
         <button
           type="button"
@@ -2211,10 +2266,15 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           </div>
         </div>
       </section>
+      )}
 
       <>
         {error && (
-          <div className="error-box" key={`error-${errorTick}`} role="alert">
+          <div
+            className={`error-box${errorTone === "warning" ? " is-warning" : ""}`}
+            key={`error-${errorTick}`}
+            role="alert"
+          >
             {error}
           </div>
         )}
@@ -2574,8 +2634,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                               {programWorkout.block.restTime}s
                             </p>
                           </div>
-                          <button type="button" onClick={() => void handleStartWorkoutSession(programWorkout)}>
-                            {isCurrent ? trainingCopy.startSession : "Iniciar"}
+                          <button
+                            type="button"
+                            disabled={!isCurrent}
+                            title={isCurrent ? undefined : "Conclua o dia atual para liberar este treino"}
+                            onClick={() => void handleStartWorkoutSession(programWorkout)}
+                          >
+                            {isCurrent ? trainingCopy.startSession : "Bloqueado"}
                           </button>
                         </div>
                       </article>
@@ -2631,11 +2696,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                  timeCapSeconds={todayWorkout.block.timeCapSeconds}
                  instructions={todayWorkout.block.instructions}
                  sessionId={workoutSession?.id ?? null}
-                 onBack={() => setStudentSection("training")}
+                 onBack={() => {
+                   // Após cancel/reset (ou sem sessão), volta ao catálogo sem re-disparar goToSection.
+                   setPlayerSessionActive(false);
+                   uiSounds.studentPage();
+                   uiSounds.pageChange();
+                   setStudentSection("training");
+                 }}
+                 onSessionActiveChange={setPlayerSessionActive}
                  onWorkoutStart={handleBeginWorkoutSession}
                  onCancelSession={handleCancelWorkoutSession}
                  onExerciseProgressChange={handleExerciseProgressChange}
-                 onRequestSubstitutes={handleRequestSubstitutes}
                  onWorkoutComplete={handleCompleteWorkoutDay}
                />
              </Suspense>
@@ -2832,20 +2903,29 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               <div className="student-products-grid">
                 {studentProducts.map((product) => (
                   <article className="student-product-card" key={product.id}>
-                    {product.imageUrl ? (
-                      <img src={mediaUrl(product.imageUrl)} alt={product.name} />
-                    ) : (
-                      <div className="student-product-fallback">
-                        <Package size={30} />
-                      </div>
-                    )}
+                    <div className="student-product-media">
+                      {product.imageUrl ? (
+                        <img src={mediaUrl(product.imageUrl)} alt={product.name} />
+                      ) : (
+                        <div className="student-product-fallback" aria-hidden="true">
+                          <Package size={30} />
+                        </div>
+                      )}
+                    </div>
                     <div className="student-product-body">
                       <small>
                         {product.category ? `${product.category} · ` : ""}
                         {labelProductKind(product.kind)}
+                        {product.shippingMethod
+                          ? ` · ${labelShippingMethod(product.shippingMethod)}`
+                          : product.kind === "DIGITAL"
+                            ? ` · ${labelShippingMethod("DIGITAL")}`
+                            : ` · ${labelShippingMethod("PICKUP")}`}
                       </small>
-                      <strong>{product.name}</strong>
-                      {product.description && <span>{product.description}</span>}
+                      <strong className="student-product-name">{product.name}</strong>
+                      {product.description ? (
+                        <span className="student-product-desc">{product.description}</span>
+                      ) : null}
                       <strong className="student-product-price">{formatPriceInBRL(product.priceInCents)}</strong>
                       <div className="student-product-actions">
                         <button
@@ -2854,7 +2934,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                           disabled={Boolean(product.outOfStock) || purchasingProductId === product.id}
                           onClick={() => void handleAddToCart(product.id)}
                         >
-                          {purchasingProductId === product.id ? "..." : "Carrinho"}
+                          {purchasingProductId === product.id ? "Adicionando…" : "Adicionar ao carrinho"}
                         </button>
                         <button
                           className="student-green-button"
@@ -2871,9 +2951,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                             : product.purchasedByMe
                               ? product.kind === "DIGITAL"
                                 ? "Já adquirido"
-                                : "Em andamento"
+                                : "Pedido em andamento"
                               : purchasingProductId === product.id
-                                ? "Pagando..."
+                                ? "Abrindo pagamento…"
                                 : "Comprar agora"}
                         </button>
                       </div>
@@ -2910,112 +2990,114 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   const qtyBusy = cartQtyBusyId === item.productId;
                   return (
                   <article className="student-info-card" key={item.id}>
-                    <Package size={22} />
+                    {item.product.imageUrl ? (
+                      <img
+                        className="student-card-image"
+                        src={mediaUrl(item.product.imageUrl)}
+                        alt={item.product.name}
+                      />
+                    ) : (
+                      <div className="student-card-icon" aria-hidden="true">
+                        <Package size={22} />
+                      </div>
+                    )}
                     <div>
                       <strong>{item.product.name}</strong>
                       <span>{formatPriceInBRL(item.lineTotalInCents)}</span>
-                      {stockLimit != null && (
-                        <span className="student-cart-stock-hint">
-                          Estoque disponível: {stockLimit} unidade(s)
-                        </span>
-                      )}
-                      <div className="student-cart-qty" role="group" aria-label={`Quantidade de ${item.product.name}`}>
+                      {stockLimit != null && item.quantity >= stockLimit ? (
+                        <span className="student-cart-stock-hint">😅 Estoque esgotado para este item</span>
+                      ) : null}
+                      <div className="student-cart-item-actions">
+                        <div className="student-cart-qty" role="group" aria-label={`Quantidade de ${item.product.name}`}>
+                          <button
+                            type="button"
+                            className="student-cart-qty-btn"
+                            aria-label="Diminuir quantidade"
+                            disabled={cartCheckingOut || qtyBusy}
+                            onClick={() => void handleCartQuantity(item.productId, item.quantity - 1)}
+                          >
+                            <Minus size={16} />
+                          </button>
+                          <strong className="student-cart-qty-value">{item.quantity}</strong>
+                          <button
+                            type="button"
+                            className="student-cart-qty-btn"
+                            aria-label={
+                              atStockLimit
+                                ? "Estoque esgotado para este item"
+                                : "Aumentar quantidade"
+                            }
+                            disabled={cartCheckingOut || qtyBusy || atStockLimit}
+                            onClick={() => void handleCartQuantity(item.productId, item.quantity + 1)}
+                          >
+                            <Plus size={16} />
+                          </button>
+                        </div>
                         <button
                           type="button"
-                          className="student-cart-qty-btn"
-                          aria-label="Diminuir quantidade"
+                          className="student-link-button"
                           disabled={cartCheckingOut || qtyBusy}
-                          onClick={() => void handleCartQuantity(item.productId, item.quantity - 1)}
+                          onClick={() => void handleCartQuantity(item.productId, 0)}
                         >
-                          <Minus size={16} />
-                        </button>
-                        <strong className="student-cart-qty-value">{item.quantity}</strong>
-                        <button
-                          type="button"
-                          className="student-cart-qty-btn"
-                          aria-label={
-                            atStockLimit
-                              ? `Limite de estoque: ${stockLimit} unidade(s)`
-                              : "Aumentar quantidade"
-                          }
-                          disabled={cartCheckingOut || qtyBusy || atStockLimit}
-                          onClick={() => void handleCartQuantity(item.productId, item.quantity + 1)}
-                        >
-                          <Plus size={16} />
+                          Remover do carrinho
                         </button>
                       </div>
-                      <button
-                        type="button"
-                        className="student-link-button"
-                        disabled={cartCheckingOut || qtyBusy}
-                        onClick={() => void handleCartQuantity(item.productId, 0)}
-                      >
-                        Remover
-                      </button>
                     </div>
                   </article>
                   );
                 })}
-                <article className="student-info-card">
-                  <ShoppingCart size={22} />
-                  <div>
-                    <strong>Resumo</strong>
-                    <span>Subtotal {formatPriceInBRL(studentCart!.subtotalInCents)}</span>
-                    {studentCart!.discountInCents > 0 && (
-                      <span>Desconto −{formatPriceInBRL(studentCart!.discountInCents)}</span>
-                    )}
-                    <span>Frete {formatPriceInBRL(studentCart!.shippingInCents)}</span>
-                    <strong className="student-product-price">{formatPriceInBRL(studentCart!.amountInCents)}</strong>
-                    <label className="student-field-label">
-                      Cupom
-                      <input
-                        value={cartCouponInput}
-                        onChange={(event) => setCartCouponInput(event.target.value)}
-                        placeholder="Código"
-                      />
-                    </label>
-                    <button type="button" className="student-green-button" onClick={() => void handleApplyCartCoupon()}>
-                      Aplicar cupom
-                    </button>
-                    <label className="student-field-label">
-                      Entrega
-                      <select
-                        value={cartShippingMethod}
-                        onChange={(event) =>
-                          void handleCartShippingChange(
-                            event.target.value as "PICKUP" | "DELIVERY" | "DIGITAL"
-                          )
-                        }
-                      >
-                        {Object.entries(shippingMethodLabel).map(([value, label]) => (
-                          <option
-                            key={value}
-                            value={value}
-                            disabled={cartShippingMethod === "DIGITAL" && value !== "DIGITAL"}
-                          >
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    {cartShippingMethod === "DELIVERY" && (
+                <article className="student-info-card student-cart-summary-card">
+                  <div className="student-card-icon" aria-hidden="true">
+                    <ShoppingCart size={22} />
+                  </div>
+                  <div className="student-cart-summary">
+                    <strong className="student-cart-summary-title">Resumo</strong>
+                    <div className="student-cart-summary-lines">
+                      <span>Subtotal {formatPriceInBRL(studentCart!.subtotalInCents)}</span>
+                      {studentCart!.discountInCents > 0 && (
+                        <span>Desconto −{formatPriceInBRL(studentCart!.discountInCents)}</span>
+                      )}
+                      <span>Frete {formatPriceInBRL(studentCart!.shippingInCents)}</span>
+                    </div>
+                    <strong className="student-product-price student-cart-summary-total">
+                      {formatPriceInBRL(studentCart!.amountInCents)}
+                    </strong>
+                    <div className="student-cart-summary-actions">
                       <label className="student-field-label">
-                        Endereço
+                        Cupom
                         <input
-                          value={cartAddress}
-                          onChange={(event) => setCartAddress(event.target.value)}
-                          placeholder="Rua, número, bairro, cidade"
+                          value={cartCouponInput}
+                          onChange={(event) => setCartCouponInput(event.target.value)}
+                          placeholder="Código"
                         />
                       </label>
-                    )}
-                    <button
-                      type="button"
-                      className="student-green-button"
-                      disabled={cartCheckingOut}
-                      onClick={() => void handleCartCheckout()}
-                    >
-                      {cartCheckingOut ? "Finalizando..." : "Finalizar e pagar"}
-                    </button>
+                      <button type="button" className="student-green-button" onClick={() => void handleApplyCartCoupon()}>
+                        Aplicar cupom de desconto
+                      </button>
+                      <div className="student-field-label student-cart-shipping">
+                        Entrega
+                        <strong>{labelShippingMethod(cartShippingMethod)}</strong>
+                        <span className="student-muted-hint">Definida pelo admin no produto</span>
+                      </div>
+                      {cartShippingMethod === "DELIVERY" && (
+                        <label className="student-field-label">
+                          Endereço
+                          <input
+                            value={cartAddress}
+                            onChange={(event) => setCartAddress(event.target.value)}
+                            placeholder="Rua, número, bairro, cidade"
+                          />
+                        </label>
+                      )}
+                      <button
+                        type="button"
+                        className="student-green-button"
+                        disabled={cartCheckingOut}
+                        onClick={() => void handleCartCheckout()}
+                      >
+                        {cartCheckingOut ? "Finalizando pedido…" : "Finalizar compra"}
+                      </button>
+                    </div>
                   </div>
                 </article>
               </>
@@ -4006,7 +4088,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             <button
               className="student-menu-item danger"
               onClick={() => {
-                uiSounds.disconnect();
+                uiSounds.toggleOff();
                 onLogout();
               }}
             >
@@ -4219,6 +4301,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         </div>
       )}
 
+      {!hideStudentChrome && (
       <nav className="student-bottom-nav" aria-label="Navegacao do aluno">
         <button className={studentSection === "home" ? "active" : ""} onClick={() => goToSection("home")}><Home size={22} />Home</button>
         <button className={studentSection === "payments" ? "active" : ""} onClick={() => goToSection("payments")}><CreditCard size={22} />Pagamentos</button>
@@ -4226,6 +4309,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         <button className={studentSection === "products" ? "active" : ""} onClick={() => goToSection("products")} style={publicConfig["module_products"] === "false" ? { display: "none" } : undefined}><Package size={22} />Vitrine</button>
         <button className={studentSection === "menu" ? "active" : ""} onClick={() => goToSection("menu")}><Menu size={22} />Menu</button>
       </nav>
+      )}
     </main>
   );
 }

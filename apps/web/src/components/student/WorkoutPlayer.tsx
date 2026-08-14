@@ -10,7 +10,6 @@ import {
   FileText,
   Pause,
   Play,
-  Repeat,
   Share2,
   Target,
   Timer,
@@ -73,14 +72,6 @@ export interface WorkoutPlayerExercise {
   }>;
 }
 
-interface WorkoutSubstituteOption {
-  id: string;
-  title: string;
-  videoUrl: string;
-  audioUrl?: string;
-  materialUrl?: string;
-}
-
 interface WorkoutPlayerProps {
   programTitle: string;
   blockTitle: string;
@@ -95,6 +86,7 @@ interface WorkoutPlayerProps {
   onBack: () => void;
   onWorkoutStart?: () => Promise<{ id: string } | void> | { id: string } | void;
   onCancelSession?: () => Promise<void> | void;
+  onSessionActiveChange?: (active: boolean) => void;
   onExerciseProgressChange?: (input: {
     sessionId?: string | null;
     exerciseId: string;
@@ -109,7 +101,6 @@ interface WorkoutPlayerProps {
     perceivedExertion?: number;
     notes?: string;
   }) => Promise<void> | void;
-  onRequestSubstitutes?: (exerciseId: string) => Promise<WorkoutPlayerExercise["alternatives"] | void> | WorkoutPlayerExercise["alternatives"] | void;
   onWorkoutComplete?: () => Promise<void> | void;
 }
 
@@ -258,9 +249,15 @@ function MediaBlock({ exercise, expanded = false, resting = false, lesson = fals
   const youtubeThumbUrl = isYouTubeUrl(mediaUrl) ? getYouTubeThumbnailUrl(mediaUrl) : "";
 
   return (
-    <div className={`runner-focus-media ${expanded ? "expanded" : ""} ${resting ? "resting" : ""}`}>
+    <div className={`runner-focus-media ${expanded ? "expanded" : ""} ${resting ? "resting" : ""}`} aria-hidden={resting || undefined}>
       {resting ? (
-        <Timer size={74} />
+        <div className="runner-rest-stage">
+          <span className="runner-rest-ring runner-rest-ring--inner" />
+          <span className="runner-rest-pulse" />
+          <span className="runner-rest-icon">
+            <Timer size={64} strokeWidth={1.75} />
+          </span>
+        </div>
       ) : youtubeEmbedUrl ? (
         expanded ? (
           <iframe
@@ -306,8 +303,8 @@ export function WorkoutPlayer({
   onBack,
   onWorkoutStart,
   onCancelSession,
+  onSessionActiveChange,
   onExerciseProgressChange,
-  onRequestSubstitutes,
   onWorkoutComplete
 }: WorkoutPlayerProps) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -335,10 +332,6 @@ export function WorkoutPlayer({
     Object.fromEntries(exercises.map((exercise) => [exerciseInstanceKey(exercise), prescribedReps(exercise) ? String(prescribedReps(exercise)) : ""]))
   );
   const [perceivedEffort, setPerceivedEffort] = useState<Record<string, string>>({});
-  const [substitutions, setSubstitutions] = useState<Record<string, WorkoutSubstituteOption>>({});
-  const [substituteOpen, setSubstituteOpen] = useState(false);
-  const [substituteLoading, setSubstituteLoading] = useState(false);
-  const [substituteOptions, setSubstituteOptions] = useState<WorkoutSubstituteOption[]>([]);
   const [dropCount, setDropCount] = useState(0);
   const [restPauseAccum, setRestPauseAccum] = useState(0);
 
@@ -367,38 +360,38 @@ export function WorkoutPlayer({
   const muscles = useMemo(() => currentExercise?.targetMuscles ?? [], [currentExercise]);
   const equipment = useMemo(() => currentExercise?.equipmentTags ?? [], [currentExercise]);
 
-  function resolveExercise(exercise: WorkoutPlayerExercise): WorkoutPlayerExercise {
-    const substitution = substitutions[exerciseInstanceKey(exercise)];
-
-    if (!substitution) {
-      return exercise;
-    }
-
-    return {
-      ...exercise,
-      title: substitution.title,
-      videoUrl: substitution.videoUrl,
-      audioUrl: substitution.audioUrl,
-      materialUrl: substitution.materialUrl
-    };
-  }
-
   function showLastExerciseNotice() {
     setLastExerciseNoticeOpen(false);
     window.setTimeout(() => setLastExerciseNoticeOpen(true), 0);
   }
+
+  const exercisesSignature = useMemo(
+    () => exercises.map((exercise) => `${exercise.prescriptionId}:${exercise.id}:${exercise.order}:${exercise.sets}`).join("|"),
+    [exercises]
+  );
 
   useEffect(() => {
     setActiveSessionId(sessionId ?? null);
   }, [sessionId]);
 
   useEffect(() => {
+    onSessionActiveChange?.(isRunning || workoutReadyToComplete);
+  }, [isRunning, workoutReadyToComplete, onSessionActiveChange]);
+
+  useEffect(() => {
+    // Só reinicia o runner quando a ficha muda de verdade — nunca no meio da sessão
+    // por re-render do pai (nova referência do array exercises).
     setLoads(
       Object.fromEntries(exercises.map((exercise) => [exerciseInstanceKey(exercise), exercise.latestWeightUsed ? String(exercise.latestWeightUsed) : exercise.initialLoad ?? ""]))
     );
     setActualReps(
       Object.fromEntries(exercises.map((exercise) => [exerciseInstanceKey(exercise), prescribedReps(exercise) ? String(prescribedReps(exercise)) : ""]))
     );
+
+    if (isRunning || workoutReadyToComplete) {
+      return;
+    }
+
     setPerceivedEffort({});
     setCurrentExerciseIndex(0);
     setCurrentSet(1);
@@ -412,12 +405,9 @@ export function WorkoutPlayer({
     setShareOpen(false);
     setLastExerciseNoticeOpen(false);
     setWorkoutReadyToComplete(false);
-    setSubstitutions({});
-    setSubstituteOpen(false);
-    setSubstituteOptions([]);
     setDropCount(0);
     setRestPauseAccum(0);
-  }, [exercises]);
+  }, [exercisesSignature]);
 
   useEffect(() => {
     if (!isRunning || isPaused) return;
@@ -569,54 +559,6 @@ export function WorkoutPlayer({
     });
   }
 
-  async function toggleSequenceExercise(exercise: WorkoutPlayerExercise) {
-    const instanceKey = exerciseInstanceKey(exercise);
-    const nextCompleted = !completedIds.has(instanceKey);
-    let sessionIdForProgress = activeSessionId;
-
-    if (nextCompleted && !sessionIdForProgress) {
-      sessionIdForProgress = await startWorkout(false);
-
-      if (!sessionIdForProgress) {
-        return;
-      }
-    }
-
-    const nextCompletedIds = new Set(completedIds);
-
-    if (nextCompleted) {
-      uiSounds.itemSelect();
-      nextCompletedIds.add(instanceKey);
-    } else {
-      uiSounds.itemDeselect();
-      nextCompletedIds.delete(instanceKey);
-      setDayCompleted(false);
-      setFinishOpen(false);
-      setWorkoutReadyToComplete(false);
-    }
-
-    setCompletedIds(nextCompletedIds);
-
-    try {
-      await onExerciseProgressChange?.({
-        sessionId: sessionIdForProgress ?? activeSessionId,
-        exerciseId: exercise.id,
-        prescriptionId: exercise.prescriptionId,
-        completed: nextCompleted,
-        weightUsed: parseLoad(loads[instanceKey] || ""),
-        repsCompleted: Math.max(0, Number(actualReps[instanceKey]) || 0),
-        sets: exercise.sets,
-        durationSeconds: exercise.durationSeconds ?? exercise.workSeconds ?? undefined,
-        distanceMeters: exercise.distanceMeters ?? undefined,
-        roundsCompleted: exercise.rounds ?? undefined,
-        perceivedExertion: perceivedEffort[instanceKey] ? Number(perceivedEffort[instanceKey]) : undefined,
-        notes: exercise.executionNotes || undefined
-      });
-    } catch {
-      setCompletedIds(completedIds);
-    }
-  }
-
   function moveToNextExercise() {
     if (currentExerciseIndex < exercises.length - 1) {
       const nextIndex = currentExerciseIndex + 1;
@@ -626,7 +568,6 @@ export function WorkoutPlayer({
       setAdvanceAfterRest(false);
       setDropCount(0);
       setRestPauseAccum(0);
-      setSubstituteOpen(false);
       setPanel("run");
       setPhase("active");
       if (nextIndex === exercises.length - 1) {
@@ -636,12 +577,9 @@ export function WorkoutPlayer({
     }
 
     setPhase("idle");
-    setIsRunning(false);
-    setIsPaused(false);
     setAdvanceAfterRest(false);
     setDropCount(0);
     setRestPauseAccum(0);
-    setSubstituteOpen(false);
     setWorkoutReadyToComplete(true);
     setFinishOpen(true);
     uiSounds.popupOpen();
@@ -733,20 +671,27 @@ export function WorkoutPlayer({
 
   async function confirmCancel() {
     await onCancelSession?.();
+    onSessionActiveChange?.(false);
     setCancelOpen(false);
     onBack();
   }
 
   function handleHeaderBack() {
-    if (isRunning) {
-      if (panel === "sequence") {
-        setCancelOpen(true);
-        uiSounds.popupOpen();
-        return;
-      }
+    // Detalhes do exercício: volta ao runner sem mexer na série.
+    if (panel === "execution" || panel === "muscles" || panel === "expand" || panel === "video" || panel === "load") {
+      setPanel("run");
+      return;
+    }
 
-      setCancelOpen(false);
+    // Runner em andamento: volta à lista (mantém sequência). Reset só via cancelar.
+    if (panel === "run" && (isRunning || workoutReadyToComplete)) {
       setPanel("sequence");
+      return;
+    }
+
+    if (isRunning || workoutReadyToComplete) {
+      setCancelOpen(true);
+      uiSounds.popupOpen();
       return;
     }
 
@@ -754,7 +699,7 @@ export function WorkoutPlayer({
   }
 
   function handleRunnerCancelButton() {
-    if (isRunning) {
+    if (isRunning || workoutReadyToComplete) {
       setCancelOpen(true);
       uiSounds.popupOpen();
       return;
@@ -764,64 +709,28 @@ export function WorkoutPlayer({
   }
 
   function openExerciseFromSequence(index: number) {
+    if (isRunning) {
+      // Em andamento: só o exercício atual (sem skip). Retoma a mesma série.
+      if (index !== currentExerciseIndex) return;
+      setPanel("run");
+      setPhase((current) => (current === "idle" ? "active" : current));
+      return;
+    }
+
     setCurrentExerciseIndex(index);
     setCurrentSet(1);
     setDropCount(0);
     setRestPauseAccum(0);
-    setSubstituteOpen(false);
     setPanel("run");
-    setPhase((current) => (isRunning && current === "idle" ? "active" : current));
+    setPhase("idle");
   }
 
-  function openSubstituteModal() {
-    if (!currentExercise) return;
-
-    const localOptions: WorkoutSubstituteOption[] = (currentExercise.alternatives ?? []).map((alternative) => ({
-      id: alternative.id,
-      title: alternative.title,
-      videoUrl: alternative.videoUrl,
-      audioUrl: alternative.audioUrl,
-      materialUrl: alternative.materialUrl
-    }));
-    setSubstituteOptions(localOptions);
-    setSubstituteOpen(true);
-    uiSounds.popupOpen();
-
-    if (localOptions.length === 0) {
-      void loadSubstitutes();
-    }
+  function goToSequenceList() {
+    setPanel("sequence");
   }
 
-  async function loadSubstitutes() {
-    if (!currentExercise || substituteLoading) return;
-
-    setSubstituteLoading(true);
-    try {
-      const remote = (await onRequestSubstitutes?.(currentExercise.id)) ?? [];
-      const remoteOptions: WorkoutSubstituteOption[] = remote.map((alternative) => ({
-        id: alternative.id,
-        title: alternative.title,
-        videoUrl: alternative.videoUrl,
-        audioUrl: alternative.audioUrl,
-        materialUrl: alternative.materialUrl
-      }));
-      setSubstituteOptions((current) => {
-        const knownIds = new Set(current.map((item) => item.id));
-        return [...current, ...remoteOptions.filter((item) => !knownIds.has(item.id))];
-      });
-    } finally {
-      setSubstituteLoading(false);
-    }
-  }
-
-  function applySubstitution(option: WorkoutSubstituteOption) {
-    if (!currentExercise) return;
-
-    setSubstitutions((current) => ({
-      ...current,
-      [exerciseInstanceKey(currentExercise)]: option
-    }));
-    setSubstituteOpen(false);
+  function returnToRunner() {
+    setPanel("run");
   }
 
   async function completeWorkout() {
@@ -840,6 +749,7 @@ export function WorkoutPlayer({
       setFinishOpen(false);
       setShareOpen(false);
       setWorkoutReadyToComplete(false);
+      onSessionActiveChange?.(false);
     } catch {
       uiSounds.error();
       setDayCompleted(false);
@@ -847,7 +757,7 @@ export function WorkoutPlayer({
   }
 
   function openSharePrompt() {
-    setIsRunning(false);
+    // Mantém a sessão viva até complete-day; só pausa o cronômetro na UI.
     setIsPaused(true);
     setFinishOpen(false);
     setShareOpen(true);
@@ -871,9 +781,12 @@ export function WorkoutPlayer({
     return <div className="workout-player-empty">Nenhum exercício carregado.</div>;
   }
 
-  const resolvedCurrentExercise = resolveExercise(currentExercise);
+  const resolvedCurrentExercise = currentExercise;
   const executionSteps = instructionSteps(resolvedCurrentExercise);
   const currentVideoUrl = isVideoMedia(resolveMediaUrl(resolvedCurrentExercise.videoUrl)) ? resolveMediaUrl(resolvedCurrentExercise.videoUrl) : "";
+
+  const isDetailPanel =
+    panel === "execution" || panel === "muscles" || panel === "expand" || panel === "video" || panel === "load";
 
   return (
     <div className="workout-runner">
@@ -882,7 +795,7 @@ export function WorkoutPlayer({
           <ArrowLeft size={28} />
         </button>
         <div>
-          <strong>Execução</strong>
+          <strong>{panel === "sequence" && isRunning ? "Sequência" : "Execução"}</strong>
           <span><Timer size={20} />{formatElapsedTime(elapsedSeconds)}</span>
         </div>
         <button aria-label={isPaused ? "Retomar cronômetro" : "Pausar cronômetro"} onClick={() => isRunning && setIsPaused((current) => !current)} disabled={!isRunning}>
@@ -908,15 +821,34 @@ export function WorkoutPlayer({
               )}
             </div>
             {exercises.map((exercise, index) => {
-              const resolvedExercise = resolveExercise(exercise);
+              const resolvedExercise = exercise;
               const instanceKey = exerciseInstanceKey(exercise);
               const selected = index === currentExerciseIndex;
+              const isCurrentLive = isRunning && selected;
+              const isDone = completedIds.has(instanceKey);
               const musclesText = (resolvedExercise.targetMuscles ?? []).join(", ") || "Grupo muscular não informado";
               const mediaUrl = resolveMediaUrl(resolvedExercise.videoUrl);
+              const liveSetLabel = isRestPause
+                ? `Cluster ${Math.min(completedClusters + 1, clusterCount)}/${clusterCount}`
+                : `Série ${Math.min(currentSet, resolvedExercise.sets)}/${resolvedExercise.sets}`;
+              const liveRestLabel = phase === "rest" ? `Descanso ${restRemaining}s` : `Próx. descanso ${currentRestSeconds}s`;
 
               return (
-                <article className={`workout-runner-card ${selected ? "selected" : ""}`} key={instanceKey}>
-                  <div className="runner-exercise-main runner-sequence-card-button" onClick={() => setCurrentExerciseIndex(index)}>
+                <article
+                  className={`workout-runner-card ${selected ? "selected" : ""} ${isCurrentLive ? "is-live" : ""} ${isDone ? "is-done" : ""} ${isRunning && !selected && !isDone ? "is-locked" : ""}`}
+                  key={instanceKey}
+                >
+                  <div
+                    className="runner-exercise-main runner-sequence-card-button"
+                    onClick={() => {
+                      if (isRunning && index !== currentExerciseIndex) return;
+                      if (isRunning && index === currentExerciseIndex) {
+                        openExerciseFromSequence(index);
+                        return;
+                      }
+                      setCurrentExerciseIndex(index);
+                    }}
+                  >
                     <div className="runner-media">
                       {mediaUrl ? (
                         isYouTubeUrl(mediaUrl) ? (
@@ -937,20 +869,45 @@ export function WorkoutPlayer({
                         {resolvedExercise.title}
                       </button>
                       <span>{musclesText}</span>
-                      <small>
-                        {resolvedExercise.sets} série(s)/ciclo(s) | {prescriptionLabel(resolvedExercise)} | {resolvedExercise.restSeconds ?? restTimeDefault}s
-                      </small>
+                      {isCurrentLive ? (
+                        <small className="runner-live-progress">
+                          <strong>{phase === "rest" ? "Descansando" : "Em andamento"}</strong>
+                          {" · "}
+                          {liveSetLabel}
+                          {" · "}
+                          {liveRestLabel}
+                        </small>
+                      ) : (
+                        <small>
+                          {resolvedExercise.sets} série(s)/ciclo(s) | {prescriptionLabel(resolvedExercise)} | {resolvedExercise.restSeconds ?? restTimeDefault}s
+                        </small>
+                      )}
+                      {isCurrentLive && (
+                        <div className="runner-sequence-set-track" aria-hidden="true">
+                          {Array.from({ length: Math.max(1, resolvedExercise.sets) }).map((_, setIndex) => {
+                            const setNumber = setIndex + 1;
+                            const complete = isDone || setNumber < currentSet;
+                            const active = !complete && setNumber === currentSet;
+                            return (
+                              <span key={setNumber} className={`${complete ? "complete" : ""} ${active ? phase : ""}`}>
+                                {complete ? <Check size={12} /> : setNumber}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                     <button
-                      className={`runner-toggle ${completedIds.has(instanceKey) ? "checked" : ""}`}
-                      aria-label={completedIds.has(instanceKey) ? "Desmarcar treino concluído" : "Marcar treino concluído"}
+                      className={`runner-toggle ${isDone ? "checked" : ""} ${isCurrentLive ? "live" : ""}`}
+                      aria-label={isDone ? "Exercício concluído" : isCurrentLive ? "Exercício em andamento" : `Exercício ${index + 1}`}
                       onClick={(event) => {
                         event.stopPropagation();
-                        void toggleSequenceExercise(exercise);
+                        if (isCurrentLive) openExerciseFromSequence(index);
                       }}
                       type="button"
+                      disabled={!isCurrentLive}
                     >
-                      <span>{completedIds.has(instanceKey) ? <Check size={18} /> : index + 1}</span>
+                      <span>{isDone ? <Check size={18} /> : isCurrentLive ? (phase === "rest" ? restRemaining : currentSet) : index + 1}</span>
                     </button>
                   </div>
                 </article>
@@ -962,12 +919,20 @@ export function WorkoutPlayer({
         {panel === "run" && (
           <article className="runner-focus-card">
             <h1>{resolvedCurrentExercise.title}</h1>
-            <div className="runner-set-pill">
-              <span>Séries/ciclos: <strong>{currentExercise.sets}</strong></span>
+            <div className={`runner-set-pill ${isRunning ? "is-live" : ""}`}>
+              <span>
+                Séries/ciclos:{" "}
+                <strong>
+                  {isRunning ? `${Math.min(currentSet, currentExercise.sets)}/${currentExercise.sets}` : currentExercise.sets}
+                </strong>
+              </span>
               {isBiSet && <span>Bi-set <strong>1A + 1B</strong></span>}
               {isDropRound && <span>Drop <strong>{dropCount}/{dropSetMax}</strong></span>}
               {isRestPause && <span>Clusters <strong>{completedClusters}/{clusterCount}</strong></span>}
-              <span>Descanso: <strong>{currentRestSeconds}s</strong></span>
+              <span>
+                Descanso:{" "}
+                <strong>{isRunning && phase === "rest" ? `${restRemaining}s` : `${currentRestSeconds}s`}</strong>
+              </span>
             </div>
             <MediaBlock exercise={resolvedCurrentExercise} resting={phase === "rest"} />
             {resolvedCurrentExercise.audioUrl && (
@@ -1049,10 +1014,6 @@ export function WorkoutPlayer({
                   <span>Material</span>
                 </button>
               )}
-              <button onClick={openSubstituteModal}>
-                <Repeat size={18} />
-                <span>Substituir</span>
-              </button>
             </div>
             <button className="runner-load-button" onClick={() => setPanel("load")}>
               <Wrench size={18} />
@@ -1063,7 +1024,7 @@ export function WorkoutPlayer({
 
         {panel === "execution" && (
           <article className="runner-detail-page">
-            <button className="runner-back-link" onClick={() => setPanel("run")}>
+            <button className="runner-back-link" onClick={returnToRunner}>
               <ChevronLeft size={20} />
               Voltar
             </button>
@@ -1120,7 +1081,7 @@ export function WorkoutPlayer({
 
         {panel === "muscles" && (
           <article className="runner-detail-page">
-            <button className="runner-back-link" onClick={() => setPanel("run")}>
+            <button className="runner-back-link" onClick={returnToRunner}>
               <ChevronLeft size={20} />
               Voltar
             </button>
@@ -1145,7 +1106,7 @@ export function WorkoutPlayer({
 
         {panel === "expand" && (
           <article className="runner-detail-page">
-            <button className="runner-back-link" onClick={() => setPanel("run")}>
+            <button className="runner-back-link" onClick={returnToRunner}>
               <ChevronLeft size={20} />
               Voltar
             </button>
@@ -1164,7 +1125,7 @@ export function WorkoutPlayer({
 
         {panel === "video" && (
           <article className="runner-detail-page runner-video-lesson">
-            <button className="runner-back-link" onClick={() => setPanel("run")}>
+            <button className="runner-back-link" onClick={returnToRunner}>
               <ChevronLeft size={20} />
               Voltar ao exercício
             </button>
@@ -1199,7 +1160,7 @@ export function WorkoutPlayer({
 
         {panel === "load" && (
           <article className="runner-detail-page runner-load-page">
-            <button className="runner-back-link" onClick={() => setPanel("run")}>
+            <button className="runner-back-link" onClick={returnToRunner}>
               <ChevronLeft size={20} />
               Voltar
             </button>
@@ -1253,8 +1214,12 @@ export function WorkoutPlayer({
         {panel === "run" ? (
           <button
             className="runner-round-button"
-            aria-label="Exercício anterior"
+            aria-label={isRunning ? "Voltar à lista de exercícios" : "Exercício anterior"}
             onClick={() => {
+              if (isRunning || workoutReadyToComplete) {
+                goToSequenceList();
+                return;
+              }
               if (currentExerciseIndex > 0) {
                 setCurrentExerciseIndex((index) => index - 1);
                 setCurrentSet(1);
@@ -1262,7 +1227,6 @@ export function WorkoutPlayer({
                 setAdvanceAfterRest(false);
                 setDropCount(0);
                 setRestPauseAccum(0);
-                setSubstituteOpen(false);
                 setPhase("active");
                 return;
               }
@@ -1272,18 +1236,16 @@ export function WorkoutPlayer({
               setAdvanceAfterRest(false);
               setDropCount(0);
               setRestPauseAccum(0);
-              setSubstituteOpen(false);
               setPhase("idle");
-              if (isRunning) {
-                setCancelOpen(true);
-        uiSounds.popupOpen();
-                return;
-              }
               onBack();
             }}
-            disabled={phase === "rest"}
+            disabled={phase === "rest" && !isRunning}
           >
-            <ChevronLeft size={24} />
+            {isRunning || workoutReadyToComplete ? <ArrowLeft size={24} /> : <ChevronLeft size={24} />}
+          </button>
+        ) : isDetailPanel ? (
+          <button className="runner-round-button" aria-label="Voltar ao exercício" onClick={returnToRunner}>
+            <ArrowLeft size={24} />
           </button>
         ) : (
           <button
@@ -1295,10 +1257,32 @@ export function WorkoutPlayer({
           </button>
         )}
         <button
-          className={`runner-start-button ${phase === "rest" ? "resting" : ""}`}
-          aria-label={phase === "rest" ? "Descanso em andamento" : isRunning ? "Treino Realizado" : "Iniciar sequência do treino"}
+          className={`runner-start-button ${phase === "rest" && panel === "run" ? "resting" : ""}`}
+          aria-label={
+            isDetailPanel
+              ? "Voltar ao exercício"
+              : phase === "rest" && panel === "run"
+                ? "Descanso em andamento"
+                : isRunning && panel === "sequence"
+                  ? phase === "rest"
+                    ? "Retomar descanso do exercício"
+                    : "Continuar exercício atual"
+                  : isRunning
+                    ? "Treino Realizado"
+                    : "Iniciar sequência do treino"
+          }
           onClick={() => {
+            if (isDetailPanel) {
+              returnToRunner();
+              return;
+            }
+
             if (panel === "sequence") {
+              if (isRunning) {
+                setPanel("run");
+                setPhase((current) => (current === "idle" ? "active" : current));
+                return;
+              }
               void startWorkout();
               return;
             }
@@ -1314,27 +1298,64 @@ export function WorkoutPlayer({
             void completeSet();
           }}
           disabled={isStarting || dayCompleted}
-          style={phase === "rest" ? ({ "--rest-progress": `${restPercent}%` } as CSSProperties) : undefined}
+          style={
+            phase === "rest" && panel === "run"
+              ? ({
+                  "--rest-progress": `${restPercent}%`,
+                  "--rest-progress-ratio": String(restPercent / 100)
+                } as CSSProperties)
+              : undefined
+          }
         >
-          {phase === "rest" ? (
+          {isDetailPanel ? (
             <>
-              <strong>{restRemaining}</strong>
-              <span>Concluir descanso</span>
+              <span className="runner-start-face">
+                <ArrowLeft size={28} />
+                <span>Voltar</span>
+              </span>
+            </>
+          ) : phase === "rest" && panel === "run" ? (
+            <>
+              <span className="runner-start-ring" aria-hidden="true">
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+                  <circle className="runner-start-ring-track" cx="50" cy="50" r="48.5" pathLength="100" />
+                  <circle className="runner-start-ring-progress" cx="50" cy="50" r="48.5" pathLength="100" />
+                </svg>
+              </span>
+              <span className="runner-start-face">
+                <strong key={restRemaining} className="runner-start-time">
+                  {restRemaining}
+                </strong>
+                <span>Descanso</span>
+              </span>
+            </>
+          ) : isRunning && panel === "sequence" ? (
+            <>
+              <span className="runner-start-face">
+                {phase === "rest" ? <Timer size={28} /> : <Play size={28} />}
+                <span>{phase === "rest" ? `${restRemaining}s` : "Continuar"}</span>
+              </span>
             </>
           ) : isDropRound ? (
             <>
-              <strong>DROP {dropCount}/{dropSetMax}</strong>
-              <span>Concluir</span>
+              <span className="runner-start-face">
+                <strong>DROP {dropCount}/{dropSetMax}</strong>
+                <span>Concluir</span>
+              </span>
             </>
           ) : isRestPause ? (
             <>
-              <Check size={38} />
-              <span>Cluster {completedClusters + 1}/{clusterCount}</span>
+              <span className="runner-start-face">
+                <Check size={34} />
+                <span>Cluster {completedClusters + 1}/{clusterCount}</span>
+              </span>
             </>
           ) : (
             <>
-              {isRunning && panel !== "sequence" ? <Check size={38} /> : <Trophy size={32} />}
-              <span>{isStarting ? "Iniciando" : isRunning && panel !== "sequence" ? "Realizado" : "Iniciar"}</span>
+              <span className="runner-start-face">
+                {isRunning && panel === "run" ? <Check size={34} /> : <Trophy size={28} />}
+                <span>{isStarting ? "Iniciando" : isRunning && panel === "run" ? "Realizado" : "Iniciar"}</span>
+              </span>
             </>
           )}
         </button>
@@ -1343,6 +1364,7 @@ export function WorkoutPlayer({
             className="runner-round-button"
             aria-label="Próximo exercício"
             onClick={() => {
+              if (isRunning) return;
               if (currentExerciseIndex < exercises.length - 1) {
                 const nextIndex = currentExerciseIndex + 1;
                 setCurrentExerciseIndex(nextIndex);
@@ -1351,7 +1373,6 @@ export function WorkoutPlayer({
                 setAdvanceAfterRest(false);
                 setDropCount(0);
                 setRestPauseAccum(0);
-                setSubstituteOpen(false);
                 setPhase("active");
                 if (nextIndex === exercises.length - 1) {
                   showLastExerciseNotice();
@@ -1361,9 +1382,13 @@ export function WorkoutPlayer({
 
               showLastExerciseNotice();
             }}
-            disabled={phase === "rest"}
+            disabled={phase === "rest" || isRunning}
           >
             <ChevronRight size={24} />
+          </button>
+        ) : isDetailPanel ? (
+          <button className="runner-round-button" aria-label="Voltar ao exercício" onClick={returnToRunner}>
+            <Play size={24} />
           </button>
         ) : (
           <button
@@ -1387,8 +1412,8 @@ export function WorkoutPlayer({
           setCancelOpen(false);
         }}>
           <section className="runner-confirm-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-            <h2>Deseja cancelar o treino?</h2>
-            <p>Ao confirmar, a execução atual será cancelada.</p>
+            <h2>Sair sem concluir?</h2>
+            <p>O progresso deste dia será resetado e você precisará recomeçar do zero.</p>
             <div>
               <button className="confirm-yes" onClick={() => {
                 uiSounds.void();
@@ -1403,37 +1428,6 @@ export function WorkoutPlayer({
                 Não
               </button>
             </div>
-          </section>
-        </div>
-      )}
-
-      {substituteOpen && currentExercise && (
-        <div className="runner-confirm-backdrop" role="presentation" onClick={() => setSubstituteOpen(false)}>
-          <section className="runner-substitute-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-            <h2>Substituir exercício</h2>
-            <p>{resolvedCurrentExercise.title}</p>
-            <div className="runner-substitute-list">
-              {substituteLoading ? (
-                <span className="runner-substitute-empty">Buscando alternativas...</span>
-              ) : substituteOptions.length > 0 ? (
-                substituteOptions.map((option) => (
-                  <button type="button" key={option.id} onClick={() => applySubstitution(option)}>
-                    <span>{option.title}</span>
-                    <small>{option.videoUrl ? "Com mídia" : "Sem mídia"}</small>
-                  </button>
-                ))
-              ) : (
-                <span className="runner-substitute-empty">Nenhuma alternativa encontrada.</span>
-              )}
-            </div>
-            {substituteOptions.length > 0 && (
-              <button className="runner-substitute-refresh" type="button" onClick={() => void loadSubstitutes()} disabled={substituteLoading}>
-                Buscar mais alternativas
-              </button>
-            )}
-            <button className="runner-substitute-cancel" type="button" onClick={() => setSubstituteOpen(false)}>
-              Fechar
-            </button>
           </section>
         </div>
       )}
@@ -1453,8 +1447,15 @@ export function WorkoutPlayer({
             <button className="runner-finish-primary" onClick={openSharePrompt} disabled={dayCompleted}>
               FINALIZAR O TREINO
             </button>
-            <button className="runner-finish-cancel" onClick={() => setFinishOpen(false)}>
-              CANCELAR
+            <button
+              className="runner-finish-cancel"
+              onClick={() => {
+                setFinishOpen(false);
+                setCancelOpen(true);
+                uiSounds.popupOpen();
+              }}
+            >
+              SAIR SEM CONCLUIR
             </button>
           </section>
         </div>
