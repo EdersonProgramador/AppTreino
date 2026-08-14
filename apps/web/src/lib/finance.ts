@@ -59,6 +59,28 @@ export function labelMembershipStatus(status: string) {
   return membershipStatusLabel[status as MembershipStatusCode] ?? status;
 }
 
+/** Status efetivo exibido na lista de usuários (matrícula real > liberação admin). */
+export function labelUserEnrollmentColumn(user: {
+  enrollmentStatus: string;
+  memberships?: Array<{ status: string }> | null;
+}) {
+  const memberships = user.memberships ?? [];
+  const activeMembership = memberships.find((item) => item.status === "ACTIVE");
+  if (activeMembership) {
+    return labelMembershipStatus("ACTIVE");
+  }
+  if (memberships.length > 0) {
+    return labelMembershipStatus(memberships[0].status);
+  }
+  if (user.enrollmentStatus === "ACTIVE") {
+    return "Ativa (liberação)";
+  }
+  if (user.enrollmentStatus === "CANCELED") {
+    return labelMembershipStatus("CANCELED");
+  }
+  return labelMembershipStatus("PENDING");
+}
+
 export function labelPaymentStatus(status: string) {
   return paymentStatusLabel[status as PaymentStatusCode] ?? status;
 }

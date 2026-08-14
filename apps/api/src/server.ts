@@ -19,6 +19,7 @@ import { registerCheckoutRoutes } from "./modules/checkout.routes.js";
 import { registerMediaRoutes } from "./modules/media.routes.js";
 import { registerPublicRoutes } from "./modules/public.routes.js";
 import { registerStudentRoutes } from "./modules/student.routes.js";
+import { registerCommerceRoutes } from "./modules/commerce.routes.js";
 import { registerUserRoutes } from "./modules/user.routes.js";
 
 const app = Fastify({
@@ -166,6 +167,7 @@ await registerCheckoutRoutes(app);
 await registerAdminRoutes(app);
 await registerUserRoutes(app);
 await registerStudentRoutes(app);
+await registerCommerceRoutes(app);
 await registerAsaasRoutes(app);
 
 async function shutdown(signal: string) {

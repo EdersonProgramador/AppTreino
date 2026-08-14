@@ -33,11 +33,14 @@ model User {
   aiWorkoutPlans      AiWorkoutPlan[]
   userProgress        UserProgress[]
   purchases           Purchase[]
+  cart                Cart?
+  orders              Order[]
   paymentCards        PaymentCard[]
   favorites           Favorite[]
   workoutFavorites    WorkoutFavorite[]
   ratings             Rating[]
   passwordResetTokens PasswordResetToken[]
+  notifications       StudentNotification[]
   createdAt           DateTime             @default(now()) @map("created_at")
   updatedAt           DateTime             @updatedAt @map("updated_at")
 
@@ -692,27 +695,40 @@ enum TicketPriority {
 }
 
 model Product {
-  id           String    @id @default(cuid())
+  id           String      @id @default(cuid())
   name         String
   description  String?
-  priceInCents Int       @default(0) @map("price_in_cents")
-  imageUrl     String?   @map("image_url")
+  priceInCents Int         @default(0) @map("price_in_cents")
+  imageUrl     String?     @map("image_url")
   category     String?
-  isActive     Boolean   @default(true) @map("is_active")
-  deletedAt    DateTime? @map("deleted_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  kind         ProductKind @default(PHYSICAL)
+  stock        Int?
+  isActive     Boolean     @default(true) @map("is_active")
+  deletedAt    DateTime?   @map("deleted_at")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
 
   purchases Purchase[]
+  cartItems CartItem[]
+  orderItems OrderItem[]
   favorites Favorite[]
   ratings   Rating[]
 
   @@map("products")
 }
 
+enum ProductKind {
+  PHYSICAL
+  DIGITAL
+
+  @@map("product_kind")
+}
+
 enum PurchaseStatus {
   PENDING
   CONFIRMED
+  READY
+  DELIVERED
   CANCELED
   REFUNDED
 
@@ -720,20 +736,140 @@ enum PurchaseStatus {
 }
 
 model Purchase {
-  id            String         @id @default(cuid())
-  userId        String         @map("user_id")
-  productId     String         @map("product_id")
-  amountInCents Int            @map("amount_in_cents")
-  status        PurchaseStatus @default(PENDING)
-  paymentMethod String?        @map("payment_method")
-  deletedAt     DateTime?      @map("deleted_at")
-  createdAt     DateTime       @default(now()) @map("created_at")
-  paidAt        DateTime?      @map("paid_at")
+  id             String         @id @default(cuid())
+  userId         String         @map("user_id")
+  productId      String         @map("product_id")
+  amountInCents  Int            @map("amount_in_cents")
+  quantity       Int            @default(1)
+  status         PurchaseStatus @default(PENDING)
+  paymentMethod  String?        @map("payment_method")
+  notes          String?
+  asaasPaymentId String?        @unique @map("asaas_payment_id")
+  paymentUrl     String?        @map("payment_url")
+  deletedAt      DateTime?      @map("deleted_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  paidAt         DateTime?      @map("paid_at")
+  fulfilledAt    DateTime?      @map("fulfilled_at")
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
 
+  @@index([userId, status])
+  @@index([productId, status])
   @@map("purchases")
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  READY
+  DELIVERED
+  CANCELED
+  REFUNDED
+
+  @@map("order_status")
+}
+
+enum ShippingMethod {
+  PICKUP
+  DELIVERY
+  DIGITAL
+
+  @@map("shipping_method")
+}
+
+model Coupon {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  description    String?
+  percentOff     Int?      @map("percent_off")
+  amountOffCents Int?      @map("amount_off_cents")
+  minOrderCents  Int       @default(0) @map("min_order_cents")
+  maxUses        Int?      @map("max_uses")
+  usedCount      Int       @default(0) @map("used_count")
+  isActive       Boolean   @default(true) @map("is_active")
+  startsAt       DateTime? @map("starts_at")
+  endsAt         DateTime? @map("ends_at")
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  orders Order[]
+
+  @@map("coupons")
+}
+
+model Cart {
+  id         String   @id @default(cuid())
+  userId     String   @unique @map("user_id")
+  couponCode String?  @map("coupon_code")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String   @map("cart_id")
+  productId String   @map("product_id")
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([cartId, productId])
+  @@map("cart_items")
+}
+
+model Order {
+  id              String         @id @default(cuid())
+  userId          String         @map("user_id")
+  status          OrderStatus    @default(PENDING)
+  subtotalInCents Int            @map("subtotal_in_cents")
+  discountInCents Int            @default(0) @map("discount_in_cents")
+  shippingInCents Int            @default(0) @map("shipping_in_cents")
+  amountInCents   Int            @map("amount_in_cents")
+  shippingMethod  ShippingMethod @default(PICKUP) @map("shipping_method")
+  shippingAddress String?        @map("shipping_address")
+  couponId        String?        @map("coupon_id")
+  couponCode      String?        @map("coupon_code")
+  notes           String?
+  paymentMethod   String?        @map("payment_method")
+  asaasPaymentId  String?        @unique @map("asaas_payment_id")
+  paymentUrl      String?        @map("payment_url")
+  deletedAt       DateTime?      @map("deleted_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  paidAt          DateTime?      @map("paid_at")
+  fulfilledAt     DateTime?      @map("fulfilled_at")
+
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coupon Coupon?     @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  items  OrderItem[]
+
+  @@index([userId, status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id              String @id @default(cuid())
+  orderId         String @map("order_id")
+  productId       String @map("product_id")
+  productName     String @map("product_name")
+  quantity        Int    @default(1)
+  unitPriceInCents Int   @map("unit_price_in_cents")
+  amountInCents   Int    @map("amount_in_cents")
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@map("order_items")
 }
 
 model PaymentCard {
@@ -860,4 +996,24 @@ model Announcement {
   updatedAt   DateTime           @updatedAt @map("updated_at")
 
   @@map("announcements")
+}
+
+/// Inbox individual de notificações por aluno (login).
+model StudentNotification {
+  id            String    @id @default(cuid())
+  userId        String    @map("user_id")
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          String
+  title         String
+  message       String
+  targetSection String?   @map("target_section")
+  sourceType    String?   @map("source_type")
+  sourceId      String?   @map("source_id")
+  readAt        DateTime? @map("read_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@index([userId, sourceType, sourceId])
+  @@map("student_notifications")
 }

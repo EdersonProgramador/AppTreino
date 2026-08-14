@@ -10,9 +10,11 @@ import {
   Package,
   Play,
   RefreshCw,
+  Rocket,
   ShieldCheck,
   ShoppingCart,
   Star,
+  Target,
   TrendingUp,
   UsersRound,
   Wallet
@@ -34,6 +36,9 @@ import type {
   RatingRow,
   SupportTicketRow
 } from "../../types";
+
+/** Meta de assinaturas ativas para liberar o lançamento B2B. */
+const B2B_LAUNCH_GOAL = 1000;
 
 export function AdminDashboardOverview({
   stats,
@@ -131,10 +136,21 @@ export function AdminDashboardOverview({
     [currentMonthKey, users]
   );
 
-  const activeMembershipCount = useMemo(
-    () => memberships.filter((item) => item.status === "ACTIVE").length,
-    [memberships]
-  );
+  const activeMembershipCount = useMemo(() => {
+    const kpi = stats.find((stat) => stat.label === "Matrículas ativas");
+    if (kpi) {
+      const parsed = Number(kpi.value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    const now = new Date();
+    return memberships.filter((item) => {
+      if (item.status !== "ACTIVE") return false;
+      const startsAt = new Date(item.startsAt);
+      if (startsAt.getTime() > now.getTime()) return false;
+      if (!item.endsAt) return true;
+      return new Date(item.endsAt).getTime() >= now.getTime();
+    }).length;
+  }, [memberships, stats]);
 
   const pendingPayments = useMemo(
     () =>
@@ -252,6 +268,14 @@ export function AdminDashboardOverview({
     ? lastUpdatedAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
     : "nunca";
 
+  const b2bProgress = useMemo(() => {
+    const current = activeMembershipCount;
+    const remaining = Math.max(0, B2B_LAUNCH_GOAL - current);
+    const percent = Math.min(100, Math.round((current / B2B_LAUNCH_GOAL) * 1000) / 10);
+    const reached = current >= B2B_LAUNCH_GOAL;
+    return { current, remaining, percent, reached };
+  }, [activeMembershipCount]);
+
   return (
     <section className="finance-hub dash-hub" id="admin-dashboard">
       <header className="finance-hub-header">
@@ -274,6 +298,47 @@ export function AdminDashboardOverview({
           ))}
         </div>
       </header>
+
+      <article
+        className={`dash-b2b-goal${b2bProgress.reached ? " is-complete" : ""}`}
+        aria-label={`Meta B2B: ${b2bProgress.current} de ${B2B_LAUNCH_GOAL} assinaturas ativas`}
+      >
+        <div className="dash-b2b-goal-heading">
+          <div className="dash-b2b-goal-icon" aria-hidden="true">
+            {b2bProgress.reached ? <Rocket size={20} /> : <Target size={20} />}
+          </div>
+          <div className="dash-b2b-goal-copy">
+            <span className="dash-b2b-goal-eyebrow">Roadmap de produto</span>
+            <strong>Meta para lançar o B2B</strong>
+            <p>
+              {b2bProgress.reached
+                ? "Meta atingida. Você pode iniciar o desenvolvimento e o lançamento do SaaS para Academias, Box e Studio."
+                : "Desenvolvimento e lançamento do SaaS B2B (Academias, Box e Studio) após 1.000 assinaturas ativas no B2C."}
+            </p>
+          </div>
+          <div className="dash-b2b-goal-count">
+            <strong>
+              {b2bProgress.current.toLocaleString("pt-BR")}
+              <span> / {B2B_LAUNCH_GOAL.toLocaleString("pt-BR")}</span>
+            </strong>
+            <small>{b2bProgress.reached ? "Meta concluída" : `${b2bProgress.remaining.toLocaleString("pt-BR")} restantes`}</small>
+          </div>
+        </div>
+        <div
+          className="dash-b2b-goal-track"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={B2B_LAUNCH_GOAL}
+          aria-valuenow={b2bProgress.current}
+          aria-valuetext={`${b2bProgress.percent}% da meta B2B`}
+        >
+          <span style={{ width: `${b2bProgress.percent}%` }} />
+        </div>
+        <div className="dash-b2b-goal-meta">
+          <span>{b2bProgress.percent.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% da meta</span>
+          <span>Assinaturas ativas (matrículas ACTIVE)</span>
+        </div>
+      </article>
 
       <div className="admin-sync-bar">
         <span className={loading ? "admin-sync-indicator syncing" : "admin-sync-indicator"} aria-hidden="true">

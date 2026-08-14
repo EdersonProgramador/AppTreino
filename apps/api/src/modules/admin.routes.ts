@@ -20,6 +20,16 @@ import {
   parseRepetitionRange
 } from "./workout-program.utils.js";
 import { buildProgramPublishReadiness, studentMatchesProgramTargetGender } from "./cms-publication.utils.js";
+import { syncUserEnrollmentFromMemberships, validActiveMembershipWhere } from "./membership.utils.js";
+import {
+  assertModuleEnabled,
+  decrementProductStock,
+  PURCHASE_PAID_STATUSES,
+  resolvePurchaseTimestamps
+} from "./commerce.utils.js";
+import { fanOutStudentNotifications, notifyStudent } from "./notification.utils.js";
+import { createAsaasCheckout } from "./asaas.client.js";
+import { asaasStatusToPaymentStatus } from "./asaas.routes.js";
 
 const uploadGroups = ["lessons", "materials", "images", "audio"] as const;
 const uploadSchema = z.object({
@@ -405,86 +415,6 @@ function addCycleDate(start: Date, cycle: "MONTHLY" | "YEARLY") {
   return end;
 }
 
-function asaasStatusToPaymentStatus(status?: string) {
-  if (["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"].includes(status ?? "")) return "CONFIRMED";
-  if (["OVERDUE"].includes(status ?? "")) return "OVERDUE";
-  if (["REFUNDED", "REFUND_REQUESTED", "CHARGEBACK_REQUESTED", "CHARGEBACK_DISPUTE"].includes(status ?? "")) {
-    return "REFUNDED";
-  }
-  if (["DELETED"].includes(status ?? "")) return "CANCELED";
-  return "PENDING";
-}
-
-async function createAsaasCheckout(input: {
-  paymentId: string;
-  planName: string;
-  customerName: string;
-  amountInCents: number;
-  billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED";
-}) {
-  if (!env.ASAAS_API_KEY) {
-    return null;
-  }
-
-  const billingTypes =
-    input.billingType === "PIX"
-      ? (["PIX"] as const)
-      : input.billingType === "CREDIT_CARD"
-        ? (["CREDIT_CARD"] as const)
-        : (["PIX", "CREDIT_CARD"] as const);
-
-  const webOrigin = env.ASAAS_CALLBACK_URL?.split(",")[0]?.trim() ?? env.WEB_ORIGIN.split(",")[0]?.trim() ?? env.WEB_ORIGIN;
-  const isHttps = webOrigin.startsWith("https://");
-  const callbackBase = isHttps ? webOrigin : "https://example.com";
-  const callback = {
-    successUrl: `${callbackBase}/`,
-    cancelUrl: `${callbackBase}/`,
-    expiredUrl: `${callbackBase}/`
-  };
-
-  const response = await fetch(`${env.ASAAS_API_URL}/checkouts`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      access_token: env.ASAAS_API_KEY
-    },
-    signal: AbortSignal.timeout(10000),
-    body: JSON.stringify({
-      billingTypes,
-      chargeTypes: ["DETACHED"],
-      minutesToExpire: 120,
-      externalReference: input.paymentId,
-      callback,
-      items: [
-        {
-          externalReference: input.paymentId,
-          name: `App Treino - ${input.planName}`,
-          description: `Assinatura App Treino - ${input.customerName}`,
-          quantity: 1,
-          value: input.amountInCents / 100
-        }
-      ]
-    })
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Falha ao criar checkout no Asaas: ${message}`);
-  }
-
-  const data = (await response.json()) as {
-    id?: string;
-    link?: string;
-    status?: string;
-  };
-
-  return {
-    id: data.id,
-    url: data.link,
-    status: data.status
-  };
-}
-
 function httpError(statusCode: number, message: string) {
   const error = new Error(message) as Error & { statusCode: number };
   error.statusCode = statusCode;
@@ -732,6 +662,7 @@ async function getActiveStudentIds(userIds?: string[], targetGender: "ALL" | "MA
     where: {
       role: "USER",
       status: "ACTIVE",
+      deletedAt: null,
       id: userIds
         ? {
             in: userIds
@@ -743,9 +674,7 @@ async function getActiveStudentIds(userIds?: string[], targetGender: "ALL" | "MA
         },
         {
           memberships: {
-            some: {
-              status: "ACTIVE"
-            }
+            some: validActiveMembershipWhere()
           }
         }
       ]
@@ -1277,7 +1206,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
     const [users, activeMemberships, pendingPayments, todayAttendance] = await Promise.all([
       prisma.user.count({ where: { deletedAt: null } }),
-      prisma.membership.count({ where: { status: "ACTIVE", deletedAt: null } }),
+      prisma.membership.count({ where: validActiveMembershipWhere() }),
       prisma.payment.count({ where: { status: "PENDING", deletedAt: null } }),
       prisma.attendanceRecord.count({
         where: {
@@ -1302,6 +1231,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         include: {
           profile: true,
           memberships: {
+            where: { deletedAt: null },
             include: {
               plan: true
             },
@@ -1345,6 +1275,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         include: {
           profile: true,
           memberships: {
+            where: { deletedAt: null },
             include: {
               plan: true,
               payments: {
@@ -1444,7 +1375,14 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
     const attendanceThisMonth = attendance.filter((record) => record.date >= monthStart && record.date < monthEnd);
     const completedWorkoutSessions = workoutSessions.filter((session) => session.status === "COMPLETED");
-    const activeMembership = student.memberships.find((membership) => membership.status === "ACTIVE") ?? null;
+    const now = new Date();
+    const activeMembership =
+      student.memberships.find((membership) => {
+        if (membership.status !== "ACTIVE" || membership.deletedAt) return false;
+        if (membership.startsAt > now) return false;
+        if (membership.endsAt && membership.endsAt < now) return false;
+        return true;
+      }) ?? null;
 
     return {
       student,
@@ -1857,6 +1795,17 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       }
     });
 
+    if (location.isActive) {
+      await fanOutStudentNotifications({
+        type: "LOCATION",
+        title: "Nova unidade cadastrada",
+        message: location.name,
+        targetSection: "locations",
+        sourceType: "location",
+        sourceId: location.id
+      });
+    }
+
     return reply.code(201).send({ location });
   });
 
@@ -1869,6 +1818,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       await assertLocationSlugAvailable(slugify(body.slug), id);
     }
 
+    const current = await prisma.location.findUniqueOrThrow({ where: { id } });
     const location = await prisma.location.update({
       where: { id },
       data: {
@@ -1885,6 +1835,17 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         sortOrder: body.sortOrder
       }
     });
+
+    if (location.isActive && !current.isActive) {
+      await fanOutStudentNotifications({
+        type: "LOCATION",
+        title: "Nova unidade cadastrada",
+        message: location.name,
+        targetSection: "locations",
+        sourceType: "location",
+        sourceId: location.id
+      });
+    }
 
     return { location };
   });
@@ -1949,6 +1910,16 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       }
     });
 
+    if (announcement.status === "PUBLISHED") {
+      await fanOutStudentNotifications({
+        type: "ANNOUNCEMENT",
+        title: announcement.title,
+        message: announcement.body,
+        sourceType: "announcement",
+        sourceId: announcement.id
+      });
+    }
+
     return reply.code(201).send({ announcement });
   });
 
@@ -1967,6 +1938,16 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         publishedAt: nextStatus === "PUBLISHED" && current.status !== "PUBLISHED" ? new Date() : undefined
       }
     });
+
+    if (nextStatus === "PUBLISHED" && current.status !== "PUBLISHED") {
+      await fanOutStudentNotifications({
+        type: "ANNOUNCEMENT",
+        title: announcement.title,
+        message: announcement.body,
+        sourceType: "announcement",
+        sourceId: announcement.id
+      });
+    }
 
     return { announcement };
   });
@@ -2387,6 +2368,17 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
     const reconciled = await reconcileProgramAudienceAssignments(program.id);
     const assignedCount = reconciled.assigned.length;
+    const recipientIds = reconciled.assigned.map((item) => item.userId).filter(Boolean);
+
+    await fanOutStudentNotifications({
+      type: "WORKOUT_PROGRAM",
+      title: "Novo programa de treino",
+      message: program.title,
+      targetSection: "training",
+      sourceType: "program",
+      sourceId: program.id,
+      ...(recipientIds.length ? { userIds: recipientIds } : {})
+    });
 
     return reply.code(existingSingleDayProgram ? 200 : 201).send({
       program,
@@ -3067,9 +3059,33 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       }
     });
     if (program.audienceMode === "ALL_ACTIVE") {
-      await reconcileProgramAudienceAssignments(program.id);
+      const reconciled = await reconcileProgramAudienceAssignments(program.id);
+      const recipientIds = reconciled.assigned.map((item) => item.userId).filter(Boolean);
+      await fanOutStudentNotifications({
+        type: "WORKOUT_PROGRAM",
+        title: "Novo programa de treino",
+        message: program.title,
+        targetSection: "training",
+        sourceType: "program",
+        sourceId: program.id,
+        ...(recipientIds.length ? { userIds: recipientIds } : {})
+      });
     } else {
       await cancelMismatchedProgramAssignments(program.id, program.targetGender);
+      const assignedIds = program.assignedUsers
+        .filter((item) => item.status === "ACTIVE")
+        .map((item) => item.userId);
+      if (assignedIds.length) {
+        await fanOutStudentNotifications({
+          type: "WORKOUT_PROGRAM",
+          title: "Novo programa de treino",
+          message: program.title,
+          targetSection: "training",
+          sourceType: "program",
+          sourceId: program.id,
+          userIds: assignedIds
+        });
+      }
     }
 
     return { program };
@@ -3440,9 +3456,19 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       case "workouts":
         await prisma.workout.update({ where: { id }, data: { deletedAt: null } });
         break;
-      case "announcements":
-        await prisma.announcement.update({ where: { id }, data: { deletedAt: null } });
+      case "announcements": {
+        const announcement = await prisma.announcement.update({ where: { id }, data: { deletedAt: null } });
+        if (announcement.status === "PUBLISHED") {
+          await fanOutStudentNotifications({
+            type: "ANNOUNCEMENT",
+            title: announcement.title,
+            message: announcement.body,
+            sourceType: "announcement",
+            sourceId: announcement.id
+          });
+        }
         break;
+      }
       case "plans":
         await prisma.plan.update({ where: { id }, data: { deletedAt: null } });
         break;
@@ -3464,9 +3490,18 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       case "aiPlans":
         await prisma.aiWorkoutPlan.update({ where: { id }, data: { deletedAt: null } });
         break;
-      case "products":
-        await prisma.product.update({ where: { id }, data: { deletedAt: null, isActive: true } });
+      case "products": {
+        const product = await prisma.product.update({ where: { id }, data: { deletedAt: null, isActive: true } });
+        await fanOutStudentNotifications({
+          type: "PRODUCT",
+          title: "Novo produto na vitrine",
+          message: product.name,
+          targetSection: "products",
+          sourceType: "product",
+          sourceId: product.id
+        });
         break;
+      }
       case "purchases":
         await prisma.purchase.update({ where: { id }, data: { deletedAt: null } });
         break;
@@ -3485,9 +3520,18 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       case "modalities":
         await prisma.modality.update({ where: { id }, data: { deletedAt: null, isActive: true } });
         break;
-      case "locations":
-        await prisma.location.update({ where: { id }, data: { deletedAt: null, isActive: true } });
+      case "locations": {
+        const location = await prisma.location.update({ where: { id }, data: { deletedAt: null, isActive: true } });
+        await fanOutStudentNotifications({
+          type: "LOCATION",
+          title: "Nova unidade cadastrada",
+          message: location.name,
+          targetSection: "locations",
+          sourceType: "location",
+          sourceId: location.id
+        });
         break;
+      }
       case "exercises":
         await prisma.exercise.update({ where: { id }, data: { deletedAt: null } });
         break;
@@ -3711,12 +3755,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       }
     });
 
-    if (membership.status === "ACTIVE") {
-      await prisma.user.update({
-        where: { id: membership.userId },
-        data: { enrollmentStatus: "ACTIVE" }
-      });
-    }
+    await syncUserEnrollmentFromMemberships(prisma, membership.userId);
 
     return reply.code(201).send({ membership });
   });
@@ -3734,12 +3773,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       }
     });
 
-    if (membership.status === "ACTIVE") {
-      await prisma.user.update({
-        where: { id: membership.userId },
-        data: { enrollmentStatus: "ACTIVE" }
-      });
-    }
+    await syncUserEnrollmentFromMemberships(prisma, membership.userId);
 
     return { membership };
   });
@@ -3747,10 +3781,12 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/memberships/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    await prisma.membership.update({
+    const membership = await prisma.membership.update({
       where: { id },
-      data: { deletedAt: new Date() }
+      data: { deletedAt: new Date() },
+      select: { userId: true }
     });
+    await syncUserEnrollmentFromMemberships(prisma, membership.userId);
     return { ok: true };
   });
 
@@ -3800,9 +3836,9 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     });
 
     const asaasPayment = await createAsaasCheckout({
-      paymentId: payment.id,
-      planName: membership.plan?.name ?? "Assinatura",
-      customerName: membership.user.name,
+      externalReference: payment.id,
+      itemName: `App Treino - ${membership.plan?.name ?? "Assinatura"}`,
+      itemDescription: `Assinatura App Treino - ${membership.user.name}`,
       amountInCents: body.amountInCents,
       billingType: body.billingType
     });
@@ -3997,6 +4033,17 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       }
     });
 
+    if (event.status === "SCHEDULED") {
+      await fanOutStudentNotifications({
+        type: "EVENT",
+        title: "Evento publicado",
+        message: event.title,
+        targetSection: "events",
+        sourceType: "event",
+        sourceId: event.id
+      });
+    }
+
     return reply.code(201).send({ event });
   });
 
@@ -4102,6 +4149,15 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       include: ticketInclude
     });
 
+    await notifyStudent(ticket.userId, {
+      type: "SUPPORT",
+      title: "Nova resposta no seu atendimento",
+      message: ticket.subject,
+      targetSection: "support",
+      sourceType: "support_ticket",
+      sourceId: ticket.id
+    });
+
     return { ticket };
   });
 
@@ -4126,6 +4182,15 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       include: ticketInclude
     });
 
+    await notifyStudent(ticket.userId, {
+      type: "SUPPORT",
+      title: "Nova resposta no seu atendimento",
+      message: ticket.subject,
+      targetSection: "support",
+      sourceType: "support_ticket",
+      sourceId: ticket.id
+    });
+
     return { ticket };
   });
 
@@ -4137,6 +4202,15 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       where: { id },
       data: { status: "CLOSED" },
       include: ticketInclude
+    });
+
+    await notifyStudent(ticket.userId, {
+      type: "SUPPORT",
+      title: "Atendimento encerrado",
+      message: ticket.subject,
+      targetSection: "support",
+      sourceType: "support_ticket_closed",
+      sourceId: ticket.id
     });
 
     return { ticket };
@@ -4192,8 +4266,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     name: z.string().min(2),
     description: z.string().optional(),
     priceInCents: z.number().int().min(0).default(0),
-    imageUrl: z.string().optional(),
+    imageUrl: z.string().optional().or(z.literal("")),
     category: z.string().optional(),
+    kind: z.enum(["PHYSICAL", "DIGITAL"]).default("PHYSICAL"),
+    stock: z.number().int().min(0).nullable().optional(),
     isActive: z.boolean().default(true)
   });
 
@@ -4201,8 +4277,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     userId: z.string().min(1),
     productId: z.string().min(1),
     amountInCents: z.number().int().min(0),
-    status: z.enum(["PENDING", "CONFIRMED", "CANCELED", "REFUNDED"]).default("PENDING"),
-    paymentMethod: z.string().optional()
+    quantity: z.number().int().min(1).default(1),
+    status: z.enum(["PENDING", "CONFIRMED", "READY", "DELIVERED", "CANCELED", "REFUNDED"]).default("PENDING"),
+    paymentMethod: z.string().optional(),
+    notes: z.string().optional()
   });
 
   const paymentCardSchema = z.object({
@@ -4219,6 +4297,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
   app.get("/admin/products", async (request) => {
     requireDatabase();
+    await assertModuleEnabled("module_products");
     const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
     const where = { deletedAt: null };
     const [products, total] = await Promise.all([
@@ -4239,23 +4318,61 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
   app.post("/admin/products", async (request, reply) => {
     requireDatabase();
+    await assertModuleEnabled("module_products");
     const body = productSchema.parse(request.body);
-    const product = await prisma.product.create({ data: body });
+    const product = await prisma.product.create({
+      data: {
+        ...body,
+        imageUrl: body.imageUrl || null,
+        stock: body.stock ?? null
+      }
+    });
+
+    if (product.isActive) {
+      await fanOutStudentNotifications({
+        type: "PRODUCT",
+        title: "Novo produto na vitrine",
+        message: product.name,
+        targetSection: "products",
+        sourceType: "product",
+        sourceId: product.id
+      });
+    }
 
     return reply.code(201).send({ product });
   });
 
   app.put("/admin/products/:id", async (request) => {
     requireDatabase();
+    await assertModuleEnabled("module_products");
     const { id } = idParamSchema.parse(request.params);
     const body = productSchema.partial().parse(request.body);
-    const product = await prisma.product.update({ where: { id }, data: body });
+    const current = await prisma.product.findUniqueOrThrow({ where: { id } });
+    const product = await prisma.product.update({
+      where: { id },
+      data: {
+        ...body,
+        ...(body.imageUrl !== undefined ? { imageUrl: body.imageUrl || null } : {})
+      }
+    });
+
+    if (product.isActive && (!current.isActive || current.deletedAt)) {
+      await fanOutStudentNotifications({
+        type: "PRODUCT",
+        title: "Novo produto na vitrine",
+        message: product.name,
+        targetSection: "products",
+        sourceType: "product",
+        sourceId: product.id
+      });
+    }
 
     return { product };
   });
 
   app.delete("/admin/products/:id", async (request) => {
     requireDatabase();
+    await assertModuleEnabled("module_products");
     const { id } = idParamSchema.parse(request.params);
     await prisma.product.update({
       where: { id },
@@ -4267,6 +4384,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
   app.get("/admin/purchases", async (request) => {
     requireDatabase();
+    await assertModuleEnabled("module_purchases");
     const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
     const where = { deletedAt: null };
     const [purchases, total] = await Promise.all([
@@ -4285,33 +4403,73 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
   app.post("/admin/purchases", async (request, reply) => {
     requireDatabase();
+    await assertModuleEnabled("module_purchases");
     const body = purchaseSchema.parse(request.body);
+    const product = await prisma.product.findFirstOrThrow({
+      where: { id: body.productId, deletedAt: null }
+    });
+    const quantity = body.quantity ?? 1;
+    if (product.stock != null && product.stock < quantity) {
+      const error = new Error("Estoque insuficiente para este produto.") as Error & { statusCode: number };
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const timestamps = resolvePurchaseTimestamps(body.status);
     const purchase = await prisma.purchase.create({
-      data: body,
+      data: {
+        userId: body.userId,
+        productId: body.productId,
+        amountInCents: body.amountInCents,
+        quantity,
+        status: body.status,
+        paymentMethod: body.paymentMethod,
+        notes: body.notes,
+        ...timestamps
+      },
       include: { user: true, product: true }
     });
+
+    if (body.status && PURCHASE_PAID_STATUSES.includes(body.status)) {
+      await decrementProductStock(body.productId, quantity);
+    }
 
     return reply.code(201).send({ purchase });
   });
 
   app.put("/admin/purchases/:id", async (request) => {
     requireDatabase();
+    await assertModuleEnabled("module_purchases");
     const { id } = idParamSchema.parse(request.params);
     const body = purchaseSchema.partial().parse(request.body);
+    const current = await prisma.purchase.findUniqueOrThrow({
+      where: { id },
+      select: { paidAt: true, fulfilledAt: true, status: true, productId: true, quantity: true }
+    });
+    const timestamps = resolvePurchaseTimestamps(body.status, current);
     const purchase = await prisma.purchase.update({
       where: { id },
       data: {
         ...body,
-        ...(body.status ? { paidAt: body.status === "CONFIRMED" ? new Date() : null } : {})
+        ...timestamps
       },
       include: { user: true, product: true }
     });
+
+    if (
+      body.status &&
+      PURCHASE_PAID_STATUSES.includes(body.status) &&
+      !PURCHASE_PAID_STATUSES.includes(current.status)
+    ) {
+      await decrementProductStock(current.productId, current.quantity);
+    }
 
     return { purchase };
   });
 
   app.delete("/admin/purchases/:id", async (request) => {
     requireDatabase();
+    await assertModuleEnabled("module_purchases");
     const { id } = idParamSchema.parse(request.params);
     await prisma.purchase.update({
       where: { id },

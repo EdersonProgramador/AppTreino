@@ -16,6 +16,7 @@ export type StudentPanelSection =
   | "payments"
   | "training"
   | "products"
+  | "cart"
   | "menu"
   | "subscription"
   | "locked"
@@ -30,6 +31,7 @@ export type StudentPanelSection =
   | "settings"
   | "membership"
   | "purchases"
+  | "orders"
   | "favorites"
   | "ratings"
   | "locations";
@@ -84,12 +86,13 @@ function createSyncNotification(event: SystemEvent): SyncNotification {
  *
  * | Origem              | Evento               | Destino Painel                 |
  * |---------------------|----------------------|--------------------------------|
- * | Compras / Produtos  | COMPRA_CONCLUIDA     | Pagamentos / Matrículas        |
+ * | Compras / Produtos  | COMPRA_CONCLUIDA     | Vitrine / Minhas compras       |
  * | QR Code             | CHECKIN_REALIZADO    | Frequência / Localidades       |
  * | Meus Cartões        | CARTAO_ATUALIZADO    | Pagamentos                     |
  * | Contato             | MENSAGEM_ENVIADA     | Atendimento                    |
  * | Avaliar             | AVALIACAO_SUBMETIDA  | Avaliações / Treino            |
  * | Estúdio de Treinos  | PROGRAMA_PUBLICADO   | Treino                         |
+ * | Catálogo / Vitrine  | PRODUTO_PUBLICADO   | Vitrine                        |
  * | Painel Admin        | CMS_ATUALIZADO       | Treino / Unidades / Conta      |
  */
 export const useStudentSyncStore = create<StudentSyncState>((set, get) => ({
@@ -151,16 +154,21 @@ export function wireStudentSyncBus() {
 
   subscribe("*", (event) => {
     const targets = EVENT_PANEL_TARGETS[event.type];
-    const silent = event.type === "CMS_ATUALIZADO";
+    // Publicações do admin vão para o inbox persistido; o bus só sincroniza/refresca.
+    const skipSyncItem =
+      event.type === "CMS_ATUALIZADO" ||
+      event.type === "PRODUTO_PUBLICADO" ||
+      event.type === "PROGRAMA_PUBLICADO";
+    const skipHighlight = event.type === "CMS_ATUALIZADO";
     const notification = createSyncNotification(event);
 
     useStudentSyncStore.setState((state) => ({
       lastEvent: event,
       pendingRefresh: [...new Set([...state.pendingRefresh, event.type])],
-      syncNotifications: silent
+      syncNotifications: skipSyncItem
         ? state.syncNotifications
         : [notification, ...state.syncNotifications].slice(0, 40),
-      highlightedSections: silent
+      highlightedSections: skipHighlight
         ? state.highlightedSections
         : [...new Set([...state.highlightedSections, ...targets])]
     }));

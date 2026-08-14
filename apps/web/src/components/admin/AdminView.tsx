@@ -78,9 +78,21 @@ import {
   labelBillingCycle,
   labelMembershipStatus,
   labelPaymentStatus,
+  labelUserEnrollmentColumn,
   membershipStatusLabel,
   paymentStatusLabel
 } from "../../lib/finance";
+import {
+  labelProductKind,
+  labelPurchaseStatus,
+  labelOrderStatus,
+  labelShippingMethod,
+  productKindLabel,
+  purchaseStatusLabel,
+  purchaseStatusTone,
+  orderStatusTone,
+  shippingMethodLabel
+} from "../../lib/commerce";
 import { assetUrl, mediaUrl } from "../../lib/urls";
 import {
   labelLocationType,
@@ -136,6 +148,8 @@ import type {
   PlanRow,
   ProductRow,
   PurchaseRow,
+  OrderRow,
+  CouponRow,
   RatingRow,
   SupportTicketRow,
   UploadResponse,
@@ -143,7 +157,7 @@ import type {
 } from "../../types";
 import { ALL_ADMIN_RESOURCES, ALL_TRASH_KINDS, assessmentPerimeterKeys, assessmentPhotoFields, CMS_TRASH_KINDS } from "../../types/admin";
 import type { TrashDisplayItem } from "../../types/admin";
-import type { PurchaseStatus } from "../../types/shared";
+import type { OrderStatus, PurchaseStatus } from "../../types/shared";
 import type { WorkoutIntensityType, WorkoutPrescriptionType } from "../student/WorkoutPlayer";
 import { ThemeModeSwitch } from "../shared/ThemeModeSwitch";
 import { uiSounds } from "../../lib/ui-sounds";
@@ -184,6 +198,8 @@ type AdminSection =
   | "profile"
   | "products"
   | "purchases"
+  | "orders"
+  | "coupons"
   | "qr"
   | "cards"
   | "contact"
@@ -467,7 +483,10 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   const [ticketsReadAt, setTicketsReadAt] = useState<string | null>(() => window.localStorage.getItem("admin-tickets-read-at"));
   const [aiPlans, setAiPlans] = useState<AiWorkoutPlanRow[]>([]);
   const [products, setProducts] = useState<ProductRow[]>([]);
+  const [editingProduct, setEditingProduct] = useState<ProductRow | null>(null);
   const [purchases, setPurchases] = useState<PurchaseRow[]>([]);
+  const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [coupons, setCoupons] = useState<CouponRow[]>([]);
   const [paymentCards, setPaymentCards] = useState<PaymentCardRow[]>([]);
   const [favorites, setFavorites] = useState<FavoriteRow[]>([]);
   const [ratings, setRatings] = useState<RatingRow[]>([]);
@@ -874,6 +893,16 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       case "purchases": {
         const response = await apiGet<{ purchases: PurchaseRow[] }>("/admin/purchases", token);
         setPurchases(response.purchases);
+        break;
+      }
+      case "orders": {
+        const response = await apiGet<{ orders: OrderRow[] }>("/admin/orders", token);
+        setOrders(response.orders);
+        break;
+      }
+      case "coupons": {
+        const response = await apiGet<{ coupons: CouponRow[] }>("/admin/coupons", token);
+        setCoupons(response.coupons);
         break;
       }
       case "paymentCards": {
@@ -2522,6 +2551,9 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       const softBase = trashSoftDeleteBase(target.kind);
       await apiDelete(target.permanent ? `${base}/${target.id}/permanent` : `${softBase}/${target.id}`, token);
       setPendingCmsDelete(null);
+      if (target.kind === "products" && editingProduct?.id === target.id) {
+        setEditingProduct(null);
+      }
       await loadAdminTrash();
       await applyAdminChange(trashDeleteResources(target.kind), target.permanent ? "Excluído definitivamente da lixeira." : "Movido para a lixeira.");
     } catch {
@@ -2533,6 +2565,13 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     try {
       const base = trashResourceBase(target.kind);
       await apiPost(`${base}/${target.id}/restore`, {}, token);
+      if (target.kind === "products") {
+        publishSystemEvent("PRODUTO_PUBLICADO", {
+          productId: target.id,
+          productName: target.name,
+          source: "admin_catalog"
+        });
+      }
       await loadAdminTrash();
       await applyAdminChange(trashDeleteResources(target.kind), "Item restaurado com sucesso.");
     } catch {
@@ -2570,34 +2609,88 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     );
   }
 
-  async function handleCreateProduct(event: FormEvent<HTMLFormElement>) {
+  async function handleSaveProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
+    const stockRaw = String(data.get("stock") ?? "").trim();
+    const priceInCents = parseBRLMoneyToCents(String(data.get("price") ?? ""));
+    const kind = (String(data.get("kind") ?? "PHYSICAL") === "DIGITAL" ? "DIGITAL" : "PHYSICAL") as
+      | "PHYSICAL"
+      | "DIGITAL";
+    const payload = {
+      name: String(data.get("name") ?? ""),
+      description: String(data.get("description") ?? ""),
+      category: String(data.get("category") ?? ""),
+      imageUrl: String(data.get("imageUrl") ?? "") || "",
+      kind,
+      stock: stockRaw === "" ? null : Math.max(0, Math.round(Number(stockRaw))),
+      priceInCents
+    };
+
+    if (priceInCents == null || priceInCents < 0) {
+      setFeedback("Informe um preço válido (ex.: 0,10 ou 29,90).");
+      return;
+    }
 
     try {
-      await apiPost(
+      if (editingProduct) {
+        await apiPut(`/admin/products/${editingProduct.id}`, payload, token);
+        setEditingProduct(null);
+        form.reset();
+        await applyAdminChange(["products"], "Produto atualizado com sucesso.");
+        return;
+      }
+
+      const created = await apiPost<{ product: { id: string; name: string; kind: "PHYSICAL" | "DIGITAL" } }>(
         "/admin/products",
         {
-          name: String(data.get("name") ?? ""),
-          description: String(data.get("description") ?? "") || undefined,
-          category: String(data.get("category") ?? "") || undefined,
-          priceInCents: Math.round(Number(data.get("price") ?? 0) * 100),
+          ...payload,
           isActive: true
         },
         token
       );
+      publishSystemEvent("PRODUTO_PUBLICADO", {
+        productId: created.product.id,
+        productName: created.product.name,
+        kind: created.product.kind,
+        source: "admin_catalog"
+      });
       form.reset();
-      await applyAdminChange(["products"], "Produto cadastrado com sucesso.");
+      await applyAdminChange(["products"], "Produto publicado na vitrine.");
     } catch (error) {
-      setFeedback(getApiErrorMessage(error, "Não foi possível cadastrar o produto."));
+      setFeedback(getApiErrorMessage(error, "Não foi possível salvar o produto."));
     }
+  }
+
+  function startEditProduct(product: ProductRow) {
+    setEditingProduct(product);
+    document.getElementById("admin-products")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handleCancelProductEdit() {
+    setEditingProduct(null);
   }
 
   async function handleUpdateProductStatus(productId: string, isActive: boolean) {
     try {
       await apiPut(`/admin/products/${productId}`, { isActive }, token);
-      await applyAdminChange(["products"]);
+      if (isActive) {
+        const product = products.find((item) => item.id === productId);
+        publishSystemEvent("PRODUTO_PUBLICADO", {
+          productId,
+          productName: product?.name ?? "Produto",
+          kind: product?.kind,
+          source: "admin_catalog"
+        });
+      }
+      if (editingProduct?.id === productId) {
+        setEditingProduct((current) => (current ? { ...current, isActive } : current));
+      }
+      await applyAdminChange(
+        ["products"],
+        isActive ? "Produto publicado na vitrine." : "Produto removido da vitrine."
+      );
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o produto."));
     }
@@ -2610,6 +2703,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     const userId = String(data.get("userId") ?? "");
     const productId = String(data.get("productId") ?? "");
     const product = products.find((item) => item.id === productId);
+    const quantity = Math.max(1, Math.round(Number(data.get("quantity") ?? 1)));
 
     if (!userId || !product) {
       setFeedback("Selecione o aluno e o produto.");
@@ -2622,25 +2716,65 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         {
           userId,
           productId,
-          amountInCents: Number(data.get("amountInCents") ?? product.priceInCents) || product.priceInCents,
+          quantity,
+          amountInCents: product.priceInCents * quantity,
           status: "CONFIRMED",
-          paymentMethod: String(data.get("paymentMethod") ?? "") || undefined
+          paymentMethod: String(data.get("paymentMethod") ?? "") || undefined,
+          notes: String(data.get("notes") ?? "") || undefined
         },
         token
       );
       form.reset();
-      await applyAdminChange(["purchases", "products"], "Compra registrada com sucesso.");
+      await applyAdminChange(["purchases", "products"], "Pedido registrado com sucesso.");
     } catch (error) {
-      setFeedback(getApiErrorMessage(error, "Não foi possível registrar a compra."));
+      setFeedback(getApiErrorMessage(error, "Não foi possível registrar o pedido."));
     }
   }
 
   async function handleUpdatePurchaseStatus(purchaseId: string, status: PurchaseStatus) {
     try {
       await apiPut(`/admin/purchases/${purchaseId}`, { status }, token);
-      await applyAdminChange(["purchases"]);
+      await applyAdminChange(["purchases", "products"]);
     } catch (error) {
-      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar a compra."));
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o pedido."));
+    }
+  }
+
+  async function handleCreateCoupon(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const percentRaw = String(data.get("percentOff") ?? "").trim();
+    const amountRaw = String(data.get("amountOff") ?? "").trim();
+    try {
+      await apiPost(
+        "/admin/coupons",
+        {
+          code: String(data.get("code") ?? ""),
+          description: String(data.get("description") ?? "") || undefined,
+          percentOff: percentRaw ? Math.round(Number(percentRaw)) : null,
+          amountOffCents: amountRaw ? Math.round(Number(amountRaw) * 100) : null,
+          minOrderCents: Math.round(Number(data.get("minOrder") ?? 0) * 100) || 0,
+          maxUses: String(data.get("maxUses") ?? "").trim()
+            ? Math.round(Number(data.get("maxUses")))
+            : null,
+          isActive: true
+        },
+        token
+      );
+      form.reset();
+      await applyAdminChange(["coupons"], "Cupom criado.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível criar o cupom."));
+    }
+  }
+
+  async function handleUpdateOrderStatus(orderId: string, status: OrderStatus) {
+    try {
+      await apiPut(`/admin/orders/${orderId}`, { status }, token);
+      await applyAdminChange(["orders", "products"]);
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o pedido."));
     }
   }
 
@@ -2696,8 +2830,8 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   }
 
   const moduleSettingRows = [
-    { key: "module_products", label: "Produtos", description: "Catálogo de produtos e vendas." },
-    { key: "module_purchases", label: "Compras", description: "Registro de compras e pagamentos." },
+    { key: "module_products", label: "Catálogo / Vitrine", description: "Produtos físicos e digitais na loja do aluno." },
+    { key: "module_purchases", label: "Pedidos", description: "Fila de pedidos e confirmação/entrega." },
     { key: "module_qr", label: "QR Code", description: "Check-in por QR Code na academia." },
     { key: "module_cards", label: "Meus Cartões", description: "Cartões salvos para cobranças." },
     { key: "module_contact", label: "Contato", description: "Mensagens recebidas dos visitantes." },
@@ -2738,7 +2872,15 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     (item) =>
       item.role === "USER" &&
       item.status === "ACTIVE" &&
-      (item.enrollmentStatus === "ACTIVE" || item.memberships?.some((membership) => membership.status === "ACTIVE"))
+      (item.enrollmentStatus === "ACTIVE" ||
+        item.memberships?.some((membership) => {
+          if (membership.status !== "ACTIVE") return false;
+          const startsAt = new Date(membership.startsAt);
+          if (Number.isNaN(startsAt.getTime()) || startsAt.getTime() > Date.now()) return false;
+          if (!membership.endsAt) return true;
+          const endsAt = new Date(membership.endsAt);
+          return !Number.isNaN(endsAt.getTime()) && endsAt.getTime() >= Date.now();
+        }))
   );
   const usersPageSize = 12;
   const filteredAdminUsers = useMemo(() => {
@@ -2949,11 +3091,19 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           <span className="admin-nav-group-label">Comercial</span>
           <button className={adminSection === "products" ? "active" : ""} onClick={() => goAdminSection("products")}>
             <Package size={18} />
-            <span className="sidebar-label">Produtos</span>
+            <span className="sidebar-label">Catálogo</span>
           </button>
           <button className={adminSection === "purchases" ? "active" : ""} onClick={() => goAdminSection("purchases")}>
             <ShoppingCart size={18} />
-            <span className="sidebar-label">Compras</span>
+            <span className="sidebar-label">Pedidos manuais</span>
+          </button>
+          <button className={adminSection === "orders" ? "active" : ""} onClick={() => goAdminSection("orders")}>
+            <Package size={18} />
+            <span className="sidebar-label">Pedidos online</span>
+          </button>
+          <button className={adminSection === "coupons" ? "active" : ""} onClick={() => goAdminSection("coupons")}>
+            <CircleDollarSign size={18} />
+            <span className="sidebar-label">Cupons</span>
           </button>
           <button className={adminSection === "qr" ? "active" : ""} onClick={() => goAdminSection("qr")}>
             <QrCode size={18} />
@@ -3173,7 +3323,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                       </select>
                     </td>
                     <td>
-                      <small>{item.enrollmentStatus}</small>
+                      <small>{labelUserEnrollmentColumn(item)}</small>
                     </td>
                     <td>
                       <div className="admin-users-actions">
@@ -5404,7 +5554,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               <article className="finance-kpi">
                 <CircleDollarSign size={18} />
                 <div>
-                  <strong>{memberships.filter((item) => item.status === "ACTIVE").length}</strong>
+                  <strong>{summary.activeMemberships}</strong>
                   <span>Matrículas ativas</span>
                 </div>
               </article>
@@ -6384,31 +6534,113 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         </article>
       </section>}
 
-      {adminSection === "products" && <section className="admin-grid phase-three-grid" id="admin-products">
-        <article className="table-panel">
+      {adminSection === "products" && <section className="finance-hub commerce-hub" id="admin-products">
+        <header className="finance-hub-header">
+          <div>
+            <span className="eyebrow w-fit">Comercial</span>
+            <h1>Catálogo</h1>
+            <p>Produtos físicos (retirada) e digitais para a vitrine do aluno.</p>
+          </div>
+          <div className="finance-hub-kpis">
+            <article className="finance-kpi">
+              <Package size={18} />
+              <div>
+                <strong>{products.filter((item) => item.isActive).length}</strong>
+                <span>Ativos</span>
+              </div>
+            </article>
+            <article className="finance-kpi">
+              <ShoppingCart size={18} />
+              <div>
+                <strong>{purchases.filter((item) => item.status === "PENDING").length}</strong>
+                <span>Pedidos pendentes</span>
+              </div>
+            </article>
+          </div>
+        </header>
+        <article className="table-panel finance-panel">
           <div className={panelTitleClass}>
             <div>
-              <h2>Catálogo de produtos</h2>
-              <p>Configure itens disponíveis para venda (planos, consultorias, suplementos).</p>
+              <h2>{editingProduct ? "Editar produto" : "Novo produto"}</h2>
+              <p>
+                {editingProduct
+                  ? `Atualize os dados de "${editingProduct.name}" na vitrine.`
+                  : "Cadastre item da vitrine com tipo e estoque opcional."}
+              </p>
             </div>
             <span>{products.length}</span>
           </div>
-          <form className={crudFormClass} onSubmit={handleCreateProduct}>
-            <input name="name" placeholder="Nome do produto" required />
-            <input name="category" placeholder="Categoria" />
-            <input name="price" type="number" step="0.01" min="0" placeholder="Preço (R$)" required />
-            <input name="description" placeholder="Descrição curta" />
-            <button className="primary-button">
+          <form
+            key={editingProduct?.id ?? "new-product"}
+            className={`${crudFormClass} commerce-product-form`}
+            onSubmit={handleSaveProduct}
+          >
+            <input name="name" placeholder="Nome do produto" defaultValue={editingProduct?.name ?? ""} required />
+            <input name="category" placeholder="Categoria" defaultValue={editingProduct?.category ?? ""} />
+            <input
+              name="price"
+              type="text"
+              inputMode="decimal"
+              placeholder="29,90"
+              title="Use vírgula para centavos, ex.: 0,10 ou 29,90"
+              aria-label="Preço em reais"
+              defaultValue={
+                editingProduct
+                  ? (editingProduct.priceInCents / 100).toLocaleString("pt-BR", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2
+                    })
+                  : ""
+              }
+              required
+            />
+            <select
+              name="kind"
+              defaultValue={editingProduct?.kind ?? "PHYSICAL"}
+              aria-label="Tipo do produto"
+            >
+              {Object.entries(productKindLabel).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <input
+              name="stock"
+              type="number"
+              min="0"
+              placeholder="Estoque (vazio = ilimitado)"
+              defaultValue={editingProduct?.stock ?? ""}
+            />
+            <input
+              name="imageUrl"
+              placeholder="URL da imagem (opcional)"
+              defaultValue={editingProduct?.imageUrl ?? ""}
+            />
+            <input
+              name="description"
+              placeholder="Descrição curta"
+              defaultValue={editingProduct?.description ?? ""}
+            />
+            <button className="primary-button" type="submit">
               <Save size={18} />
-              Cadastrar produto
+              {editingProduct ? "Salvar alterações" : "Cadastrar produto"}
             </button>
+            {editingProduct && (
+              <button type="button" className="outline-button" onClick={handleCancelProductEdit}>
+                Cancelar edição
+              </button>
+            )}
           </form>
           {products.length > 0 ? (
             visibleProducts.map((product) => (
-              <div className={dataRowClass} key={product.id}>
+              <div className={`${dataRowClass} commerce-product-row`} key={product.id}>
                 <span>
                   <strong>{product.name}</strong>
-                  {product.category ?? "Sem categoria"} · {formatPriceInBRL(product.priceInCents)} · {product._count?.purchases ?? 0} venda(s)
+                  {product.category ?? "Sem categoria"} · {labelProductKind(product.kind)} ·{" "}
+                  {formatPriceInBRL(product.priceInCents)}
+                  {product.stock != null ? ` · estoque ${product.stock}` : " · estoque livre"} ·{" "}
+                  {product._count?.purchases ?? 0} pedido(s)
                 </span>
                 <select
                   aria-label="Status do produto"
@@ -6418,9 +6650,19 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   <option value="true">Ativo</option>
                   <option value="false">Inativo</option>
                 </select>
-                <button className={deleteActionButtonClass} aria-label="Excluir produto" onClick={() => setPendingCmsDelete({ kind: "products", id: product.id, name: product.name })}>
-                  <Trash2 size={17} />
-                </button>
+                <div className="cms-row-actions cms-row-actions-danger">
+                  <button
+                    type="button"
+                    className={editActionButtonClass}
+                    aria-label="Editar produto"
+                    onClick={() => startEditProduct(product)}
+                  >
+                    <Pencil size={17} />
+                  </button>
+                  <button className={deleteActionButtonClass} aria-label="Excluir produto" onClick={() => setPendingCmsDelete({ kind: "products", id: product.id, name: product.name })}>
+                    <Trash2 size={17} />
+                  </button>
+                </div>
               </div>
             ))
           ) : (
@@ -6440,16 +6682,45 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         </article>
       </section>}
 
-      {adminSection === "purchases" && <section className="admin-grid phase-three-grid" id="admin-purchases">
-        <article className="table-panel">
+      {adminSection === "purchases" && <section className="finance-hub commerce-hub" id="admin-purchases">
+        <header className="finance-hub-header">
+          <div>
+            <span className="eyebrow w-fit">Comercial</span>
+            <h1>Pedidos</h1>
+            <p>Registre vendas manuais e avance o status até a entrega/retirada.</p>
+          </div>
+          <div className="finance-hub-kpis">
+            <article className="finance-kpi">
+              <CircleDollarSign size={18} />
+              <div>
+                <strong>
+                  {formatPriceInBRL(
+                    purchases
+                      .filter((item) => item.status === "CONFIRMED" || item.status === "READY" || item.status === "DELIVERED")
+                      .reduce((sum, item) => sum + item.amountInCents, 0)
+                  )}
+                </strong>
+                <span>Receita produtos</span>
+              </div>
+            </article>
+            <article className="finance-kpi tone-warning">
+              <ShoppingCart size={18} />
+              <div>
+                <strong>{purchases.filter((item) => item.status === "PENDING" || item.status === "READY").length}</strong>
+                <span>Em andamento</span>
+              </div>
+            </article>
+          </div>
+        </header>
+        <article className="table-panel finance-panel">
           <div className={panelTitleClass}>
             <div>
-              <h2>Registrar compra</h2>
-              <p>Associe um produto a um aluno de forma manual.</p>
+              <h2>Registrar pedido</h2>
+              <p>Venda presencial/manual já confirmada (balcão).</p>
             </div>
             <span>Manual</span>
           </div>
-          <form className={crudFormClass} onSubmit={handleCreatePurchase}>
+          <form className={`${crudFormClass} commerce-purchase-form`} onSubmit={handleCreatePurchase}>
             <select name="userId" required>
               <option value="">Aluno</option>
               {users.filter((item) => item.role === "USER").map((item) => (
@@ -6466,46 +6737,63 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 </option>
               ))}
             </select>
+            <input name="quantity" type="number" min="1" defaultValue={1} aria-label="Quantidade" />
             <select name="paymentMethod" defaultValue="PIX">
               <option value="PIX">PIX</option>
               <option value="CARD">Cartão</option>
               <option value="BOLETO">Boleto</option>
+              <option value="CASH">Dinheiro</option>
             </select>
+            <input name="notes" placeholder="Observação (opcional)" />
             <button className="primary-button">
               <Save size={18} />
-              Registrar compra
+              Registrar pedido
             </button>
           </form>
         </article>
-        <article className="table-panel">
+        <article className="table-panel finance-panel">
           <div className={panelTitleClass}>
             <div>
-              <h2>Compras</h2>
-              <p>Histórico de compras e status de pagamento.</p>
+              <h2>Fila de pedidos</h2>
+              <p>Pendente → Pago → Pronto → Entregue.</p>
             </div>
             <span>{purchases.length}</span>
           </div>
           {purchases.length > 0 ? (
             visiblePurchases.map((purchase) => (
-              <div className={dataRowClass} key={purchase.id}>
+              <div className={`${dataRowClass} commerce-purchase-row`} key={purchase.id}>
                 <span>
                   <strong>{purchase.product.name}</strong>
-                  {purchase.user.name} · {formatPriceInBRL(purchase.amountInCents)} ·{" "}
+                  {purchase.user.name} · {formatPriceInBRL(purchase.amountInCents)}
+                  {purchase.quantity && purchase.quantity > 1 ? ` · qtd ${purchase.quantity}` : ""} ·{" "}
                   {new Date(purchase.createdAt).toLocaleDateString("pt-BR")}
+                  {purchase.notes ? ` · ${purchase.notes}` : ""}
+                  {purchase.paymentUrl ? (
+                    <>
+                      {" · "}
+                      <a className="finance-link" href={purchase.paymentUrl} target="_blank" rel="noreferrer">
+                        Link Asaas
+                      </a>
+                    </>
+                  ) : null}
+                </span>
+                <span className={`finance-status-badge tone-${purchaseStatusTone(purchase.status)}`}>
+                  {labelPurchaseStatus(purchase.status)}
                 </span>
                 <select
-                  aria-label="Status da compra"
+                  aria-label="Status do pedido"
                   value={purchase.status}
                   onChange={(event) =>
                     void handleUpdatePurchaseStatus(purchase.id, event.target.value as PurchaseStatus)
                   }
                 >
-                  <option value="PENDING">Pendente</option>
-                  <option value="CONFIRMED">Confirmada</option>
-                  <option value="CANCELED">Cancelada</option>
-                  <option value="REFUNDED">Reembolsada</option>
+                  {Object.entries(purchaseStatusLabel).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
                 </select>
-                <button className={deleteActionButtonClass} aria-label="Excluir compra" onClick={() => setPendingCmsDelete({ kind: "purchases", id: purchase.id, name: purchase.product?.name ?? "Compra" })}>
+                <button className={deleteActionButtonClass} aria-label="Excluir pedido" onClick={() => setPendingCmsDelete({ kind: "purchases", id: purchase.id, name: purchase.product?.name ?? "Pedido" })}>
                   <Trash2 size={17} />
                 </button>
               </div>
@@ -6513,19 +6801,164 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           ) : (
             <div className="dash-empty">
               <ShoppingCart size={18} />
-              Nenhuma compra registrada.
+              Nenhum pedido registrado.
             </div>
           )}
           {purchases.length > 0 && (
             <AdminPaginationBar
               page={currentPurchasesPage}
               pageCount={purchasesTotalPages}
-              totalLabel={`${purchases.length} compra(s)`}
+              totalLabel={`${purchases.length} pedido(s)`}
               onPageChange={setPurchasesPage}
             />
           )}
         </article>
       </section>}
+
+      {adminSection === "orders" && (
+        <section className="finance-hub commerce-hub" id="admin-orders">
+          <header className="finance-hub-header">
+            <div>
+              <span className="eyebrow w-fit">Comercial</span>
+              <h1>Pedidos online</h1>
+              <p>Pedidos do carrinho da vitrine (multi-item, cupom e frete/retirada).</p>
+            </div>
+            <div className="finance-hub-kpis">
+              <article className="finance-kpi">
+                <Package size={18} />
+                <div>
+                  <strong>{orders.length}</strong>
+                  <span>Total</span>
+                </div>
+              </article>
+              <article className="finance-kpi tone-warning">
+                <ShoppingCart size={18} />
+                <div>
+                  <strong>{orders.filter((item) => item.status === "PENDING").length}</strong>
+                  <span>Aguardando pagamento</span>
+                </div>
+              </article>
+            </div>
+          </header>
+          <article className="table-panel finance-panel">
+            <div className={panelTitleClass}>
+              <div>
+                <h2>Fila de pedidos</h2>
+                <p>Status: Pendente → Pago → Pronto → Entregue.</p>
+              </div>
+              <span>{orders.length}</span>
+            </div>
+            {orders.length > 0 ? (
+              orders.map((order) => (
+                <div className={`${dataRowClass} commerce-purchase-row`} key={order.id}>
+                  <span>
+                    <strong>
+                      {order.items.map((item) => `${item.productName}×${item.quantity}`).join(", ")}
+                    </strong>
+                    {order.user?.name ?? "Aluno"} · {formatPriceInBRL(order.amountInCents)}
+                    {order.discountInCents > 0 ? ` · desc. ${formatPriceInBRL(order.discountInCents)}` : ""}
+                    {order.shippingInCents > 0 ? ` · frete ${formatPriceInBRL(order.shippingInCents)}` : ""}
+                    {" · "}
+                    {labelShippingMethod(order.shippingMethod)}
+                    {order.couponCode ? ` · cupom ${order.couponCode}` : ""}
+                    {order.paymentUrl ? (
+                      <>
+                        {" · "}
+                        <a className="finance-link" href={order.paymentUrl} target="_blank" rel="noreferrer">
+                          Link Asaas
+                        </a>
+                      </>
+                    ) : null}
+                  </span>
+                  <span className={`finance-status-badge tone-${orderStatusTone(order.status)}`}>
+                    {labelOrderStatus(order.status)}
+                  </span>
+                  <select
+                    aria-label="Status do pedido online"
+                    value={order.status}
+                    onChange={(event) => void handleUpdateOrderStatus(order.id, event.target.value as OrderStatus)}
+                  >
+                    {Object.entries(purchaseStatusLabel).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))
+            ) : (
+              <div className="dash-empty">
+                <Package size={18} />
+                Nenhum pedido online ainda.
+              </div>
+            )}
+          </article>
+        </section>
+      )}
+
+      {adminSection === "coupons" && (
+        <section className="finance-hub commerce-hub" id="admin-coupons">
+          <header className="finance-hub-header">
+            <div>
+              <span className="eyebrow w-fit">Comercial</span>
+              <h1>Cupons</h1>
+              <p>Descontos percentuais ou valor fixo para o checkout da vitrine.</p>
+            </div>
+          </header>
+          <article className="table-panel finance-panel">
+            <div className={panelTitleClass}>
+              <div>
+                <h2>Novo cupom</h2>
+                <p>Informe % ou valor fixo (não os dois ao mesmo tempo de forma obrigatória — um basta).</p>
+              </div>
+              <span>{coupons.length}</span>
+            </div>
+            <form className={`${crudFormClass} commerce-product-form`} onSubmit={handleCreateCoupon}>
+              <input name="code" placeholder="Código (ex: TREINO10)" required />
+              <input name="description" placeholder="Descrição" />
+              <input name="percentOff" type="number" min="1" max="100" placeholder="% off" />
+              <input name="amountOff" type="number" step="0.01" min="0" placeholder="R$ off" />
+              <input name="minOrder" type="number" step="0.01" min="0" placeholder="Pedido mínimo (R$)" />
+              <input name="maxUses" type="number" min="1" placeholder="Máx. usos (opcional)" />
+              <button className="primary-button" type="submit">
+                <Save size={18} />
+                Criar cupom
+              </button>
+            </form>
+            {coupons.length > 0 ? (
+              coupons.map((coupon) => (
+                <div className={dataRowClass} key={coupon.id}>
+                  <span>
+                    <strong>{coupon.code}</strong>
+                    {coupon.percentOff ? `${coupon.percentOff}%` : formatPriceInBRL(coupon.amountOffCents ?? 0)}
+                    {" · "}
+                    usados {coupon.usedCount}
+                    {coupon.maxUses != null ? `/${coupon.maxUses}` : ""}
+                    {coupon.description ? ` · ${coupon.description}` : ""}
+                  </span>
+                  <button
+                    type="button"
+                    className={deleteActionButtonClass}
+                    aria-label="Excluir cupom"
+                    onClick={() =>
+                      void apiDelete(`/admin/coupons/${coupon.id}`, token)
+                        .then(() => applyAdminChange(["coupons"], "Cupom removido."))
+                        .catch((error) => setFeedback(getApiErrorMessage(error, "Falha ao remover cupom.")))
+                    }
+                  >
+                    <Trash2 size={17} />
+                  </button>
+                </div>
+              ))
+            ) : (
+              <div className="dash-empty">
+                <CircleDollarSign size={18} />
+                Nenhum cupom cadastrado.
+              </div>
+            )}
+          </article>
+        </section>
+      )}
 
       {adminSection === "qr" && <section className="admin-grid phase-three-grid" id="admin-qr">
         <article className="table-panel">

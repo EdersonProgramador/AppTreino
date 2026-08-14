@@ -310,6 +310,8 @@ export type AdminResource =
   | "aiPlans"
   | "products"
   | "purchases"
+  | "orders"
+  | "coupons"
   | "paymentCards"
   | "favorites"
   | "ratings"
@@ -334,6 +336,8 @@ export const ALL_ADMIN_RESOURCES: AdminResource[] = [
   "aiPlans",
   "products",
   "purchases",
+  "orders",
+  "coupons",
   "paymentCards",
   "favorites",
   "ratings",

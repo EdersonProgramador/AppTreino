@@ -183,6 +183,8 @@ export interface ProductRow {
   priceInCents: number;
   imageUrl?: string | null;
   category?: string | null;
+  kind?: "PHYSICAL" | "DIGITAL";
+  stock?: number | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -190,22 +192,106 @@ export interface ProductRow {
   purchasedByMe?: boolean;
   favoritedByMe?: boolean;
   ratedByMe?: boolean;
+  outOfStock?: boolean;
 }
 
-export type PurchaseStatus = "PENDING" | "CONFIRMED" | "CANCELED" | "REFUNDED";
+export type PurchaseStatus =
+  | "PENDING"
+  | "CONFIRMED"
+  | "READY"
+  | "DELIVERED"
+  | "CANCELED"
+  | "REFUNDED";
 
 export interface PurchaseRow {
   id: string;
   userId: string;
   productId: string;
   amountInCents: number;
+  quantity?: number;
   status: PurchaseStatus;
   paymentMethod?: string | null;
+  notes?: string | null;
+  asaasPaymentId?: string | null;
+  paymentUrl?: string | null;
   createdAt: string;
   paidAt?: string | null;
+  fulfilledAt?: string | null;
   user: AdminUser;
   product: ProductRow;
 }
+
+export type OrderStatus = PurchaseStatus;
+export type ShippingMethod = "PICKUP" | "DELIVERY" | "DIGITAL";
+
+export interface OrderItemRow {
+  id: string;
+  orderId: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPriceInCents: number;
+  amountInCents: number;
+}
+
+export interface OrderRow {
+  id: string;
+  userId: string;
+  status: OrderStatus;
+  subtotalInCents: number;
+  discountInCents: number;
+  shippingInCents: number;
+  amountInCents: number;
+  shippingMethod: ShippingMethod;
+  shippingAddress?: string | null;
+  couponId?: string | null;
+  couponCode?: string | null;
+  notes?: string | null;
+  paymentMethod?: string | null;
+  asaasPaymentId?: string | null;
+  paymentUrl?: string | null;
+  createdAt: string;
+  paidAt?: string | null;
+  fulfilledAt?: string | null;
+  items: OrderItemRow[];
+  user?: AdminUser;
+}
+
+export interface CouponRow {
+  id: string;
+  code: string;
+  description?: string | null;
+  percentOff?: number | null;
+  amountOffCents?: number | null;
+  minOrderCents: number;
+  maxUses?: number | null;
+  usedCount: number;
+  isActive: boolean;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  createdAt: string;
+}
+
+export interface CartItemRow {
+  id: string;
+  productId: string;
+  quantity: number;
+  lineTotalInCents: number;
+  product: ProductRow;
+}
+
+export interface CartRow {
+  id: string;
+  couponCode?: string | null;
+  items: CartItemRow[];
+  subtotalInCents: number;
+  discountInCents: number;
+  shippingInCents: number;
+  shippingMethod: ShippingMethod;
+  amountInCents: number;
+  itemCount: number;
+}
+
 
 export interface PaymentCardRow {
   id: string;

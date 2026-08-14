@@ -16,6 +16,7 @@ export type SystemEventType =
   | "MENSAGEM_ENVIADA"
   | "AVALIACAO_SUBMETIDA"
   | "PROGRAMA_PUBLICADO"
+  | "PRODUTO_PUBLICADO"
   | "CMS_ATUALIZADO";
 
 export type PanelDestination =
@@ -26,16 +27,19 @@ export type PanelDestination =
   | "support"
   | "ratings"
   | "training"
-  | "assessments";
+  | "assessments"
+  | "products"
+  | "purchases";
 
 /** Destinos no Painel do Aluno mapeados por evento de origem. */
 export const EVENT_PANEL_TARGETS: Record<SystemEventType, PanelDestination[]> = {
-  COMPRA_CONCLUIDA: ["payments", "membership"],
+  COMPRA_CONCLUIDA: ["products", "purchases"],
   CHECKIN_REALIZADO: ["status", "locations"],
   CARTAO_ATUALIZADO: ["payments"],
   MENSAGEM_ENVIADA: ["support"],
   AVALIACAO_SUBMETIDA: ["assessments", "training", "ratings"],
   PROGRAMA_PUBLICADO: ["training"],
+  PRODUTO_PUBLICADO: ["products"],
   CMS_ATUALIZADO: ["training", "locations", "membership", "payments"]
 };
 
@@ -47,7 +51,9 @@ export const PANEL_SECTION_LABEL: Record<PanelDestination, string> = {
   support: "Atendimento",
   ratings: "Favoritos e avaliações",
   training: "Treino",
-  assessments: "Avaliação física"
+  assessments: "Avaliação física",
+  products: "Vitrine",
+  purchases: "Minhas compras"
 };
 
 export const EVENT_FLOW_META: Record<
@@ -60,8 +66,8 @@ export const EVENT_FLOW_META: Record<
 > = {
   COMPRA_CONCLUIDA: {
     origin: "Compras / Produtos",
-    syncAction: "Registra a transação no histórico de pagamentos e libera a nova matrícula ou produto.",
-    notificationTitle: "Compra sincronizada"
+    syncAction: "Registra o pedido no histórico da vitrine e atualiza o status comercial.",
+    notificationTitle: "Pedido registrado"
   },
   CHECKIN_REALIZADO: {
     origin: "QR Code",
@@ -87,6 +93,11 @@ export const EVENT_FLOW_META: Record<
     origin: "Estúdio de Treinos",
     syncAction: "Libera o programa publicado no catálogo de treinos do aluno elegível.",
     notificationTitle: "Novo treino publicado"
+  },
+  PRODUTO_PUBLICADO: {
+    origin: "Catálogo / Vitrine",
+    syncAction: "Disponibiliza o produto na vitrine online do aluno.",
+    notificationTitle: "Novo produto na vitrine"
   },
   CMS_ATUALIZADO: {
     origin: "Painel Admin",
@@ -132,6 +143,12 @@ export type SystemEventPayloadMap = {
     audienceMode: "ALL_ACTIVE" | "SELECTED";
     eligibleStudentCount?: number;
     source: "cms_publish";
+  };
+  PRODUTO_PUBLICADO: {
+    productId: string;
+    productName: string;
+    kind?: "PHYSICAL" | "DIGITAL";
+    source: "admin_catalog";
   };
   CMS_ATUALIZADO: {
     scopes: Array<"training" | "locations" | "announcements" | "account">;
@@ -186,6 +203,12 @@ export function buildSyncNotificationMessage<T extends SystemEventType>(
       const count =
         typeof data.eligibleStudentCount === "number" ? ` para ${data.eligibleStudentCount} aluno(s)` : "";
       return `Treino "${data.programTitle}" publicado${count}. ${meta.syncAction} Destino: ${targets}.`;
+    }
+    case "PRODUTO_PUBLICADO": {
+      const data = payload as SystemEventPayloadMap["PRODUTO_PUBLICADO"];
+      const kindLabel = data.kind === "DIGITAL" ? "digital" : data.kind === "PHYSICAL" ? "físico" : "";
+      const kindSuffix = kindLabel ? ` (${kindLabel})` : "";
+      return `"${data.productName}"${kindSuffix} disponível na vitrine. ${meta.syncAction} Destino: ${targets}.`;
     }
     case "CMS_ATUALIZADO": {
       const data = payload as SystemEventPayloadMap["CMS_ATUALIZADO"];

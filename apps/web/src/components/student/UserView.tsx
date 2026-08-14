@@ -23,8 +23,10 @@ import {
   MapPin,
   Menu,
   MessageCircle,
+  Minus,
   Package,
   Pencil,
+  Plus,
   QrCode,
   Ruler,
   Settings,
@@ -56,6 +58,7 @@ import {
   labelMembershipStatus,
   labelPaymentStatus
 } from "../../lib/finance";
+import { labelProductKind, labelPurchaseStatus, labelOrderStatus, labelShippingMethod, purchaseStatusTone, shippingMethodLabel } from "../../lib/commerce";
 import { labelLocationType, studentLocationLabel } from "../../lib/locations";
 import { sessionLabelFromBlock, trainingCopy } from "../../lib/training-copy";
 import { AnimatedList } from "../shared/AnimatedList";
@@ -78,6 +81,8 @@ import type {
   PlanRow,
   ProductRow,
   PurchaseRow,
+  CartRow,
+  OrderRow,
   StudentFavoriteRow,
   StudentLocationRow,
   StudentMembershipRow,
@@ -145,9 +150,6 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [studentProfileEditing, setStudentProfileEditing] = useState(false);
   const [studentProfileUf, setStudentProfileUf] = useState<string>(profile?.state ?? "");
   const [studentProfileFormKey, setStudentProfileFormKey] = useState(0);
-  const [notificationsReadAt, setNotificationsReadAt] = useState<string | null>(() =>
-    window.localStorage.getItem("student-notifications-read-at")
-  );
   const [aiPlans, setAiPlans] = useState<AiWorkoutPlanRow[]>([]);
   const [publicConfig, setPublicConfig] = useState<Record<string, string>>({});
   const [showStudentQr, setShowStudentQr] = useState(false);
@@ -173,6 +175,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [studentLightbox, setStudentLightbox] = useState<{ urls: string[]; index: number } | null>(null);
   const [studentProducts, setStudentProducts] = useState<ProductRow[]>([]);
   const [studentPurchases, setStudentPurchases] = useState<PurchaseRow[]>([]);
+  const [studentCart, setStudentCart] = useState<CartRow | null>(null);
+  const [studentOrders, setStudentOrders] = useState<OrderRow[]>([]);
+  const [cartShippingMethod, setCartShippingMethod] = useState<"PICKUP" | "DELIVERY" | "DIGITAL">("PICKUP");
+  const [cartAddress, setCartAddress] = useState("");
+  const [cartCouponInput, setCartCouponInput] = useState("");
+  const [cartCheckingOut, setCartCheckingOut] = useState(false);
+  const [cartQtyBusyId, setCartQtyBusyId] = useState<string | null>(null);
   const [purchasingProductId, setPurchasingProductId] = useState<string | null>(null);
   const [purchaseConfirmId, setPurchaseConfirmId] = useState<string | null>(null);
   const purchaseConfirmTimer = useRef<number | null>(null);
@@ -181,8 +190,15 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [submittingRatingId, setSubmittingRatingId] = useState<string | null>(null);
   const [favoritingProgramId, setFavoritingProgramId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorTick, setErrorTick] = useState(0);
   const [success, setSuccess] = useState<string | null>(null);
   const [completingOnboarding, setCompletingOnboarding] = useState(false);
+
+  function flashError(message: string) {
+    setSuccess(null);
+    setErrorTick((tick) => tick + 1);
+    setError(message);
+  }
 
   useEffect(() => {
     if (!success) return;
@@ -192,8 +208,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   }, [success]);
 
   useEffect(() => {
-    if (error) uiSounds.error();
-  }, [error]);
+    if (!error) return;
+    uiSounds.error();
+    const timer = window.setTimeout(() => setError(null), 2000);
+    return () => window.clearTimeout(timer);
+  }, [error, errorTick]);
 
   useEffect(() => {
     if (!accessReady) return;
@@ -290,6 +309,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         consistencyResponse,
         productsResponse,
         purchasesResponse,
+        cartResponse,
+        ordersResponse,
         workoutFavoritesResponse,
         locationsResponse
       ] = await Promise.all([
@@ -301,8 +322,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         apiGet<{ notifications: NotificationRow[] }>("/user/notifications", token),
         apiGet<{ plans: AiWorkoutPlanRow[] }>("/user/ai-workout-plans", token),
         apiGet<WorkoutConsistencyResponse>("/student/workout/consistency", token).catch(() => null),
-        apiGet<{ products: ProductRow[] }>("/student/products", token),
-        apiGet<{ purchases: PurchaseRow[] }>("/student/purchases", token),
+        apiGet<{ products: ProductRow[] }>("/student/products", token).catch(() => ({ products: [] as ProductRow[] })),
+        apiGet<{ purchases: PurchaseRow[] }>("/student/purchases", token).catch(() => ({ purchases: [] as PurchaseRow[] })),
+        apiGet<{ cart: CartRow }>("/student/cart", token).catch(() => ({ cart: null })),
+        apiGet<{ orders: OrderRow[] }>("/student/orders", token).catch(() => ({ orders: [] as OrderRow[] })),
         apiGet<{ favorites: StudentFavoriteRow[] }>("/student/workout/favorites", token),
         apiGet<{ locations: StudentLocationRow[] }>("/student/locations", token)
       ]);
@@ -318,6 +341,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       setConsistency(consistencyResponse);
       setStudentProducts(productsResponse.products);
       setStudentPurchases(purchasesResponse.purchases);
+      setStudentCart(cartResponse.cart);
+      if (cartResponse.cart?.shippingMethod) {
+        setCartShippingMethod(cartResponse.cart.shippingMethod);
+      }
+      if (cartResponse.cart?.couponCode) {
+        setCartCouponInput(cartResponse.cart.couponCode);
+      }
+      setStudentOrders(ordersResponse.orders);
       setStudentWorkoutFavorites(workoutFavoritesResponse.favorites);
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;
@@ -423,6 +454,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           setSuccess("Feedback sincronizado com Avaliação física / Treino.");
         }
 
+        if (refreshTypes.includes("PRODUTO_PUBLICADO")) {
+          const [productsResponse, notificationsResponse] = await Promise.all([
+            apiGet<{ products: ProductRow[] }>("/student/products", token),
+            apiGet<{ notifications: NotificationRow[] }>("/user/notifications", token)
+          ]);
+          setStudentProducts(productsResponse.products);
+          setNotifications(notificationsResponse.notifications);
+          setSuccess("Novo produto disponível na vitrine.");
+          uiSounds.popupNotify();
+        }
+
         if (refreshTypes.includes("PROGRAMA_PUBLICADO") || refreshTypes.includes("CMS_ATUALIZADO")) {
           await loadUserData();
           if (refreshTypes.includes("PROGRAMA_PUBLICADO")) {
@@ -523,12 +565,23 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   }, [studentSection, token]);
 
   useEffect(() => {
-    if (!notificationsOpen) return;
-    const now = new Date().toISOString();
-    setNotificationsReadAt(now);
-    window.localStorage.setItem("student-notifications-read-at", now);
+    if (studentSection !== "cart" || !token || publicConfig["module_products"] === "false") return;
+    void refreshStudentCart().catch(() => {
+      setError("Não foi possível abrir o carrinho.");
+    });
+  }, [studentSection, token, publicConfig]);
+
+  useEffect(() => {
+    if (!notificationsOpen || !token) return;
     markAllNotificationsRead();
-  }, [notificationsOpen, markAllNotificationsRead]);
+    void apiPost<{ ok: boolean; unreadCount: number }>("/user/notifications/read", { all: true }, token)
+      .then(() => {
+        setNotifications((current) =>
+          current.map((item) => (item.readAt ? item : { ...item, readAt: new Date().toISOString() }))
+        );
+      })
+      .catch(() => undefined);
+  }, [notificationsOpen, markAllNotificationsRead, token]);
 
   async function handleEventRegistration(eventId: string) {
     try {
@@ -1145,6 +1198,149 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     }
   }
 
+  async function refreshStudentCart(shippingMethod?: "PICKUP" | "DELIVERY" | "DIGITAL") {
+    if (!token) return null;
+    const method = shippingMethod ?? cartShippingMethod;
+    const response = await apiGet<{ cart: CartRow }>(
+      `/student/cart?shippingMethod=${encodeURIComponent(method)}`,
+      token
+    );
+    setStudentCart(response.cart);
+    setCartShippingMethod(response.cart.shippingMethod);
+    if (response.cart.couponCode) {
+      setCartCouponInput(response.cart.couponCode);
+    }
+    return response.cart;
+  }
+
+  async function handleAddToCart(productId: string) {
+    setPurchasingProductId(productId);
+    setError(null);
+    setSuccess(null);
+    try {
+      const product = studentProducts.find((item) => item.id === productId);
+      const inCart = studentCart?.items.find((item) => item.productId === productId);
+      const nextQty = (inCart?.quantity ?? 0) + 1;
+      if (product?.stock != null && nextQty > product.stock) {
+        flashError(
+          `Limite de estoque: no máximo ${product.stock} unidade(s) disponível(is) para "${product.name}".`
+        );
+        return;
+      }
+
+      const response = await apiPost<{ cart: CartRow }>("/student/cart/items", { productId, quantity: 1 }, token);
+      setStudentCart(response.cart);
+      setCartShippingMethod(response.cart.shippingMethod);
+      goToSection("cart");
+      if (product?.stock != null && nextQty >= product.stock) {
+        flashError(
+          `Limite de estoque: no máximo ${product.stock} unidade(s) disponível(is) para "${product.name}".`
+        );
+      } else {
+        setSuccess("Adicionado ao carrinho.");
+      }
+    } catch (cartError) {
+      flashError(cartError instanceof ApiError ? cartError.message : "Não foi possível adicionar ao carrinho.");
+    } finally {
+      setPurchasingProductId(null);
+    }
+  }
+
+  async function handleCartQuantity(productId: string, quantity: number) {
+    if (cartQtyBusyId) return;
+    const item = studentCart?.items.find((entry) => entry.productId === productId);
+    const nextQty = Math.max(0, quantity);
+    if (item?.product.stock != null && nextQty > item.product.stock) {
+      flashError(
+        `Limite de estoque: no máximo ${item.product.stock} unidade(s) disponível(is) para "${item.product.name}".`
+      );
+      return;
+    }
+
+    setCartQtyBusyId(productId);
+    setError(null);
+    setSuccess(null);
+    try {
+      await apiPut<{ cart: CartRow }>(
+        `/student/cart/items/${productId}`,
+        { quantity: nextQty },
+        token
+      );
+      await refreshStudentCart(cartShippingMethod);
+      if (item?.product.stock != null && nextQty >= item.product.stock) {
+        flashError(
+          `Limite de estoque: no máximo ${item.product.stock} unidade(s) disponível(is) para "${item.product.name}".`
+        );
+      }
+    } catch (qtyError) {
+      flashError(qtyError instanceof ApiError ? qtyError.message : "Não foi possível atualizar a quantidade.");
+    } finally {
+      setCartQtyBusyId(null);
+    }
+  }
+
+  async function handleApplyCartCoupon() {
+    setError(null);
+    try {
+      await apiPut<{ cart: CartRow }>(
+        "/student/cart/coupon",
+        { code: cartCouponInput.trim() || null },
+        token
+      );
+      await refreshStudentCart(cartShippingMethod);
+      setSuccess(cartCouponInput.trim() ? "Cupom aplicado." : "Cupom removido.");
+    } catch (couponError) {
+      flashError(couponError instanceof ApiError ? couponError.message : "Cupom inválido.");
+    }
+  }
+
+  async function handleCartShippingChange(method: "PICKUP" | "DELIVERY" | "DIGITAL") {
+    setCartShippingMethod(method);
+    setError(null);
+    try {
+      await refreshStudentCart(method);
+    } catch {
+      // Mantém a seleção local se o refresh falhar.
+    }
+  }
+
+  async function handleCartCheckout() {
+    setCartCheckingOut(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const response = await apiPost<{ order: OrderRow }>("/student/cart/checkout", {
+        shippingMethod: cartShippingMethod,
+        shippingAddress: cartAddress,
+        billingType: "UNDEFINED"
+      }, token);
+      setStudentOrders((current) => [response.order, ...current]);
+      setStudentCart({
+        id: studentCart?.id ?? "empty",
+        items: [],
+        subtotalInCents: 0,
+        discountInCents: 0,
+        shippingInCents: 0,
+        shippingMethod: "PICKUP",
+        amountInCents: 0,
+        itemCount: 0,
+        couponCode: null
+      });
+      setCartCouponInput("");
+      setCartAddress("");
+      if (response.order.paymentUrl) {
+        window.location.href = response.order.paymentUrl;
+        return;
+      }
+      setSuccess("Pedido criado. Aguardando confirmação de pagamento.");
+      goToSection("orders");
+    } catch (checkoutError) {
+      flashError(checkoutError instanceof ApiError ? checkoutError.message : "Não foi possível finalizar o pedido.");
+    } finally {
+      setCartCheckingOut(false);
+    }
+  }
+
   async function handleBuyProduct(productId: string) {
     setPurchasingProductId(productId);
     setError(null);
@@ -1156,21 +1352,64 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         current.map((item) => (item.id === productId ? { ...item, purchasedByMe: true } : item))
       );
       setPurchaseConfirmId(productId);
-      emitSystemEvent("COMPRA_CONCLUIDA", {
-        productId,
-        purchaseId: response.purchase.id,
-        productName,
-        source: "produtos"
-      });
+      emitSystemEvent(
+        "COMPRA_CONCLUIDA",
+        {
+          productId,
+          purchaseId: response.purchase.id,
+          productName,
+          source: "produtos"
+        },
+        { navigateTo: response.purchase.paymentUrl ? null : "purchases" }
+      );
+
+      if (response.purchase.paymentUrl) {
+        window.location.href = response.purchase.paymentUrl;
+        return;
+      }
+
       if (purchaseConfirmTimer.current) {
         window.clearTimeout(purchaseConfirmTimer.current);
       }
       purchaseConfirmTimer.current = window.setTimeout(() => {
         setPurchaseConfirmId(null);
         purchaseConfirmTimer.current = null;
-      }, 2000);
+      }, 2500);
     } catch (buyError) {
-      setError(buyError instanceof ApiError ? buyError.message : "Não foi possível registrar a compra.");
+      setError(buyError instanceof ApiError ? buyError.message : "Não foi possível registrar o pedido.");
+    } finally {
+      setPurchasingProductId(null);
+    }
+  }
+
+  async function handlePayPurchase(purchaseId: string) {
+    setError(null);
+    setPurchasingProductId(purchaseId);
+    try {
+      const existing = studentPurchases.find((item) => item.id === purchaseId);
+      if (existing?.paymentUrl) {
+        openAsaasCheckout(existing.paymentUrl);
+        return;
+      }
+      const response = await apiPost<{ purchase: PurchaseRow; alreadyPaid?: boolean }>(
+        `/student/purchases/${purchaseId}/checkout`,
+        {},
+        token
+      );
+      setStudentPurchases((current) =>
+        current.map((item) => (item.id === purchaseId ? response.purchase : item))
+      );
+      if (response.alreadyPaid) {
+        await loadUserData();
+        return;
+      }
+      if (response.purchase.paymentUrl) {
+        openAsaasCheckout(response.purchase.paymentUrl);
+        return;
+      }
+      setError("Link de pagamento indisponível. Aguarde a confirmação da academia.");
+    } catch (payError) {
+      setError(payError instanceof ApiError ? payError.message : "Não foi possível abrir o pagamento.");
     } finally {
       setPurchasingProductId(null);
     }
@@ -1518,11 +1757,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   );
 
   const unreadNotificationsCount = useMemo(() => {
-    const since = notificationsReadAt ? new Date(notificationsReadAt) : new Date(0);
-    const remoteUnread = notifications.filter((notification) => new Date(notification.publishedAt) > since).length;
+    const remoteUnread = notifications.filter((notification) => !notification.readAt).length;
     const syncUnread = syncNotifications.filter((notification) => !notification.read).length;
     return remoteUnread + syncUnread;
-  }, [notifications, notificationsReadAt, syncNotifications]);
+  }, [notifications, syncNotifications]);
 
   const mergedNotifications = useMemo(() => {
     const syncItems = syncNotifications.map((item) => ({
@@ -1535,20 +1773,37 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       targets: item.targets,
       read: item.read
     }));
-    const remoteItems = notifications.map((item) => ({
-      id: item.id,
-      kind: "remote" as const,
-      title: item.title,
-      message: item.message,
-      publishedAt: item.publishedAt,
-      origin: null as string | null,
-      targets: [] as PanelDestination[],
-      read: notificationsReadAt ? new Date(item.publishedAt) <= new Date(notificationsReadAt) : false
-    }));
+    const remoteItems = notifications.map((item) => {
+      const section = item.targetSection as PanelDestination | null | undefined;
+      const targetsFromSection = section ? ([section] as PanelDestination[]) : [];
+      const targetsFromType =
+        item.type === "PRODUCT"
+          ? (["products"] as PanelDestination[])
+          : item.type === "WORKOUT_PROGRAM" || item.type === "WORKOUT"
+            ? (["training"] as PanelDestination[])
+            : item.type === "LOCATION"
+              ? (["locations"] as PanelDestination[])
+              : item.type === "SUPPORT"
+                ? (["support"] as PanelDestination[])
+                : item.type === "EVENT"
+                  ? (["events"] as PanelDestination[])
+                  : [];
+      return {
+        id: item.id,
+        kind: "remote" as const,
+        type: item.type,
+        title: item.title,
+        message: item.message,
+        publishedAt: item.publishedAt,
+        origin: null as string | null,
+        targets: targetsFromSection.length ? targetsFromSection : targetsFromType,
+        read: Boolean(item.readAt)
+      };
+    });
     return [...syncItems, ...remoteItems]
       .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
-      .slice(0, 12);
-  }, [syncNotifications, notifications, notificationsReadAt]);
+      .slice(0, 20);
+  }, [syncNotifications, notifications]);
 
   if (!accessReady) {
     return (
@@ -1834,6 +2089,32 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             <span>Ofensiva</span>
             <strong>{currentStreak}</strong>
           </button>
+          {publicConfig["module_products"] !== "false" && (studentCart?.itemCount ?? 0) > 0 && (
+            <div className="student-cart-wrap">
+              <button
+                type="button"
+                className={[
+                  "student-icon-button",
+                  "student-cart-button",
+                  "has-items",
+                  studentSection === "cart" ? "is-active" : ""
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                aria-label={`Carrinho com ${studentCart!.itemCount} ${studentCart!.itemCount === 1 ? "item" : "itens"}`}
+                aria-current={studentSection === "cart" ? "page" : undefined}
+                onClick={() => {
+                  setNotificationsOpen(false);
+                  goToSection("cart");
+                }}
+              >
+                <ShoppingCart size={24} strokeWidth={2.25} />
+                <span className="student-notification-badge student-cart-badge">
+                  {studentCart!.itemCount > 99 ? "99+" : studentCart!.itemCount}
+                </span>
+              </button>
+            </div>
+          )}
           <div className="student-notification-wrap">
             <button className="student-icon-button" aria-label="Notificações" onClick={() => setNotificationsOpen((open) => {
               if (open) uiSounds.popupClose();
@@ -1876,7 +2157,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                         support: "Atendimento",
                         ratings: trainingCopy.favoritesAndRatings,
                         training: trainingCopy.workout,
-                        assessments: trainingCopy.physicalAssessment
+                        assessments: trainingCopy.physicalAssessment,
+                        products: "Vitrine",
+                        purchases: "Minhas compras",
+                        events: "Eventos"
                       };
                       const primaryTarget = notification.targets[0];
                       const openLabel = primaryTarget
@@ -1886,18 +2170,25 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                       return (
                         <article
                           key={notification.id}
-                          className={notification.kind === "sync" ? "student-sync-notification" : undefined}
+                          className={[
+                            notification.kind === "sync" ? "student-sync-notification" : "",
+                            !notification.read ? "student-notification-unread" : ""
+                          ]
+                            .filter(Boolean)
+                            .join(" ") || undefined}
                         >
                           <strong>{notification.title}</strong>
                           {notification.origin && <em className="student-sync-origin">{notification.origin}</em>}
                           <span>{notification.message}</span>
                           <small>{new Date(notification.publishedAt).toLocaleString("pt-BR")}</small>
-                          {notification.kind === "sync" && primaryTarget && openLabel && (
+                          {primaryTarget && openLabel && (
                             <button
                               type="button"
                               className="student-sync-open"
                               onClick={() => {
-                                markNotificationRead(notification.id);
+                                if (notification.kind === "sync") {
+                                  markNotificationRead(notification.id);
+                                }
                                 setStudentSection(primaryTarget as StudentPanelSection);
                                 setNotificationsOpen(false);
                               }}
@@ -1922,8 +2213,16 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       </section>
 
       <>
-        {error && <div className="error-box">{error}</div>}
-        {success && <div className="success-box">{success}</div>}
+        {error && (
+          <div className="error-box" key={`error-${errorTick}`} role="alert">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="success-box" key={`success-${success}`} role="status">
+            {success}
+          </div>
+        )}
 
         {studentSection === "home" && (
           <>
@@ -2514,17 +2813,19 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           </section>
         )}
 
-        {studentSection === "products" && (
+        {studentSection === "products" && publicConfig["module_products"] !== "false" && (
           <section className="student-sheet">
             <div className="student-sheet-heading">
-              <span>Produtos</span>
+              <span>Loja da academia</span>
               <h1>Vitrine online</h1>
-              <p>{studentProducts.length} produto(s) disponíveis</p>
+              <p>
+                {studentProducts.length} produto(s) · peça e retire na unidade ou receba o digital após confirmação
+              </p>
             </div>
             {purchaseConfirmId && (
               <div className="student-toast-confirm" role="status">
                 <Check size={18} />
-                Compra registrada
+                Pedido criado — abrindo pagamento…
               </div>
             )}
             {studentProducts.length > 0 ? (
@@ -2539,22 +2840,43 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                       </div>
                     )}
                     <div className="student-product-body">
-                      {product.category && <small>{product.category}</small>}
+                      <small>
+                        {product.category ? `${product.category} · ` : ""}
+                        {labelProductKind(product.kind)}
+                      </small>
                       <strong>{product.name}</strong>
                       {product.description && <span>{product.description}</span>}
                       <strong className="student-product-price">{formatPriceInBRL(product.priceInCents)}</strong>
-                      <button
-                        className="student-green-button"
-                        type="button"
-                        disabled={Boolean(product.purchasedByMe) || purchasingProductId === product.id}
-                        onClick={() => void handleBuyProduct(product.id)}
-                      >
-                        {product.purchasedByMe
-                          ? "Já solicitado"
-                          : purchasingProductId === product.id
-                            ? "Registrando..."
-                            : "Comprar"}
-                      </button>
+                      <div className="student-product-actions">
+                        <button
+                          className="student-green-button"
+                          type="button"
+                          disabled={Boolean(product.outOfStock) || purchasingProductId === product.id}
+                          onClick={() => void handleAddToCart(product.id)}
+                        >
+                          {purchasingProductId === product.id ? "..." : "Carrinho"}
+                        </button>
+                        <button
+                          className="student-green-button"
+                          type="button"
+                          disabled={
+                            Boolean(product.purchasedByMe) ||
+                            Boolean(product.outOfStock) ||
+                            purchasingProductId === product.id
+                          }
+                          onClick={() => void handleBuyProduct(product.id)}
+                        >
+                          {product.outOfStock
+                            ? "Sem estoque"
+                            : product.purchasedByMe
+                              ? product.kind === "DIGITAL"
+                                ? "Já adquirido"
+                                : "Em andamento"
+                              : purchasingProductId === product.id
+                                ? "Pagando..."
+                                : "Comprar agora"}
+                        </button>
+                      </div>
                     </div>
                   </article>
                 ))}
@@ -2562,19 +2884,202 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             ) : (
               <article className="student-empty-state">
                 <Package size={34} />
-                <strong>Nenhum produto cadastrado</strong>
-                <span>A vitrine será preenchida quando a academia cadastrar produtos.</span>
+                <strong>Nenhum produto na vitrine</strong>
+                <span>Quando a academia publicar itens, eles aparecerão aqui.</span>
               </article>
             )}
           </section>
         )}
 
-        {studentSection === "purchases" && (
+        {studentSection === "cart" && publicConfig["module_products"] !== "false" && (
           <section className="student-sheet">
             <div className="student-sheet-heading">
-              <span>Compras</span>
-              <h1>Meu histórico de compras</h1>
-              <p>{studentPurchases.length} compra(s) registrada(s)</p>
+              <span>Loja</span>
+              <h1>Carrinho</h1>
+              <p>
+                {(studentCart?.itemCount ?? 0) > 0
+                  ? `${studentCart!.itemCount} item(ns) salvos · finalize quando quiser`
+                  : "Seus itens ficam salvos enquanto você navega"}
+              </p>
+            </div>
+            {(studentCart?.items?.length ?? 0) > 0 ? (
+              <>
+                {studentCart!.items.map((item) => {
+                  const stockLimit = item.product.stock;
+                  const atStockLimit = stockLimit != null && item.quantity >= stockLimit;
+                  const qtyBusy = cartQtyBusyId === item.productId;
+                  return (
+                  <article className="student-info-card" key={item.id}>
+                    <Package size={22} />
+                    <div>
+                      <strong>{item.product.name}</strong>
+                      <span>{formatPriceInBRL(item.lineTotalInCents)}</span>
+                      {stockLimit != null && (
+                        <span className="student-cart-stock-hint">
+                          Estoque disponível: {stockLimit} unidade(s)
+                        </span>
+                      )}
+                      <div className="student-cart-qty" role="group" aria-label={`Quantidade de ${item.product.name}`}>
+                        <button
+                          type="button"
+                          className="student-cart-qty-btn"
+                          aria-label="Diminuir quantidade"
+                          disabled={cartCheckingOut || qtyBusy}
+                          onClick={() => void handleCartQuantity(item.productId, item.quantity - 1)}
+                        >
+                          <Minus size={16} />
+                        </button>
+                        <strong className="student-cart-qty-value">{item.quantity}</strong>
+                        <button
+                          type="button"
+                          className="student-cart-qty-btn"
+                          aria-label={
+                            atStockLimit
+                              ? `Limite de estoque: ${stockLimit} unidade(s)`
+                              : "Aumentar quantidade"
+                          }
+                          disabled={cartCheckingOut || qtyBusy || atStockLimit}
+                          onClick={() => void handleCartQuantity(item.productId, item.quantity + 1)}
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        className="student-link-button"
+                        disabled={cartCheckingOut || qtyBusy}
+                        onClick={() => void handleCartQuantity(item.productId, 0)}
+                      >
+                        Remover
+                      </button>
+                    </div>
+                  </article>
+                  );
+                })}
+                <article className="student-info-card">
+                  <ShoppingCart size={22} />
+                  <div>
+                    <strong>Resumo</strong>
+                    <span>Subtotal {formatPriceInBRL(studentCart!.subtotalInCents)}</span>
+                    {studentCart!.discountInCents > 0 && (
+                      <span>Desconto −{formatPriceInBRL(studentCart!.discountInCents)}</span>
+                    )}
+                    <span>Frete {formatPriceInBRL(studentCart!.shippingInCents)}</span>
+                    <strong className="student-product-price">{formatPriceInBRL(studentCart!.amountInCents)}</strong>
+                    <label className="student-field-label">
+                      Cupom
+                      <input
+                        value={cartCouponInput}
+                        onChange={(event) => setCartCouponInput(event.target.value)}
+                        placeholder="Código"
+                      />
+                    </label>
+                    <button type="button" className="student-green-button" onClick={() => void handleApplyCartCoupon()}>
+                      Aplicar cupom
+                    </button>
+                    <label className="student-field-label">
+                      Entrega
+                      <select
+                        value={cartShippingMethod}
+                        onChange={(event) =>
+                          void handleCartShippingChange(
+                            event.target.value as "PICKUP" | "DELIVERY" | "DIGITAL"
+                          )
+                        }
+                      >
+                        {Object.entries(shippingMethodLabel).map(([value, label]) => (
+                          <option
+                            key={value}
+                            value={value}
+                            disabled={cartShippingMethod === "DIGITAL" && value !== "DIGITAL"}
+                          >
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {cartShippingMethod === "DELIVERY" && (
+                      <label className="student-field-label">
+                        Endereço
+                        <input
+                          value={cartAddress}
+                          onChange={(event) => setCartAddress(event.target.value)}
+                          placeholder="Rua, número, bairro, cidade"
+                        />
+                      </label>
+                    )}
+                    <button
+                      type="button"
+                      className="student-green-button"
+                      disabled={cartCheckingOut}
+                      onClick={() => void handleCartCheckout()}
+                    >
+                      {cartCheckingOut ? "Finalizando..." : "Finalizar e pagar"}
+                    </button>
+                  </div>
+                </article>
+              </>
+            ) : (
+              <article className="student-empty-state">
+                <ShoppingCart size={34} />
+                <strong>Carrinho vazio</strong>
+                <span>Adicione produtos na vitrine para montar o pedido.</span>
+              </article>
+            )}
+          </section>
+        )}
+
+        {studentSection === "orders" && publicConfig["module_purchases"] !== "false" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Pedidos</span>
+              <h1>Pedidos do carrinho</h1>
+              <p>{studentOrders.length} pedido(s) multi-item</p>
+            </div>
+            {studentOrders.length > 0 ? (
+              studentOrders.map((order) => (
+                <article className="student-info-card" key={order.id}>
+                  <ShoppingCart size={22} />
+                  <div>
+                    <strong>
+                      {order.items.map((item) => `${item.productName}×${item.quantity}`).join(", ")}
+                    </strong>
+                    <span>
+                      {formatPriceInBRL(order.amountInCents)} · {labelShippingMethod(order.shippingMethod)}
+                    </span>
+                    <span className={`finance-status-badge tone-${purchaseStatusTone(order.status)}`}>
+                      {labelOrderStatus(order.status)}
+                    </span>
+                    <span>{new Date(order.createdAt).toLocaleDateString("pt-BR")}</span>
+                    {order.status === "PENDING" && order.paymentUrl && (
+                      <button
+                        type="button"
+                        className="student-green-button"
+                        style={{ marginTop: 8, minHeight: 40 }}
+                        onClick={() => openAsaasCheckout(order.paymentUrl as string)}
+                      >
+                        Pagar agora
+                      </button>
+                    )}
+                  </div>
+                </article>
+              ))
+            ) : (
+              <article className="student-empty-state">
+                <ShoppingCart size={34} />
+                <strong>Nenhum pedido do carrinho</strong>
+                <span>Finalize um carrinho para ver os pedidos aqui.</span>
+              </article>
+            )}
+          </section>
+        )}
+
+        {studentSection === "purchases" && publicConfig["module_purchases"] !== "false" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Pedidos</span>
+              <h1>Minhas compras</h1>
+              <p>{studentPurchases.length} pedido(s) · status atualizado pela academia</p>
             </div>
             {studentPurchases.length > 0 ? (
               studentPurchases.map((purchase) => (
@@ -2583,17 +3088,35 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   <div>
                     <strong>{purchase.product.name}</strong>
                     <span>
-                      {formatPriceInBRL(purchase.amountInCents)} • {purchase.status}
+                      {formatPriceInBRL(purchase.amountInCents)} · {labelProductKind(purchase.product.kind)}
+                    </span>
+                    <span className={`finance-status-badge tone-${purchaseStatusTone(purchase.status)}`}>
+                      {labelPurchaseStatus(purchase.status)}
                     </span>
                     <span>{new Date(purchase.createdAt).toLocaleDateString("pt-BR")}</span>
+                    {purchase.status === "PENDING" && (
+                      <button
+                        type="button"
+                        className="student-green-button"
+                        style={{ marginTop: 8, minHeight: 40 }}
+                        disabled={purchasingProductId === purchase.id}
+                        onClick={() => void handlePayPurchase(purchase.id)}
+                      >
+                        {purchasingProductId === purchase.id
+                          ? "Abrindo..."
+                          : purchase.paymentUrl
+                            ? "Pagar agora"
+                            : "Gerar pagamento"}
+                      </button>
+                    )}
                   </div>
                 </article>
               ))
             ) : (
               <article className="student-empty-state">
                 <ShoppingCart size={34} />
-                <strong>Nenhuma compra ainda</strong>
-                <span>Os produtos que você comprar aparecerão aqui.</span>
+                <strong>Nenhum pedido ainda</strong>
+                <span>Solicite um produto na vitrine para acompanhar aqui.</span>
               </article>
             )}
           </section>
@@ -3439,16 +3962,41 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               { icon: CreditCard, title: "Pagamentos", action: () => goToSection("payments"), favorite: true },
               { icon: Ruler, title: trainingCopy.physicalAssessment, action: () => goToSection("assessments") },
               { icon: CalendarDays, title: "Frequência", action: () => goToSection("status") },
-              { icon: Package, title: "Produtos", action: () => goToSection("products"), favorite: true },
-              { icon: ShoppingCart, title: "Compras", action: () => goToSection("purchases") },
+              {
+                icon: Package,
+                title: "Vitrine",
+                action: () => goToSection("products"),
+                favorite: true,
+                moduleKey: "module_products"
+              },
+              {
+                icon: ShoppingCart,
+                title: "Carrinho",
+                action: () => goToSection("cart"),
+                moduleKey: "module_products"
+              },
+              {
+                icon: ShoppingCart,
+                title: "Pedidos online",
+                action: () => goToSection("orders"),
+                moduleKey: "module_purchases"
+              },
+              {
+                icon: ShoppingCart,
+                title: "Compras rápidas",
+                action: () => goToSection("purchases"),
+                moduleKey: "module_purchases"
+              },
               { icon: CalendarPlus, title: "Eventos", action: () => goToSection("events") },
               { icon: MapPin, title: "Unidades", action: () => goToSection("locations") },
               { icon: Headphones, title: "Atendimento", action: () => goToSection("support") },
               { icon: QrCode, title: "QR Code", action: () => { goToSection("home"); setShowStudentQr(true); } },
-              { icon: CreditCard, title: "Meus Cartões", action: () => goToSection("payments") },
+              { icon: CreditCard, title: "Meus Cartões", action: () => goToSection("payments"), moduleKey: "module_cards" },
               { icon: Settings, title: "Configurações", action: () => goToSection("settings") },
               { icon: Star, title: trainingCopy.favoritesAndRatings, action: () => goToSection("ratings") }
-            ].map((item) => (
+            ]
+              .filter((item) => !("moduleKey" in item) || publicConfig[item.moduleKey as string] !== "false")
+              .map((item) => (
               <button className="student-menu-item" key={item.title} onClick={item.action}>
                 <item.icon size={24} />
                 <span>{item.title}</span>
@@ -3675,7 +4223,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         <button className={studentSection === "home" ? "active" : ""} onClick={() => goToSection("home")}><Home size={22} />Home</button>
         <button className={studentSection === "payments" ? "active" : ""} onClick={() => goToSection("payments")}><CreditCard size={22} />Pagamentos</button>
         <button className={studentSection === "training" || studentSection === "player" || studentSection === "history" ? "active" : ""} onClick={() => openTrainingCatalog()}><Dumbbell size={22} />Treino</button>
-        <button className={studentSection === "products" ? "active" : ""} onClick={() => goToSection("products")}><Package size={22} />Produtos</button>
+        <button className={studentSection === "products" ? "active" : ""} onClick={() => goToSection("products")} style={publicConfig["module_products"] === "false" ? { display: "none" } : undefined}><Package size={22} />Vitrine</button>
         <button className={studentSection === "menu" ? "active" : ""} onClick={() => goToSection("menu")}><Menu size={22} />Menu</button>
       </nav>
     </main>

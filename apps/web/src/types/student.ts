@@ -63,10 +63,14 @@ export interface StudentProfile {
 
 export interface NotificationRow {
   id: string;
-  type: "WORKOUT_PROGRAM" | "EVENT" | "WORKOUT" | "SUPPORT" | "ANNOUNCEMENT" | "LOCATION";
+  type: "WORKOUT_PROGRAM" | "EVENT" | "WORKOUT" | "SUPPORT" | "ANNOUNCEMENT" | "LOCATION" | "PRODUCT" | string;
   title: string;
   message: string;
   publishedAt: string;
+  readAt?: string | null;
+  targetSection?: string | null;
+  sourceType?: string | null;
+  sourceId?: string | null;
 }
 
 export interface StudentFavoriteRow {

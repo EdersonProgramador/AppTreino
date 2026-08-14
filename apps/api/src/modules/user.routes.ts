@@ -10,15 +10,7 @@ import { isImageUploadExtension, optimizeUploadedImage } from "../media-optimize
 import { buildPublicUploadUrl, saveValidatedUpload, uploadsDir } from "../upload-security.js";
 import { autoCloseStaleTickets, ticketInclude } from "./ticket.utils.js";
 import { calculateBodyFatEstimate, physicalAssessmentFormSchema } from "./physical-assessment.utils.js";
-import { studentMatchesProgramTargetGender } from "./cms-publication.utils.js";
-
-function normalizeSearch(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLowerCase();
-}
+import { validActiveMembershipWhere } from "./membership.utils.js";
 
 const eventRegistrationSchema = z.object({
   eventId: z.string().min(1)
@@ -152,8 +144,7 @@ async function requireActiveMembership(userId: string) {
     prisma.membership.findFirst({
       where: {
         userId,
-        status: "ACTIVE",
-        deletedAt: null
+        ...validActiveMembershipWhere()
       }
     }),
     prisma.user.findUnique({
@@ -162,7 +153,7 @@ async function requireActiveMembership(userId: string) {
     })
   ]);
 
-  // Liberação: pagamento Asaas (membership ACTIVE) OU autorização admin (enrollment ACTIVE).
+  // Liberação: matrícula ACTIVE vigente OU autorização admin (enrollment ACTIVE).
   if (membership || user?.enrollmentStatus === "ACTIVE") {
     return membership;
   }
@@ -533,188 +524,62 @@ export async function registerUserRoutes(app: FastifyInstance) {
   app.get("/user/notifications", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);
-    const userProfile = await prisma.profile.findUnique({
-      where: { userId: user.id },
-      select: { city: true, state: true, gender: true }
-    });
 
-    const [programs, events, workouts, tickets, announcements, locations] = await Promise.all([
-      prisma.program.findMany({
-        where: {
-          status: "PUBLISHED",
-          isActive: true,
-          deletedAt: null,
-          modality: {
-            isActive: true,
-            deletedAt: null
-          },
-          OR: [
-            { audienceMode: "ALL_ACTIVE" },
-            {
-              assignedUsers: {
-                some: {
-                  userId: user.id,
-                  status: "ACTIVE"
-                }
-              }
-            }
-          ]
-        },
-        orderBy: {
-          publishedAt: "desc"
-        },
-        take: 20
+    const [rows, unreadCount] = await Promise.all([
+      prisma.studentNotification.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: "desc" },
+        take: 40
       }),
-      prisma.event.findMany({
-        where: {
-          status: "SCHEDULED",
-          deletedAt: null
-        },
-        orderBy: {
-          startsAt: "asc"
-        },
-        take: 10
-      }),
-      prisma.workout.findMany({
-        orderBy: {
-          createdAt: "desc"
-        },
-        take: 10
-      }),
-      prisma.supportTicket.findMany({
-        where: {
-          userId: user.id,
-          deletedAt: null
-        },
-        orderBy: {
-          updatedAt: "desc"
-        },
-        include: {
-          messages: {
-            orderBy: {
-              createdAt: "desc"
-            },
-            take: 1
-          }
-        }
-      }),
-      prisma.announcement.findMany({
-        where: {
-          status: "PUBLISHED",
-          deletedAt: null
-        },
-        orderBy: {
-          publishedAt: "desc"
-        },
-        take: 10
-      }),
-      prisma.location.findMany({
-        where: {
-          isActive: true,
-          deletedAt: null,
-          createdAt: {
-            gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-          }
-        },
-        orderBy: {
-          createdAt: "desc"
-        },
-        take: 10
+      prisma.studentNotification.count({
+        where: { userId: user.id, readAt: null }
       })
     ]);
 
-    const supportNotifications = tickets
-      .map((ticket) => {
-        const lastMessage = ticket.messages[0];
-        const isActive =
-          ticket.status === "OPEN" || ticket.status === "IN_PROGRESS" || ticket.status === "WAITING_STUDENT";
-
-        if (isActive && lastMessage && lastMessage.senderType === "ADMIN") {
-          return {
-            id: `support-${ticket.id}`,
-            type: "SUPPORT",
-            title: "Nova resposta no seu atendimento",
-            message: ticket.subject,
-            publishedAt: lastMessage.createdAt
-          };
-        }
-
-        const closedSince = new Date().getTime() - new Date(ticket.updatedAt).getTime();
-        if (ticket.status === "CLOSED" && closedSince < 7 * 24 * 60 * 60 * 1000) {
-          return {
-            id: `support-closed-${ticket.id}`,
-            type: "SUPPORT",
-            title: "Atendimento encerrado",
-            message: ticket.subject,
-            publishedAt: ticket.updatedAt
-          };
-        }
-
-        return null;
-      })
-      .filter((notification): notification is NonNullable<typeof notification> => notification !== null);
-
-    const profileCity = normalizeSearch(userProfile?.city ?? "");
-    const profileState = normalizeSearch(userProfile?.state ?? "");
-
-    const locationNotifications = locations
-      .filter((location) => {
-        if (!profileCity) return false;
-        const locationCity = normalizeSearch(location.city ?? "");
-        if (!locationCity || locationCity !== profileCity) return false;
-        if (profileState) {
-          const locationState = normalizeSearch(location.state ?? "");
-          if (locationState && locationState !== profileState) return false;
-        }
-        return true;
-      })
-      .map((location) => ({
-        id: `location-${location.id}`,
-        type: "LOCATION",
-        title: "Nova unidade cadastrada",
-        message: location.name,
-        publishedAt: location.createdAt
-      }));
-
-    const notifications = [
-      ...locationNotifications,
-      ...supportNotifications,
-      ...programs
-        .filter((program) => studentMatchesProgramTargetGender(program.targetGender, userProfile?.gender))
-        .slice(0, 10)
-        .map((program) => ({
-        id: `program-${program.id}`,
-        type: "WORKOUT_PROGRAM",
-        title: "Novo programa de treino",
-        message: program.title,
-        publishedAt: program.publishedAt ?? program.createdAt
-      })),
-      ...events.map((event) => ({
-        id: `event-${event.id}`,
-        type: "EVENT",
-        title: "Evento publicado",
-        message: event.title,
-        publishedAt: event.createdAt
-      })),
-      ...announcements.map((announcement) => ({
-        id: `announcement-${announcement.id}`,
-        type: "ANNOUNCEMENT",
-        title: announcement.title,
-        message: announcement.body,
-        publishedAt: announcement.publishedAt ?? announcement.createdAt
-      })),
-      ...workouts.map((workout) => ({
-        id: `workout-${workout.id}`,
-        type: "WORKOUT",
-        title: "Treino publicado",
-        message: workout.title,
-        publishedAt: workout.createdAt
-      }))
-    ].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-
     return {
-      notifications: notifications.slice(0, 20)
+      unreadCount,
+      notifications: rows.map((row) => ({
+        id: row.id,
+        type: row.type,
+        title: row.title,
+        message: row.message,
+        publishedAt: row.createdAt,
+        readAt: row.readAt,
+        targetSection: row.targetSection,
+        sourceType: row.sourceType,
+        sourceId: row.sourceId
+      }))
     };
+  });
+
+  app.post("/user/notifications/read", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const body = z
+      .object({
+        ids: z.array(z.string().min(1)).optional(),
+        all: z.boolean().optional()
+      })
+      .parse(request.body ?? {});
+
+    const now = new Date();
+    if (body.all || !body.ids?.length) {
+      await prisma.studentNotification.updateMany({
+        where: { userId: user.id, readAt: null },
+        data: { readAt: now }
+      });
+    } else {
+      await prisma.studentNotification.updateMany({
+        where: { userId: user.id, id: { in: body.ids }, readAt: null },
+        data: { readAt: now }
+      });
+    }
+
+    const unreadCount = await prisma.studentNotification.count({
+      where: { userId: user.id, readAt: null }
+    });
+
+    return { ok: true, unreadCount };
   });
 
   app.get("/user/attendance", async (request) => {

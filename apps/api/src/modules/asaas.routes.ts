@@ -3,6 +3,15 @@ import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
+import { parseOrderExternalReference, parsePurchaseExternalReference } from "./asaas.client.js";
+import {
+  decrementProductStock,
+  ORDER_PAID_STATUSES,
+  PURCHASE_PAID_STATUSES,
+  resolveOrderTimestamps,
+  resolvePurchaseTimestamps
+} from "./commerce.utils.js";
+import type { OrderStatus, PurchaseStatus } from "@prisma/client";
 
 export function asaasStatusToPaymentStatus(status?: string) {
   if (["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"].includes(status ?? "")) return "CONFIRMED";
@@ -23,6 +32,20 @@ function checkoutStatusToPaymentStatus(status?: string) {
 
 export function shouldActivateMembership(status: string) {
   return status === "CONFIRMED";
+}
+
+function mapAsaasStatusToPurchaseStatus(status: string): PurchaseStatus | null {
+  if (status === "CONFIRMED") return "CONFIRMED";
+  if (status === "REFUNDED") return "REFUNDED";
+  if (status === "CANCELED") return "CANCELED";
+  return null;
+}
+
+function mapAsaasStatusToOrderStatus(status: string): OrderStatus | null {
+  if (status === "CONFIRMED") return "CONFIRMED";
+  if (status === "REFUNDED") return "REFUNDED";
+  if (status === "CANCELED") return "CANCELED";
+  return null;
 }
 
 export function addCycleDate(start: Date, cycle: "MONTHLY" | "YEARLY") {
@@ -168,6 +191,114 @@ export async function registerAsaasRoutes(app: FastifyInstance) {
       return reply.code(200).send({
         received: true
       });
+    }
+
+    const orderRefId = parseOrderExternalReference(paymentId);
+    if (orderRefId) {
+      const order = await prisma.order.findFirst({
+        where: { id: orderRefId, deletedAt: null },
+        include: { items: true }
+      });
+      if (!order) {
+        request.log.warn({ externalReference: paymentId }, "Asaas webhook order not found");
+        return reply.code(200).send({ received: true, ignored: true });
+      }
+      if (shouldActivateMembership(status) && amountInCents != null && amountInCents !== order.amountInCents) {
+        return reply.code(400).send({ error: "Payment value mismatch" });
+      }
+      const nextOrderStatus = mapAsaasStatusToOrderStatus(status);
+      const timestamps = resolveOrderTimestamps(nextOrderStatus ?? undefined, {
+        paidAt: order.paidAt,
+        fulfilledAt: order.fulfilledAt
+      });
+      const updatedOrder = await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          ...(asaasPayment?.id || checkout?.id
+            ? { asaasPaymentId: asaasPayment?.id ?? checkout?.id }
+            : {}),
+          paymentUrl: asaasPayment?.invoiceUrl ?? asaasPayment?.bankSlipUrl ?? checkout?.link ?? order.paymentUrl,
+          ...(nextOrderStatus ? { status: nextOrderStatus, ...timestamps } : {})
+        }
+      });
+      if (
+        nextOrderStatus &&
+        ORDER_PAID_STATUSES.includes(nextOrderStatus) &&
+        !ORDER_PAID_STATUSES.includes(order.status)
+      ) {
+        for (const item of order.items) {
+          await decrementProductStock(item.productId, item.quantity);
+        }
+      }
+      return reply.code(200).send({ received: true, orderId: updatedOrder.id });
+    }
+
+    const purchaseRefId = parsePurchaseExternalReference(paymentId);
+    if (purchaseRefId || !paymentId) {
+      const purchase = await prisma.purchase.findFirst({
+        where: purchaseRefId
+          ? { id: purchaseRefId, deletedAt: null }
+          : asaasPayment?.id
+            ? { asaasPaymentId: asaasPayment.id, deletedAt: null }
+            : { asaasPaymentId: checkout?.id, deletedAt: null }
+      });
+
+      if (purchase) {
+        if (shouldActivateMembership(status) && amountInCents != null && amountInCents !== purchase.amountInCents) {
+          return reply.code(400).send({
+            error: "Payment value mismatch"
+          });
+        }
+
+        const nextPurchaseStatus = mapAsaasStatusToPurchaseStatus(status);
+        const timestamps = resolvePurchaseTimestamps(nextPurchaseStatus ?? undefined, {
+          paidAt: purchase.paidAt,
+          fulfilledAt: purchase.fulfilledAt
+        });
+
+        const updatedPurchase = await prisma.purchase.update({
+          where: { id: purchase.id },
+          data: {
+            ...(asaasPayment?.id || checkout?.id
+              ? { asaasPaymentId: asaasPayment?.id ?? checkout?.id }
+              : {}),
+            paymentUrl: asaasPayment?.invoiceUrl ?? asaasPayment?.bankSlipUrl ?? checkout?.link ?? purchase.paymentUrl,
+            ...(nextPurchaseStatus
+              ? {
+                  status: nextPurchaseStatus,
+                  ...timestamps
+                }
+              : {})
+          }
+        });
+
+        if (
+          nextPurchaseStatus &&
+          PURCHASE_PAID_STATUSES.includes(nextPurchaseStatus) &&
+          !PURCHASE_PAID_STATUSES.includes(purchase.status)
+        ) {
+          await decrementProductStock(purchase.productId, purchase.quantity);
+        }
+
+        return reply.code(200).send({
+          received: true,
+          purchaseId: updatedPurchase.id
+        });
+      }
+
+      if (purchaseRefId) {
+        request.log.warn(
+          {
+            asaasPaymentId: asaasPayment?.id ?? checkout?.id,
+            externalReference: paymentId
+          },
+          "Asaas webhook purchase not found"
+        );
+        return reply.code(200).send({
+          received: true,
+          ignored: true
+        });
+      }
     }
 
     const payment = await prisma.payment.findFirst({

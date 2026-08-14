@@ -9,6 +9,13 @@ import {
   filterActiveBlockExercises,
   studentMatchesProgramTargetGender
 } from "./cms-publication.utils.js";
+import { validActiveMembershipWhere } from "./membership.utils.js";
+import {
+  assertModuleEnabled,
+  blockingPurchaseStatusesForProduct,
+  PURCHASE_PAID_STATUSES
+} from "./commerce.utils.js";
+import { createAsaasCheckout, purchaseExternalReference, type AsaasBillingType } from "./asaas.client.js";
 
 const substituteSchema = z.object({
   exerciseId: z.string().min(1)
@@ -134,8 +141,7 @@ async function getEnrollmentStatus(userId: string) {
     prisma.membership.findFirst({
       where: {
         userId,
-        status: "ACTIVE",
-        deletedAt: null
+        ...validActiveMembershipWhere()
       },
       select: { id: true }
     })
@@ -149,12 +155,7 @@ async function getCurrentStudentMembership(userId: string) {
   const currentMembership = await prisma.membership.findFirst({
     where: {
       userId,
-      status: "ACTIVE",
-      deletedAt: null,
-      startsAt: {
-        lte: now
-      },
-      OR: [{ endsAt: null }, { endsAt: { gte: now } }]
+      ...validActiveMembershipWhere(now)
     },
     include: {
       plan: true,
@@ -1499,13 +1500,19 @@ export async function registerStudentRoutes(app: FastifyInstance) {
   });
 
   const studentPurchaseSchema = z.object({
-    productId: z.string().min(1)
+    productId: z.string().min(1),
+    billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED")
+  });
+
+  const studentPurchaseCheckoutSchema = z.object({
+    billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED")
   });
 
   app.get("/student/products", async (request) => {
     requireDatabase();
+    await assertModuleEnabled("module_products");
     const authUser = await requireAuth(app, request);
-    const [products, purchasedProductIds, favoritedProductIds, ratedProductIds] = await Promise.all([
+    const [products, openPurchases, favoritedProductIds, ratedProductIds] = await Promise.all([
       prisma.product.findMany({
         where: {
           isActive: true,
@@ -1523,15 +1530,18 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       prisma.purchase.findMany({
         where: {
           userId: authUser.id,
-          status: { in: ["PENDING", "CONFIRMED"] }
+          deletedAt: null,
+          status: { in: ["PENDING", "CONFIRMED", "READY", "DELIVERED"] }
         },
         select: {
-          productId: true
+          productId: true,
+          status: true
         }
       }),
       prisma.favorite.findMany({
         where: {
-          userId: authUser.id
+          userId: authUser.id,
+          deletedAt: null
         },
         select: {
           productId: true
@@ -1541,7 +1551,8 @@ export async function registerStudentRoutes(app: FastifyInstance) {
         where: {
           userId: authUser.id,
           targetType: "PRODUCT",
-          productId: { not: null }
+          productId: { not: null },
+          deletedAt: null
         },
         select: {
           productId: true
@@ -1550,12 +1561,19 @@ export async function registerStudentRoutes(app: FastifyInstance) {
     ]);
 
     return {
-      products: products.map((product) => ({
-        ...product,
-        purchasedByMe: purchasedProductIds.some((item) => item.productId === product.id),
-        favoritedByMe: favoritedProductIds.some((item) => item.productId === product.id),
-        ratedByMe: ratedProductIds.some((item) => item.productId === product.id)
-      }))
+      products: products.map((product) => {
+        const blocking = blockingPurchaseStatusesForProduct(product.kind);
+        const purchasedByMe = openPurchases.some(
+          (item) => item.productId === product.id && blocking.includes(item.status)
+        );
+        return {
+          ...product,
+          purchasedByMe,
+          favoritedByMe: favoritedProductIds.some((item) => item.productId === product.id),
+          ratedByMe: ratedProductIds.some((item) => item.productId === product.id),
+          outOfStock: product.stock != null && product.stock <= 0
+        };
+      })
     };
   });
 
@@ -1626,36 +1644,154 @@ export async function registerStudentRoutes(app: FastifyInstance) {
 
   app.post("/student/purchases", async (request, reply) => {
     requireDatabase();
+    await assertModuleEnabled("module_purchases");
     const authUser = await requireAuth(app, request);
     assertNotAdminPreview(authUser);
     const body = studentPurchaseSchema.parse(request.body);
     const product = await prisma.product.findFirstOrThrow({
       where: {
         id: body.productId,
-        isActive: true
+        isActive: true,
+        deletedAt: null
       }
     });
+
+    if (product.stock != null && product.stock <= 0) {
+      const error = new Error("Produto sem estoque no momento.") as Error & { statusCode: number };
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const blockingStatuses = blockingPurchaseStatusesForProduct(product.kind);
+    const existingOpen = await prisma.purchase.findFirst({
+      where: {
+        userId: authUser.id,
+        productId: product.id,
+        deletedAt: null,
+        status: { in: blockingStatuses }
+      },
+      select: { id: true }
+    });
+    if (existingOpen) {
+      const error = new Error(
+        product.kind === "DIGITAL"
+          ? "Você já possui este produto digital."
+          : "Você já tem um pedido em andamento para este produto."
+      ) as Error & { statusCode: number };
+      error.statusCode = 409;
+      throw error;
+    }
+
     const purchase = await prisma.purchase.create({
       data: {
         userId: authUser.id,
         productId: product.id,
         amountInCents: product.priceInCents,
-        status: "PENDING"
+        quantity: 1,
+        status: "PENDING",
+        paymentMethod: body.billingType === "UNDEFINED" ? null : body.billingType
       },
       include: {
         product: true
       }
     });
 
-    return reply.code(201).send({ purchase });
+    const asaasCheckout = await createAsaasCheckout({
+      externalReference: purchaseExternalReference(purchase.id),
+      itemName: `App Treino - ${product.name}`,
+      itemDescription: `Pedido vitrine - ${authUser.name}`,
+      amountInCents: purchase.amountInCents,
+      billingType: body.billingType as AsaasBillingType
+    });
+
+    const updatedPurchase = asaasCheckout
+      ? await prisma.purchase.update({
+          where: { id: purchase.id },
+          data: {
+            asaasPaymentId: asaasCheckout.id,
+            paymentUrl: asaasCheckout.url
+          },
+          include: { product: true }
+        })
+      : purchase;
+
+    return reply.code(201).send({ purchase: updatedPurchase });
+  });
+
+  app.post("/student/purchases/:id/checkout", async (request, reply) => {
+    requireDatabase();
+    await assertModuleEnabled("module_purchases");
+    const authUser = await requireAuth(app, request);
+    assertNotAdminPreview(authUser);
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const body = studentPurchaseCheckoutSchema.parse(request.body ?? {});
+
+    const purchase = await prisma.purchase.findFirst({
+      where: {
+        id,
+        userId: authUser.id,
+        deletedAt: null
+      },
+      include: { product: true }
+    });
+
+    if (!purchase) {
+      const error = new Error("Pedido não encontrado.") as Error & { statusCode: number };
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (PURCHASE_PAID_STATUSES.includes(purchase.status)) {
+      return { purchase, alreadyPaid: true };
+    }
+
+    if (purchase.status !== "PENDING") {
+      const error = new Error("Este pedido não pode mais ser pago.") as Error & { statusCode: number };
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (purchase.paymentUrl) {
+      return { purchase, alreadyPaid: false };
+    }
+
+    const asaasCheckout = await createAsaasCheckout({
+      externalReference: purchaseExternalReference(purchase.id),
+      itemName: `App Treino - ${purchase.product.name}`,
+      itemDescription: `Pedido vitrine - ${authUser.name}`,
+      amountInCents: purchase.amountInCents,
+      billingType: body.billingType as AsaasBillingType
+    });
+
+    if (!asaasCheckout) {
+      const error = new Error(
+        "Pagamento online indisponível no momento. A academia confirmará seu pedido manualmente."
+      ) as Error & { statusCode: number };
+      error.statusCode = 503;
+      throw error;
+    }
+
+    const updatedPurchase = await prisma.purchase.update({
+      where: { id: purchase.id },
+      data: {
+        asaasPaymentId: asaasCheckout.id,
+        paymentUrl: asaasCheckout.url,
+        paymentMethod: body.billingType === "UNDEFINED" ? purchase.paymentMethod : body.billingType
+      },
+      include: { product: true }
+    });
+
+    return reply.send({ purchase: updatedPurchase, alreadyPaid: false });
   });
 
   app.get("/student/purchases", async (request) => {
     requireDatabase();
+    await assertModuleEnabled("module_purchases");
     const authUser = await requireAuth(app, request);
     const purchases = await prisma.purchase.findMany({
       where: {
-        userId: authUser.id
+        userId: authUser.id,
+        deletedAt: null
       },
       include: {
         product: true
