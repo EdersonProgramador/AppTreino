@@ -1,5 +1,5 @@
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -20,13 +20,24 @@ import {
   isAppOrigin,
   isExternalScheme
 } from "./src/config";
-import { MusicPlayerScreen, type NativeTrack } from "./src/MusicPlayerScreen";
+import type { NativeTrack } from "./src/musicPlayback";
+import { musicPlayback } from "./src/musicPlayback";
 import { downloadWorkoutImage, shareWorkoutImage } from "./src/nativeShare";
 
-type MusicPayload = {
-  type: "OPEN_MUSIC_PLAYER";
-  tracks: NativeTrack[];
+type MusicControlPayload = {
+  type:
+    | "OPEN_MUSIC_PLAYER"
+    | "MUSIC_PLAY"
+    | "MUSIC_PAUSE"
+    | "MUSIC_NEXT"
+    | "MUSIC_PREV"
+    | "MUSIC_STOP"
+    | "MUSIC_SEEK"
+    | "MUSIC_PLAY_AT";
+  tracks?: NativeTrack[];
   startIndex?: number;
+  index?: number;
+  ratio?: number;
 };
 
 type ImagePayload = {
@@ -37,7 +48,7 @@ type ImagePayload = {
   text?: string;
 };
 
-type WebPayload = MusicPayload | ImagePayload;
+type WebPayload = MusicControlPayload | ImagePayload;
 
 const APP_BG = "#08090b";
 
@@ -77,14 +88,31 @@ function insetScript(top: number, bottom: number, left = 0, right = 0, keyboard 
   `;
 }
 
+function syncMusicToWeb(webRef: RefObject<WebView | null>, snap: ReturnType<typeof musicPlayback.snapshot>) {
+  const payload = JSON.stringify({
+    playing: snap.playing,
+    progress: snap.positionSec,
+    duration: snap.durationSec > 0 ? snap.durationSec : undefined,
+    index: snap.index
+  });
+  webRef.current?.injectJavaScript(`
+    (function () {
+      try {
+        if (typeof window.__nativeMusicSync === "function") {
+          window.__nativeMusicSync(${payload});
+        }
+      } catch (e) {}
+      true;
+    })();
+  `);
+}
+
 function AppShell() {
   const webRef = useRef<WebView>(null);
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [canGoBack, setCanGoBack] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [musicQueue, setMusicQueue] = useState<NativeTrack[] | null>(null);
-  const [musicStartIndex, setMusicStartIndex] = useState(0);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const nativeInsets = useMemo(
@@ -95,6 +123,13 @@ function AppShell() {
   useEffect(() => {
     webRef.current?.injectJavaScript(nativeInsets);
   }, [nativeInsets]);
+
+  // Áudio nativo → atualiza dock web (progresso / pause / faixa).
+  useEffect(() => {
+    return musicPlayback.subscribe((snap) => {
+      syncMusicToWeb(webRef, snap);
+    });
+  }, []);
 
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
@@ -114,16 +149,12 @@ function AppShell() {
   }, []);
 
   const handleBack = useCallback(() => {
-    if (musicQueue) {
-      setMusicQueue(null);
-      return true;
-    }
     if (canGoBack && webRef.current) {
       webRef.current.goBack();
       return true;
     }
     return false;
-  }, [canGoBack, musicQueue]);
+  }, [canGoBack]);
 
   useEffect(() => {
     if (Platform.OS !== "android") return;
@@ -134,12 +165,42 @@ function AppShell() {
   function onWebMessage(event: WebViewMessageEvent) {
     try {
       const data = JSON.parse(event.nativeEvent.data) as WebPayload;
+
       if (data?.type === "OPEN_MUSIC_PLAYER") {
         if (!Array.isArray(data.tracks) || !data.tracks.length) return;
-        setMusicStartIndex(data.startIndex ?? 0);
-        setMusicQueue(data.tracks);
+        // Só áudio nativo — UI/controles ficam no dock web (mesmo layout).
+        void musicPlayback.openQueue(data.tracks, data.startIndex ?? 0);
         return;
       }
+      if (data?.type === "MUSIC_PLAY") {
+        void musicPlayback.play();
+        return;
+      }
+      if (data?.type === "MUSIC_PAUSE") {
+        void musicPlayback.pause();
+        return;
+      }
+      if (data?.type === "MUSIC_NEXT") {
+        void musicPlayback.next({ autoplay: true });
+        return;
+      }
+      if (data?.type === "MUSIC_PREV") {
+        void musicPlayback.prev();
+        return;
+      }
+      if (data?.type === "MUSIC_STOP") {
+        void musicPlayback.stop();
+        return;
+      }
+      if (data?.type === "MUSIC_SEEK") {
+        if (typeof data.ratio === "number") void musicPlayback.seekRatio(data.ratio);
+        return;
+      }
+      if (data?.type === "MUSIC_PLAY_AT") {
+        if (typeof data.index === "number") void musicPlayback.playAt(data.index);
+        return;
+      }
+
       if (data?.type === "DOWNLOAD_IMAGE" || data?.type === "SHARE_IMAGE") {
         if (!data.base64) return;
         void (async () => {
@@ -159,21 +220,6 @@ function AppShell() {
     } catch {
       // ignore non-JSON messages
     }
-  }
-
-  if (musicQueue) {
-    return (
-      <View style={styles.root}>
-        <StatusBar style="light" />
-        <SafeAreaView style={styles.safeFlex} edges={["top", "right", "bottom", "left"]}>
-          <MusicPlayerScreen
-            onClose={() => setMusicQueue(null)}
-            startIndex={musicStartIndex}
-            tracks={musicQueue}
-          />
-        </SafeAreaView>
-      </View>
-    );
   }
 
   return (
@@ -222,6 +268,7 @@ function AppShell() {
           onLoadEnd={() => {
             setLoading(false);
             webRef.current?.injectJavaScript(nativeInsets);
+            syncMusicToWeb(webRef, musicPlayback.snapshot());
           }}
           onNavigationStateChange={(nav: WebViewNavigation) => {
             setCanGoBack(nav.canGoBack);

@@ -1,10 +1,19 @@
 # App Treino — Mobile (Expo)
 
-Shell React Native (Expo) com WebView do produto web existente + player nativo do **Play**.
+Shell React Native (Expo) com WebView + **áudio nativo** (`expo-av`).
 
-- Abre em `/login?app=mobile` (não a landing de vendas)
-- Após login, o web redireciona para `/aluno` ou `/admin`
-- Aba **Play**: catálogo no WebView; ao tocar uma faixa no app, abre o player nativo (`expo-av` no Expo Go; `react-native-track-player` após development build)
+## Modelo
+
+| Camada | Responsável |
+|---|---|
+| Catálogo + dock (`student-play-dock` / mini) + Now Playing | **Web** (mesmo layout) |
+| Áudio em segundo plano | **Expo** (`musicPlayback` / expo-av) |
+| Play / Pause / Next no dock | Web → bridge → nativo |
+
+- Tocar uma faixa: abre o dock com controles (como na web)
+- Navegar Home/Treino/etc.: dock continua visível → aluno pode pausar
+- Toque no dock: abre Now Playing (web)
+- Sem overlay nativo por cima da navegação
 
 ## Rodar
 
@@ -13,22 +22,8 @@ npm --prefix apps/mobile install
 npm run dev:mobile
 ```
 
-## URL do WebView
+## URL
 
 ```txt
-EXPO_PUBLIC_WEB_URL=https://edersonprogramador.com
-# Dev LAN:
-# EXPO_PUBLIC_WEB_URL=http://SEU_IP_LAN:5174
+EXPO_PUBLIC_WEB_URL=http://SEU_IP_LAN:5174
 ```
-
-## Player nativo / Track Player
-
-No Expo Go a reprodução usa `expo-av` (background limitado no iOS).
-Para `react-native-track-player` (lock screen / background completo):
-
-```bash
-npx expo prebuild
-# ou EAS development build
-```
-
-O contrato da fila já está em `src/trackPlayer.ts`.

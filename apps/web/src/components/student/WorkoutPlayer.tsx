@@ -20,6 +20,7 @@ import { mediaUrl as appMediaUrl } from "../../lib/urls";
 import { uiSounds } from "../../lib/ui-sounds";
 import { WorkoutShareFlow } from "./WorkoutShareFlow";
 import { StudentMusicMini } from "./StudentMusicPlayerHost";
+import { isNativeAppShell } from "../../lib/native-bridge";
 
 export type WorkoutStructureType =
   | "NORMAL"
@@ -1196,7 +1197,7 @@ export function WorkoutPlayer({
             </button>
           </article>
         )}
-        <StudentMusicMini compact />
+        {!isNativeAppShell() ? <StudentMusicMini compact /> : null}
       </main>
 
       <footer className="workout-runner-controls">

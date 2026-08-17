@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Disc3, Heart, Music2, Pause, Play, Search, Shuffle } from "lucide-react";
 import { apiGet } from "../../api";
+import { musicAudio } from "../../lib/music-audio";
+import { isNativeAppShell } from "../../lib/native-bridge";
+import { nativeOpenMusicQueue } from "../../lib/native-music";
 import { playableMediaUrl } from "../../lib/urls";
 import { useMusicPlayerStore, type MusicPlayTrack } from "../../stores/musicPlayerStore";
 
@@ -58,7 +61,7 @@ export function StudentPlaySection({ token }: Props) {
   const index = useMusicPlayerStore((state) => state.index);
   const playing = useMusicPlayerStore((state) => state.playing);
   const likedIds = useMusicPlayerStore((state) => state.likedIds);
-  const startQueue = useMusicPlayerStore((state) => state.startQueue);
+  const [playError, setPlayError] = useState<string | null>(null);
   const toggleLike = useMusicPlayerStore((state) => state.toggleLike);
   const current = queue[index] ?? null;
 
@@ -120,7 +123,55 @@ export function StudentPlaySection({ token }: Props) {
   const featuredCover = current?.coverUrl || featuredAlbum?.coverUrl || allTracks[0]?.coverUrl || null;
 
   function playTracks(tracks: PlayTrack[], startIndex = 0, shuffled = false) {
-    startQueue(tracks, startIndex, { expand: false, ...(shuffled ? { shuffle: true } : {}) });
+    setPlayError(null);
+    if (!tracks.length) return;
+
+    const safeIndex = Math.min(Math.max(0, startIndex), tracks.length - 1);
+
+    // Mobile (Expo): UI = dock web; áudio = expo-av nativo.
+    if (isNativeAppShell()) {
+      musicAudio.stop();
+      useMusicPlayerStore.getState().armQueue(tracks, safeIndex, {
+        expand: false,
+        ...(shuffled ? { shuffle: true } : {})
+      });
+      const opened = nativeOpenMusicQueue(useMusicPlayerStore.getState().queue, useMusicPlayerStore.getState().index);
+      if (!opened) {
+        setPlayError("Não foi possível abrir o player nativo.");
+        useMusicPlayerStore.getState().reset();
+        return;
+      }
+      useMusicPlayerStore.setState({ playing: true });
+      return;
+    }
+
+    const track = tracks[safeIndex];
+    if (!track?.audioUrl) {
+      setPlayError("Esta faixa não tem arquivo de áudio.");
+      return;
+    }
+
+    const state = useMusicPlayerStore.getState();
+    const volume = state.volume > 0.05 && !state.muted ? state.volume : 0.85;
+    if (state.muted || state.volume <= 0.05) {
+      useMusicPlayerStore.setState({ muted: false, volume });
+    }
+
+    const playPromise = musicAudio.playNow(track.audioUrl, volume);
+    useMusicPlayerStore.getState().armQueue(tracks, safeIndex, {
+      expand: false,
+      ...(shuffled ? { shuffle: true } : {})
+    });
+
+    void playPromise
+      .then(() => {
+        useMusicPlayerStore.setState({ playing: true });
+      })
+      .catch((err: unknown) => {
+        useMusicPlayerStore.setState({ playing: false });
+        const message = err instanceof Error ? `${err.name}: ${err.message}` : "erro desconhecido";
+        setPlayError(`Não foi possível tocar esta faixa (${message}).`);
+      });
   }
 
   function playAlbum(album: PlayAlbum, startIndex = 0, shuffled = false) {
@@ -238,6 +289,7 @@ export function StudentPlaySection({ token }: Props) {
             </label>
 
             {error && <p className="student-play-error">{error}</p>}
+            {playError && <p className="student-play-error">{playError}</p>}
             {loading && <p className="student-play-empty">Carregando sua trilha...</p>}
 
             {likedTracks.length > 0 && !normalizedQuery && (

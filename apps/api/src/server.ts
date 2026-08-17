@@ -148,10 +148,13 @@ await app.register(staticFiles, {
   // Filenames já são únicos (timestamp + uuid) → cache longo seguro.
   setHeaders: (response, filePath) => {
     response.setHeader("X-Content-Type-Options", "nosniff");
-    response.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
     response.setHeader("Cache-Control", mediaCacheControl(true));
-    if (/\.(mp4|webm|ogv|mov|mp3|m4a|aac|ogg|wav|flac|opus)$/i.test(filePath)) {
+    const isPlayableMedia = /\.(mp4|webm|ogv|mov|mp3|m4a|aac|ogg|wav|flac|opus)$/i.test(filePath);
+    if (isPlayableMedia) {
+      // Sem CSP no media: sandbox/default-src no response já quebrou <audio> no Chrome.
       response.setHeader("Accept-Ranges", "bytes");
+    } else {
+      response.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
     }
   }
 });

@@ -58,7 +58,15 @@ export function MusicAdminPanel({ token }: Props) {
     const filename = file.name?.trim() || "track.mp3";
     data.append("file", file, filename);
     const response = await apiUpload<UploadResponse>("/admin/uploads?group=audio", data, token);
-    return response.file.url;
+    const url = response.file.url;
+    // Preferir path relativo (mesmo origin / proxy Vite).
+    try {
+      const parsed = new URL(url, window.location.origin);
+      if (parsed.pathname.startsWith("/uploads/")) return `${parsed.pathname}${parsed.search}`;
+    } catch {
+      // keep
+    }
+    return url;
   }
 
   async function uploadImage(file: File) {

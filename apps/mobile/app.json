@@ -16,6 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.edersonprogramador.apptreino",
       "infoPlist": {
+        "UIBackgroundModes": ["audio"],
         "NSCameraUsageDescription": "Permitir a camera para compartilhar o treino.",
         "NSMicrophoneUsageDescription": "Permitir o microfone ao gravar video do treino.",
         "NSPhotoLibraryUsageDescription": "Permitir acesso as fotos para compartilhar o treino.",
@@ -38,6 +39,8 @@
         "RECORD_AUDIO",
         "INTERNET",
         "ACCESS_NETWORK_STATE",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "READ_MEDIA_IMAGES",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE"
@@ -49,6 +52,7 @@
     "plugins": [
       "expo-asset",
       "expo-font",
+      "expo-av",
       [
         "expo-media-library",
         {

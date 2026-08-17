@@ -1,5 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { Pause, Play, SkipForward } from "lucide-react";
+import { musicAudio } from "../../lib/music-audio";
+import { isNativeAppShell } from "../../lib/native-bridge";
+import { installNativeMusicSyncBridge, subscribeNativeMusicSync } from "../../lib/native-music";
 import { playableMediaUrl } from "../../lib/urls";
 import { useMusicPlayerStore } from "../../stores/musicPlayerStore";
 import { StudentNowPlaying } from "./StudentNowPlaying";
@@ -11,22 +14,6 @@ type HostProps = {
 
 function resolveMediaUrl(url: string) {
   return playableMediaUrl(url);
-}
-
-function audioSrcEquals(audio: HTMLAudioElement, nextSrc: string) {
-  const current = audio.getAttribute("src") || audio.src || "";
-  try {
-    return new URL(current, window.location.href).href === new URL(nextSrc, window.location.href).href;
-  } catch {
-    return current === nextSrc;
-  }
-}
-
-function stopAudio(audio: HTMLAudioElement | null) {
-  if (!audio) return;
-  audio.pause();
-  audio.removeAttribute("src");
-  audio.load();
 }
 
 export function StudentMusicMini({ compact = false }: { compact?: boolean }) {
@@ -78,7 +65,6 @@ export function StudentMusicMini({ compact = false }: { compact?: boolean }) {
 }
 
 export function StudentMusicPlayerHost({ compact = false, hideMini = false }: HostProps) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const queue = useMusicPlayerStore((state) => state.queue);
   const index = useMusicPlayerStore((state) => state.index);
   const playing = useMusicPlayerStore((state) => state.playing);
@@ -100,50 +86,78 @@ export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Ho
   const toggleMute = useMusicPlayerStore((state) => state.toggleMute);
   const current = queue[index] ?? null;
 
+  // Eventos HTML5 só na web. No Expo o áudio é nativo e sincroniza via bridge.
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (!current) {
-      stopAudio(audio);
-      return;
+    if (isNativeAppShell()) {
+      installNativeMusicSyncBridge();
+      return subscribeNativeMusicSync((payload) => {
+        if (typeof payload.progress === "number") setProgress(payload.progress);
+        if (typeof payload.duration === "number" && payload.duration > 0) setDuration(payload.duration);
+        if (typeof payload.playing === "boolean") {
+          useMusicPlayerStore.setState({ playing: payload.playing });
+        }
+        if (typeof payload.index === "number") {
+          const queue = useMusicPlayerStore.getState().queue;
+          if (queue[payload.index]) {
+            useMusicPlayerStore.setState({
+              index: payload.index,
+              duration: queue[payload.index]?.durationSec ?? useMusicPlayerStore.getState().duration
+            });
+          }
+        }
+        if (payload.ended) ended();
+      });
     }
-    const nextSrc = resolveMediaUrl(current.audioUrl);
-    if (!nextSrc) {
-      stopAudio(audio);
-      return;
-    }
-    if (!audioSrcEquals(audio, nextSrc)) {
-      audio.src = nextSrc;
-      setProgress(0);
-    }
-    if (playing) {
-      void audio.play().catch(() => setPlaying(false));
-    } else {
-      audio.pause();
-    }
-  }, [current?.id, current?.audioUrl, current, playing, setPlaying, setProgress]);
+
+    const offTime = musicAudio.on("timeupdate", (audio) => {
+      setProgress(audio.currentTime || 0);
+    });
+    const offMeta = musicAudio.on("loadedmetadata", (audio) => {
+      setDuration(audio.duration || 0);
+    });
+    const offDuration = musicAudio.on("durationchange", (audio) => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration);
+      }
+    });
+    const offEnded = musicAudio.on("ended", () => {
+      ended();
+    });
+    const offError = musicAudio.on("error", () => {
+      setPlaying(false);
+    });
+
+    return () => {
+      offTime();
+      offMeta();
+      offDuration();
+      offEnded();
+      offError();
+    };
+  }, [ended, setDuration, setPlaying, setProgress]);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    return () => stopAudio(audio);
-  }, []);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.volume = muted ? 0 : volume;
-    audio.muted = muted;
-  }, [volume, muted, current]);
+    if (isNativeAppShell()) return;
+    musicAudio.setVolume(volume, muted);
+  }, [volume, muted]);
 
   useEffect(() => {
     if (seekRatio == null) return;
-    const audio = audioRef.current;
+    if (isNativeAppShell()) {
+      consumeSeek();
+      return;
+    }
+    const audio = musicAudio.element;
     if (audio) {
       const total = duration || audio.duration || 0;
-      audio.currentTime = Math.max(0, total * seekRatio);
-      setProgress(audio.currentTime);
+      if (total > 0) {
+        audio.currentTime = Math.max(0, total * seekRatio);
+        setProgress(audio.currentTime);
+      }
       if (playing) {
-        void audio.play().catch(() => setPlaying(false));
+        void musicAudio.play().then((result) => {
+          if (!result.ok) setPlaying(false);
+        });
       }
     }
     consumeSeek();
@@ -156,7 +170,7 @@ export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Ho
       try {
         session.setActionHandler(action, handler);
       } catch {
-        // Alguns browsers rejeitam handlers ausentes na saída.
+        // ignore
       }
     };
 
@@ -184,9 +198,20 @@ export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Ho
     setHandler("previoustrack", () => prev());
     setHandler("nexttrack", () => next());
     setHandler("seekto", (details) => {
-      if (typeof details.seekTime === "number" && audioRef.current) {
-        audioRef.current.currentTime = details.seekTime;
-        setProgress(details.seekTime);
+      if (typeof details.seekTime === "number") {
+        if (isNativeAppShell()) {
+          const total = useMusicPlayerStore.getState().duration || 0;
+          if (total > 0) {
+            useMusicPlayerStore.getState().seek(details.seekTime / total);
+          }
+          setProgress(details.seekTime);
+          return;
+        }
+        const audio = musicAudio.element;
+        if (audio) {
+          audio.currentTime = details.seekTime;
+          setProgress(details.seekTime);
+        }
       }
     });
     return () => {
@@ -220,19 +245,10 @@ export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Ho
     return () => window.removeEventListener("keydown", onKey);
   }, [current, expanded, toggle, next, prev, toggleMute, collapse]);
 
-  // Mini no shell só fora do treino; no player o dock fica no WorkoutPlayer (evita duplicar).
   const showMini = Boolean(current) && !expanded && !hideMini;
 
   return (
     <>
-      <audio
-        ref={audioRef}
-        onEnded={() => ended()}
-        onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)}
-        onTimeUpdate={(event) => setProgress(event.currentTarget.currentTime || 0)}
-        preload="metadata"
-        hidden
-      />
       {expanded && current ? <StudentNowPlaying /> : null}
       {showMini ? <StudentMusicMini compact={compact} /> : null}
     </>

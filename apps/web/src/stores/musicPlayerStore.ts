@@ -1,4 +1,16 @@
 import { create } from "zustand";
+import { musicAudio } from "../lib/music-audio";
+import { isNativeAppShell } from "../lib/native-bridge";
+import {
+  nativeMusicNext,
+  nativeMusicPause,
+  nativeMusicPlay,
+  nativeMusicPlayAt,
+  nativeMusicPrev,
+  nativeMusicSeek,
+  nativeMusicStop,
+  nativeOpenMusicQueue
+} from "../lib/native-music";
 
 export type MusicPlayTrack = {
   id: string;
@@ -88,6 +100,13 @@ type MusicPlayerState = {
   seekRatio: number | null;
   seekToken: number;
   startQueue: (tracks: MusicPlayTrack[], startIndex?: number, options?: { expand?: boolean; shuffle?: boolean }) => void;
+  startQueueAndPlay: (
+    tracks: MusicPlayTrack[],
+    startIndex?: number,
+    options?: { expand?: boolean; shuffle?: boolean }
+  ) => Promise<boolean>;
+  /** Inicia fila sem tocar (ex.: player nativo no Expo). */
+  armQueue: (tracks: MusicPlayTrack[], startIndex?: number, options?: { expand?: boolean; shuffle?: boolean }) => void;
   playAt: (index: number) => void;
   setPlaying: (playing: boolean) => void;
   toggle: () => void;
@@ -136,7 +155,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       sourceQueue: tracks,
       queue: built.queue,
       index: built.index,
-      playing: true,
+      playing: false,
       progress: 0,
       duration: built.queue[built.index]?.durationSec ?? 0,
       shuffle,
@@ -144,48 +163,176 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       queueOpen: false
     });
   },
+  armQueue: (tracks, startIndex = 0, options) => {
+    get().startQueue(tracks, startIndex, options);
+  },
+  /**
+   * Play no gesto do clique: inicia o áudio ANTES de notificar o React/Zustand
+   * (subscribers síncronos podem “gastar” a user activation no Safari/Chrome).
+   */
+  startQueueAndPlay: async (tracks, startIndex = 0, options) => {
+    if (!tracks.length) return false;
+    const shuffle = options?.shuffle ?? get().shuffle;
+    if (options?.shuffle != null && options.shuffle !== get().shuffle) {
+      persist(SHUFFLE_KEY, options.shuffle ? "1" : "0");
+    }
+    const built = buildQueue(tracks, startIndex, shuffle);
+    const current = built.queue[built.index];
+    if (!current?.audioUrl) {
+      set({ playing: false });
+      return false;
+    }
+
+    const volume = get().volume;
+    const muted = get().muted;
+    // 1) Dispara play ainda no turno do clique
+    const resultPromise = musicAudio.playSource(current.audioUrl, volume, muted, { fromStart: true });
+
+    // 2) Só então atualiza a UI
+    set({
+      sourceQueue: tracks,
+      queue: built.queue,
+      index: built.index,
+      playing: false,
+      progress: 0,
+      duration: current.durationSec ?? 0,
+      shuffle,
+      expanded: options?.expand ?? false,
+      queueOpen: false
+    });
+
+    const result = await resultPromise;
+    set({ playing: result.ok });
+    return result.ok;
+  },
   playAt: (index) => {
     const { queue } = get();
     if (!queue[index]) return;
     set({ index, playing: true, progress: 0, duration: queue[index].durationSec ?? 0 });
+    if (isNativeAppShell()) {
+      musicAudio.stop();
+      nativeMusicPlayAt(index);
+      return;
+    }
+    const track = queue[index];
+    void musicAudio.playSource(track.audioUrl, get().volume, get().muted, { fromStart: true }).then((result) => {
+      set({ playing: Boolean(result.ok) });
+    });
   },
-  setPlaying: (playing) => set({ playing }),
-  toggle: () => set({ playing: !get().playing }),
+  setPlaying: (playing) => {
+    set({ playing });
+    if (isNativeAppShell()) {
+      musicAudio.stop();
+      if (playing) nativeMusicPlay();
+      else nativeMusicPause();
+      return;
+    }
+    if (playing) {
+      const current = get().queue[get().index];
+      if (current?.audioUrl) {
+        void musicAudio.playSource(current.audioUrl, get().volume, get().muted, { fromStart: false }).then((result) => {
+          if (!result.ok) set({ playing: false });
+        });
+      }
+    } else {
+      musicAudio.pause();
+    }
+  },
+  toggle: () => {
+    const next = !get().playing;
+    get().setPlaying(next);
+  },
   next: () => {
     const { queue, index, repeat } = get();
     if (!queue.length) return;
+    if (isNativeAppShell()) {
+      musicAudio.stop();
+      if (index < queue.length - 1) {
+        set({ index: index + 1, progress: 0, playing: true, duration: queue[index + 1]?.durationSec ?? 0 });
+        nativeMusicNext();
+        return;
+      }
+      if (repeat === "all") {
+        set({ index: 0, progress: 0, playing: true, duration: queue[0]?.durationSec ?? 0 });
+        nativeMusicNext();
+        return;
+      }
+      set({ playing: false, progress: 0 });
+      nativeMusicPause();
+      return;
+    }
     if (index < queue.length - 1) {
-      set({ index: index + 1, progress: 0, playing: true, duration: queue[index + 1]?.durationSec ?? 0 });
+      set({ index: index + 1, progress: 0, playing: false, duration: queue[index + 1]?.durationSec ?? 0 });
+    } else if (repeat === "all") {
+      set({ index: 0, progress: 0, playing: false, duration: queue[0]?.durationSec ?? 0 });
+    } else {
+      set({ playing: false, progress: 0, seekRatio: 0, seekToken: Date.now() });
+      musicAudio.pause();
       return;
     }
-    if (repeat === "all") {
-      set({ index: 0, progress: 0, playing: true, duration: queue[0]?.durationSec ?? 0 });
-      return;
+    const track = get().queue[get().index];
+    if (track?.audioUrl) {
+      void musicAudio.playSource(track.audioUrl, get().volume, get().muted, { fromStart: true }).then((result) => {
+        set({ playing: Boolean(result.ok) });
+      });
     }
-    set({ playing: false, progress: 0, seekRatio: 0, seekToken: Date.now() });
   },
   prev: () => {
     const { queue, index, progress, repeat } = get();
     if (!queue.length) return;
+    if (isNativeAppShell()) {
+      musicAudio.stop();
+      nativeMusicPrev();
+      if (progress > 3) {
+        set({ progress: 0, playing: true });
+        return;
+      }
+      if (index > 0) {
+        set({ index: index - 1, progress: 0, playing: true, duration: queue[index - 1]?.durationSec ?? 0 });
+      } else if (repeat === "all") {
+        const last = queue.length - 1;
+        set({ index: last, progress: 0, playing: true, duration: queue[last]?.durationSec ?? 0 });
+      } else {
+        set({ progress: 0, playing: true });
+      }
+      return;
+    }
     if (progress > 3) {
       set({ seekRatio: 0, seekToken: Date.now(), progress: 0, playing: true });
+      void musicAudio.play().then((result) => {
+        if (!result.ok) set({ playing: false });
+      });
       return;
     }
     if (index > 0) {
-      set({ index: index - 1, progress: 0, playing: true, duration: queue[index - 1]?.durationSec ?? 0 });
-      return;
-    }
-    if (repeat === "all") {
+      set({ index: index - 1, progress: 0, playing: false, duration: queue[index - 1]?.durationSec ?? 0 });
+    } else if (repeat === "all") {
       const last = queue.length - 1;
-      set({ index: last, progress: 0, playing: true, duration: queue[last]?.durationSec ?? 0 });
+      set({ index: last, progress: 0, playing: false, duration: queue[last]?.durationSec ?? 0 });
+    } else {
+      set({ seekRatio: 0, seekToken: Date.now(), progress: 0, playing: true });
+      void musicAudio.play().then((result) => {
+        if (!result.ok) set({ playing: false });
+      });
       return;
     }
-    set({ seekRatio: 0, seekToken: Date.now(), progress: 0, playing: true });
+    const track = get().queue[get().index];
+    if (track?.audioUrl) {
+      void musicAudio.playSource(track.audioUrl, get().volume, get().muted, { fromStart: true }).then((result) => {
+        set({ playing: Boolean(result.ok) });
+      });
+    }
   },
   ended: () => {
     const { repeat, queue, index } = get();
     if (repeat === "one") {
       set({ seekRatio: 0, seekToken: Date.now(), progress: 0, playing: true });
+      if (isNativeAppShell()) {
+        nativeMusicSeek(0);
+        nativeMusicPlay();
+        return;
+      }
+      void musicAudio.play();
       return;
     }
     if (index < queue.length - 1 || repeat === "all") {
@@ -193,6 +340,8 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       return;
     }
     set({ playing: false, progress: 0 });
+    if (isNativeAppShell()) nativeMusicPause();
+    else musicAudio.pause();
   },
   setProgress: (progress) => set({ progress }),
   setDuration: (duration) => set({ duration }),
@@ -200,6 +349,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     const next = Math.min(1, Math.max(0, volume));
     persist(VOLUME_KEY, String(next));
     set({ volume: next, muted: next === 0 });
+    if (!isNativeAppShell()) musicAudio.setVolume(next, next === 0);
   },
   toggleMute: () => {
     const { muted, volume } = get();
@@ -207,9 +357,11 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       const restored = volume > 0 ? volume : 0.85;
       persist(VOLUME_KEY, String(restored));
       set({ muted: false, volume: restored });
+      if (!isNativeAppShell()) musicAudio.setVolume(restored, false);
       return;
     }
     set({ muted: true });
+    if (!isNativeAppShell()) musicAudio.setVolume(volume, true);
   },
   toggleShuffle: () => {
     const { shuffle, sourceQueue, queue, index } = get();
@@ -226,6 +378,9 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     );
     const built = buildQueue(sourceQueue, startIndex, nextShuffle);
     set({ shuffle: nextShuffle, queue: built.queue, index: built.index });
+    if (isNativeAppShell()) {
+      nativeOpenMusicQueue(built.queue, built.index);
+    }
   },
   cycleRepeat: () => {
     const order: RepeatMode[] = ["off", "all", "one"];
@@ -246,9 +401,15 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   expand: () => set({ expanded: true }),
   collapse: () => set({ expanded: false, queueOpen: false }),
   toggleQueueOpen: () => set({ queueOpen: !get().queueOpen }),
-  seek: (ratio) => set({ seekRatio: Math.min(1, Math.max(0, ratio)), seekToken: Date.now() }),
+  seek: (ratio) => {
+    const next = Math.min(1, Math.max(0, ratio));
+    set({ seekRatio: next, seekToken: Date.now() });
+    if (isNativeAppShell()) nativeMusicSeek(next);
+  },
   consumeSeek: () => set({ seekRatio: null }),
-  reset: () =>
+  reset: () => {
+    if (isNativeAppShell()) nativeMusicStop();
+    musicAudio.stop();
     set({
       sourceQueue: [],
       queue: [],
@@ -259,5 +420,6 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       expanded: false,
       queueOpen: false,
       seekRatio: null
-    })
+    });
+  }
 }));

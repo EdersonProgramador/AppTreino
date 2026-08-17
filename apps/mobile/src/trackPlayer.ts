@@ -1,11 +1,12 @@
+import type { NativeTrack } from "./musicPlayback";
+
 /**
  * react-native-track-player integration point.
  *
  * Expo Go cannot load custom native modules. Playback in Expo Go uses expo-av
- * (`MusicPlayerScreen`). After `npx expo prebuild` / EAS development build,
+ * (`musicPlayback`). After `npx expo prebuild` / EAS development build,
  * swap the player implementation to TrackPlayer via these helpers.
  */
-import type { NativeTrack } from "./MusicPlayerScreen";
 
 export async function setupTrackPlayerIfAvailable(): Promise<boolean> {
   try {

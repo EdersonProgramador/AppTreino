@@ -7,116 +7,37 @@ import {
   Text,
   View
 } from "react-native";
-import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from "expo-av";
+import {
+  emptyMusicSnapshot,
+  musicPlayback,
+  type MusicPlaybackSnapshot,
+  type NativeTrack
+} from "./musicPlayback";
 
-export type NativeTrack = {
-  id: string;
-  title: string;
-  artist: string;
-  artwork?: string;
-  url: string;
-};
+export type { NativeTrack };
 
-type Props = {
-  tracks: NativeTrack[];
-  startIndex?: number;
+type ScreenProps = {
   onClose: () => void;
 };
 
-/**
- * Native music player shell.
- * Uses expo-av inside Expo Go; the same queue contract is ready for
- * react-native-track-player once a development build is available.
- */
-export function MusicPlayerScreen({ tracks, startIndex = 0, onClose }: Props) {
-  const [index, setIndex] = useState(Math.min(Math.max(startIndex, 0), Math.max(tracks.length - 1, 0)));
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+function useMusicSnapshot() {
+  const [snap, setSnap] = useState<MusicPlaybackSnapshot>(emptyMusicSnapshot);
+  useEffect(() => musicPlayback.subscribe(setSnap), []);
+  return snap;
+}
 
-  const current = tracks[index];
+/**
+ * UI cheia do Play (somente mobile/Expo).
+ * Fechar = volta ao app; áudio segue no musicPlayback (segundo plano no app).
+ * Parar musica = encerra o áudio de verdade.
+ */
+export function MusicPlayerScreen({ onClose }: ScreenProps) {
+  const { current, queue, index, playing, loading, error } = useMusicSnapshot();
 
   const subtitle = useMemo(() => {
-    if (!tracks.length) return "";
-    return `${index + 1} / ${tracks.length}`;
-  }, [index, tracks.length]);
-
-  useEffect(() => {
-    void Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      staysActiveInBackground: true,
-      playsInSilentModeIOS: true,
-      interruptionModeIOS: InterruptionModeIOS.DuckOthers,
-      interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false
-    });
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    let active: Audio.Sound | null = null;
-
-    async function load() {
-      if (!current) return;
-      setLoading(true);
-      setError(null);
-      try {
-        if (sound) {
-          await sound.unloadAsync();
-        }
-        const { sound: next } = await Audio.Sound.createAsync(
-          { uri: current.url },
-          { shouldPlay: true },
-          (status) => {
-            if (!status.isLoaded) return;
-            if (status.didJustFinish) {
-              setIndex((value) => (value + 1) % tracks.length);
-            }
-          }
-        );
-        active = next;
-        if (!mounted) {
-          await next.unloadAsync();
-          return;
-        }
-        setSound(next);
-        setPlaying(true);
-      } catch {
-        if (mounted) setError("Nao foi possivel reproduzir esta faixa.");
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    }
-
-    void load();
-
-    return () => {
-      mounted = false;
-      void active?.unloadAsync();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only when track changes
-  }, [current?.id, current?.url]);
-
-  useEffect(() => {
-    return () => {
-      void sound?.unloadAsync();
-    };
-  }, [sound]);
-
-  async function togglePlay() {
-    if (!sound) return;
-    const status = await sound.getStatusAsync();
-    if (!status.isLoaded) return;
-    if (status.isPlaying) {
-      await sound.pauseAsync();
-      setPlaying(false);
-    } else {
-      await sound.playAsync();
-      setPlaying(true);
-    }
-  }
+    if (!queue.length) return "";
+    return `${index + 1} / ${queue.length}`;
+  }, [index, queue.length]);
 
   if (!current) {
     return (
@@ -132,7 +53,7 @@ export function MusicPlayerScreen({ tracks, startIndex = 0, onClose }: Props) {
   return (
     <View style={styles.safe}>
       <Pressable onPress={onClose} style={styles.back}>
-        <Text style={styles.backText}>Fechar player</Text>
+        <Text style={styles.backText}>Continuar no app</Text>
       </Pressable>
 
       {current.artwork ? (
@@ -144,21 +65,32 @@ export function MusicPlayerScreen({ tracks, startIndex = 0, onClose }: Props) {
       <Text style={styles.title}>{current.title}</Text>
       <Text style={styles.artist}>{current.artist}</Text>
       <Text style={styles.meta}>{subtitle}</Text>
+      <Text style={styles.hint}>A musica continua ao fechar. Toque numa faixa no Play para reabrir.</Text>
 
       {loading && <ActivityIndicator color="#f2b461" style={{ marginTop: 18 }} />}
       {error && <Text style={styles.error}>{error}</Text>}
 
       <View style={styles.controls}>
-        <Pressable onPress={() => setIndex((value) => (value - 1 + tracks.length) % tracks.length)} style={styles.ctrl}>
+        <Pressable onPress={() => void musicPlayback.prev()} style={styles.ctrl}>
           <Text style={styles.ctrlText}>Prev</Text>
         </Pressable>
-        <Pressable onPress={() => void togglePlay()} style={[styles.ctrl, styles.ctrlPrimary]}>
+        <Pressable onPress={() => void musicPlayback.toggle()} style={[styles.ctrl, styles.ctrlPrimary]}>
           <Text style={styles.ctrlPrimaryText}>{playing ? "Pause" : "Play"}</Text>
         </Pressable>
-        <Pressable onPress={() => setIndex((value) => (value + 1) % tracks.length)} style={styles.ctrl}>
+        <Pressable onPress={() => void musicPlayback.next({ autoplay: true })} style={styles.ctrl}>
           <Text style={styles.ctrlText}>Next</Text>
         </Pressable>
       </View>
+
+      <Pressable
+        onPress={() => {
+          void musicPlayback.stop();
+          onClose();
+        }}
+        style={styles.stopBtn}
+      >
+        <Text style={styles.stopText}>Parar musica</Text>
+      </Pressable>
     </View>
   );
 }
@@ -204,6 +136,13 @@ const styles = StyleSheet.create({
     color: "#f2b461",
     fontWeight: "700"
   },
+  hint: {
+    marginTop: 10,
+    color: "rgba(255,247,236,0.45)",
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 16
+  },
   controls: {
     marginTop: "auto",
     flexDirection: "row",
@@ -244,5 +183,16 @@ const styles = StyleSheet.create({
   closeText: {
     color: "#f2b461",
     fontWeight: "800"
+  },
+  stopBtn: {
+    marginTop: 16,
+    alignSelf: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 14
+  },
+  stopText: {
+    color: "rgba(255,247,236,0.55)",
+    fontWeight: "700",
+    fontSize: 13
   }
 });

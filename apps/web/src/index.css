@@ -16464,17 +16464,22 @@ html.is-native-app .student-app-shell.is-play .student-bottom-nav {
 
 html.is-native-app .student-music-mini,
 html.is-native-app .student-play-dock {
-  position: relative;
-  left: auto;
-  bottom: auto;
-  transform: none;
+  /* Mesmo layout da web: no fluxo flex, acima da bottom nav */
+  position: relative !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  display: grid !important;
   flex: 0 0 auto;
   width: calc(100% - 20px);
   max-width: calc(100% - 20px);
   margin: 0 auto 8px;
+  transform: none !important;
+  z-index: 55;
 }
 
 html.is-native-app .student-now-playing {
+  /* Importante: column/grid — flex row quebrava arte + controles em linha */
   position: fixed;
   top: var(--student-header-offset, 86px);
   bottom: var(--student-nav-offset);
@@ -16486,6 +16491,40 @@ html.is-native-app .student-now-playing {
   z-index: 55;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  flex-direction: column;
+}
+
+/* Play no Expo: sempre coluna (evita media 600px colocar arte ao lado) */
+html.is-native-app .student-play-hero,
+html.is-native-app .student-play-album-hero {
+  grid-template-columns: 1fr !important;
+  align-items: start !important;
+}
+
+html.is-native-app .student-play-hero-art {
+  width: min(100%, 280px);
+  max-width: 280px;
+  justify-self: start;
+}
+
+html.is-native-app .student-play-hero-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  gap: 10px;
+}
+
+html.is-native-app .student-play-hero-actions .student-play-cta,
+html.is-native-app .student-play-hero-actions .student-play-ghost {
+  width: 100%;
+  justify-content: center;
+}
+
+html.is-native-app .student-app-shell.is-play {
+  flex-direction: column !important;
 }
 
 html.is-native-app .student-play-shell,
