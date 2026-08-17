@@ -29,7 +29,8 @@ export type PanelDestination =
   | "training"
   | "assessments"
   | "products"
-  | "purchases";
+  | "purchases"
+  | "play";
 
 /** Destinos no Painel do Aluno mapeados por evento de origem. */
 export const EVENT_PANEL_TARGETS: Record<SystemEventType, PanelDestination[]> = {
@@ -53,7 +54,8 @@ export const PANEL_SECTION_LABEL: Record<PanelDestination, string> = {
   training: "Treino",
   assessments: "Avaliação física",
   products: "Vitrine",
-  purchases: "Minhas compras"
+  purchases: "Minhas compras",
+  play: "Play"
 };
 
 export const EVENT_FLOW_META: Record<

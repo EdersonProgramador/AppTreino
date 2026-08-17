@@ -10,7 +10,6 @@ import {
   FileText,
   Pause,
   Play,
-  Share2,
   Target,
   Timer,
   Trophy,
@@ -19,6 +18,7 @@ import {
 } from "lucide-react";
 import { mediaUrl as appMediaUrl } from "../../lib/urls";
 import { uiSounds } from "../../lib/ui-sounds";
+import { WorkoutShareFlow } from "./WorkoutShareFlow";
 
 export type WorkoutStructureType =
   | "NORMAL"
@@ -764,19 +764,6 @@ export function WorkoutPlayer({
     uiSounds.popupOpen();
   }
 
-  async function shareWorkout() {
-    const shareData = {
-      title: "O TREINO DE HOJE TÁ PAGO!",
-      text: "Acabei de concluir meu treino no App Treino."
-    };
-
-    if (navigator.share) {
-      await navigator.share(shareData);
-    } else if (navigator.clipboard) {
-      await navigator.clipboard.writeText(shareData.text);
-    }
-  }
-
   if (exercises.length === 0 || !currentExercise) {
     return <div className="workout-player-empty">Nenhum exercício carregado.</div>;
   }
@@ -1208,6 +1195,7 @@ export function WorkoutPlayer({
             </button>
           </article>
         )}
+        <div id="student-workout-mini-slot" className="student-workout-mini-slot" />
       </main>
 
       <footer className="workout-runner-controls">
@@ -1476,21 +1464,14 @@ export function WorkoutPlayer({
       )}
 
       {shareOpen && (
-        <div className="runner-confirm-backdrop" role="presentation">
-          <section className="runner-share-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-            <div className="runner-share-icon" aria-hidden="true">
-              <Share2 size={58} />
-            </div>
-            <h2>O TREINO DE HOJE TÁ PAGO!</h2>
-            <p>Aproveite para compartilhar essa conquista com seus amigos nas redes sociais!</p>
-            <button className="runner-share-primary" onClick={() => void shareWorkout()} disabled={dayCompleted}>
-              COMPARTILHAR
-            </button>
-            <button className="runner-share-cancel" onClick={() => void completeWorkout()} disabled={dayCompleted}>
-              Não, obrigado!
-            </button>
-          </section>
-        </div>
+        <WorkoutShareFlow
+          programTitle={programTitle}
+          blockTitle={blockTitle}
+          exerciseCount={exercises.length}
+          durationLabel={formatElapsedTime(elapsedSeconds)}
+          busy={dayCompleted}
+          onDismiss={completeWorkout}
+        />
       )}
     </div>
   );

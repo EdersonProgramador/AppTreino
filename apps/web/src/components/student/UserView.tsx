@@ -24,6 +24,7 @@ import {
   Menu,
   MessageCircle,
   Minus,
+  Music2,
   Package,
   Pencil,
   Plus,
@@ -100,6 +101,9 @@ import { assessmentPerimeterKeys, assessmentPhotoFields } from "../../types/admi
 import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
 import { LockedOverlay } from "./LockedOverlay";
 import { StudentSettingsPanel } from "./StudentSettingsPanel";
+import { StudentMusicPlayerHost } from "./StudentMusicPlayerHost";
+import { StudentPlaySection } from "./StudentPlaySection";
+import { useMusicPlayerStore } from "../../stores/musicPlayerStore";
 import { PhysicalAssessmentFormView } from "../shared/PhysicalAssessmentFormView";
 import { uiSounds } from "../../lib/ui-sounds";
 
@@ -545,6 +549,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
   const hideStudentChrome =
     studentSection === "player" && (playerSessionActive || Boolean(workoutSession));
+  const musicQueueLength = useMusicPlayerStore((state) => state.queue.length);
 
   const goToSection = (section: StudentPanelSection) => {
     const nextSection = section === "favorites" ? "ratings" : section;
@@ -554,12 +559,16 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         await handleCancelWorkoutSession();
         uiSounds.studentPage();
         uiSounds.pageChange();
+        useMusicPlayerStore.getState().collapse();
         setStudentSection(nextSection);
       })();
       return;
     }
     uiSounds.studentPage();
     uiSounds.pageChange();
+    if (nextSection !== "play") {
+      useMusicPlayerStore.getState().collapse();
+    }
     setStudentSection(nextSection);
   };
 
@@ -1839,9 +1848,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               ? (["locations"] as PanelDestination[])
               : item.type === "SUPPORT"
                 ? (["support"] as PanelDestination[])
-                : item.type === "EVENT"
+                :         item.type === "EVENT"
                   ? (["events"] as PanelDestination[])
-                  : [];
+                  : item.type === "MUSIC_ALBUM" || item.type === "MUSIC_TRACK"
+                    ? (["play"] as PanelDestination[])
+                    : [];
       return {
         id: item.id,
         kind: "remote" as const,
@@ -2115,7 +2126,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   };
 
   return (
-    <main className={`student-app-shell ${hideStudentChrome ? "workout-immersive" : ""}`}>
+    <main className={`student-app-shell ${hideStudentChrome ? "workout-immersive" : ""}${musicQueueLength ? " has-music-dock" : ""}`}>
       {adminPreviewBanner}
       {!hideStudentChrome && (
       <section className="student-app-header">
@@ -2215,7 +2226,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                         assessments: trainingCopy.physicalAssessment,
                         products: "Vitrine",
                         purchases: "Minhas compras",
-                        events: "Eventos"
+                        events: "Eventos",
+                        play: "Play"
                       };
                       const primaryTarget = notification.targets[0];
                       const openLabel = primaryTarget
@@ -4070,6 +4082,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 moduleKey: "module_purchases"
               },
               { icon: CalendarPlus, title: "Eventos", action: () => goToSection("events") },
+              { icon: Music2, title: "Play", action: () => goToSection("play"), favorite: true },
               { icon: MapPin, title: "Unidades", action: () => goToSection("locations") },
               { icon: Headphones, title: "Atendimento", action: () => goToSection("support") },
               { icon: QrCode, title: "QR Code", action: () => { goToSection("home"); setShowStudentQr(true); } },
@@ -4101,6 +4114,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         {studentSection === "settings" && (
           <StudentSettingsPanel onBack={() => goToSection("menu")} />
         )}
+
+        {studentSection === "play" && token && <StudentPlaySection token={token} />}
       </>
 
         {studentSection === "history" && (
@@ -4301,10 +4316,16 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         </div>
       )}
 
+      {token && (
+        <StudentMusicPlayerHost
+          compact={hideStudentChrome}
+          hideMini={studentSection === "play"}
+        />
+      )}
       {!hideStudentChrome && (
       <nav className="student-bottom-nav" aria-label="Navegacao do aluno">
         <button className={studentSection === "home" ? "active" : ""} onClick={() => goToSection("home")}><Home size={22} />Home</button>
-        <button className={studentSection === "payments" ? "active" : ""} onClick={() => goToSection("payments")}><CreditCard size={22} />Pagamentos</button>
+        <button className={studentSection === "play" ? "active" : ""} onClick={() => goToSection("play")}><Music2 size={22} />Play</button>
         <button className={studentSection === "training" || studentSection === "player" || studentSection === "history" ? "active" : ""} onClick={() => openTrainingCatalog()}><Dumbbell size={22} />Treino</button>
         <button className={studentSection === "products" ? "active" : ""} onClick={() => goToSection("products")} style={publicConfig["module_products"] === "false" ? { display: "none" } : undefined}><Package size={22} />Vitrine</button>
         <button className={studentSection === "menu" ? "active" : ""} onClick={() => goToSection("menu")}><Menu size={22} />Menu</button>

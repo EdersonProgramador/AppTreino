@@ -34,7 +34,8 @@ export type StudentPanelSection =
   | "orders"
   | "favorites"
   | "ratings"
-  | "locations";
+  | "locations"
+  | "play";
 
 export type SyncNotification = {
   id: string;
