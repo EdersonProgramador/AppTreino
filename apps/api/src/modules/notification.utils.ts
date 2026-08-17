@@ -7,7 +7,9 @@ export type StudentNotificationType =
   | "LOCATION"
   | "WORKOUT_PROGRAM"
   | "SUPPORT"
-  | "WORKOUT";
+  | "WORKOUT"
+  | "MUSIC_ALBUM"
+  | "MUSIC_TRACK";
 
 export type FanOutNotificationInput = {
   type: StudentNotificationType;

@@ -13,12 +13,11 @@ import {
   Volume2,
   VolumeX
 } from "lucide-react";
+import { playableMediaUrl } from "../../lib/urls";
 import { useMusicPlayerStore } from "../../stores/musicPlayerStore";
 
 function resolveMediaUrl(url: string) {
-  if (/^https?:\/\//i.test(url)) return url;
-  if (url.startsWith("/")) return `${window.location.origin}${url}`;
-  return url;
+  return playableMediaUrl(url);
 }
 
 function formatClock(seconds: number) {

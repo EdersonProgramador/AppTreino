@@ -41,7 +41,6 @@ const cartCouponSchema = z.object({
 });
 
 const cartCheckoutSchema = z.object({
-  shippingMethod: z.enum(["PICKUP", "DELIVERY", "DIGITAL"]).default("PICKUP"),
   shippingAddress: z.string().trim().max(500).optional().or(z.literal("")),
   notes: z.string().trim().max(500).optional().or(z.literal("")),
   billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED")
@@ -72,12 +71,9 @@ const orderStatusSchema = z.object({
   status: z.enum(["PENDING", "CONFIRMED", "READY", "DELIVERED", "CANCELED", "REFUNDED"])
 });
 
-async function serializeCart(userId: string, shippingMethod?: "PICKUP" | "DELIVERY" | "DIGITAL") {
+async function serializeCart(userId: string) {
   const cart = await getOrCreateCart(userId);
-  const allDigital =
-    cart.items.length > 0 && cart.items.every((item) => item.product.kind === "DIGITAL");
-  const resolvedMethod = allDigital ? "DIGITAL" : shippingMethod ?? "PICKUP";
-  const totals = await buildCartTotals(cart, resolvedMethod);
+  const totals = await buildCartTotals(cart);
   return {
     cart: {
       id: cart.id,
@@ -105,12 +101,7 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
     requireDatabase();
     await assertModuleEnabled("module_products");
     const authUser = await requireAuth(app, request);
-    const query = z
-      .object({
-        shippingMethod: z.enum(["PICKUP", "DELIVERY", "DIGITAL"]).optional()
-      })
-      .parse(request.query ?? {});
-    return serializeCart(authUser.id, query.shippingMethod);
+    return serializeCart(authUser.id);
   });
 
   app.post("/student/cart/items", async (request, reply) => {
@@ -126,20 +117,14 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
     });
     if (!product) throw httpError(404, "Produto não encontrado.");
     if (product.stock != null && product.stock < body.quantity) {
-      throw httpError(
-        400,
-        `Limite de estoque: no máximo ${product.stock} unidade(s) disponível(is) para "${product.name}".`
-      );
+      throw httpError(400, "Esse é o máximo disponível por enquanto.");
     }
 
     const cart = await getOrCreateCart(authUser.id);
     const existing = cart.items.find((item) => item.productId === body.productId);
     const nextQty = (existing?.quantity ?? 0) + body.quantity;
     if (product.stock != null && product.stock < nextQty) {
-      throw httpError(
-        400,
-        `Limite de estoque: no máximo ${product.stock} unidade(s) disponível(is) para "${product.name}".`
-      );
+      throw httpError(400, "Esse é o máximo disponível por enquanto.");
     }
 
     if (existing) {
@@ -177,10 +162,7 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
       await prisma.cartItem.delete({ where: { id: item.id } });
     } else {
       if (item.product.stock != null && item.product.stock < body.quantity) {
-        throw httpError(
-          400,
-          `Limite de estoque: no máximo ${item.product.stock} unidade(s) disponível(is) para "${item.product.name}".`
-        );
+        throw httpError(400, "Esse é o máximo disponível por enquanto.");
       }
       await prisma.cartItem.update({
         where: { id: item.id },
@@ -244,19 +226,16 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
         throw httpError(400, `Produto "${item.product.name}" não está mais disponível.`);
       }
       if (item.product.stock != null && item.product.stock < item.quantity) {
-        throw httpError(
-          400,
-          `Limite de estoque: no máximo ${item.product.stock} unidade(s) disponível(is) para "${item.product.name}".`
-        );
+        throw httpError(400, "Esse é o máximo disponível por enquanto.");
       }
     }
 
-    if (body.shippingMethod === "DELIVERY" && !body.shippingAddress?.trim()) {
+    const totals = await buildCartTotals(cart);
+    if (totals.items.length === 0) throw httpError(400, "Carrinho sem itens válidos.");
+
+    if (totals.shippingMethod === "DELIVERY" && !body.shippingAddress?.trim()) {
       throw httpError(400, "Informe o endereço para entrega.");
     }
-
-    const totals = await buildCartTotals(cart, body.shippingMethod);
-    if (totals.items.length === 0) throw httpError(400, "Carrinho sem itens válidos.");
 
     const order = await prisma.$transaction(async (tx) => {
       const created = await tx.order.create({
@@ -268,7 +247,8 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
           shippingInCents: totals.shippingInCents,
           amountInCents: totals.amountInCents,
           shippingMethod: totals.shippingMethod,
-          shippingAddress: body.shippingMethod === "DELIVERY" ? body.shippingAddress?.trim() || null : null,
+          shippingAddress:
+            totals.shippingMethod === "DELIVERY" ? body.shippingAddress?.trim() || null : null,
           couponId: totals.couponId,
           couponCode: totals.couponCode,
           notes: body.notes?.trim() || null,

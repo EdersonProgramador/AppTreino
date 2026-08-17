@@ -547,9 +547,22 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     }
   }, [studentSection]);
 
+  useEffect(() => {
+    const scroller = document.querySelector(".student-app-scroll");
+    if (scroller instanceof HTMLElement) {
+      scroller.scrollTop = 0;
+    }
+    window.scrollTo(0, 0);
+  }, [studentSection]);
+
+  /** Menu inferior some só com sessão de treino iniciada; ao sair, retorna. */
   const hideStudentChrome =
     studentSection === "player" && (playerSessionActive || Boolean(workoutSession));
   const musicQueueLength = useMusicPlayerStore((state) => state.queue.length);
+
+  const restoreStudentChrome = () => {
+    setPlayerSessionActive(false);
+  };
 
   const goToSection = (section: StudentPanelSection) => {
     const nextSection = section === "favorites" ? "ratings" : section;
@@ -557,6 +570,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       // Sair sem concluir = reset do treino do dia.
       void (async () => {
         await handleCancelWorkoutSession();
+        restoreStudentChrome();
         uiSounds.studentPage();
         uiSounds.pageChange();
         useMusicPlayerStore.getState().collapse();
@@ -847,6 +861,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         token
       );
       setWorkoutSession(response.session);
+      setPlayerSessionActive(true);
       return response.session;
     } catch (startError) {
       const message =
@@ -2126,7 +2141,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   };
 
   return (
-    <main className={`student-app-shell ${hideStudentChrome ? "workout-immersive" : ""}${musicQueueLength ? " has-music-dock" : ""}`}>
+    <main
+      className={`student-app-shell${hideStudentChrome ? " workout-immersive" : ""}${
+        musicQueueLength ? " has-music-dock" : ""
+      }${studentSection === "play" ? " is-play" : ""}`}
+    >
       {adminPreviewBanner}
       {!hideStudentChrome && (
       <section className="student-app-header">
@@ -2280,7 +2299,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       </section>
       )}
 
-      <>
+      <div className="student-app-scroll">
         {error && (
           <div
             className={`error-box${errorTone === "warning" ? " is-warning" : ""}`}
@@ -2710,7 +2729,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                  sessionId={workoutSession?.id ?? null}
                  onBack={() => {
                    // Após cancel/reset (ou sem sessão), volta ao catálogo sem re-disparar goToSection.
-                   setPlayerSessionActive(false);
+                   restoreStudentChrome();
                    uiSounds.studentPage();
                    uiSounds.pageChange();
                    setStudentSection("training");
@@ -2719,7 +2738,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                  onWorkoutStart={handleBeginWorkoutSession}
                  onCancelSession={handleCancelWorkoutSession}
                  onExerciseProgressChange={handleExerciseProgressChange}
-                 onWorkoutComplete={handleCompleteWorkoutDay}
+                 onWorkoutComplete={async () => {
+                   await handleCompleteWorkoutDay();
+                   restoreStudentChrome();
+                   uiSounds.studentPage();
+                   uiSounds.pageChange();
+                   setStudentSection("home");
+                 }}
                />
              </Suspense>
            </section>
@@ -4116,7 +4141,6 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         )}
 
         {studentSection === "play" && token && <StudentPlaySection token={token} />}
-      </>
 
         {studentSection === "history" && (
           <section className="student-workout-history-page" aria-label="Histórico de treinos">
@@ -4170,6 +4194,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             </button>
           </section>
         )}
+      </div>
 
       {streakCalendarOpen &&
         createPortal(
@@ -4319,7 +4344,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       {token && (
         <StudentMusicPlayerHost
           compact={hideStudentChrome}
-          hideMini={studentSection === "play"}
+          hideMini={studentSection === "player"}
         />
       )}
       {!hideStudentChrome && (

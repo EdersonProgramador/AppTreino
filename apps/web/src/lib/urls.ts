@@ -67,6 +67,26 @@ export const mediaUrl = (path?: string | null) => {
   return assetUrl(trimmed);
 };
 
+/** Same-origin URL for <audio>/<img> and CSS — never point Expo at localhost:3333. */
+export function playableMediaUrl(path?: string | null) {
+  const resolved = mediaUrl(path);
+  if (!resolved) return "";
+  if (/^(data:|blob:)/i.test(resolved)) return resolved;
+  if (typeof window === "undefined") return resolved;
+  try {
+    const url = new URL(resolved, window.location.href);
+    const apiLan =
+      url.port === "3333" &&
+      /^(localhost|127\.0\.0\.1|10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(url.hostname);
+    if (apiLan && /^\/uploads\//i.test(url.pathname)) {
+      return `${window.location.origin}${url.pathname}${url.search}`;
+    }
+    return url.href;
+  } catch {
+    return resolved;
+  }
+}
+
 type OptimizedMediaOptions = {
   width?: number;
   quality?: number;

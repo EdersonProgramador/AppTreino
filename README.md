@@ -8,10 +8,13 @@ Monorepo com web (React/Vite), API (Fastify/Prisma) e pacotes compartilhados.
 apps/
   web/      Landing, login, painel admin e área do aluno
   api/      API Node.js, auth, pagamentos e webhooks
+  mobile/   App Expo (WebView) — login + portais aluno/admin
 packages/
   shared/   Tipos e contratos compartilhados
 docs/       Documentação (inclui deploy)
 ```
+
+O **app mobile** abre em `/login` (produto de uso diário). A **landing de vendas** fica só no site web.
 
 ## Produção
 
@@ -38,6 +41,7 @@ npm run prisma:generate
 npm run prisma:migrate
 npm run dev:api
 npm run dev:web
+npm run dev:mobile   # Expo Go — ver apps/mobile/README.md
 ```
 
 ## GitHub Actions

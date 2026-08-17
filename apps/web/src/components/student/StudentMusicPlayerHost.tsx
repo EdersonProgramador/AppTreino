@@ -1,21 +1,83 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef } from "react";
 import { Pause, Play, SkipForward } from "lucide-react";
+import { playableMediaUrl } from "../../lib/urls";
 import { useMusicPlayerStore } from "../../stores/musicPlayerStore";
 import { StudentNowPlaying } from "./StudentNowPlaying";
 
-type Props = {
+type HostProps = {
   compact?: boolean;
   hideMini?: boolean;
 };
 
 function resolveMediaUrl(url: string) {
-  if (/^https?:\/\//i.test(url)) return url;
-  if (url.startsWith("/")) return `${window.location.origin}${url}`;
-  return url;
+  return playableMediaUrl(url);
 }
 
-export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Props) {
+function audioSrcEquals(audio: HTMLAudioElement, nextSrc: string) {
+  const current = audio.getAttribute("src") || audio.src || "";
+  try {
+    return new URL(current, window.location.href).href === new URL(nextSrc, window.location.href).href;
+  } catch {
+    return current === nextSrc;
+  }
+}
+
+function stopAudio(audio: HTMLAudioElement | null) {
+  if (!audio) return;
+  audio.pause();
+  audio.removeAttribute("src");
+  audio.load();
+}
+
+export function StudentMusicMini({ compact = false }: { compact?: boolean }) {
+  const queue = useMusicPlayerStore((state) => state.queue);
+  const index = useMusicPlayerStore((state) => state.index);
+  const playing = useMusicPlayerStore((state) => state.playing);
+  const expanded = useMusicPlayerStore((state) => state.expanded);
+  const setPlaying = useMusicPlayerStore((state) => state.setPlaying);
+  const next = useMusicPlayerStore((state) => state.next);
+  const expand = useMusicPlayerStore((state) => state.expand);
+  const current = queue[index] ?? null;
+
+  if (!current || expanded) return null;
+
+  const coverStyle = current.coverUrl
+    ? { backgroundImage: `url(${resolveMediaUrl(current.coverUrl)})` }
+    : undefined;
+
+  return (
+    <div className={`student-play-dock student-music-mini${playing ? " is-playing" : ""}${compact ? " is-compact" : ""}`}>
+      <button
+        className="student-play-dock-cover"
+        onClick={() => expand()}
+        style={coverStyle}
+        type="button"
+        aria-label="Abrir player"
+      />
+      <button className="student-play-dock-meta" onClick={() => expand()} type="button">
+        <strong>{current.title}</strong>
+        <span>{current.artist || "App Treino"}</span>
+      </button>
+      <div className="student-play-dock-center">
+        <div className="student-play-dock-controls">
+          <button
+            aria-label={playing ? "Pausar" : "Tocar"}
+            className="student-play-dock-main"
+            onClick={() => setPlaying(!playing)}
+            type="button"
+          >
+            {playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
+          </button>
+          <button aria-label="Proxima" onClick={() => next()} type="button">
+            <SkipForward size={16} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function StudentMusicPlayerHost({ compact = false, hideMini = false }: HostProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const queue = useMusicPlayerStore((state) => state.queue);
   const index = useMusicPlayerStore((state) => state.index);
@@ -34,16 +96,23 @@ export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Pr
   const setProgress = useMusicPlayerStore((state) => state.setProgress);
   const setDuration = useMusicPlayerStore((state) => state.setDuration);
   const consumeSeek = useMusicPlayerStore((state) => state.consumeSeek);
-  const expand = useMusicPlayerStore((state) => state.expand);
   const collapse = useMusicPlayerStore((state) => state.collapse);
   const toggleMute = useMusicPlayerStore((state) => state.toggleMute);
   const current = queue[index] ?? null;
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !current) return;
+    if (!audio) return;
+    if (!current) {
+      stopAudio(audio);
+      return;
+    }
     const nextSrc = resolveMediaUrl(current.audioUrl);
-    if (audio.src !== nextSrc) {
+    if (!nextSrc) {
+      stopAudio(audio);
+      return;
+    }
+    if (!audioSrcEquals(audio, nextSrc)) {
       audio.src = nextSrc;
       setProgress(0);
     }
@@ -52,7 +121,12 @@ export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Pr
     } else {
       audio.pause();
     }
-  }, [current?.id, current?.audioUrl, playing, setPlaying, setProgress]);
+  }, [current?.id, current?.audioUrl, current, playing, setPlaying, setProgress]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    return () => stopAudio(audio);
+  }, []);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -76,31 +150,51 @@ export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Pr
   }, [seekToken, seekRatio, duration, playing, consumeSeek, setProgress, setPlaying]);
 
   useEffect(() => {
-    if (!current || typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
-    navigator.mediaSession.metadata = new MediaMetadata({
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    const session = navigator.mediaSession;
+    const setHandler = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
+      try {
+        session.setActionHandler(action, handler);
+      } catch {
+        // Alguns browsers rejeitam handlers ausentes na saída.
+      }
+    };
+
+    if (!current) {
+      session.metadata = null;
+      session.playbackState = "none";
+      setHandler("play", null);
+      setHandler("pause", null);
+      setHandler("previoustrack", null);
+      setHandler("nexttrack", null);
+      setHandler("seekto", null);
+      return;
+    }
+
+    session.metadata = new MediaMetadata({
       title: current.title,
       artist: current.artist || "App Treino",
       artwork: current.coverUrl
         ? [{ src: resolveMediaUrl(current.coverUrl), sizes: "512x512", type: "image/jpeg" }]
         : []
     });
-    navigator.mediaSession.playbackState = playing ? "playing" : "paused";
-    navigator.mediaSession.setActionHandler("play", () => setPlaying(true));
-    navigator.mediaSession.setActionHandler("pause", () => setPlaying(false));
-    navigator.mediaSession.setActionHandler("previoustrack", () => prev());
-    navigator.mediaSession.setActionHandler("nexttrack", () => next());
-    navigator.mediaSession.setActionHandler("seekto", (details) => {
+    session.playbackState = playing ? "playing" : "paused";
+    setHandler("play", () => setPlaying(true));
+    setHandler("pause", () => setPlaying(false));
+    setHandler("previoustrack", () => prev());
+    setHandler("nexttrack", () => next());
+    setHandler("seekto", (details) => {
       if (typeof details.seekTime === "number" && audioRef.current) {
         audioRef.current.currentTime = details.seekTime;
         setProgress(details.seekTime);
       }
     });
     return () => {
-      navigator.mediaSession.setActionHandler("play", null);
-      navigator.mediaSession.setActionHandler("pause", null);
-      navigator.mediaSession.setActionHandler("previoustrack", null);
-      navigator.mediaSession.setActionHandler("nexttrack", null);
-      navigator.mediaSession.setActionHandler("seekto", null);
+      setHandler("play", null);
+      setHandler("pause", null);
+      setHandler("previoustrack", null);
+      setHandler("nexttrack", null);
+      setHandler("seekto", null);
     };
   }, [current, playing, next, prev, setPlaying, setProgress]);
 
@@ -126,50 +220,8 @@ export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Pr
     return () => window.removeEventListener("keydown", onKey);
   }, [current, expanded, toggle, next, prev, toggleMute, collapse]);
 
-  const coverStyle = current?.coverUrl
-    ? { backgroundImage: `url(${resolveMediaUrl(current.coverUrl)})` }
-    : undefined;
+  // Mini no shell só fora do treino; no player o dock fica no WorkoutPlayer (evita duplicar).
   const showMini = Boolean(current) && !expanded && !hideMini;
-  const [workoutSlot, setWorkoutSlot] = useState<HTMLElement | null>(null);
-
-  useLayoutEffect(() => {
-    if (!compact) {
-      setWorkoutSlot(null);
-      return;
-    }
-    setWorkoutSlot(document.getElementById("student-workout-mini-slot"));
-  }, [compact, showMini]);
-
-  const mini = showMini && current ? (
-    <div className={`student-play-dock student-music-mini${playing ? " is-playing" : ""}${compact ? " is-compact" : ""}`}>
-      <button
-        className="student-play-dock-cover"
-        onClick={() => expand()}
-        style={coverStyle}
-        type="button"
-        aria-label="Abrir player"
-      />
-      <button className="student-play-dock-meta" onClick={() => expand()} type="button">
-        <strong>{current.title}</strong>
-        <span>{current.artist || "App Treino"}</span>
-      </button>
-      <div className="student-play-dock-center">
-        <div className="student-play-dock-controls">
-          <button
-            aria-label={playing ? "Pausar" : "Tocar"}
-            className="student-play-dock-main"
-            onClick={() => setPlaying(!playing)}
-            type="button"
-          >
-            {playing ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}
-          </button>
-          <button aria-label="Proxima" onClick={() => next()} type="button">
-            <SkipForward size={18} />
-          </button>
-        </div>
-      </div>
-    </div>
-  ) : null;
 
   return (
     <>
@@ -182,7 +234,7 @@ export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Pr
         hidden
       />
       {expanded && current ? <StudentNowPlaying /> : null}
-      {compact ? (workoutSlot && mini ? createPortal(mini, workoutSlot) : null) : mini}
+      {showMini ? <StudentMusicMini compact={compact} /> : null}
     </>
   );
 }

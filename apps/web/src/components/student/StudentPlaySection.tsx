@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Disc3, Heart, Music2, Pause, Play, Search, Shuffle } from "lucide-react";
 import { apiGet } from "../../api";
+import { playableMediaUrl } from "../../lib/urls";
 import { useMusicPlayerStore, type MusicPlayTrack } from "../../stores/musicPlayerStore";
 
 export type PlayTrack = MusicPlayTrack;
@@ -23,9 +24,7 @@ type Props = {
 };
 
 function resolveMediaUrl(url: string) {
-  if (/^https?:\/\//i.test(url)) return url;
-  if (url.startsWith("/")) return `${window.location.origin}${url}`;
-  return url;
+  return playableMediaUrl(url);
 }
 
 function formatClock(seconds: number) {
@@ -60,8 +59,6 @@ export function StudentPlaySection({ token }: Props) {
   const playing = useMusicPlayerStore((state) => state.playing);
   const likedIds = useMusicPlayerStore((state) => state.likedIds);
   const startQueue = useMusicPlayerStore((state) => state.startQueue);
-  const expand = useMusicPlayerStore((state) => state.expand);
-  const expanded = useMusicPlayerStore((state) => state.expanded);
   const toggleLike = useMusicPlayerStore((state) => state.toggleLike);
   const current = queue[index] ?? null;
 
@@ -123,7 +120,7 @@ export function StudentPlaySection({ token }: Props) {
   const featuredCover = current?.coverUrl || featuredAlbum?.coverUrl || allTracks[0]?.coverUrl || null;
 
   function playTracks(tracks: PlayTrack[], startIndex = 0, shuffled = false) {
-    startQueue(tracks, startIndex, { expand: true, ...(shuffled ? { shuffle: true } : {}) });
+    startQueue(tracks, startIndex, { expand: false, ...(shuffled ? { shuffle: true } : {}) });
   }
 
   function playAlbum(album: PlayAlbum, startIndex = 0, shuffled = false) {
@@ -362,17 +359,6 @@ export function StudentPlaySection({ token }: Props) {
           </>
         )}
       </div>
-
-      {current && !expanded && (
-        <button className={`student-play-now${playing ? " is-playing" : ""}`} onClick={() => expand()} type="button">
-          <div className="student-play-now-cover" style={coverStyle(current.coverUrl)} />
-          <div className="student-play-now-meta">
-            <strong>{current.title}</strong>
-            <span>{current.artist || "App Treino"}</span>
-          </div>
-          <span className="student-play-now-hint">Player</span>
-        </button>
-      )}
     </section>
   );
 }

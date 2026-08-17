@@ -26,6 +26,7 @@ import {
   Megaphone,
   Menu,
   MessageCircle,
+  Music2,
   Package,
   PanelLeftClose,
   PanelLeftOpen,
@@ -57,6 +58,7 @@ import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState 
 import { formatPriceInBRL, parseBRLMoneyToCents } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { BRAZILIAN_STATES, CITIES_BY_STATE } from "../../brazil-data";
+import { MusicAdminPanel } from "./MusicAdminPanel";
 import {
   cmsProgramStatusLabel,
   cmsTargetGenderLabel,
@@ -207,6 +209,7 @@ type AdminSection =
   | "ratings"
   | "assessments"
   | "events"
+  | "music"
   | "trash";
 
 const AdminSoundToggle = () => {
@@ -945,9 +948,20 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     }
 
     try {
-      await Promise.all(requested.map((resource) => fetchAdminResource(resource)));
+      const results = await Promise.allSettled(requested.map((resource) => fetchAdminResource(resource)));
+      const rejected = results.filter((result) => result.status === "rejected") as PromiseRejectedResult[];
+      const authLost = rejected.some((result) => result.reason instanceof ApiError && result.reason.status === 401);
+      if (authLost) return;
+      if (rejected.length > 0 && rejected.length === results.length) {
+        setFeedback("Não foi possível carregar dados administrativos. Verifique API, banco e permissão.");
+      } else if (rejected.length > 0) {
+        // Falha parcial: painel segue útil; não dispara som de erro de boot.
+        setLastUpdatedAt(new Date());
+        return;
+      }
       setLastUpdatedAt(new Date());
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) return;
       setFeedback("Não foi possível carregar dados administrativos. Verifique API, banco e permissão.");
     } finally {
       setLoading(false);
@@ -1130,6 +1144,8 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     const data = new FormData(form);
     const name = String(data.get("name") ?? "").trim();
     const email = String(data.get("email") ?? "").trim();
+    const password = String(data.get("password") ?? "");
+    const passwordConfirm = String(data.get("passwordConfirm") ?? "");
 
     if (name.length < 2) {
       setFeedback("Informe um nome válido (mínimo 2 caracteres).");
@@ -1138,6 +1154,16 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     if (!email) {
       setFeedback("Informe um e-mail válido.");
       return;
+    }
+    if (password || passwordConfirm) {
+      if (password.length < 6) {
+        setFeedback("A nova senha deve ter no mínimo 6 caracteres.");
+        return;
+      }
+      if (password !== passwordConfirm) {
+        setFeedback("A confirmação da senha não confere.");
+        return;
+      }
     }
 
     setSavingStudentProfile(true);
@@ -1156,13 +1182,14 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           city: String(data.get("city") ?? "").trim() || undefined,
           state: String(data.get("state") ?? "").trim() || undefined,
           status: String(data.get("status") ?? "ACTIVE"),
-          locationId: String(data.get("locationId") ?? "").trim() || ""
+          locationId: String(data.get("locationId") ?? "").trim() || "",
+          ...(password ? { password } : {})
         },
         token
       );
       await refreshAdminStudentOverview();
       setAdminStudentProfileFormKey((key) => key + 1);
-      setSuccess("Perfil do aluno atualizado com sucesso.");
+      setSuccess(password ? "Perfil e senha do aluno atualizados com sucesso." : "Perfil do aluno atualizado com sucesso.");
       uiSounds.success();
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o perfil do aluno."));
@@ -2537,7 +2564,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       const response = await apiGet<{ trash: AdminTrashData }>("/admin/trash", token);
       setAdminTrash(response.trash);
     } catch {
-      setFeedback("Não foi possível carregar a lixeira.");
+      // Lixeira é secundária — não bloquear login/boot com toast de erro.
     } finally {
       setAdminTrashLoading(false);
     }
@@ -2618,12 +2645,20 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     const kind = (String(data.get("kind") ?? "PHYSICAL") === "DIGITAL" ? "DIGITAL" : "PHYSICAL") as
       | "PHYSICAL"
       | "DIGITAL";
+    const shippingRaw = String(data.get("shippingMethod") ?? "PICKUP");
+    const shippingMethod =
+      kind === "DIGITAL"
+        ? ("DIGITAL" as const)
+        : shippingRaw === "DELIVERY"
+          ? ("DELIVERY" as const)
+          : ("PICKUP" as const);
     const payload = {
       name: String(data.get("name") ?? ""),
       description: String(data.get("description") ?? ""),
       category: String(data.get("category") ?? ""),
       imageUrl: String(data.get("imageUrl") ?? "") || "",
       kind,
+      shippingMethod,
       stock: stockRaw === "" ? null : Math.max(0, Math.round(Number(stockRaw))),
       priceInCents
     };
@@ -3119,6 +3154,10 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
             <CalendarPlus size={18} />
             <span className="sidebar-label">Eventos</span>
           </button>
+          <button className={adminSection === "music" ? "active" : ""} onClick={() => goAdminSection("music")}>
+            <Music2 size={18} />
+            <span className="sidebar-label">Play</span>
+          </button>
 
           <span className="admin-nav-group-label">Relacionamento</span>
           <button className={adminSection === "contact" ? "active" : ""} onClick={() => goAdminSection("contact")}>
@@ -3149,7 +3188,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         <button
             className="workspace-logout mt-3 flex w-full min-h-[44px] items-center justify-start gap-2.5 rounded-lg border border-brand-ember/35 bg-brand-ember/10 px-3 text-left text-[13px] font-extrabold transition hover:border-brand-ember/55 hover:bg-brand-ember/15"
           onClick={() => {
-            uiSounds.disconnect();
+            uiSounds.toggleOff();
             onLogout();
           }}
         >
@@ -3496,6 +3535,35 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                       ))}
                     </select>
                   </label>
+
+                  <fieldset className="admin-student-password-group">
+                    <legend>
+                      <LockKeyhole size={14} />
+                      Troca de senha
+                    </legend>
+                    <label>
+                      Nova senha
+                      <input
+                        name="password"
+                        type="password"
+                        minLength={6}
+                        placeholder="Deixe em branco para manter"
+                        autoComplete="new-password"
+                      />
+                    </label>
+                    <label>
+                      Confirmar senha
+                      <input
+                        name="passwordConfirm"
+                        type="password"
+                        minLength={6}
+                        placeholder="Repita a nova senha"
+                        autoComplete="new-password"
+                      />
+                    </label>
+                    <small>Mínimo 6 caracteres. A alteração vale no próximo login do aluno.</small>
+                  </fieldset>
+
                   <button className="primary-button" type="submit" disabled={savingStudentProfile || studentOverviewLoading}>
                     {savingStudentProfile ? <Loader2 className="spin" size={18} /> : <Save size={18} />}
                     {savingStudentProfile ? "Salvando…" : "Salvar alterações"}
@@ -6534,12 +6602,14 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         </article>
       </section>}
 
+      {adminSection === "music" && token && <MusicAdminPanel token={token} />}
+
       {adminSection === "products" && <section className="finance-hub commerce-hub" id="admin-products">
         <header className="finance-hub-header">
           <div>
             <span className="eyebrow w-fit">Comercial</span>
             <h1>Catálogo</h1>
-            <p>Produtos físicos (retirada) e digitais para a vitrine do aluno.</p>
+            <p>Produtos físicos e digitais com entrega definida no cadastro.</p>
           </div>
           <div className="finance-hub-kpis">
             <article className="finance-kpi">
@@ -6605,6 +6675,22 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 </option>
               ))}
             </select>
+            <select
+              name="shippingMethod"
+              defaultValue={
+                editingProduct?.kind === "DIGITAL"
+                  ? "DIGITAL"
+                  : editingProduct?.shippingMethod === "DELIVERY"
+                    ? "DELIVERY"
+                    : "PICKUP"
+              }
+              aria-label="Forma de entrega"
+              title="Definida pelo admin; o aluno só visualiza no carrinho"
+            >
+              <option value="PICKUP">{shippingMethodLabel.PICKUP}</option>
+              <option value="DELIVERY">{shippingMethodLabel.DELIVERY}</option>
+              <option value="DIGITAL">{shippingMethodLabel.DIGITAL}</option>
+            </select>
             <input
               name="stock"
               type="number"
@@ -6638,6 +6724,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 <span>
                   <strong>{product.name}</strong>
                   {product.category ?? "Sem categoria"} · {labelProductKind(product.kind)} ·{" "}
+                  {labelShippingMethod(product.shippingMethod)} ·{" "}
                   {formatPriceInBRL(product.priceInCents)}
                   {product.stock != null ? ` · estoque ${product.stock}` : " · estoque livre"} ·{" "}
                   {product._count?.purchases ?? 0} pedido(s)

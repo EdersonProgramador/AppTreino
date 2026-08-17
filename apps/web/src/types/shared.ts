@@ -184,6 +184,7 @@ export interface ProductRow {
   imageUrl?: string | null;
   category?: string | null;
   kind?: "PHYSICAL" | "DIGITAL";
+  shippingMethod?: "PICKUP" | "DELIVERY" | "DIGITAL";
   stock?: number | null;
   isActive: boolean;
   createdAt: string;

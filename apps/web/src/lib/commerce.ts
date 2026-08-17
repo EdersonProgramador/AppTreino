@@ -12,7 +12,7 @@ export type OrderStatusCode = PurchaseStatusCode;
 export type ShippingMethodCode = "PICKUP" | "DELIVERY" | "DIGITAL";
 
 export const productKindLabel: Record<ProductKindCode, string> = {
-  PHYSICAL: "Físico / retirada",
+  PHYSICAL: "Físico",
   DIGITAL: "Digital"
 };
 

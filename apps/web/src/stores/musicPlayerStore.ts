@@ -106,6 +106,7 @@ type MusicPlayerState = {
   toggleQueueOpen: () => void;
   seek: (ratio: number) => void;
   consumeSeek: () => void;
+  reset: () => void;
 };
 
 export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
@@ -139,7 +140,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       progress: 0,
       duration: built.queue[built.index]?.durationSec ?? 0,
       shuffle,
-      expanded: options?.expand ?? true,
+      expanded: options?.expand ?? false,
       queueOpen: false
     });
   },
@@ -246,5 +247,17 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   collapse: () => set({ expanded: false, queueOpen: false }),
   toggleQueueOpen: () => set({ queueOpen: !get().queueOpen }),
   seek: (ratio) => set({ seekRatio: Math.min(1, Math.max(0, ratio)), seekToken: Date.now() }),
-  consumeSeek: () => set({ seekRatio: null })
+  consumeSeek: () => set({ seekRatio: null }),
+  reset: () =>
+    set({
+      sourceQueue: [],
+      queue: [],
+      index: 0,
+      playing: false,
+      progress: 0,
+      duration: 0,
+      expanded: false,
+      queueOpen: false,
+      seekRatio: null
+    })
 }));

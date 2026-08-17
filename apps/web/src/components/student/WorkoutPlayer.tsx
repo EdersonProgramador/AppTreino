@@ -19,6 +19,7 @@ import {
 import { mediaUrl as appMediaUrl } from "../../lib/urls";
 import { uiSounds } from "../../lib/ui-sounds";
 import { WorkoutShareFlow } from "./WorkoutShareFlow";
+import { StudentMusicMini } from "./StudentMusicPlayerHost";
 
 export type WorkoutStructureType =
   | "NORMAL"
@@ -779,14 +780,14 @@ export function WorkoutPlayer({
     <div className="workout-runner">
       <header className="workout-runner-header">
         <button aria-label="Voltar para treinos" onClick={handleHeaderBack}>
-          <ArrowLeft size={28} />
+          <ArrowLeft size={22} />
         </button>
         <div>
           <strong>{panel === "sequence" && isRunning ? "Sequência" : "Execução"}</strong>
-          <span><Timer size={20} />{formatElapsedTime(elapsedSeconds)}</span>
+          <span><Timer size={16} />{formatElapsedTime(elapsedSeconds)}</span>
         </div>
         <button aria-label={isPaused ? "Retomar cronômetro" : "Pausar cronômetro"} onClick={() => isRunning && setIsPaused((current) => !current)} disabled={!isRunning}>
-          {isPaused || !isRunning ? <Play size={26} /> : <Pause size={26} />}
+          {isPaused || !isRunning ? <Play size={20} /> : <Pause size={20} />}
         </button>
       </header>
 
@@ -938,7 +939,7 @@ export function WorkoutPlayer({
 
                     return (
                       <span className={`${complete ? "complete" : ""} ${active ? phase : ""} ${isDropSlot ? "drop-slot" : ""}`} key={setNumber}>
-                        {complete ? <Check size={22} /> : isDropSlot ? "D" : setNumber}
+                        {complete ? <Check size={14} /> : isDropSlot ? "D" : setNumber}
                       </span>
                     );
                   })
@@ -950,7 +951,7 @@ export function WorkoutPlayer({
 
                       return (
                         <span className={`${complete ? "complete" : ""} ${active ? phase : ""}`} key={clusterNumber}>
-                          {complete ? <Check size={22} /> : clusterNumber}
+                          {complete ? <Check size={14} /> : clusterNumber}
                         </span>
                       );
                     })
@@ -961,7 +962,7 @@ export function WorkoutPlayer({
 
                       return (
                         <span className={`${complete ? "complete" : ""} ${active ? phase : ""}`} key={setNumber}>
-                          {complete ? <Check size={22} /> : setNumber}
+                          {complete ? <Check size={14} /> : setNumber}
                         </span>
                       );
                     })}
@@ -1195,7 +1196,7 @@ export function WorkoutPlayer({
             </button>
           </article>
         )}
-        <div id="student-workout-mini-slot" className="student-workout-mini-slot" />
+        <StudentMusicMini compact />
       </main>
 
       <footer className="workout-runner-controls">
@@ -1229,11 +1230,11 @@ export function WorkoutPlayer({
             }}
             disabled={phase === "rest" && !isRunning}
           >
-            {isRunning || workoutReadyToComplete ? <ArrowLeft size={24} /> : <ChevronLeft size={24} />}
+            {isRunning || workoutReadyToComplete ? <ArrowLeft size={20} /> : <ChevronLeft size={20} />}
           </button>
         ) : isDetailPanel ? (
           <button className="runner-round-button" aria-label="Voltar ao exercício" onClick={returnToRunner}>
-            <ArrowLeft size={24} />
+            <ArrowLeft size={20} />
           </button>
         ) : (
           <button
@@ -1241,7 +1242,7 @@ export function WorkoutPlayer({
             aria-label="Cancelar treino"
             onClick={handleRunnerCancelButton}
           >
-            <X size={24} />
+            <X size={20} />
           </button>
         )}
         <button
@@ -1298,16 +1299,16 @@ export function WorkoutPlayer({
           {isDetailPanel ? (
             <>
               <span className="runner-start-face">
-                <ArrowLeft size={28} />
+                <ArrowLeft size={22} />
                 <span>Voltar</span>
               </span>
             </>
           ) : phase === "rest" && panel === "run" ? (
             <>
               <span className="runner-start-ring" aria-hidden="true">
-                <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-                  <circle className="runner-start-ring-track" cx="50" cy="50" r="48.5" pathLength="100" />
-                  <circle className="runner-start-ring-progress" cx="50" cy="50" r="48.5" pathLength="100" />
+                <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+                  <circle className="runner-start-ring-track" cx="50" cy="50" r="46" pathLength="100" />
+                  <circle className="runner-start-ring-progress" cx="50" cy="50" r="46" pathLength="100" />
                 </svg>
               </span>
               <span className="runner-start-face">
@@ -1320,7 +1321,7 @@ export function WorkoutPlayer({
           ) : isRunning && panel === "sequence" ? (
             <>
               <span className="runner-start-face">
-                {phase === "rest" ? <Timer size={28} /> : <Play size={28} />}
+                {phase === "rest" ? <Timer size={22} /> : <Play size={22} />}
                 <span>{phase === "rest" ? `${restRemaining}s` : "Continuar"}</span>
               </span>
             </>
@@ -1334,14 +1335,14 @@ export function WorkoutPlayer({
           ) : isRestPause ? (
             <>
               <span className="runner-start-face">
-                <Check size={34} />
+                <Check size={24} />
                 <span>Cluster {completedClusters + 1}/{clusterCount}</span>
               </span>
             </>
           ) : (
             <>
               <span className="runner-start-face">
-                {isRunning && panel === "run" ? <Check size={34} /> : <Trophy size={28} />}
+                {isRunning && panel === "run" ? <Check size={24} /> : <Trophy size={22} />}
                 <span>{isStarting ? "Iniciando" : isRunning && panel === "run" ? "Realizado" : "Iniciar"}</span>
               </span>
             </>
@@ -1372,11 +1373,11 @@ export function WorkoutPlayer({
             }}
             disabled={phase === "rest" || isRunning}
           >
-            <ChevronRight size={24} />
+            <ChevronRight size={20} />
           </button>
         ) : isDetailPanel ? (
           <button className="runner-round-button" aria-label="Voltar ao exercício" onClick={returnToRunner}>
-            <Play size={24} />
+            <Play size={20} />
           </button>
         ) : (
           <button
@@ -1389,7 +1390,7 @@ export function WorkoutPlayer({
             }}
             disabled={!isRunning}
           >
-            {!isRunning || isPaused ? <Play size={24} /> : <Pause size={24} />}
+            {!isRunning || isPaused ? <Play size={20} /> : <Pause size={20} />}
           </button>
         )}
       </footer>

@@ -96,15 +96,42 @@ export async function getDeliveryFeeCents() {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_DELIVERY_FEE_CENTS;
 }
 
+/** Entrega definida pelo admin no produto — o aluno só vê o resultado no carrinho. */
+export function resolveShippingMethodFromProducts(
+  items: Array<{ kind: ProductKind; shippingMethod?: ShippingMethod | null }>
+): ShippingMethod {
+  if (items.length === 0) return "PICKUP";
+
+  const allDigital = items.every(
+    (item) => item.kind === "DIGITAL" || item.shippingMethod === "DIGITAL"
+  );
+  if (allDigital) return "DIGITAL";
+
+  // Se qualquer item físico exige entrega, o pedido fica como entrega.
+  const needsDelivery = items.some(
+    (item) => item.kind === "PHYSICAL" && item.shippingMethod === "DELIVERY"
+  );
+  return needsDelivery ? "DELIVERY" : "PICKUP";
+}
+
+export function normalizeProductShippingMethod(
+  kind: ProductKind,
+  shippingMethod?: ShippingMethod | null
+): ShippingMethod {
+  if (kind === "DIGITAL") return "DIGITAL";
+  if (shippingMethod === "DELIVERY") return "DELIVERY";
+  return "PICKUP";
+}
+
 export async function resolveShippingQuote(
-  method: ShippingMethod,
-  items: Array<{ kind: ProductKind }>
+  items: Array<{ kind: ProductKind; shippingMethod?: ShippingMethod | null }>
 ) {
-  const allDigital = items.length > 0 && items.every((item) => item.kind === "DIGITAL");
-  if (allDigital || method === "DIGITAL") {
+  const shippingMethod = resolveShippingMethodFromProducts(items);
+
+  if (shippingMethod === "DIGITAL") {
     return { shippingMethod: "DIGITAL" as const, shippingInCents: 0 };
   }
-  if (method === "DELIVERY") {
+  if (shippingMethod === "DELIVERY") {
     return { shippingMethod: "DELIVERY" as const, shippingInCents: await getDeliveryFeeCents() };
   }
   return { shippingMethod: "PICKUP" as const, shippingInCents: 0 };
@@ -180,9 +207,16 @@ export async function buildCartTotals(cart: {
   couponCode: string | null;
   items: Array<{
     quantity: number;
-    product: { priceInCents: number; kind: ProductKind; isActive: boolean; deletedAt: Date | null; stock: number | null };
+    product: {
+      priceInCents: number;
+      kind: ProductKind;
+      shippingMethod?: ShippingMethod | null;
+      isActive: boolean;
+      deletedAt: Date | null;
+      stock: number | null;
+    };
   }>;
-}, shippingMethod: ShippingMethod = "PICKUP") {
+}) {
   const activeItems = cart.items.filter((item) => item.product.isActive && !item.product.deletedAt);
   const subtotalInCents = activeItems.reduce(
     (sum, item) => sum + item.product.priceInCents * item.quantity,
@@ -206,8 +240,10 @@ export async function buildCartTotals(cart: {
   }
 
   const shipping = await resolveShippingQuote(
-    shippingMethod,
-    activeItems.map((item) => ({ kind: item.product.kind }))
+    activeItems.map((item) => ({
+      kind: item.product.kind,
+      shippingMethod: item.product.shippingMethod
+    }))
   );
 
   const amountInCents = Math.max(0, subtotalInCents - discountInCents + shipping.shippingInCents);

@@ -24,6 +24,9 @@ export const uiSounds = {
   screenshot: () => playUiSound("system/screenshot"),
   trash: () => playUiSound("system/trash"),
   blocked: () => playUiSound("ui/blocked"),
+  /** Aviso suave (ex.: limite de estoque). */
+  warning: () => playUiSound("notification/warning"),
+  info: () => playUiSound("notification/info"),
   /** Mudança de página genérica. */
   pageChange: () => playUiSound("ui/button_soft"),
   /** Troca de páginas no portal do aluno. */
@@ -57,6 +60,8 @@ export const ALL_UI_SOUND_PRELOAD: LibrarySoundName[] = [
   "system/screenshot",
   "system/trash",
   "ui/blocked",
+  "notification/warning",
+  "notification/info",
   "ui/button_soft",
   "ui/item_select",
   "ui/item_deselect",

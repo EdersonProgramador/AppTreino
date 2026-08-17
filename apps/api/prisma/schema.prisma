@@ -695,18 +695,20 @@ enum TicketPriority {
 }
 
 model Product {
-  id           String      @id @default(cuid())
-  name         String
-  description  String?
-  priceInCents Int         @default(0) @map("price_in_cents")
-  imageUrl     String?     @map("image_url")
-  category     String?
-  kind         ProductKind @default(PHYSICAL)
-  stock        Int?
-  isActive     Boolean     @default(true) @map("is_active")
-  deletedAt    DateTime?   @map("deleted_at")
-  createdAt    DateTime    @default(now()) @map("created_at")
-  updatedAt    DateTime    @updatedAt @map("updated_at")
+  id             String         @id @default(cuid())
+  name           String
+  description    String?
+  priceInCents   Int            @default(0) @map("price_in_cents")
+  imageUrl       String?        @map("image_url")
+  category       String?
+  kind           ProductKind    @default(PHYSICAL)
+  /// Definido pelo admin: PICKUP/DELIVERY para físico; DIGITAL para digital.
+  shippingMethod ShippingMethod @default(PICKUP) @map("shipping_method")
+  stock          Int?
+  isActive       Boolean        @default(true) @map("is_active")
+  deletedAt      DateTime?      @map("deleted_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
 
   purchases Purchase[]
   cartItems CartItem[]
@@ -996,6 +998,48 @@ model Announcement {
   updatedAt   DateTime           @updatedAt @map("updated_at")
 
   @@map("announcements")
+}
+
+enum MusicPublishStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model MusicAlbum {
+  id          String             @id @default(cuid())
+  title       String
+  description String?
+  coverUrl    String?            @map("cover_url")
+  status      MusicPublishStatus @default(DRAFT)
+  publishedAt DateTime?          @map("published_at")
+  deletedAt   DateTime?          @map("deleted_at")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  tracks      MusicTrack[]
+
+  @@index([status, publishedAt])
+  @@map("music_albums")
+}
+
+model MusicTrack {
+  id          String             @id @default(cuid())
+  albumId     String?            @map("album_id")
+  album       MusicAlbum?        @relation(fields: [albumId], references: [id], onDelete: SetNull)
+  title       String
+  artist      String?
+  audioUrl    String             @map("audio_url")
+  coverUrl    String?            @map("cover_url")
+  durationSec Int?               @map("duration_sec")
+  sortOrder   Int                @default(0) @map("sort_order")
+  status      MusicPublishStatus @default(DRAFT)
+  publishedAt DateTime?          @map("published_at")
+  deletedAt   DateTime?          @map("deleted_at")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  @@index([albumId, sortOrder])
+  @@index([status, publishedAt])
+  @@map("music_tracks")
 }
 
 /// Inbox individual de notificações por aluno (login).

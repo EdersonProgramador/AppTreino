@@ -24,6 +24,7 @@ import { syncUserEnrollmentFromMemberships, validActiveMembershipWhere } from ".
 import {
   assertModuleEnabled,
   decrementProductStock,
+  normalizeProductShippingMethod,
   PURCHASE_PAID_STATUSES,
   resolvePurchaseTimestamps
 } from "./commerce.utils.js";
@@ -55,7 +56,7 @@ const userSchema = z.object({
 
 const updateUserSchema = userSchema.partial().extend({
   email: z.string().email().optional(),
-  password: z.string().min(6).optional()
+  password: z.string().min(6).optional().or(z.literal(""))
 });
 
 const workoutSchema = z.object({
@@ -1162,7 +1163,20 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     );
 
     if (!extension) {
-      throw httpError(400, "Tipo de arquivo não permitido para o CMS Fitness.");
+      request.log.warn(
+        {
+          group,
+          filename: file.filename,
+          mimetype: file.mimetype
+        },
+        "upload rejected by type validation"
+      );
+      throw httpError(
+        400,
+        group === "audio"
+          ? "Formato de áudio não permitido. Use MP3, WAV, OGG, M4A, AAC ou FLAC."
+          : "Tipo de arquivo não permitido para o CMS Fitness."
+      );
     }
 
     let storedFilename = `${baseFilename}.${extension}`;
@@ -4269,6 +4283,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     imageUrl: z.string().optional().or(z.literal("")),
     category: z.string().optional(),
     kind: z.enum(["PHYSICAL", "DIGITAL"]).default("PHYSICAL"),
+    shippingMethod: z.enum(["PICKUP", "DELIVERY", "DIGITAL"]).optional(),
     stock: z.number().int().min(0).nullable().optional(),
     isActive: z.boolean().default(true)
   });
@@ -4320,9 +4335,11 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     await assertModuleEnabled("module_products");
     const body = productSchema.parse(request.body);
+    const shippingMethod = normalizeProductShippingMethod(body.kind, body.shippingMethod ?? null);
     const product = await prisma.product.create({
       data: {
         ...body,
+        shippingMethod,
         imageUrl: body.imageUrl || null,
         stock: body.stock ?? null
       }
@@ -4348,10 +4365,21 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     const { id } = idParamSchema.parse(request.params);
     const body = productSchema.partial().parse(request.body);
     const current = await prisma.product.findUniqueOrThrow({ where: { id } });
+    const nextKind = body.kind ?? current.kind;
+    const shouldNormalizeShipping =
+      body.kind !== undefined || body.shippingMethod !== undefined;
     const product = await prisma.product.update({
       where: { id },
       data: {
         ...body,
+        ...(shouldNormalizeShipping
+          ? {
+              shippingMethod: normalizeProductShippingMethod(
+                nextKind,
+                body.shippingMethod ?? current.shippingMethod
+              )
+            }
+          : {}),
         ...(body.imageUrl !== undefined ? { imageUrl: body.imageUrl || null } : {})
       }
     });

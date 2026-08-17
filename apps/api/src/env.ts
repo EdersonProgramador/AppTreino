@@ -15,7 +15,9 @@ const envCandidates = [
 
 for (const envPath of [...new Set(envCandidates)]) {
   if (existsSync(envPath)) {
-    config({ path: envPath, override: false });
+    // Arquivo .env do projeto deve prevalecer sobre variáveis stale herdadas do shell.
+    config({ path: envPath, override: true });
+    break;
   }
 }
 

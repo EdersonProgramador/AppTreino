@@ -20,11 +20,13 @@ import { registerMediaRoutes } from "./modules/media.routes.js";
 import { registerPublicRoutes } from "./modules/public.routes.js";
 import { registerStudentRoutes } from "./modules/student.routes.js";
 import { registerCommerceRoutes } from "./modules/commerce.routes.js";
+import { registerMusicRoutes } from "./modules/music.routes.js";
 import { registerUserRoutes } from "./modules/user.routes.js";
 
 const app = Fastify({
   logger: true,
-  trustProxy: true
+  trustProxy: true,
+  bodyLimit: 250 * 1024 * 1024
 });
 
 console.log("[Env Check] ASAAS_API_KEY present:", Boolean(env.ASAAS_API_KEY));
@@ -35,6 +37,18 @@ const uploadsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../uploads"
 const allowedOrigins = env.WEB_ORIGIN.split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+
+function isDevLanOrigin(origin: string) {
+  if (env.NODE_ENV === "production") return false;
+  try {
+    const url = new URL(origin);
+    const lan = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(url.hostname);
+    const vitePort = url.port === "5173" || url.port === "5174";
+    return lan && url.protocol === "http:" && vitePort;
+  } catch {
+    return false;
+  }
+}
 
 mkdirSync(uploadsDir, { recursive: true });
 
@@ -70,8 +84,16 @@ app.setErrorHandler((error, _request, reply) => {
   }
 
   const statusCode = "statusCode" in error && typeof error.statusCode === "number" ? error.statusCode : 500;
+  const isCorsOriginError =
+    typeof error.message === "string" && error.message.includes("Origem nao permitida pelo CORS");
 
   app.log.error({ err: error }, "request error");
+
+  if (isCorsOriginError) {
+    return reply.code(403).send({
+      message: "Origem nao permitida pelo CORS. Atualize WEB_ORIGIN e reinicie a API."
+    });
+  }
 
   if (statusCode >= 500) {
     return reply.code(statusCode).send({
@@ -86,7 +108,7 @@ app.setErrorHandler((error, _request, reply) => {
 
 await app.register(cors, {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || allowedOrigins.includes(origin) || isDevLanOrigin(origin)) {
       callback(null, true);
       return;
     }
@@ -128,7 +150,7 @@ await app.register(staticFiles, {
     response.setHeader("X-Content-Type-Options", "nosniff");
     response.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
     response.setHeader("Cache-Control", mediaCacheControl(true));
-    if (/\.(mp4|webm|ogv|mov)$/i.test(filePath)) {
+    if (/\.(mp4|webm|ogv|mov|mp3|m4a|aac|ogg|wav|flac|opus)$/i.test(filePath)) {
       response.setHeader("Accept-Ranges", "bytes");
     }
   }
@@ -167,6 +189,7 @@ await registerCheckoutRoutes(app);
 await registerAdminRoutes(app);
 await registerUserRoutes(app);
 await registerStudentRoutes(app);
+await registerMusicRoutes(app);
 await registerCommerceRoutes(app);
 await registerAsaasRoutes(app);
 

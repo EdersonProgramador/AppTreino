@@ -9,5 +9,6 @@ build/
 coverage/
 .turbo/
 .vite/
+.expo/
 apps/api/uploads/
 .tmp-*

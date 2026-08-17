@@ -14,7 +14,7 @@ const GROUP_TO_EXTENSIONS: Record<UploadGroup, string[]> = {
   lessons: ["mp4", "webm", "ogv", "mov", "jpg", "jpeg", "png", "webp", "gif"],
   materials: ["pdf", "doc", "docx", "xls", "xlsx", "csv", "jpg", "jpeg", "png", "webp", "gif"],
   images: ["jpg", "jpeg", "png", "webp", "gif"],
-  audio: ["mp3", "wav", "ogg"]
+  audio: ["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "webm", "mpeg", "mpga"]
 };
 
 const EXTENSION_TO_MIMETYPE: Record<string, string> = {
@@ -35,7 +35,11 @@ const EXTENSION_TO_MIMETYPE: Record<string, string> = {
   gif: "image/gif",
   mp3: "audio/mpeg",
   wav: "audio/wav",
-  ogg: "audio/ogg"
+  ogg: "audio/ogg",
+  m4a: "audio/mp4",
+  aac: "audio/aac",
+  flac: "audio/flac",
+  opus: "audio/opus"
 };
 
 const FORBIDDEN_EXTENSIONS = new Set([
@@ -69,13 +73,10 @@ const MAGIC_BYTES: Array<{ extension: string; offset: number; bytes: number[]; m
   { extension: "jpg", offset: 0, bytes: [0xff, 0xd8, 0xff] },
   { extension: "jpeg", offset: 0, bytes: [0xff, 0xd8, 0xff] },
   { extension: "gif", offset: 0, bytes: [0x47, 0x49, 0x46, 0x38] },
-  { extension: "webp", offset: 0, bytes: [0x52, 0x49, 0x46, 0x46], mask: undefined },
-  { extension: "mp4", offset: 4, bytes: [0x66, 0x74, 0x79, 0x70] },
   { extension: "webm", offset: 0, bytes: [0x1a, 0x45, 0xdf, 0xa3] },
-  { extension: "mov", offset: 4, bytes: [0x66, 0x74, 0x79, 0x70] },
   { extension: "mp3", offset: 0, bytes: [0x49, 0x44, 0x33] },
-  { extension: "wav", offset: 0, bytes: [0x52, 0x49, 0x46, 0x46] },
   { extension: "ogg", offset: 0, bytes: [0x4f, 0x67, 0x67, 0x53] },
+  { extension: "flac", offset: 0, bytes: [0x66, 0x4c, 0x61, 0x43] },
   { extension: "csv", offset: 0, bytes: [] },
   { extension: "doc", offset: 0, bytes: [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1] },
   { extension: "docx", offset: 0, bytes: [0x50, 0x4b, 0x03, 0x04] },
@@ -83,19 +84,50 @@ const MAGIC_BYTES: Array<{ extension: string; offset: number; bytes: number[]; m
   { extension: "xlsx", offset: 0, bytes: [0x50, 0x4b, 0x03, 0x04] }
 ];
 
+function bytesMatch(buffer: Buffer, offset: number, bytes: number[]) {
+  if (buffer.length < offset + bytes.length) {
+    return false;
+  }
+
+  return bytes.every((byte, index) => buffer[offset + index] === byte);
+}
+
+function asciiAt(buffer: Buffer, offset: number, length: number) {
+  if (buffer.length < offset + length) {
+    return "";
+  }
+
+  return buffer.subarray(offset, offset + length).toString("ascii");
+}
+
 function detectExtensionFromBytes(buffer: Buffer): string | null {
+  if (bytesMatch(buffer, 0, [0x49, 0x44, 0x33])) {
+    return "mp3";
+  }
+
+  if (bytesMatch(buffer, 0, [0x52, 0x49, 0x46, 0x46])) {
+    const riffType = asciiAt(buffer, 8, 4);
+    if (riffType === "WEBP") return "webp";
+    if (riffType === "WAVE") return "wav";
+  }
+
+  if (bytesMatch(buffer, 4, [0x66, 0x74, 0x79, 0x70])) {
+    const brand = asciiAt(buffer, 8, 4);
+    if (brand === "M4A " || brand === "M4B " || brand === "mp4a") return "m4a";
+    if (brand === "qt  ") return "mov";
+    return "mp4";
+  }
+
+  if (buffer.length >= 2 && buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0) {
+    return "mp3";
+  }
+
   for (const signature of MAGIC_BYTES) {
     if (!signature.bytes.length) {
       continue;
     }
 
-    if (buffer.length < signature.offset + signature.bytes.length) {
-      continue;
-    }
-
-    const matches = signature.bytes.every((byte, index) => buffer[signature.offset + index] === byte);
-
-    if (matches) {
+    if (bytesMatch(buffer, signature.offset, signature.bytes)) {
       return signature.extension;
     }
   }
@@ -104,6 +136,95 @@ function detectExtensionFromBytes(buffer: Buffer): string | null {
 }
 
 const SIGNATURE_BUFFER_SIZE = 16;
+
+const AUDIO_MIME_TO_EXTENSION: Record<string, string> = {
+  "audio/mpeg": "mp3",
+  "audio/mp3": "mp3",
+  "audio/mpeg3": "mp3",
+  "audio/x-mpeg": "mp3",
+  "audio/x-mp3": "mp3",
+  "audio/mp4": "m4a",
+  "audio/x-m4a": "m4a",
+  "audio/m4a": "m4a",
+  "audio/aac": "aac",
+  "audio/x-aac": "aac",
+  "audio/wav": "wav",
+  "audio/wave": "wav",
+  "audio/x-wav": "wav",
+  "audio/vnd.wave": "wav",
+  "audio/ogg": "ogg",
+  "audio/vorbis": "ogg",
+  "audio/flac": "flac",
+  "audio/x-flac": "flac",
+  "audio/opus": "opus",
+  "audio/webm": "webm"
+};
+
+function normalizeStoredAudioExtension(extension: string) {
+  if (extension === "mpeg" || extension === "mpga") return "mp3";
+  if (extension === "mp4" || extension === "mov") return "m4a";
+  return extension;
+}
+
+function extensionFromFilename(filename: string | undefined) {
+  const lower = (filename ?? "").trim().toLowerCase();
+  const name = lower.split(/[/\\]/).pop() ?? "";
+  const dot = name.lastIndexOf(".");
+  if (dot < 0) return "";
+  return name.slice(dot + 1).replace(/[^a-z0-9]/g, "");
+}
+
+function extensionFromMime(mimetype: string | undefined) {
+  const mime = (mimetype ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
+  if (AUDIO_MIME_TO_EXTENSION[mime]) {
+    return AUDIO_MIME_TO_EXTENSION[mime];
+  }
+  if (mime.startsWith("audio/")) {
+    const subtype = mime.slice("audio/".length).replace(/^x-/, "");
+    if (subtype === "mpeg") return "mp3";
+    return subtype || "";
+  }
+  return "";
+}
+
+export function resolveUploadExtension(
+  buffer: Buffer,
+  filename: string | undefined,
+  group: UploadGroup,
+  declaredMimetype?: string
+): string | null {
+  const nameExtension = extensionFromFilename(filename);
+  const mimeExtension = extensionFromMime(declaredMimetype);
+  const magicExtension = detectExtensionFromBytes(buffer);
+
+  if (group === "audio") {
+    const candidates = [magicExtension, nameExtension, mimeExtension].filter(Boolean) as string[];
+    for (const candidate of candidates) {
+      const normalized = normalizeStoredAudioExtension(candidate);
+      if (extensionMatchesGroup(normalized, "audio") || extensionMatchesGroup(candidate, "audio")) {
+        return normalizeStoredAudioExtension(
+          extensionMatchesGroup(normalized, "audio") ? normalized : candidate
+        );
+      }
+    }
+
+    if ((declaredMimetype ?? "").toLowerCase().startsWith("audio/")) {
+      return "mp3";
+    }
+
+    return null;
+  }
+
+  if (magicExtension && extensionMatchesGroup(magicExtension, group)) {
+    return magicExtension;
+  }
+
+  if (nameExtension && !FORBIDDEN_EXTENSIONS.has(nameExtension) && extensionMatchesGroup(nameExtension, group)) {
+    return nameExtension;
+  }
+
+  return null;
+}
 
 export async function saveValidatedUpload(
   fileStream: Readable,
@@ -118,6 +239,10 @@ export async function saveValidatedUpload(
   const output = createWriteStream(destinationPath);
 
   try {
+    const writeFailed = new Promise<never>((_, reject) => {
+      output.once("error", reject);
+    });
+
     for await (const chunk of fileStream) {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
 
@@ -128,31 +253,32 @@ export async function saveValidatedUpload(
       }
 
       if (!output.write(buffer)) {
-        await new Promise<void>((resolve, reject) => {
-          output.once("drain", resolve);
-          output.once("error", reject);
-        });
+        await Promise.race([
+          new Promise<void>((resolve) => output.once("drain", resolve)),
+          writeFailed
+        ]);
       }
     }
 
     output.end();
-
-    await new Promise<void>((resolve, reject) => {
-      output.once("finish", resolve);
-      output.once("error", reject);
-    });
+    await Promise.race([
+      new Promise<void>((resolve) => output.once("finish", resolve)),
+      writeFailed
+    ]);
   } catch (error) {
     output.destroy();
     await rm(destinationPath, { force: true });
     throw error;
   }
 
-  const magicExtension = detectExtensionFromBytes(signatureBuffer.subarray(0, signatureBytes));
-  const nameExtension = (filename ?? "").split(".").pop()?.toLowerCase() ?? "";
-  const extension =
-    magicExtension ?? (nameExtension && !FORBIDDEN_EXTENSIONS.has(nameExtension) ? nameExtension : null);
+  const extension = resolveUploadExtension(
+    signatureBuffer.subarray(0, signatureBytes),
+    filename,
+    group,
+    declaredMimetype
+  );
 
-  if (!extension || !extensionMatchesGroup(extension, group)) {
+  if (!extension) {
     await rm(destinationPath, { force: true });
     return null;
   }

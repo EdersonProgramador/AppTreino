@@ -5,12 +5,16 @@
   "description": "Monorepo do App Treino com web, API e pacotes compartilhados.",
   "workspaces": [
     "packages/*",
-    "apps/*"
+    "apps/web",
+    "apps/api"
   ],
   "scripts": {
     "dev": "npm run build --workspace @app-treino/shared && npm run dev --workspace @app-treino/web",
     "dev:web": "npm run build --workspace @app-treino/shared && npm run dev --workspace @app-treino/web",
     "dev:api": "npm run build --workspace @app-treino/shared && npm run dev --workspace @app-treino/api",
+    "dev:mobile": "npm --prefix apps/mobile start",
+    "mobile:android": "npm --prefix apps/mobile run android",
+    "mobile:ios": "npm --prefix apps/mobile run ios",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run build --workspace @app-treino/shared && npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",

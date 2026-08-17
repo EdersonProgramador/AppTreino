@@ -1,12 +1,31 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3333";
+function isPrivateLanHost(hostname: string) {
+  return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(hostname);
+}
+
+/**
+ * Dev (Vite): same-origin so Expo/WebView hits :5174 and the proxy reaches the API.
+ * LAN production-like: same host as the page, port 3333.
+ */
+export function getApiBaseUrl() {
+  if (import.meta.env.DEV) {
+    return "";
+  }
+
+  const configured = String(import.meta.env.VITE_API_URL ?? "").trim().replace(/\/$/, "");
+  if (typeof window !== "undefined" && isPrivateLanHost(window.location.hostname)) {
+    return `${window.location.protocol}//${window.location.hostname}:3333`;
+  }
+
+  return configured || "http://localhost:3333";
+}
+
+function apiUrl(path: string) {
+  return `${getApiBaseUrl()}${path}`;
+}
 
 type UnauthorizedHandler = () => void;
 
 let unauthorizedHandler: UnauthorizedHandler | null = null;
-
-export function getApiBaseUrl() {
-  return API_URL;
-}
 
 export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
   unauthorizedHandler = handler;
@@ -60,7 +79,7 @@ async function parseResponse<T>(response: Response, hadSessionToken: boolean): P
 }
 
 export async function apiGet<T>(path: string, token?: string | null): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(`${apiUrl(path)}`, {
     headers: authHeaders(token)
   });
 
@@ -68,7 +87,7 @@ export async function apiGet<T>(path: string, token?: string | null): Promise<T>
 }
 
 export async function apiPost<T>(path: string, body: unknown, token?: string | null): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(`${apiUrl(path)}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -81,7 +100,7 @@ export async function apiPost<T>(path: string, body: unknown, token?: string | n
 }
 
 export async function apiPut<T>(path: string, body: unknown, token?: string | null): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(`${apiUrl(path)}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -94,7 +113,7 @@ export async function apiPut<T>(path: string, body: unknown, token?: string | nu
 }
 
 export async function apiDelete<T>(path: string, token?: string | null): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(`${apiUrl(path)}`, {
     method: "DELETE",
     headers: authHeaders(token)
   });
@@ -103,7 +122,7 @@ export async function apiDelete<T>(path: string, token?: string | null): Promise
 }
 
 export async function apiUpload<T>(path: string, body: FormData, token?: string | null): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(`${apiUrl(path)}`, {
     method: "POST",
     headers: authHeaders(token),
     body
