@@ -27,6 +27,7 @@ import {
 } from "./session";
 import { paths } from "./paths";
 import { preloadAdminPanel, preloadStudentPanel } from "./RouteGuards";
+import { useMusicPlayerStore } from "../stores/musicPlayerStore";
 
 type AuthContextValue = {
   phase: ReturnType<typeof useAuthStore.getState>["phase"];
@@ -88,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Wire 401 → clear session
   useEffect(() => {
     setUnauthorizedHandler(() => {
+      useMusicPlayerStore.getState().reset();
       useAuthStore.getState().clearSession();
       navigate(paths.home, { replace: true });
     });
@@ -110,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (cancelled) return;
           if (!response.user) {
             store.clearSession();
-            navigate(paths.login, { replace: true });
+            navigate(paths.home, { replace: true });
             return;
           }
           const nextUser = normalizeAuthUser(response.user);
@@ -124,10 +126,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
         .catch((error) => {
           if (cancelled) return;
-          // Only drop session on hard auth failure — never bounce to Home mid-login
+          // Only drop session on hard auth failure — send guest to Home (topbar), not /login
           if (error instanceof ApiError && error.status === 401) {
             store.clearSession();
-            navigate(paths.login, { replace: true });
+            navigate(paths.home, { replace: true });
           }
         });
       return () => {
@@ -143,7 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         if (!response.user) {
           store.clearSession();
-          navigate(paths.login, { replace: true });
+          navigate(paths.home, { replace: true });
           return;
         }
 
@@ -162,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         if (cancelled) return;
         store.clearSession();
-        navigate(paths.login, { replace: true });
+        navigate(paths.home, { replace: true });
       });
 
     return () => {
@@ -199,8 +201,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, token, phase, location.pathname, navigate]);
 
   const logout = useCallback(() => {
+    useMusicPlayerStore.getState().reset();
     useAuthStore.getState().clearSession();
-    // Página de vendas / home pública (evita ficar em /login após sair do aluno).
     navigate(paths.home, { replace: true });
   }, [navigate]);
 

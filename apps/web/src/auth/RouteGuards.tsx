@@ -4,7 +4,7 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { can, canAccessPanel, type UserRole } from "@app-treino/shared";
 import { assetUrl } from "../lib/urls";
 import { useAuth } from "./AuthContext";
-import { canAccessRoleRoute, homePathForRole, isRoleHomePath, mustRedirectForRole } from "./session";
+import { canAccessRoleRoute, homePathForRole, isGuestPath, isRoleHomePath, mustRedirectForRole } from "./session";
 import { paths } from "./paths";
 
 export function TransitionScreen({ message }: { message?: string }) {
@@ -31,6 +31,12 @@ export function BootScreen() {
 export function SessionGate({ children }: { children: ReactNode }) {
   const { phase, user, isTransitioning, transitionMessage } = useAuth();
   const location = useLocation();
+  const onGuestPath = isGuestPath(location.pathname);
+
+  // Mantém o formulário de login montado durante signingIn (loading fica no próprio form).
+  if (phase === "signingIn" && onGuestPath) {
+    return <>{children}</>;
+  }
 
   if (isTransitioning || phase === "restoring") {
     return <TransitionScreen message={transitionMessage} />;
@@ -69,14 +75,8 @@ export function ProtectedRoute({ role }: { role: UserRole }) {
   }
 
   if (!user || !token) {
-    // Aluno sem sessão → página de vendas (home). Evita corrida do logout cair em /login.
-    return (
-      <Navigate
-        to={role === "USER" ? paths.home : paths.login}
-        replace
-        state={{ from: location }}
-      />
-    );
+    // Sem sessão → Home de vendas (topbar). Evita cair em /login após sair/expirar.
+    return <Navigate to={paths.home} replace state={{ from: location }} />;
   }
 
   // Session exists but still settling onto role home
@@ -127,7 +127,7 @@ export function AdminPanel() {
   const { token, user, logout } = useAuth();
 
   if (!token || !user || !canAccessPanel(user.role, "admin") || !can(user.role, "admin_panel:access")) {
-    return <Navigate to={user ? homePathForRole(user.role) : paths.login} replace />;
+    return <Navigate to={user ? homePathForRole(user.role) : paths.home} replace />;
   }
 
   return (
@@ -141,7 +141,7 @@ export function StudentPanel() {
   const { token, user, logout } = useAuth();
 
   if (!token || !user) {
-    return <Navigate to={paths.login} replace />;
+    return <Navigate to={paths.home} replace />;
   }
 
   if (!canAccessPanel(user.role, "student") || !can(user.role, "student_panel:access")) {

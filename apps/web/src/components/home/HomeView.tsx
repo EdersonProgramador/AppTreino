@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -37,6 +37,7 @@ export function HomeView({
 }) {
   const [stickyVisible, setStickyVisible] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const scrollRootRef = useRef<HTMLElement | null>(null);
   const monthly = initialPlans.find((plan) => plan.code === "monthly")!;
   const annual = initialPlans.find((plan) => plan.code === "annual")!;
   const annualAnchorCents = monthly.priceInCents * 12;
@@ -44,10 +45,21 @@ export function HomeView({
   const annualInstallmentCents = Math.round(annual.priceInCents / 12);
 
   useEffect(() => {
-    const onScroll = () => setStickyVisible(window.scrollY > 520);
+    const root = scrollRootRef.current;
+    const readY = () => {
+      if (root && root.scrollHeight > root.clientHeight + 1) {
+        return root.scrollTop;
+      }
+      return window.scrollY || document.documentElement.scrollTop || 0;
+    };
+    const onScroll = () => setStickyVisible(readY() > 520);
     onScroll();
+    root?.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    return () => {
+      root?.removeEventListener("scroll", onScroll);
+      window.removeEventListener("scroll", onScroll);
+    };
   }, []);
 
   useEffect(() => {
@@ -61,7 +73,7 @@ export function HomeView({
   }, []);
 
   return (
-    <main className="home-landing">
+    <main ref={scrollRootRef} className="home-landing">
       {/* 01. Top bar — urgência */}
       <div className="home-topbar border-b border-brand-gold/25 bg-gradient-to-r from-brand-ember/90 via-brand-coral to-brand-amber px-4 py-2.5 text-center text-[12px] font-extrabold leading-snug sm:text-sm">
         Condição especial: garanta seu plano hoje e receba acesso imediato + garantia de 7 dias sem risco.

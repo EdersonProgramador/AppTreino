@@ -1,4 +1,5 @@
 import {
+  ArrowLeft,
   Loader2,
   LogIn,
   Play,
@@ -40,63 +41,64 @@ export const LoginView = ({
   const selectedPlan = initialPlans.find((plan) => plan.code === selectedPlanCode);
 
   useEffect(() => {
-    if (selectedPlanCode) {
-      setMode("register");
-    }
+    if (selectedPlanCode) setMode("register");
   }, [selectedPlanCode]);
 
   useEffect(() => {
-    if (resetToken) {
-      setMode("reset");
-    }
+    if (resetToken) setMode("reset");
   }, [resetToken]);
 
   useEffect(() => {
-    if (success && mode === "reset") {
-      setMode("login");
-    }
+    if (success && mode === "reset") setMode("login");
   }, [success, mode]);
 
   useEffect(() => {
     if (!googleClientId || !googleButtonRef.current || mode === "forgot" || mode === "reset") return;
 
-    const renderGoogleButton = () => {
-      if (!window.google || !googleButtonRef.current || !googleClientId) return;
+    const container = googleButtonRef.current;
+    let cancelled = false;
 
-      googleButtonRef.current.innerHTML = "";
+    const renderGoogleButton = () => {
+      if (cancelled || !window.google || !container || !googleClientId) return;
+
+      const available = Math.floor(container.getBoundingClientRect().width || 0);
+      const width = Math.min(320, Math.max(240, available > 0 ? available : 280));
+
+      container.innerHTML = "";
       window.google.accounts.id.initialize({
         client_id: googleClientId,
         callback: (response) => {
-          if (!response.credential || !formRef.current) {
-            return;
-          }
-
+          if (!response.credential || !formRef.current) return;
           const data = new FormData(formRef.current);
           data.set("idToken", response.credential);
           data.set("credential", response.credential);
           void onSubmit(mode, data, "GOOGLE");
         }
       });
-      window.google.accounts.id.renderButton(googleButtonRef.current, {
+      window.google.accounts.id.renderButton(container, {
         theme: "outline",
         size: "large",
         type: "standard",
         text: mode === "login" ? "signin_with" : "signup_with",
         shape: "rectangular",
-        width: 320
+        width
       });
     };
 
     if (window.google) {
       renderGoogleButton();
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
 
     const existingScript = document.querySelector<HTMLScriptElement>("script[data-google-identity]");
-
     if (existingScript) {
       existingScript.addEventListener("load", renderGoogleButton, { once: true });
-      return () => existingScript.removeEventListener("load", renderGoogleButton);
+      return () => {
+        cancelled = true;
+        existingScript.removeEventListener("load", renderGoogleButton);
+      };
     }
 
     const script = document.createElement("script");
@@ -107,7 +109,10 @@ export const LoginView = ({
     script.addEventListener("load", renderGoogleButton, { once: true });
     document.head.appendChild(script);
 
-    return () => script.removeEventListener("load", renderGoogleButton);
+    return () => {
+      cancelled = true;
+      script.removeEventListener("load", renderGoogleButton);
+    };
   }, [mode, onSubmit]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -132,15 +137,6 @@ export const LoginView = ({
     void onSubmit(mode === "register" ? "register" : "login", new FormData(formRef.current), "GOOGLE");
   }
 
-  function handleForgotPasswordClick() {
-    setMode("forgot");
-  }
-
-  function handleBackToLogin() {
-    onClearResetToken();
-    setMode("login");
-  }
-
   const isSubmitting = loading !== "idle";
   const title =
     mode === "reset"
@@ -148,40 +144,34 @@ export const LoginView = ({
       : mode === "forgot"
         ? "Recuperar acesso"
         : mode === "register"
-          ? "Cadastro personalizado"
-          : "Entrar no App Treino";
+          ? "Criar conta"
+          : "Entrar";
   const description =
     mode === "reset"
-      ? "Escolha uma nova senha para voltar a acessar sua conta."
+      ? "Defina uma nova senha para acessar sua conta."
       : mode === "forgot"
-        ? "Informe o e-mail ou telefone cadastrado para receber o link de redefinição."
+        ? "Informe o e-mail ou telefone cadastrado para receber o link."
         : mode === "register"
-          ? "Em poucos passos coletamos seu objetivo, nível e disponibilidade para liberar os treinos certos."
-          : "Entre com e-mail, telefone ou Google para acessar sua área de aluno com o mesmo fluxo de autenticação.";
+          ? "Conte seu objetivo e disponibilidade para liberar os treinos certos."
+          : "Acesse com e-mail, telefone ou Google.";
 
   return (
-    <main className="flex min-h-[calc(100vh-76px)] items-center justify-center px-5 py-10 sm:px-8 md:px-12">
-      <section className="ui-panel w-full max-w-lg">
-        <div
-          className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-brand-gold/25 bg-brand-gold/10 text-brand-gold"
-          aria-hidden="true"
-        >
-          <Play size={22} />
-        </div>
-        <span className="ui-eyebrow">Área de acesso</span>
-        <h1 className="ui-display mt-3 text-[clamp(1.75rem,4vw,2.5rem)] leading-tight">{title}</h1>
-        <p className="mt-3 text-base leading-relaxed text-sand-muted">{description}</p>
+    <main className="login-page">
+      <section className="ui-panel login-panel">
+        <header className="login-panel-header">
+          <div className="login-panel-icon" aria-hidden="true">
+            <Play size={20} />
+          </div>
+          <span className="ui-eyebrow">Área de acesso</span>
+          <h1 className="ui-display login-panel-title">{title}</h1>
+          <p className="login-panel-copy">{description}</p>
+        </header>
 
         {(mode === "login" || mode === "register") && (
-          <div
-            className="mt-6 grid grid-cols-2 gap-2 rounded-xl border border-[color:var(--app-border)] bg-ink/50 p-1"
-            role="tablist"
-            aria-label="Modo de acesso"
-          >
+          <div className="login-mode-tabs" role="tablist" aria-label="Modo de acesso">
             <button
-              className={`min-h-[42px] rounded-lg text-sm font-extrabold transition ${
-                mode === "login" ? "bg-brand-gold text-[color:var(--on-accent)]" : "text-sand-muted hover:text-sand"
-              }`}
+              type="button"
+              className={`login-mode-tab${mode === "login" ? " is-active" : ""}`}
               onClick={() => setMode("login")}
               role="tab"
               aria-selected={mode === "login"}
@@ -189,9 +179,8 @@ export const LoginView = ({
               Login
             </button>
             <button
-              className={`min-h-[42px] rounded-lg text-sm font-extrabold transition ${
-                mode === "register" ? "bg-brand-gold text-[color:var(--on-accent)]" : "text-sand-muted hover:text-sand"
-              }`}
+              type="button"
+              className={`login-mode-tab${mode === "register" ? " is-active" : ""}`}
               onClick={() => setMode("register")}
               role="tab"
               aria-selected={mode === "register"}
@@ -202,50 +191,55 @@ export const LoginView = ({
         )}
 
         {mode === "register" ? (
-          <WorkoutOnboarding
-            mode="register"
-            submitting={isSubmitting}
-            error={error}
-            selectedPlanName={
-              selectedPlan
-                ? `${selectedPlan.name} - ${formatPriceInBRL(selectedPlan.priceInCents)}`
-                : null
-            }
-            onSubmit={onRegisterOnboarding}
-          />
+          <div className="login-register-wrap">
+            <WorkoutOnboarding
+              mode="register"
+              submitting={isSubmitting}
+              error={error}
+              selectedPlanName={
+                selectedPlan ? `${selectedPlan.name} - ${formatPriceInBRL(selectedPlan.priceInCents)}` : null
+              }
+              onSubmit={onRegisterOnboarding}
+            />
+          </div>
         ) : (
-          <form ref={formRef} className="mt-6 grid gap-4" onSubmit={handleSubmit}>
-            {mode === "login" || mode === "forgot" ? (
-              <label className="ui-label">
-                E-mail ou telefone
+          <form ref={formRef} className="login-form" onSubmit={handleSubmit}>
+            {(mode === "login" || mode === "forgot") && (
+              <label className="ui-label login-field">
+                <span className="login-field-caption">E-mail ou telefone</span>
                 <input
                   className="ui-input"
                   name="identifier"
                   type="text"
+                  inputMode="email"
+                  autoComplete="username"
                   placeholder="Seu e-mail ou telefone"
                   required
                 />
               </label>
-            ) : null}
+            )}
+
             {mode === "reset" && (
               <>
-                <label className="ui-label">
-                  Nova senha
+                <label className="ui-label login-field">
+                  <span className="login-field-caption">Nova senha</span>
                   <input
                     className="ui-input"
                     name="password"
                     type="password"
+                    autoComplete="new-password"
                     minLength={6}
                     placeholder="Mínimo 6 caracteres"
                     required
                   />
                 </label>
-                <label className="ui-label">
-                  Confirmar nova senha
+                <label className="ui-label login-field">
+                  <span className="login-field-caption">Confirmar nova senha</span>
                   <input
                     className="ui-input"
                     name="confirmPassword"
                     type="password"
+                    autoComplete="new-password"
                     minLength={6}
                     placeholder="Repita a nova senha"
                     required
@@ -253,30 +247,27 @@ export const LoginView = ({
                 </label>
               </>
             )}
+
             {mode === "login" && (
-              <label className="ui-label">
-                Senha
+              <label className="ui-label login-field">
+                <span className="login-field-caption">Senha</span>
                 <input
                   className="ui-input"
                   name="password"
                   type="password"
+                  autoComplete="current-password"
                   minLength={6}
                   placeholder="Mínimo 6 caracteres"
                   required
                 />
               </label>
             )}
-            {mode === "login" &&
-              (googleClientId ? (
-                <div className="google-identity-button" ref={googleButtonRef} />
-              ) : (
-                <button className="ui-btn-secondary w-full" type="button" onClick={handleGoogleSubmit} disabled={isSubmitting}>
-                  {loading === "submitting" ? <Loader2 className="animate-spin" size={18} /> : <UserRound size={18} />}
-                  Entrar com Google
-                </button>
-              ))}
+
+            {error ? <div className="ui-error login-feedback">{error}</div> : null}
+            {success ? <div className="ui-success login-feedback">{success}</div> : null}
+
             <button
-              className={`ui-btn-primary login-submit-button w-full${isSubmitting ? " is-loading" : ""}`}
+              className={`ui-btn-primary login-submit-button${isSubmitting ? " is-loading" : ""}`}
               type="submit"
               disabled={isSubmitting}
             >
@@ -289,20 +280,46 @@ export const LoginView = ({
                     : "Entrar"}
               </span>
             </button>
+
             {mode === "login" && (
-              <button className="ui-btn-ghost w-full" type="button" onClick={handleForgotPasswordClick}>
-                Esqueci minha senha
-              </button>
+              <>
+                <div className="login-divider" role="separator" aria-label="ou">
+                  <span>ou</span>
+                </div>
+                {googleClientId ? (
+                  <div className="google-identity-button" ref={googleButtonRef} />
+                ) : (
+                  <button
+                    className="ui-btn-secondary login-google-fallback"
+                    type="button"
+                    onClick={handleGoogleSubmit}
+                    disabled={isSubmitting}
+                  >
+                    {loading === "submitting" ? <Loader2 className="animate-spin" size={18} /> : <UserRound size={18} />}
+                    Entrar com Google
+                  </button>
+                )}
+                <button className="ui-btn-ghost login-forgot" type="button" onClick={() => setMode("forgot")}>
+                  Esqueci minha senha
+                </button>
+              </>
             )}
+
             {(mode === "forgot" || mode === "reset") && (
-              <button className="ui-btn-ghost w-full" type="button" onClick={handleBackToLogin}>
+              <button
+                className="ui-btn-ghost login-forgot"
+                type="button"
+                onClick={() => {
+                  onClearResetToken();
+                  setMode("login");
+                }}
+              >
+                <ArrowLeft size={16} />
                 Voltar para o login
               </button>
             )}
           </form>
         )}
-        {mode !== "register" && error && <div className="ui-error">{error}</div>}
-        {success && <div className="ui-success">{success}</div>}
       </section>
     </main>
   );

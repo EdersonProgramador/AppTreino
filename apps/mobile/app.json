@@ -5,8 +5,58 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "extra": {
-      "apiUrl": "http://localhost:3333"
-    }
+    "scheme": "apptreino",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#08090b"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.edersonprogramador.apptreino",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Permitir a camera para compartilhar o treino.",
+        "NSMicrophoneUsageDescription": "Permitir o microfone ao gravar video do treino.",
+        "NSPhotoLibraryUsageDescription": "Permitir acesso as fotos para compartilhar o treino.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSAllowsLocalNetworking": true
+        }
+      }
+    },
+    "android": {
+      "package": "com.edersonprogramador.apptreino",
+      "usesCleartextTraffic": true,
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#08090b"
+      },
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "READ_MEDIA_IMAGES",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Permitir salvar a imagem do treino na galeria.",
+          "savePhotosPermission": "Permitir salvar a imagem do treino na galeria.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ]
+    ]
   }
 }

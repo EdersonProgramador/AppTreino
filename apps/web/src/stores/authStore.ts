@@ -69,7 +69,20 @@ export const useAuthStore = create<AuthStore>((set) => ({
   clearLoginMessages: () => set({ loginError: null, loginSuccess: null }),
 
   beginRestore: () => set({ phase: "restoring" }),
-  beginSignIn: () => set({ phase: "signingIn", loginError: null, loginSuccess: null }),
+  beginSignIn: () => {
+    // Evita corrida: /me com token antigo pode limpar a sessão no meio do login.
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(TOKEN_KEY);
+    }
+    set({
+      phase: "signingIn",
+      loginError: null,
+      loginSuccess: null,
+      token: null,
+      user: null,
+      pendingDestination: null
+    });
+  },
   beginRedirect: (destination) =>
     set({
       phase: "redirecting",

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
-import { LogIn } from "lucide-react";
+import { ArrowLeft, LogIn } from "lucide-react";
 import { LoginView } from "../components/auth/LoginView";
 import { AppDownloadSoonView } from "../components/home/AppDownloadSoonView";
 import { HomeView } from "../components/home/HomeView";
@@ -55,7 +55,7 @@ export function LoginPage() {
   const {
     user,
     token,
-    isTransitioning,
+    phase,
     transitionMessage,
     loginState,
     loginError,
@@ -89,7 +89,8 @@ export function LoginPage() {
     }
   }, [searchParams, setSelectedPlanCode]);
 
-  if (isTransitioning) {
+  // signingIn: mantém o formulário (spinner no botão). Só bloqueia em restore/redirect.
+  if (phase === "restoring" || phase === "redirecting") {
     return <TransitionScreen message={transitionMessage} />;
   }
 
@@ -98,8 +99,8 @@ export function LoginPage() {
   }
 
   return (
-    <>
-      <GuestChrome />
+    <div className="login-shell">
+      <GuestChrome variant="login" />
       <LoginView
         loading={loginState}
         error={loginError}
@@ -115,34 +116,33 @@ export function LoginPage() {
           navigate(paths.login, { replace: true });
         }}
       />
-    </>
+    </div>
   );
 }
 
-function GuestChrome() {
+function GuestChrome({ variant = "default" }: { variant?: "default" | "login" }) {
   return (
-    <header className="guest-chrome sticky top-0 z-20 grid min-h-[76px] grid-cols-[minmax(150px,1fr)_auto_minmax(150px,1fr)] items-center gap-6 border-b px-5 backdrop-blur-md sm:px-8 md:px-12">
-      <Link className="inline-flex items-center border-0 bg-transparent p-0" to={paths.home} aria-label="Ir para início">
+    <header className="guest-chrome sticky top-0 z-20 flex min-h-[56px] items-center justify-between gap-3 border-b px-4 backdrop-blur-md sm:min-h-[64px] sm:px-8 md:px-12">
+      <Link className="inline-flex min-w-0 shrink items-center border-0 bg-transparent p-0" to={paths.home} aria-label="Ir para início">
         <img
-          className="block h-auto w-[clamp(158px,16vw,218px)] rounded-lg drop-shadow-lg"
+          className="block h-auto w-[clamp(124px,38vw,200px)] max-w-full rounded-lg drop-shadow-lg"
           src={assetUrl("assets/app-treino-logo.svg")}
           alt="App Treino"
         />
       </Link>
-      <nav className="hidden items-center gap-6 md:flex" aria-label="Navegação principal">
-        <Link className="guest-chrome-link text-sm font-bold transition hover:-translate-y-px" to={`${paths.home}#recursos`}>
-          Recursos
+      {variant === "login" ? (
+        <Link className="guest-chrome-link inline-flex items-center gap-2 border-0 bg-transparent text-sm font-bold no-underline" to={paths.home}>
+          <ArrowLeft size={16} />
+          Voltar
         </Link>
-        <Link className="guest-chrome-link text-sm font-bold transition hover:-translate-y-px" to={`${paths.home}#planos`}>
-          Planos
-        </Link>
-      </nav>
-      <div className="flex items-center justify-end gap-3.5">
-        <Link className="guest-chrome-link inline-flex items-center gap-2 border-0 bg-transparent text-sm font-bold transition hover:-translate-y-px" to={paths.login}>
-          <LogIn size={18} />
-          Entrar
-        </Link>
-      </div>
+      ) : (
+        <div className="flex shrink-0 items-center justify-end gap-3.5">
+          <Link className="guest-chrome-link inline-flex items-center gap-2 border-0 bg-transparent text-sm font-bold transition hover:-translate-y-px" to={paths.login}>
+            <LogIn size={18} />
+            Entrar
+          </Link>
+        </div>
+      )}
     </header>
   );
 }
