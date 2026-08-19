@@ -403,8 +403,22 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   toggleQueueOpen: () => set({ queueOpen: !get().queueOpen }),
   seek: (ratio) => {
     const next = Math.min(1, Math.max(0, ratio));
-    set({ seekRatio: next, seekToken: Date.now() });
-    if (isNativeAppShell()) nativeMusicSeek(next);
+    if (isNativeAppShell()) {
+      const total = get().duration;
+      set({
+        seekRatio: next,
+        seekToken: Date.now(),
+        progress: total > 0 ? total * next : get().progress
+      });
+      nativeMusicSeek(next);
+      return;
+    }
+    const time = musicAudio.seekRatio(next, get().duration);
+    const total = musicAudio.getDuration() || get().duration;
+    set({
+      progress: time ?? (total > 0 ? total * next : get().progress),
+      duration: total > 0 ? total : get().duration
+    });
   },
   consumeSeek: () => set({ seekRatio: null }),
   reset: () => {

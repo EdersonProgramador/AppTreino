@@ -221,6 +221,49 @@ class MusicAudioEngine {
     this.boundSrc = "";
   }
 
+  /** Fração já em buffer (0–1) para LinearProgress variant="buffer". */
+  getBufferedRatio() {
+    const audio = this.audio;
+    if (!audio) return 0;
+    const total = audio.duration;
+    if (!Number.isFinite(total) || total <= 0 || !audio.buffered.length) return 0;
+    try {
+      const end = audio.buffered.end(audio.buffered.length - 1);
+      return Math.min(1, Math.max(0, end / total));
+    } catch {
+      return 0;
+    }
+  }
+
+  getDuration() {
+    const total = this.audio?.duration ?? 0;
+    return Number.isFinite(total) && total > 0 ? total : 0;
+  }
+
+  seekRatio(ratio: number, fallbackDuration = 0) {
+    const audio = this.ensureAudio();
+    if (!audio) return null;
+    const total =
+      this.getDuration() ||
+      (Number.isFinite(fallbackDuration) && fallbackDuration > 0 ? fallbackDuration : 0);
+    if (total <= 0) return null;
+    const time = Math.min(total, Math.max(0, total * Math.min(1, Math.max(0, ratio))));
+    try {
+      if (typeof audio.fastSeek === "function") {
+        audio.fastSeek(time);
+      } else {
+        audio.currentTime = time;
+      }
+    } catch {
+      try {
+        audio.currentTime = time;
+      } catch {
+        return null;
+      }
+    }
+    return Number.isFinite(audio.currentTime) ? audio.currentTime : time;
+  }
+
   getDebugState() {
     const audio = this.audio;
     if (!audio) return { boundSrc: this.boundSrc, audio: null };

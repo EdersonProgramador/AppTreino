@@ -46,7 +46,13 @@ export const uiSounds = {
   nav: () => playUiSound("ui/keystroke_soft"),
   open: () => playUiSound("ui/popup_open"),
   close: () => playUiSound("ui/popup_close"),
-  complete: () => playUiSound("ui/success_chime")
+  complete: () => playUiSound("ui/success_chime"),
+  /** Início do arraste na barra de progresso da música. */
+  musicSeekStart: () => playUiSound("ui/keystroke_soft", 0.22),
+  /** Tick suave ao cruzar marcos durante o arraste. */
+  musicSeekTick: () => playUiSound("ui/item_select", 0.16),
+  /** Confirmação ao soltar / buscar posição na faixa. */
+  musicSeekCommit: () => playUiSound("ui/radio_select", 0.28)
 } as const;
 
 export const ALL_UI_SOUND_PRELOAD: LibrarySoundName[] = [

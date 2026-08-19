@@ -4,23 +4,21 @@ import {
   ArrowLeft,
   Check,
   ChevronLeft,
-  ChevronRight,
   Dumbbell,
   Expand,
   FileText,
   Pause,
   Play,
+  ChevronsRight,
   Target,
   Timer,
   Trophy,
-  Wrench,
-  X
+  Wrench
 } from "lucide-react";
 import { mediaUrl as appMediaUrl } from "../../lib/urls";
 import { uiSounds } from "../../lib/ui-sounds";
 import { WorkoutShareFlow } from "./WorkoutShareFlow";
-import { StudentMusicMini } from "./StudentMusicPlayerHost";
-import { isNativeAppShell } from "../../lib/native-bridge";
+import { WorkoutMusicPlayer } from "./workout-music-player/WorkoutMusicPlayer";
 
 export type WorkoutStructureType =
   | "NORMAL"
@@ -700,16 +698,6 @@ export function WorkoutPlayer({
     onBack();
   }
 
-  function handleRunnerCancelButton() {
-    if (isRunning || workoutReadyToComplete) {
-      setCancelOpen(true);
-      uiSounds.popupOpen();
-      return;
-    }
-
-    onBack();
-  }
-
   function openExerciseFromSequence(index: number) {
     if (isRunning) {
       // Em andamento: só o exercício atual (sem skip). Retoma a mesma série.
@@ -725,10 +713,6 @@ export function WorkoutPlayer({
     setRestPauseAccum(0);
     setPanel("run");
     setPhase("idle");
-  }
-
-  function goToSequenceList() {
-    setPanel("sequence");
   }
 
   function returnToRunner() {
@@ -1197,58 +1181,11 @@ export function WorkoutPlayer({
             </button>
           </article>
         )}
-        {!isNativeAppShell() ? <StudentMusicMini compact /> : null}
       </main>
 
       <footer className="workout-runner-controls">
-        {panel === "run" ? (
-          <button
-            className="runner-round-button"
-            aria-label={isRunning ? "Voltar à lista de exercícios" : "Exercício anterior"}
-            onClick={() => {
-              if (isRunning || workoutReadyToComplete) {
-                goToSequenceList();
-                return;
-              }
-              if (currentExerciseIndex > 0) {
-                setCurrentExerciseIndex((index) => index - 1);
-                setCurrentSet(1);
-                setRestRemaining(0);
-                setAdvanceAfterRest(false);
-                setDropCount(0);
-                setRestPauseAccum(0);
-                setPhase("active");
-                return;
-              }
-
-              setCurrentSet(1);
-              setRestRemaining(0);
-              setAdvanceAfterRest(false);
-              setDropCount(0);
-              setRestPauseAccum(0);
-              setPhase("idle");
-              onBack();
-            }}
-            disabled={phase === "rest" && !isRunning}
-          >
-            {isRunning || workoutReadyToComplete ? <ArrowLeft size={20} /> : <ChevronLeft size={20} />}
-          </button>
-        ) : isDetailPanel ? (
-          <button className="runner-round-button" aria-label="Voltar ao exercício" onClick={returnToRunner}>
-            <ArrowLeft size={20} />
-          </button>
-        ) : (
-          <button
-            className="runner-round-button"
-            aria-label="Cancelar treino"
-            onClick={handleRunnerCancelButton}
-          >
-            <X size={20} />
-          </button>
-        )}
-        <button
-          className={`runner-start-button ${phase === "rest" && panel === "run" ? "resting" : ""}`}
-          aria-label={
+        <WorkoutMusicPlayer
+          centerAriaLabel={
             isDetailPanel
               ? "Voltar ao exercício"
               : phase === "rest" && panel === "run"
@@ -1261,7 +1198,86 @@ export function WorkoutPlayer({
                     ? "Treino Realizado"
                     : "Iniciar sequência do treino"
           }
-          onClick={() => {
+          centerContent={
+            isDetailPanel ? (
+              <>
+                <span className="runner-start-face">
+                  <ArrowLeft size={22} />
+                  <span>Voltar</span>
+                </span>
+              </>
+            ) : phase === "rest" && panel === "run" ? (
+              <>
+                <span className="runner-start-ring" aria-hidden="true">
+                  <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+                    <circle className="runner-start-ring-track" cx="50" cy="50" r="46" pathLength="100" />
+                    <circle className="runner-start-ring-progress" cx="50" cy="50" r="46" pathLength="100" />
+                  </svg>
+                </span>
+                <span className="runner-start-face">
+                  <strong key={restRemaining} className="runner-start-time">
+                    {restRemaining}
+                  </strong>
+                  <span>Descanso</span>
+                </span>
+              </>
+            ) : isRunning && panel === "sequence" ? (
+              <>
+                <span className="runner-start-face">
+                  {phase === "rest" ? <Timer size={22} /> : <Play size={22} />}
+                  <span>{phase === "rest" ? `${restRemaining}s` : "Continuar"}</span>
+                </span>
+              </>
+            ) : isDropRound ? (
+              <>
+                <span className="runner-start-face">
+                  <strong>
+                    DROP {dropCount}/{dropSetMax}
+                  </strong>
+                  <span>Concluir</span>
+                </span>
+              </>
+            ) : isRestPause ? (
+              <>
+                <span className="runner-start-face">
+                  <Check size={24} />
+                  <span>
+                    Cluster {completedClusters + 1}/{clusterCount}
+                  </span>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="runner-start-face">
+                  {isRunning && panel === "run" ? <Check size={26} strokeWidth={1.7} /> : <Trophy size={32} strokeWidth={1.55} />}
+                  <span>{isStarting ? "Iniciando" : isRunning && panel === "run" ? "Realizado" : "Iniciar"}</span>
+                </span>
+              </>
+            )
+          }
+          centerDisabled={isStarting || dayCompleted}
+          centerResting={phase === "rest" && panel === "run"}
+          centerStyle={
+            phase === "rest" && panel === "run"
+              ? ({
+                  "--rest-progress": `${restPercent}%`,
+                  "--rest-progress-ratio": String(restPercent / 100)
+                } as CSSProperties)
+              : undefined
+          }
+          nextExerciseAriaLabel={isDetailPanel ? "Voltar ao exercício" : "Próximo exercício"}
+          nextExerciseDisabled={
+            isDetailPanel ? false : panel !== "run" || phase === "rest" || isRunning
+          }
+          nextExerciseIcon={
+            isDetailPanel ? (
+              <Play size={20} strokeWidth={1.8} />
+            ) : (
+              <ChevronsRight size={20} strokeWidth={1.8} />
+            )
+          }
+          nextExerciseLabel={isDetailPanel ? "Voltar" : "Próximo exercício"}
+          onCenterClick={() => {
             if (isDetailPanel) {
               returnToRunner();
               return;
@@ -1287,113 +1303,30 @@ export function WorkoutPlayer({
             }
             void completeSet();
           }}
-          disabled={isStarting || dayCompleted}
-          style={
-            phase === "rest" && panel === "run"
-              ? ({
-                  "--rest-progress": `${restPercent}%`,
-                  "--rest-progress-ratio": String(restPercent / 100)
-                } as CSSProperties)
-              : undefined
-          }
-        >
-          {isDetailPanel ? (
-            <>
-              <span className="runner-start-face">
-                <ArrowLeft size={22} />
-                <span>Voltar</span>
-              </span>
-            </>
-          ) : phase === "rest" && panel === "run" ? (
-            <>
-              <span className="runner-start-ring" aria-hidden="true">
-                <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-                  <circle className="runner-start-ring-track" cx="50" cy="50" r="46" pathLength="100" />
-                  <circle className="runner-start-ring-progress" cx="50" cy="50" r="46" pathLength="100" />
-                </svg>
-              </span>
-              <span className="runner-start-face">
-                <strong key={restRemaining} className="runner-start-time">
-                  {restRemaining}
-                </strong>
-                <span>Descanso</span>
-              </span>
-            </>
-          ) : isRunning && panel === "sequence" ? (
-            <>
-              <span className="runner-start-face">
-                {phase === "rest" ? <Timer size={22} /> : <Play size={22} />}
-                <span>{phase === "rest" ? `${restRemaining}s` : "Continuar"}</span>
-              </span>
-            </>
-          ) : isDropRound ? (
-            <>
-              <span className="runner-start-face">
-                <strong>DROP {dropCount}/{dropSetMax}</strong>
-                <span>Concluir</span>
-              </span>
-            </>
-          ) : isRestPause ? (
-            <>
-              <span className="runner-start-face">
-                <Check size={24} />
-                <span>Cluster {completedClusters + 1}/{clusterCount}</span>
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="runner-start-face">
-                {isRunning && panel === "run" ? <Check size={24} /> : <Trophy size={22} />}
-                <span>{isStarting ? "Iniciando" : isRunning && panel === "run" ? "Realizado" : "Iniciar"}</span>
-              </span>
-            </>
-          )}
-        </button>
-        {panel === "run" ? (
-          <button
-            className="runner-round-button"
-            aria-label="Próximo exercício"
-            onClick={() => {
-              if (isRunning) return;
-              if (currentExerciseIndex < exercises.length - 1) {
-                const nextIndex = currentExerciseIndex + 1;
-                setCurrentExerciseIndex(nextIndex);
-                setCurrentSet(1);
-                setRestRemaining(0);
-                setAdvanceAfterRest(false);
-                setDropCount(0);
-                setRestPauseAccum(0);
-                setPhase("active");
-                if (nextIndex === exercises.length - 1) {
-                  showLastExerciseNotice();
-                }
-                return;
-              }
+          onNextExercise={() => {
+            if (isDetailPanel) {
+              returnToRunner();
+              return;
+            }
 
-              showLastExerciseNotice();
-            }}
-            disabled={phase === "rest" || isRunning}
-          >
-            <ChevronRight size={20} />
-          </button>
-        ) : isDetailPanel ? (
-          <button className="runner-round-button" aria-label="Voltar ao exercício" onClick={returnToRunner}>
-            <Play size={20} />
-          </button>
-        ) : (
-          <button
-            className="runner-round-button"
-            aria-label={isRunning ? (isPaused ? "Retomar cronômetro" : "Pausar cronômetro") : "Cronômetro aguardando início"}
-            onClick={() => {
-              if (isRunning) {
-                setIsPaused((current) => !current);
+            if (panel !== "run" || isRunning || phase === "rest") return;
+            if (currentExerciseIndex < exercises.length - 1) {
+              const nextIndex = currentExerciseIndex + 1;
+              setCurrentExerciseIndex(nextIndex);
+              setCurrentSet(1);
+              setRestRemaining(0);
+              setAdvanceAfterRest(false);
+              setDropCount(0);
+              setRestPauseAccum(0);
+              setPhase("active");
+              if (nextIndex === exercises.length - 1) {
+                showLastExerciseNotice();
               }
-            }}
-            disabled={!isRunning}
-          >
-            {!isRunning || isPaused ? <Play size={20} /> : <Pause size={20} />}
-          </button>
-        )}
+              return;
+            }
+            showLastExerciseNotice();
+          }}
+        />
       </footer>
 
       {cancelOpen && (
