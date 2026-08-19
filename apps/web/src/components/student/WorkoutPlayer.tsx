@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -17,6 +17,17 @@ import {
 } from "lucide-react";
 import { mediaUrl as appMediaUrl } from "../../lib/urls";
 import { uiSounds } from "../../lib/ui-sounds";
+import {
+  clearWorkoutRunner,
+  computeElapsed,
+  computeRestRemaining,
+  readWorkoutRunner,
+  writeWorkoutRunner,
+  type RunnerPanel,
+  type RunnerPhase
+} from "../../lib/workout-runner-persist";
+import { isNativeAppShell } from "../../lib/native-bridge";
+import { flushShellStateToNative } from "../../lib/shell-persist";
 import { WorkoutShareFlow } from "./WorkoutShareFlow";
 import { WorkoutMusicPlayer } from "./workout-music-player/WorkoutMusicPlayer";
 
@@ -103,9 +114,6 @@ interface WorkoutPlayerProps {
   }) => Promise<void> | void;
   onWorkoutComplete?: () => Promise<void> | void;
 }
-
-type RunnerPanel = "sequence" | "run" | "execution" | "muscles" | "expand" | "video" | "load";
-type RunnerPhase = "idle" | "active" | "rest";
 
 const structureTypeLabels: Record<WorkoutStructureType, string> = {
   NORMAL: "Normal",
@@ -307,23 +315,44 @@ export function WorkoutPlayer({
   onExerciseProgressChange,
   onWorkoutComplete
 }: WorkoutPlayerProps) {
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+  const restoredRunner = readWorkoutRunner();
+  const elapsedBaseRef = useRef(restoredRunner?.elapsedBase ?? 0);
+  const runningStartedAtRef = useRef<number | null>(
+    restoredRunner?.isRunning && !restoredRunner.isPaused
+      ? restoredRunner.runningStartedAt ?? Date.now()
+      : null
+  );
+  const restEndsAtRef = useRef<number | null>(
+    restoredRunner?.phase === "rest" && !restoredRunner.isPaused
+      ? restoredRunner.restEndsAt ??
+        (restoredRunner.restRemaining > 0 ? Date.now() + restoredRunner.restRemaining * 1000 : null)
+      : restoredRunner?.restEndsAt ?? null
+  );
+  const [elapsedSeconds, setElapsedSeconds] = useState(() =>
+    restoredRunner ? computeElapsed(restoredRunner) : 0
+  );
+  const [isRunning, setIsRunning] = useState(Boolean(restoredRunner?.isRunning));
+  const [isPaused, setIsPaused] = useState(Boolean(restoredRunner?.isPaused));
   const [isStarting, setIsStarting] = useState(false);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(sessionId ?? null);
-  const [panel, setPanel] = useState<RunnerPanel>("sequence");
-  const [phase, setPhase] = useState<RunnerPhase>("idle");
-  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
-  const [currentSet, setCurrentSet] = useState(1);
-  const [restRemaining, setRestRemaining] = useState(0);
-  const [advanceAfterRest, setAdvanceAfterRest] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(
+    sessionId ?? restoredRunner?.sessionId ?? null
+  );
+  const [panel, setPanel] = useState<RunnerPanel>(restoredRunner?.panel ?? "sequence");
+  const [phase, setPhase] = useState<RunnerPhase>(restoredRunner?.phase ?? "idle");
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(restoredRunner?.currentExerciseIndex ?? 0);
+  const [currentSet, setCurrentSet] = useState(restoredRunner?.currentSet ?? 1);
+  const [restRemaining, setRestRemaining] = useState(restoredRunner?.restRemaining ?? 0);
+  const [advanceAfterRest, setAdvanceAfterRest] = useState(Boolean(restoredRunner?.advanceAfterRest));
   const [cancelOpen, setCancelOpen] = useState(false);
   const [finishOpen, setFinishOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [lastExerciseNoticeOpen, setLastExerciseNoticeOpen] = useState(false);
-  const [workoutReadyToComplete, setWorkoutReadyToComplete] = useState(false);
-  const [completedIds, setCompletedIds] = useState<Set<string>>(() => new Set());
+  const [workoutReadyToComplete, setWorkoutReadyToComplete] = useState(
+    Boolean(restoredRunner?.workoutReadyToComplete)
+  );
+  const [completedIds, setCompletedIds] = useState<Set<string>>(
+    () => new Set(restoredRunner?.completedIds ?? [])
+  );
   const [dayCompleted, setDayCompleted] = useState(false);
   const [loads, setLoads] = useState<Record<string, string>>(() =>
     Object.fromEntries(exercises.map((exercise) => [exerciseInstanceKey(exercise), exercise.latestWeightUsed ? String(exercise.latestWeightUsed) : exercise.initialLoad ?? ""]))
@@ -332,8 +361,8 @@ export function WorkoutPlayer({
     Object.fromEntries(exercises.map((exercise) => [exerciseInstanceKey(exercise), prescribedReps(exercise) ? String(prescribedReps(exercise)) : ""]))
   );
   const [perceivedEffort, setPerceivedEffort] = useState<Record<string, string>>({});
-  const [dropCount, setDropCount] = useState(0);
-  const [restPauseAccum, setRestPauseAccum] = useState(0);
+  const [dropCount, setDropCount] = useState(restoredRunner?.dropCount ?? 0);
+  const [restPauseAccum, setRestPauseAccum] = useState(restoredRunner?.restPauseAccum ?? 0);
 
   const currentExercise = exercises[currentExerciseIndex] ?? exercises[0];
   const currentExerciseKey = currentExercise ? exerciseInstanceKey(currentExercise) : "";
@@ -371,7 +400,7 @@ export function WorkoutPlayer({
   );
 
   useEffect(() => {
-    setActiveSessionId(sessionId ?? null);
+    if (sessionId) setActiveSessionId(sessionId);
   }, [sessionId]);
 
   useEffect(() => {
@@ -410,24 +439,164 @@ export function WorkoutPlayer({
   }, [exercisesSignature]);
 
   useEffect(() => {
+    if (phase !== "rest") restEndsAtRef.current = null;
+  }, [phase]);
+
+  useEffect(() => {
     if (!isRunning || isPaused) return;
 
-    const interval = window.setInterval(() => {
-      setElapsedSeconds((current) => current + 1);
-    }, 1000);
-
+    const tick = () => {
+      setElapsedSeconds(
+        computeElapsed({
+          isRunning: true,
+          isPaused: false,
+          elapsedBase: elapsedBaseRef.current,
+          runningStartedAt: runningStartedAtRef.current
+        })
+      );
+    };
+    tick();
+    const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
   }, [isPaused, isRunning]);
 
   useEffect(() => {
-    if (phase !== "rest" || isPaused || restRemaining <= 0) return;
+    if (isRunning && !isPaused && !runningStartedAtRef.current) {
+      runningStartedAtRef.current = Date.now();
+    }
+    if (isPaused || !isRunning) {
+      elapsedBaseRef.current = elapsedSeconds;
+      runningStartedAtRef.current = null;
+    }
+  }, [isPaused, isRunning, elapsedSeconds]);
 
-    const interval = window.setInterval(() => {
-      setRestRemaining((current) => Math.max(0, current - 1));
-    }, 1000);
+  useEffect(() => {
+    if (!isRunning) {
+      if (!workoutReadyToComplete) clearWorkoutRunner();
+      return;
+    }
+    writeWorkoutRunner({
+      sessionId: activeSessionId,
+      isRunning,
+      isPaused,
+      panel,
+      phase,
+      currentExerciseIndex,
+      currentSet,
+      restRemaining,
+      restEndsAt: restEndsAtRef.current,
+      elapsedBase: elapsedBaseRef.current,
+      runningStartedAt: runningStartedAtRef.current,
+      completedIds: [...completedIds],
+      dropCount,
+      restPauseAccum,
+      workoutReadyToComplete,
+      advanceAfterRest
+    });
+    flushShellStateToNative();
+  }, [
+    activeSessionId,
+    advanceAfterRest,
+    completedIds,
+    currentExerciseIndex,
+    currentSet,
+    dropCount,
+    isPaused,
+    isRunning,
+    panel,
+    phase,
+    restPauseAccum,
+    restRemaining,
+    workoutReadyToComplete
+  ]);
 
+  useEffect(() => {
+    if (isPaused && phase === "rest" && restEndsAtRef.current) {
+      const left = computeRestRemaining(restEndsAtRef.current, restRemaining);
+      restEndsAtRef.current = null;
+      setRestRemaining(left);
+      return;
+    }
+    if (!isPaused && phase === "rest" && restRemaining > 0 && !restEndsAtRef.current) {
+      restEndsAtRef.current = Date.now() + restRemaining * 1000;
+    }
+  }, [isPaused, phase]);
+
+  useEffect(() => {
+    if (!isNativeAppShell()) return;
+    const syncClocks = () => {
+      if (isRunning && !isPaused) {
+        setElapsedSeconds(
+          computeElapsed({
+            isRunning: true,
+            isPaused: false,
+            elapsedBase: elapsedBaseRef.current,
+            runningStartedAt: runningStartedAtRef.current
+          })
+        );
+      }
+      if (phase === "rest" && !isPaused && restEndsAtRef.current) {
+        setRestRemaining(computeRestRemaining(restEndsAtRef.current, 0));
+      }
+      writeWorkoutRunner({
+        sessionId: activeSessionId,
+        isRunning,
+        isPaused,
+        panel,
+        phase,
+        currentExerciseIndex,
+        currentSet,
+        restRemaining: restEndsAtRef.current
+          ? computeRestRemaining(restEndsAtRef.current, restRemaining)
+          : restRemaining,
+        restEndsAt: restEndsAtRef.current,
+        elapsedBase: elapsedBaseRef.current,
+        runningStartedAt: runningStartedAtRef.current,
+        completedIds: [...completedIds],
+        dropCount,
+        restPauseAccum,
+        workoutReadyToComplete,
+        advanceAfterRest
+      });
+      flushShellStateToNative();
+    };
+    const onVisibility = () => {
+      // Minimizar NÃO congela o cronômetro — o relógio de parede continua.
+      syncClocks();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", onVisibility);
+    };
+  }, [
+    activeSessionId,
+    advanceAfterRest,
+    completedIds,
+    currentExerciseIndex,
+    currentSet,
+    dropCount,
+    isPaused,
+    isRunning,
+    panel,
+    phase,
+    restPauseAccum,
+    restRemaining,
+    workoutReadyToComplete
+  ]);
+
+  useEffect(() => {
+    if (phase !== "rest" || isPaused) return;
+
+    const tick = () => {
+      if (!restEndsAtRef.current) return;
+      setRestRemaining(computeRestRemaining(restEndsAtRef.current, 0));
+    };
+    tick();
+    const interval = window.setInterval(tick, 250);
     return () => window.clearInterval(interval);
-  }, [isPaused, phase, restRemaining]);
+  }, [isPaused, phase]);
 
   useEffect(() => {
     if (phase !== "rest" || restRemaining !== 0 || !currentExercise) return;
@@ -523,6 +692,8 @@ export function WorkoutPlayer({
       const session = await onWorkoutStart?.();
       const nextSessionId = session?.id ?? null;
       setActiveSessionId(nextSessionId);
+      elapsedBaseRef.current = 0;
+      runningStartedAtRef.current = Date.now();
       setElapsedSeconds(0);
       setIsRunning(true);
       setIsPaused(false);
@@ -630,6 +801,7 @@ export function WorkoutPlayer({
       const mateExercise = exercises[pairMateIndex];
       const pairSets = Math.max(baseExercise?.sets ?? 0, mateExercise?.sets ?? 0);
       setAdvanceAfterRest(currentSet >= pairSets);
+      restEndsAtRef.current = Date.now() + currentRestSeconds * 1000;
       setPhase("rest");
       setRestRemaining(currentRestSeconds);
       return;
@@ -640,12 +812,14 @@ export function WorkoutPlayer({
       setRestPauseAccum(nextAccum);
       const setComplete = nextAccum >= restPauseTargetReps(currentExercise);
       setAdvanceAfterRest(setComplete && currentSet >= exerciseSets);
+      restEndsAtRef.current = Date.now() + currentRestSeconds * 1000;
       setPhase("rest");
       setRestRemaining(currentRestSeconds);
       return;
     }
 
     setAdvanceAfterRest(currentSet >= exerciseSets);
+    restEndsAtRef.current = Date.now() + currentRestSeconds * 1000;
     setPhase("rest");
     setRestRemaining(currentRestSeconds);
   }
@@ -653,6 +827,7 @@ export function WorkoutPlayer({
   function finishRestNow() {
     if (phase !== "rest") return;
 
+    restEndsAtRef.current = null;
     setRestRemaining(0);
   }
 
@@ -670,6 +845,7 @@ export function WorkoutPlayer({
   }
 
   async function confirmCancel() {
+    clearWorkoutRunner();
     await onCancelSession?.();
     onSessionActiveChange?.(false);
     setCancelOpen(false);
@@ -727,6 +903,7 @@ export function WorkoutPlayer({
     try {
       await onWorkoutComplete?.();
       uiSounds.workoutComplete();
+      clearWorkoutRunner();
       setIsRunning(false);
       setIsPaused(false);
       setElapsedSeconds(0);

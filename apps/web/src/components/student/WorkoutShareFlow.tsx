@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type Ref } from "react";
 import html2canvas from "html2canvas";
 import {
   Camera,
@@ -9,7 +9,6 @@ import {
   UserRound,
   X
 } from "lucide-react";
-import { FacebookIcon, TelegramIcon, TwitterIcon, WhatsappIcon } from "react-share";
 import { blobToBase64, isNativeAppShell, postNativeMessage } from "../../lib/native-bridge";
 import { uiSounds } from "../../lib/ui-sounds";
 
@@ -32,6 +31,56 @@ function sharePageUrl() {
 
 function stopMediaStream(stream: MediaStream | null) {
   stream?.getTracks().forEach((track) => track.stop());
+}
+
+function SharePreviewCard({
+  programTitle,
+  blockTitle,
+  exerciseCount,
+  durationLabel,
+  photoUrl,
+  cardRef
+}: {
+  programTitle: string;
+  blockTitle: string;
+  exerciseCount: number;
+  durationLabel: string;
+  photoUrl: string | null;
+  cardRef: Ref<HTMLDivElement>;
+}) {
+  return (
+    <div className="runner-share-card" data-testid="workout-share-card" ref={cardRef}>
+      <span className="runner-share-card-badge">App Treino</span>
+      <h3>O TREINO DE HOJE ESTÁ PAGO!</h3>
+      {photoUrl ? (
+        <div className="runner-share-card-photo">
+          <img src={photoUrl} alt="Sua foto do treino" />
+        </div>
+      ) : (
+        <div className="runner-share-card-mark" aria-hidden="true">
+          <Trophy size={42} />
+        </div>
+      )}
+      <dl className="runner-share-card-stats">
+        <div>
+          <dt>Programa</dt>
+          <dd>{programTitle}</dd>
+        </div>
+        <div>
+          <dt>Treino</dt>
+          <dd>{blockTitle}</dd>
+        </div>
+        <div>
+          <dt>Exercícios</dt>
+          <dd>{exerciseCount}</dd>
+        </div>
+        <div>
+          <dt>Tempo</dt>
+          <dd>{durationLabel}</dd>
+        </div>
+      </dl>
+    </div>
+  );
 }
 
 export function WorkoutShareFlow({
@@ -59,6 +108,7 @@ export function WorkoutShareFlow({
   const shareUrl = sharePageUrl();
   const shareTitle = "O TREINO DE HOJE ESTÁ PAGO!";
   const shareText = `${shareTitle} Concluí ${blockTitle} (${programTitle}) em ${durationLabel} no App Treino.`;
+  const showCardInline = step === "ready";
 
   function releaseCamera() {
     stopMediaStream(streamRef.current);
@@ -234,13 +284,28 @@ export function WorkoutShareFlow({
     document.body.appendChild(link);
     link.click();
     link.remove();
-    // WebKit precisa do blob vivo um pouco após o click.
     window.setTimeout(() => URL.revokeObjectURL(url), 1500);
   }
 
+  async function persistCardImage(blob: Blob) {
+    if (isNativeAppShell()) {
+      const base64 = await blobToBase64(blob);
+      const sent = postNativeMessage({
+        type: "DOWNLOAD_IMAGE",
+        base64,
+        filename: "treino-pago.png"
+      });
+      if (!sent) {
+        throw new Error("native-download-failed");
+      }
+      return;
+    }
+    await downloadViaAnchor(blob);
+  }
+
   async function downloadCardImage() {
-    // Apenas download — não finaliza o treino.
-    if (downloading || busy || sharing || (model === "photo" && !photoUrl)) return;
+    if (downloading || busy || sharing || !model || step !== "ready") return;
+    if (model === "photo" && !photoUrl) return;
     setDownloading(true);
     uiSounds.submit();
     try {
@@ -249,21 +314,7 @@ export function WorkoutShareFlow({
         uiSounds.error();
         return;
       }
-
-      if (isNativeAppShell()) {
-        const base64 = await blobToBase64(blob);
-        const sent = postNativeMessage({
-          type: "DOWNLOAD_IMAGE",
-          base64,
-          filename: "treino-pago.png"
-        });
-        if (!sent) {
-          uiSounds.error();
-        }
-        return;
-      }
-
-      await downloadViaAnchor(blob);
+      await persistCardImage(blob);
     } catch {
       uiSounds.error();
     } finally {
@@ -272,8 +323,8 @@ export function WorkoutShareFlow({
   }
 
   async function shareNative() {
-    // Abre o share sheet; NÃO finaliza o treino (só o Fechar finaliza).
-    if (sharing || busy || downloading) return;
+    if (sharing || busy || downloading || !model || step !== "ready") return;
+    if (model === "photo" && !photoUrl) return;
     setSharing(true);
     uiSounds.submit();
     try {
@@ -287,12 +338,15 @@ export function WorkoutShareFlow({
         const base64 = await blobToBase64(blob);
         const sent = postNativeMessage({
           type: "SHARE_IMAGE",
+          save: false,
           base64,
           filename: "treino-pago.png",
           title: shareTitle,
           text: shareText
         });
-        if (!sent) uiSounds.error();
+        if (!sent) {
+          uiSounds.error();
+        }
         return;
       }
 
@@ -323,6 +377,17 @@ export function WorkoutShareFlow({
     }
   }
 
+  const previewCard = (
+    <SharePreviewCard
+      blockTitle={blockTitle}
+      cardRef={cardRef}
+      durationLabel={durationLabel}
+      exerciseCount={exerciseCount}
+      photoUrl={model === "photo" ? photoUrl : null}
+      programTitle={programTitle}
+    />
+  );
+
   return (
     <div className="runner-confirm-backdrop runner-share-backdrop" role="presentation">
       <section
@@ -332,16 +397,17 @@ export function WorkoutShareFlow({
         aria-labelledby="runner-share-title"
         onClick={(event) => event.stopPropagation()}
       >
+        <div
+          aria-hidden={!showCardInline}
+          className={showCardInline ? undefined : "runner-share-card-capture"}
+        >
+          {previewCard}
+        </div>
+
         {step === "choose" ? (
           <>
-            <div className="runner-share-social-row" aria-hidden="true">
-              <WhatsappIcon size={28} round />
-              <FacebookIcon size={28} round />
-              <TwitterIcon size={28} round />
-              <TelegramIcon size={28} round />
-            </div>
             <h2 id="runner-share-title">É HORA DE COMPARTILHAR!</h2>
-            <p>Selecione o tipo de imagem que você deseja compartilhar com seus amigos!</p>
+            <p>Escolha um modelo para baixar ou compartilhar com seus amigos.</p>
 
             <div className="runner-share-model-grid">
               <button type="button" className="runner-share-model-card" onClick={() => selectModel("simple")} disabled={busy}>
@@ -361,6 +427,7 @@ export function WorkoutShareFlow({
             <button
               type="button"
               className="runner-share-cancel"
+              data-testid="workout-share-close"
               disabled={busy}
               onClick={() => {
                 uiSounds.popupClose();
@@ -447,44 +514,13 @@ export function WorkoutShareFlow({
 
         {step === "ready" ? (
           <>
-            <div className="runner-share-card" ref={cardRef}>
-              <span className="runner-share-card-badge">App Treino</span>
-              <h3>O TREINO DE HOJE ESTÁ PAGO!</h3>
-              {model === "photo" && photoUrl ? (
-                <div className="runner-share-card-photo">
-                  <img src={photoUrl} alt="Sua foto do treino" />
-                </div>
-              ) : (
-                <div className="runner-share-card-mark" aria-hidden="true">
-                  <Trophy size={42} />
-                </div>
-              )}
-              <dl className="runner-share-card-stats">
-                <div>
-                  <dt>Programa</dt>
-                  <dd>{programTitle}</dd>
-                </div>
-                <div>
-                  <dt>Treino</dt>
-                  <dd>{blockTitle}</dd>
-                </div>
-                <div>
-                  <dt>Exercícios</dt>
-                  <dd>{exerciseCount}</dd>
-                </div>
-                <div>
-                  <dt>Tempo</dt>
-                  <dd>{durationLabel}</dd>
-                </div>
-              </dl>
-            </div>
-
             <h2 id="runner-share-title">TUDO CERTO!</h2>
-            <p>Baixe ou compartilhe a imagem. Para concluir o treino e avançar, toque em Fechar.</p>
+            <p>Compartilhe ou baixe a imagem. O treino só é concluído quando você tocar em Fechar.</p>
 
             <button
               type="button"
               className="runner-share-secondary"
+              data-testid="workout-share-download"
               disabled={busy || downloading || sharing || (model === "photo" && !photoUrl)}
               onClick={() => void downloadCardImage()}
             >
@@ -494,6 +530,7 @@ export function WorkoutShareFlow({
             <button
               type="button"
               className="runner-share-primary"
+              data-testid="workout-share-share"
               disabled={busy || sharing || downloading || (model === "photo" && !photoUrl)}
               onClick={() => void shareNative()}
             >
@@ -503,6 +540,7 @@ export function WorkoutShareFlow({
             <button
               type="button"
               className="runner-share-cancel"
+              data-testid="workout-share-close"
               disabled={busy || sharing || downloading}
               onClick={() => {
                 uiSounds.popupClose();

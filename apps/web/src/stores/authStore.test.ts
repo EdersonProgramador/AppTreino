@@ -105,6 +105,7 @@ describe("authStore login phase machine", () => {
     });
     useAuthStore.getState().clearSession();
     assert.equal(memory.get("app-treino-token"), undefined);
+    assert.equal(memory.get("app-treino-user"), undefined);
     assert.equal(useAuthStore.getState().phase, "anonymous");
   });
 });

@@ -28,6 +28,7 @@ const VOLUME_KEY = "apptreino.music.volume";
 const REPEAT_KEY = "apptreino.music.repeat";
 const SHUFFLE_KEY = "apptreino.music.shuffle";
 const LIKED_KEY = "apptreino.music.liked";
+const QUEUE_KEY = "apptreino.music.session";
 
 function readNumber(key: string, fallback: number) {
   if (typeof localStorage === "undefined") return fallback;
@@ -63,6 +64,74 @@ function persist(key: string, value: string) {
   if (typeof localStorage === "undefined") return;
   localStorage.setItem(key, value);
 }
+
+function isTrack(value: unknown): value is MusicPlayTrack {
+  if (!value || typeof value !== "object") return false;
+  const track = value as MusicPlayTrack;
+  return typeof track.id === "string" && typeof track.audioUrl === "string" && typeof track.title === "string";
+}
+
+type StoredSession = {
+  sourceQueue: MusicPlayTrack[];
+  queue: MusicPlayTrack[];
+  index: number;
+  playing: boolean;
+  progress: number;
+  duration: number;
+};
+
+function readStoredSession(): StoredSession | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const parsed = JSON.parse(localStorage.getItem(QUEUE_KEY) ?? "null") as Partial<StoredSession> | null;
+    if (!parsed || !Array.isArray(parsed.queue) || !parsed.queue.every(isTrack)) return null;
+    const queue = parsed.queue;
+    const sourceQueue = Array.isArray(parsed.sourceQueue) && parsed.sourceQueue.every(isTrack) ? parsed.sourceQueue : queue;
+    const index = Math.min(Math.max(0, Number(parsed.index) || 0), Math.max(0, queue.length - 1));
+    return {
+      sourceQueue,
+      queue,
+      index,
+      playing: Boolean(parsed.playing),
+      progress: Number.isFinite(Number(parsed.progress)) ? Number(parsed.progress) : 0,
+      duration: Number.isFinite(Number(parsed.duration)) ? Number(parsed.duration) : 0
+    };
+  } catch {
+    return null;
+  }
+}
+
+function persistSession(state: {
+  sourceQueue: MusicPlayTrack[];
+  queue: MusicPlayTrack[];
+  index: number;
+  playing: boolean;
+  progress: number;
+  duration: number;
+}) {
+  if (typeof localStorage === "undefined") return;
+  try {
+    if (!state.queue.length) {
+      localStorage.removeItem(QUEUE_KEY);
+      return;
+    }
+    localStorage.setItem(
+      QUEUE_KEY,
+      JSON.stringify({
+        sourceQueue: state.sourceQueue,
+        queue: state.queue,
+        index: state.index,
+        playing: state.playing,
+        progress: state.progress,
+        duration: state.duration
+      } satisfies StoredSession)
+    );
+  } catch {
+    // ignore
+  }
+}
+
+const restoredSession = readStoredSession();
 
 function shuffleArray<T>(items: T[]) {
   const next = [...items];
@@ -126,15 +195,22 @@ type MusicPlayerState = {
   seek: (ratio: number) => void;
   consumeSeek: () => void;
   reset: () => void;
+  hydrateFromNative: (
+    tracks: MusicPlayTrack[],
+    index: number,
+    playing: boolean,
+    progress: number,
+    duration: number
+  ) => void;
 };
 
 export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
-  sourceQueue: [],
-  queue: [],
-  index: 0,
-  playing: false,
-  progress: 0,
-  duration: 0,
+  sourceQueue: restoredSession?.sourceQueue ?? [],
+  queue: restoredSession?.queue ?? [],
+  index: restoredSession?.index ?? 0,
+  playing: restoredSession?.playing ?? false,
+  progress: restoredSession?.progress ?? 0,
+  duration: restoredSession?.duration ?? 0,
   volume: readStoredVolume(),
   muted: false,
   shuffle: readShuffle(),
@@ -162,6 +238,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       expanded: options?.expand ?? false,
       queueOpen: false
     });
+    persistSession(get());
   },
   armQueue: (tracks, startIndex = 0, options) => {
     get().startQueue(tracks, startIndex, options);
@@ -278,22 +355,22 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     }
   },
   prev: () => {
-    const { queue, index, progress, repeat } = get();
+    const { queue, index, progress, repeat, playing } = get();
     if (!queue.length) return;
     if (isNativeAppShell()) {
       musicAudio.stop();
       nativeMusicPrev();
       if (progress > 3) {
-        set({ progress: 0, playing: true });
+        set({ progress: 0, playing });
         return;
       }
       if (index > 0) {
-        set({ index: index - 1, progress: 0, playing: true, duration: queue[index - 1]?.durationSec ?? 0 });
+        set({ index: index - 1, progress: 0, playing, duration: queue[index - 1]?.durationSec ?? 0 });
       } else if (repeat === "all") {
         const last = queue.length - 1;
-        set({ index: last, progress: 0, playing: true, duration: queue[last]?.durationSec ?? 0 });
+        set({ index: last, progress: 0, playing, duration: queue[last]?.durationSec ?? 0 });
       } else {
-        set({ progress: 0, playing: true });
+        set({ progress: 0, playing });
       }
       return;
     }
@@ -379,7 +456,10 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     const built = buildQueue(sourceQueue, startIndex, nextShuffle);
     set({ shuffle: nextShuffle, queue: built.queue, index: built.index });
     if (isNativeAppShell()) {
-      nativeOpenMusicQueue(built.queue, built.index);
+      nativeOpenMusicQueue(built.queue, built.index, {
+        autoplay: get().playing,
+        resumeSec: get().progress
+      });
     }
   },
   cycleRepeat: () => {
@@ -421,9 +501,30 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     });
   },
   consumeSeek: () => set({ seekRatio: null }),
+  hydrateFromNative: (tracks, index, playing, progress, duration) => {
+    if (!tracks.length) return;
+    const safeIndex = Math.min(Math.max(0, index), tracks.length - 1);
+    set({
+      sourceQueue: tracks,
+      queue: tracks,
+      index: safeIndex,
+      playing,
+      progress,
+      duration: duration > 0 ? duration : tracks[safeIndex]?.durationSec ?? 0
+    });
+    persistSession(get());
+  },
   reset: () => {
     if (isNativeAppShell()) nativeMusicStop();
     musicAudio.stop();
+    persistSession({
+      sourceQueue: [],
+      queue: [],
+      index: 0,
+      playing: false,
+      progress: 0,
+      duration: 0
+    });
     set({
       sourceQueue: [],
       queue: [],
@@ -437,3 +538,13 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     });
   }
 }));
+
+if (typeof window !== "undefined") {
+  let lastPersist = 0;
+  useMusicPlayerStore.subscribe((state) => {
+    const now = Date.now();
+    if (now - lastPersist < 1200) return;
+    lastPersist = now;
+    persistSession(state);
+  });
+}

@@ -2,9 +2,12 @@ import { create } from "zustand";
 import type { AuthUser } from "@app-treino/shared";
 import {
   TOKEN_KEY,
+  USER_KEY,
   homePathForRole,
   normalizeAuthUser,
-  readStoredToken
+  persistStoredUser,
+  readStoredToken,
+  readStoredUser
 } from "../auth/session";
 import type { AuthMode, PlanCode } from "../types/auth";
 
@@ -49,12 +52,13 @@ type AuthStore = {
   clearSession: () => void;
 };
 
-const hasTokenOnBoot = Boolean(readStoredToken());
+const bootToken = readStoredToken();
+const bootUser = bootToken ? readStoredUser() : null;
 
 export const useAuthStore = create<AuthStore>((set) => ({
-  phase: hasTokenOnBoot ? "restoring" : "anonymous",
-  user: null,
-  token: readStoredToken(),
+  phase: bootToken && bootUser ? "authenticated" : bootToken ? "restoring" : "anonymous",
+  user: bootUser,
+  token: bootToken,
   loginError: null,
   loginSuccess: null,
   resetToken: null,
@@ -73,7 +77,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
     // Evita corrida: /me com token antigo pode limpar a sessão no meio do login.
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(TOKEN_KEY);
+      window.localStorage.removeItem(USER_KEY);
     }
+    persistStoredUser(null);
     set({
       phase: "signingIn",
       loginError: null,
@@ -93,19 +99,25 @@ export const useAuthStore = create<AuthStore>((set) => ({
       phase: "authenticated",
       pendingDestination: null
     }),
-  failSignIn: (message) =>
+  failSignIn: (message) => {
+    persistStoredUser(null);
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(TOKEN_KEY);
+    }
     set({
       token: null,
       user: null,
       phase: "anonymous",
       loginError: message,
       pendingDestination: null
-    }),
+    });
+  },
 
   establishSession: (response) => {
     const user = normalizeAuthUser(response.user);
     const destination = homePathForRole(user.role);
     window.localStorage.setItem(TOKEN_KEY, response.token);
+    persistStoredUser(user);
     set({
       token: response.token,
       user,
@@ -120,6 +132,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   switchSession: (response, destination) => {
     const user = normalizeAuthUser(response.user);
     window.localStorage.setItem(TOKEN_KEY, response.token);
+    persistStoredUser(user);
     set({
       token: response.token,
       user,
@@ -131,6 +144,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   clearSession: () => {
     window.localStorage.removeItem(TOKEN_KEY);
+    persistStoredUser(null);
     set({
       token: null,
       user: null,

@@ -70,7 +70,7 @@ export function WorkoutMusicPlayer({
 
   return (
     <>
-      <div className={`workout-music-bar${playing ? " is-playing" : ""}${hasTrack ? " has-track" : ""}`}>
+      <div className={`workout-music-bar${playing ? " is-playing" : ""}${hasTrack ? " has-track" : ""}`} data-testid="workout-music-bar">
         <div className="workout-music-ambient workout-music-ambient--left" aria-hidden="true" />
         <div className="workout-music-ambient workout-music-ambient--center" aria-hidden="true" />
 

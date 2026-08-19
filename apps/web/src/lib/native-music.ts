@@ -20,15 +20,38 @@ export function toNativeMusicTracks(tracks: MusicPlayTrack[]): NativeMusicTrackP
   }));
 }
 
-/** Abre/atualiza a fila no expo-av (mobile). UI continua no web (dock). */
-export function nativeOpenMusicQueue(tracks: MusicPlayTrack[], startIndex: number) {
+export function fromNativeMusicTracks(tracks: NativeMusicTrackPayload[]): MusicPlayTrack[] {
+  return tracks
+    .filter((track) => track?.id && track.url)
+    .map((track) => ({
+      id: track.id,
+      title: track.title,
+      artist: track.artist || "App Treino",
+      audioUrl: track.url,
+      coverUrl: track.artwork ?? null,
+      durationSec: null
+    }));
+}
+
+/** Abre/atualiza a fila no player nativo (mobile). UI continua no web (dock). */
+export function nativeOpenMusicQueue(
+  tracks: MusicPlayTrack[],
+  startIndex: number,
+  options?: { autoplay?: boolean; resumeSec?: number }
+) {
   if (!isNativeAppShell() || !tracks.length) return false;
   const safeIndex = Math.min(Math.max(0, startIndex), tracks.length - 1);
   return postNativeMessage({
     type: "OPEN_MUSIC_PLAYER",
     startIndex: safeIndex,
-    tracks: toNativeMusicTracks(tracks)
+    tracks: toNativeMusicTracks(tracks),
+    autoplay: options?.autoplay,
+    resumeSec: options?.resumeSec
   });
+}
+
+export function nativeRequestMusicSync() {
+  return isNativeAppShell() && postNativeMessage({ type: "MUSIC_SYNC" });
 }
 
 export function nativeMusicPlay() {
@@ -65,6 +88,7 @@ export type NativeMusicSyncPayload = {
   duration?: number;
   index?: number;
   ended?: boolean;
+  tracks?: NativeMusicTrackPayload[];
 };
 
 type SyncHandler = (payload: NativeMusicSyncPayload) => void;

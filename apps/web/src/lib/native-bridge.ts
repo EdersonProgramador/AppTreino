@@ -17,6 +17,10 @@ export function postNativeMessage(payload: Record<string, unknown>) {
   return true;
 }
 
+export function nativeLogout() {
+  return postNativeMessage({ type: "NATIVE_LOGOUT" });
+}
+
 export async function blobToBase64(blob: Blob) {
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();

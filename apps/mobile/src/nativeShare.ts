@@ -21,26 +21,30 @@ function base64ToBytes(raw: string) {
 
 function writeTempPng(base64: string, filename = "treino-pago.png") {
   const safeName = filename.replace(/[^\w.\-]+/g, "_") || "treino-pago.png";
-  const file = new File(Paths.cache, safeName);
-  if (file.exists) {
-    file.delete();
-  }
+  const uniqueName = `${Date.now()}-${safeName}`;
+  const file = new File(Paths.cache, uniqueName);
   file.create();
   // Native write aceita 1 arg (string | Uint8Array); options de encoding quebram no iOS.
   file.write(base64ToBytes(base64));
   return file.uri;
 }
 
-export async function downloadWorkoutImage(base64: string, filename = "treino-pago.png") {
+export async function downloadWorkoutImage(
+  base64: string,
+  filename = "treino-pago.png",
+  options: { fallbackShare?: boolean; notify?: boolean } = {}
+) {
   const path = writeTempPng(base64, filename);
   const permission = await MediaLibrary.requestPermissionsAsync();
   if (permission.granted) {
     await MediaLibrary.saveToLibraryAsync(path);
-    Alert.alert("Imagem salva", "A imagem do treino foi salva na galeria.");
+    if (options.notify !== false) {
+      Alert.alert("Imagem salva", "A imagem do treino foi salva na galeria.");
+    }
     return;
   }
 
-  if (await Sharing.isAvailableAsync()) {
+  if (options.fallbackShare !== false && (await Sharing.isAvailableAsync())) {
     await Sharing.shareAsync(path, {
       mimeType: "image/png",
       UTI: "public.png",

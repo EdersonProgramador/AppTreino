@@ -2,7 +2,12 @@ import { useEffect } from "react";
 import { Pause, Play, SkipForward } from "lucide-react";
 import { musicAudio } from "../../lib/music-audio";
 import { isNativeAppShell } from "../../lib/native-bridge";
-import { installNativeMusicSyncBridge, subscribeNativeMusicSync } from "../../lib/native-music";
+import {
+  fromNativeMusicTracks,
+  installNativeMusicSyncBridge,
+  nativeRequestMusicSync,
+  subscribeNativeMusicSync
+} from "../../lib/native-music";
 import { playableMediaUrl } from "../../lib/urls";
 import { useMusicPlayerStore } from "../../stores/musicPlayerStore";
 import { StudentNowPlaying } from "./StudentNowPlaying";
@@ -33,7 +38,10 @@ export function StudentMusicMini({ compact = false }: { compact?: boolean }) {
     : undefined;
 
   return (
-    <div className={`student-play-dock student-music-mini${playing ? " is-playing" : ""}${compact ? " is-compact" : ""}`}>
+    <div
+      className={`student-play-dock student-music-mini${playing ? " is-playing" : ""}${compact ? " is-compact" : ""}`}
+      data-testid="student-music-mini"
+    >
       <button
         className="student-play-dock-cover"
         onClick={() => expand()}
@@ -41,7 +49,7 @@ export function StudentMusicMini({ compact = false }: { compact?: boolean }) {
         type="button"
         aria-label="Abrir player"
       />
-      <button className="student-play-dock-meta" onClick={() => expand()} type="button">
+      <button className="student-play-dock-meta" data-testid="student-music-mini-meta" onClick={() => expand()} type="button">
         <strong>{current.title}</strong>
         <span>{current.artist || "App Treino"}</span>
       </button>
@@ -90,7 +98,25 @@ export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Ho
   useEffect(() => {
     if (isNativeAppShell()) {
       installNativeMusicSyncBridge();
-      return subscribeNativeMusicSync((payload) => {
+      nativeRequestMusicSync();
+      const off = subscribeNativeMusicSync((payload) => {
+        if (payload.tracks?.length) {
+          const incoming = fromNativeMusicTracks(payload.tracks);
+          const current = useMusicPlayerStore.getState();
+          const sameQueue =
+            current.queue.length === incoming.length &&
+            current.queue.every((track, i) => track.id === incoming[i]?.id);
+          if (!sameQueue) {
+            current.hydrateFromNative(
+              incoming,
+              payload.index ?? 0,
+              Boolean(payload.playing),
+              payload.progress ?? 0,
+              payload.duration ?? 0
+            );
+            return;
+          }
+        }
         if (typeof payload.progress === "number") setProgress(payload.progress);
         if (typeof payload.duration === "number" && payload.duration > 0) setDuration(payload.duration);
         if (typeof payload.playing === "boolean") {
@@ -107,6 +133,13 @@ export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Ho
         }
         if (payload.ended) ended();
       });
+
+      const retries = [200, 800, 1600].map((ms) => window.setTimeout(() => nativeRequestMusicSync(), ms));
+
+      return () => {
+        retries.forEach((id) => window.clearTimeout(id));
+        off();
+      };
     }
 
     const offTime = musicAudio.on("timeupdate", (audio) => {
@@ -164,6 +197,7 @@ export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Ho
   }, [seekToken, seekRatio, duration, playing, consumeSeek, setProgress, setPlaying]);
 
   useEffect(() => {
+    if (isNativeAppShell()) return;
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
     const session = navigator.mediaSession;
     const setHandler = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
@@ -199,14 +233,6 @@ export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Ho
     setHandler("nexttrack", () => next());
     setHandler("seekto", (details) => {
       if (typeof details.seekTime === "number") {
-        if (isNativeAppShell()) {
-          const total = useMusicPlayerStore.getState().duration || 0;
-          if (total > 0) {
-            useMusicPlayerStore.getState().seek(details.seekTime / total);
-          }
-          setProgress(details.seekTime);
-          return;
-        }
         const audio = musicAudio.element;
         if (audio) {
           audio.currentTime = details.seekTime;
@@ -214,14 +240,44 @@ export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Ho
         }
       }
     });
-    return () => {
-      setHandler("play", null);
-      setHandler("pause", null);
-      setHandler("previoustrack", null);
-      setHandler("nexttrack", null);
-      setHandler("seekto", null);
+    try {
+      const total = duration || musicAudio.getDuration();
+      const position = useMusicPlayerStore.getState().progress;
+      if (total > 0) {
+        session.setPositionState({
+          duration: total,
+          playbackRate: 1,
+          position: Math.min(total, Math.max(0, position))
+        });
+      }
+    } catch {
+      // setPositionState pode falhar se duration/position forem inválidos
+    }
+    return undefined;
+  }, [current, playing, duration, next, prev, setPlaying, setProgress]);
+
+  useEffect(() => {
+    if (isNativeAppShell()) return;
+
+    const resumeIfNeeded = () => {
+      if (document.visibilityState !== "visible") return;
+      const state = useMusicPlayerStore.getState();
+      if (!state.playing || !state.queue.length) return;
+      const audio = musicAudio.element;
+      if (audio && audio.paused) {
+        void musicAudio.play().then((result) => {
+          if (!result.ok) setPlaying(false);
+        });
+      }
     };
-  }, [current, playing, next, prev, setPlaying, setProgress]);
+
+    document.addEventListener("visibilitychange", resumeIfNeeded);
+    window.addEventListener("focus", resumeIfNeeded);
+    return () => {
+      document.removeEventListener("visibilitychange", resumeIfNeeded);
+      window.removeEventListener("focus", resumeIfNeeded);
+    };
+  }, [setPlaying]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {

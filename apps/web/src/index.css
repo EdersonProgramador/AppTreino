@@ -8920,6 +8920,7 @@ html.is-native-app .workout-album-picker {
 }
 
 .runner-share-modal {
+  position: relative;
   display: grid;
   width: min(100%, 366px);
   gap: 18px;
@@ -8933,6 +8934,7 @@ html.is-native-app .workout-album-picker {
 
 .runner-share-flow {
   max-height: min(92svh, 720px);
+  overflow-x: hidden;
   overflow-y: auto;
   gap: 16px;
   padding: 28px 18px 22px;
@@ -8947,6 +8949,7 @@ html.is-native-app .workout-album-picker {
   gap: 12px;
 }
 
+.runner-share-social-row button,
 .runner-share-network-row button {
   display: inline-grid;
   place-items: center;
@@ -8954,6 +8957,19 @@ html.is-native-app .workout-album-picker {
   padding: 0;
   background: transparent;
   cursor: pointer;
+}
+
+.runner-share-social-row button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.runner-share-card-capture {
+  position: absolute;
+  left: -10000px;
+  top: 0;
+  width: 320px;
+  pointer-events: none;
 }
 
 .runner-share-icon {

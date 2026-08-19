@@ -7,6 +7,7 @@ import { GuestRoute, ProtectedRoute, RoleHomeRedirect, SessionGate } from "./aut
 import { paths } from "./auth/paths";
 import { useUiPrefsStore } from "./stores/uiPrefsStore";
 import { ALL_UI_SOUND_PRELOAD } from "./lib/ui-sounds";
+import { installShellStateFlush } from "./lib/shell-persist";
 
 const AppRoutes = () => (
   <SessionGate>
@@ -41,6 +42,10 @@ export const App = () => {
 
   useEffect(() => {
     useUiPrefsStore.getState().hydrate();
+  }, []);
+
+  useEffect(() => {
+    return installShellStateFlush();
   }, []);
 
   return (

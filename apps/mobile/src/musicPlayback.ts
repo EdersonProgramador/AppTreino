@@ -1,4 +1,11 @@
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS, type AVPlaybackStatus } from "expo-av";
+import { AppState, type AppStateStatus } from "react-native";
+import {
+  getTrackPlayerRuntime,
+  setupTrackPlayerIfAvailable,
+  toTrackPlayerTracks,
+  type TrackPlayerRuntime
+} from "./trackPlayer";
 
 export type NativeTrack = {
   id: string;
@@ -17,6 +24,7 @@ export type MusicPlaybackSnapshot = {
   current: NativeTrack | null;
   positionSec: number;
   durationSec: number;
+  ended?: boolean;
 };
 
 type Listener = (snapshot: MusicPlaybackSnapshot) => void;
@@ -35,9 +43,9 @@ function emptySnapshot(): MusicPlaybackSnapshot {
 }
 
 /**
- * Player nativo persistente (expo-av).
- * Continua tocando com a UI fechada / WebView em uso.
- * Só para ao chamar stop() (encerrar Play de verdade).
+ * Player persistente em segundo plano.
+ * Development/production build: react-native-track-player (foreground service + lock screen).
+ * Expo Go: expo-av com staysActiveInBackground (iOS ok; Android Go limita o SO).
  */
 class MusicPlaybackService {
   private queue: NativeTrack[] = [];
@@ -52,6 +60,160 @@ class MusicPlaybackService {
   private positionMillis = 0;
   private durationMillis = 0;
   private loadChain: Promise<void> = Promise.resolve();
+  private userPaused = false;
+  private engine: "pending" | "trackplayer" | "expo-av" = "pending";
+  private rntp: TrackPlayerRuntime | null = null;
+  private trackEventsBound = false;
+  private engineReady: Promise<void>;
+
+  constructor() {
+    this.engineReady = this.resolveEngine();
+    AppState.addEventListener("change", (next: AppStateStatus) => {
+      void this.handleAppState(next);
+    });
+  }
+
+  private async resolveEngine() {
+    const ok = await setupTrackPlayerIfAvailable();
+    if (ok) {
+      this.rntp = getTrackPlayerRuntime();
+      if (this.rntp) {
+        this.engine = "trackplayer";
+        this.bindTrackPlayerEvents();
+        return;
+      }
+    }
+    this.engine = "expo-av";
+    await this.ensureMode().catch(() => undefined);
+  }
+
+  private usingTrackPlayer() {
+    return this.engine === "trackplayer" && this.rntp != null;
+  }
+
+  private intendedPlaying() {
+    return this.queue.length > 0 && !this.userPaused;
+  }
+
+  private bindTrackPlayerEvents() {
+    if (this.trackEventsBound || !this.rntp) return;
+    this.trackEventsBound = true;
+    const { TrackPlayer, Event, State } = this.rntp;
+
+    TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, (data) => {
+      this.positionMillis = Math.max(0, (data.position ?? 0) * 1000);
+      this.durationMillis = Math.max(0, (data.duration ?? 0) * 1000);
+      this.emit();
+    });
+
+    TrackPlayer.addEventListener(Event.PlaybackState, (data) => {
+      if (data.state === State.Playing) {
+        this.playing = true;
+        this.loading = false;
+        this.emit();
+        return;
+      }
+      this.loading = data.state === State.Buffering || data.state === State.Loading;
+      if ((data.state === State.Paused || data.state === State.Stopped) && this.userPaused) {
+        this.playing = false;
+        this.emit();
+      }
+    });
+
+    TrackPlayer.addEventListener(Event.RemotePause, () => {
+      this.userPaused = true;
+      this.playing = false;
+      this.emit();
+    });
+
+    TrackPlayer.addEventListener(Event.RemotePlay, () => {
+      this.userPaused = false;
+      this.playing = true;
+      this.emit();
+    });
+
+    TrackPlayer.addEventListener(Event.RemoteStop, () => {
+      void this.stop();
+    });
+
+    TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (data) => {
+      if (typeof data.index === "number" && data.index >= 0) {
+        this.index = data.index;
+        this.emit();
+      }
+    });
+
+    TrackPlayer.addEventListener(Event.PlaybackQueueEnded, () => {
+      this.playing = false;
+      this.userPaused = true;
+      this.emit({ ended: true, playing: false });
+    });
+  }
+
+  private async resumeIfIntended() {
+    if (!this.intendedPlaying()) return;
+    this.playing = true;
+
+    if (this.usingTrackPlayer() && this.rntp) {
+      try {
+        await this.rntp.TrackPlayer.play();
+        this.playing = true;
+        this.emit();
+      } catch {
+        // serviço nativo ainda vivo; ignora
+      }
+      return;
+    }
+
+    if (this.sound) {
+      try {
+        const status = await this.sound.getStatusAsync();
+        if (status.isLoaded) {
+          if (!status.isPlaying) await this.sound.playAsync();
+          this.playing = true;
+          this.emit();
+          return;
+        }
+      } catch {
+        // recarrega só se o Sound morreu
+      }
+    }
+
+    await this.loadCurrent({ autoplay: true, resumeSec: this.positionMillis / 1000 });
+  }
+
+  private async handleAppState(next: AppStateStatus) {
+    const background = next === "background" || next === "inactive";
+
+    if (background) {
+      return;
+    }
+
+    if (next !== "active") return;
+
+    if (this.usingTrackPlayer() && this.rntp) {
+      try {
+        const progress = await this.rntp.TrackPlayer.getProgress();
+        this.positionMillis = Math.max(0, (progress.position ?? 0) * 1000);
+        this.durationMillis = Math.max(0, (progress.duration ?? 0) * 1000);
+        const index = await this.rntp.TrackPlayer.getActiveTrackIndex();
+        if (typeof index === "number" && index >= 0) this.index = index;
+        const state = await this.rntp.TrackPlayer.getPlaybackState();
+        this.playing = state.state === this.rntp.State.Playing || this.intendedPlaying();
+        if (this.intendedPlaying() && state.state !== this.rntp.State.Playing) {
+          await this.rntp.TrackPlayer.play();
+          this.playing = true;
+        }
+        this.emit();
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
+    if (!this.intendedPlaying()) return;
+    await this.resumeIfIntended();
+  }
 
   subscribe(listener: Listener) {
     this.listeners.add(listener);
@@ -65,7 +227,7 @@ class MusicPlaybackService {
     return {
       queue: this.queue,
       index: this.index,
-      playing: this.playing,
+      playing: this.queue.length > 0 && !this.userPaused,
       loading: this.loading,
       error: this.error,
       current: this.queue[this.index] ?? null,
@@ -74,8 +236,8 @@ class MusicPlaybackService {
     };
   }
 
-  private emit() {
-    const snap = this.snapshot();
+  private emit(override?: Partial<MusicPlaybackSnapshot>) {
+    const snap = { ...this.snapshot(), ...override };
     this.listeners.forEach((listener) => listener(snap));
   }
 
@@ -85,9 +247,9 @@ class MusicPlaybackService {
       allowsRecordingIOS: false,
       staysActiveInBackground: true,
       playsInSilentModeIOS: true,
-      interruptionModeIOS: InterruptionModeIOS.DuckOthers,
-      interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-      shouldDuckAndroid: true,
+      interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+      interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+      shouldDuckAndroid: false,
       playThroughEarpieceAndroid: false
     });
     this.modeReady = true;
@@ -119,48 +281,163 @@ class MusicPlaybackService {
       }
       return;
     }
-    this.playing = status.isPlaying;
     this.loading = false;
     this.positionMillis = status.positionMillis ?? 0;
     this.durationMillis = status.durationMillis ?? 0;
     if (status.didJustFinish) {
-      void this.next({ autoplay: true });
+      this.playing = false;
+      this.userPaused = true;
+      this.emit({ ended: true, playing: false });
       return;
     }
+
+    if (!status.isPlaying && this.intendedPlaying()) {
+      return;
+    }
+
+    this.playing = status.isPlaying;
     this.emit();
   };
 
-  async openQueue(tracks: NativeTrack[], startIndex = 0) {
+  async openQueue(
+    tracks: NativeTrack[],
+    startIndex = 0,
+    options?: { autoplay?: boolean; resumeSec?: number }
+  ) {
     if (!tracks.length) return;
-    // Serializa aberturas (evita 2 Sound tocando se a mensagem vier duplicada).
-    this.loadChain = this.loadChain.then(() => this.openQueueExclusive(tracks, startIndex)).catch(() => undefined);
+    this.loadChain = this.loadChain
+      .then(async () => {
+        await this.engineReady;
+        await this.openQueueExclusive(tracks, startIndex, options);
+      })
+      .catch(() => undefined);
     await this.loadChain;
   }
 
-  private async openQueueExclusive(tracks: NativeTrack[], startIndex = 0) {
-    await this.ensureMode();
-    const safeIndex = Math.min(Math.max(0, startIndex), tracks.length - 1);
-    const sameQueue =
+  private sameQueue(tracks: NativeTrack[]) {
+    return (
       this.queue.length === tracks.length &&
-      this.queue.every((track, i) => track.id === tracks[i]?.id && track.url === tracks[i]?.url);
+      this.queue.every((track, i) => track.id === tracks[i]?.id)
+    );
+  }
 
-    if (sameQueue && this.index === safeIndex && this.sound) {
+  private async openQueueExclusive(
+    tracks: NativeTrack[],
+    startIndex = 0,
+    options?: { autoplay?: boolean; resumeSec?: number }
+  ) {
+    const safeIndex = Math.min(Math.max(0, startIndex), tracks.length - 1);
+    const autoplay = options?.autoplay !== false;
+    const resumeSec = options?.resumeSec;
+
+    if (this.usingTrackPlayer() && this.rntp) {
       this.error = null;
+      if (this.sameQueue(tracks)) {
+        if (this.index !== safeIndex) {
+          this.index = safeIndex;
+          try {
+            await this.rntp.TrackPlayer.skip(safeIndex);
+          } catch {
+            // ignore
+          }
+        }
+        if (typeof resumeSec === "number" && resumeSec > 0.4) {
+          try {
+            const progress = await this.rntp.TrackPlayer.getProgress();
+            if (Math.abs((progress.position ?? 0) - resumeSec) > 1.5) {
+              await this.rntp.TrackPlayer.seekTo(resumeSec);
+            }
+          } catch {
+            // ignore
+          }
+        }
+        if (autoplay) {
+          this.userPaused = false;
+          await this.play();
+        }
+        this.emit();
+        return;
+      }
+
+      this.userPaused = !autoplay;
+      this.queue = tracks;
+      this.index = safeIndex;
       this.emit();
-      if (!this.playing) {
+      await this.rntp.TrackPlayer.reset();
+      await this.rntp.TrackPlayer.add(toTrackPlayerTracks(tracks));
+      if (safeIndex > 0) await this.rntp.TrackPlayer.skip(safeIndex);
+      if (typeof resumeSec === "number" && resumeSec > 0.4) {
+        await this.rntp.TrackPlayer.seekTo(resumeSec);
+        this.positionMillis = resumeSec * 1000;
+      }
+      if (autoplay) {
+        await this.rntp.TrackPlayer.play();
+        this.playing = true;
+        this.userPaused = false;
+      } else {
+        this.playing = false;
+      }
+      this.emit();
+      return;
+    }
+
+    await this.ensureMode();
+    if (this.sameQueue(tracks) && this.sound) {
+      this.error = null;
+      if (this.index !== safeIndex) {
+        this.index = safeIndex;
+        await this.loadCurrent({ autoplay, resumeSec });
+        return;
+      }
+      if (typeof resumeSec === "number" && resumeSec > 0.4) {
+        try {
+          const status = await this.sound.getStatusAsync();
+          if (status.isLoaded) {
+            const currentSec = (status.positionMillis ?? 0) / 1000;
+            if (Math.abs(currentSec - resumeSec) > 1.5) {
+              await this.sound.setPositionAsync(resumeSec * 1000);
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+      this.emit();
+      if (autoplay && !this.userPaused && !this.playing) {
         await this.play();
       }
       return;
     }
 
+    this.userPaused = !autoplay;
     this.queue = tracks;
     this.index = safeIndex;
     this.error = null;
     this.emit();
-    await this.loadCurrent({ autoplay: true });
+    await this.loadCurrent({ autoplay, resumeSec });
   }
 
-  private async loadCurrent({ autoplay }: { autoplay: boolean }) {
+  private async loadCurrent({ autoplay, resumeSec }: { autoplay: boolean; resumeSec?: number }) {
+    if (this.usingTrackPlayer() && this.rntp) {
+      try {
+        await this.rntp.TrackPlayer.skip(this.index);
+        if (typeof resumeSec === "number" && resumeSec > 0.4) {
+          await this.rntp.TrackPlayer.seekTo(resumeSec);
+        }
+        if (autoplay) {
+          this.userPaused = false;
+          await this.rntp.TrackPlayer.play();
+          this.playing = true;
+        }
+        this.emit();
+      } catch {
+        this.error = "Nao foi possivel reproduzir esta faixa.";
+        this.playing = false;
+        this.emit();
+      }
+      return;
+    }
+
     const track = this.queue[this.index];
     if (!track?.url) {
       this.error = "Faixa sem URL de audio.";
@@ -179,9 +456,16 @@ class MusicPlaybackService {
     if (token !== this.loadToken) return;
 
     try {
+      const positionMillis =
+        typeof resumeSec === "number" && resumeSec > 0.4 ? Math.round(resumeSec * 1000) : 0;
       const { sound } = await Audio.Sound.createAsync(
         { uri: track.url },
-        { shouldPlay: autoplay, progressUpdateIntervalMillis: 500 },
+        {
+          shouldPlay: autoplay,
+          progressUpdateIntervalMillis: 500,
+          positionMillis,
+          isLooping: false
+        },
         this.onStatus
       );
       if (token !== this.loadToken) {
@@ -191,6 +475,8 @@ class MusicPlaybackService {
       this.sound = sound;
       this.playing = autoplay;
       this.loading = false;
+      this.userPaused = !autoplay;
+      if (positionMillis > 0) this.positionMillis = positionMillis;
       this.emit();
     } catch {
       if (token !== this.loadToken) return;
@@ -203,23 +489,22 @@ class MusicPlaybackService {
   }
 
   async toggle() {
-    if (!this.sound) {
-      await this.loadCurrent({ autoplay: true });
+    if (this.playing) {
+      await this.pause();
       return;
     }
-    const status = await this.sound.getStatusAsync();
-    if (!status.isLoaded) return;
-    if (status.isPlaying) {
-      await this.sound.pauseAsync();
-      this.playing = false;
-    } else {
-      await this.sound.playAsync();
-      this.playing = true;
-    }
-    this.emit();
+    await this.play();
   }
 
   async play() {
+    await this.engineReady;
+    this.userPaused = false;
+    if (this.usingTrackPlayer() && this.rntp) {
+      await this.rntp.TrackPlayer.play();
+      this.playing = true;
+      this.emit();
+      return;
+    }
     if (!this.sound) {
       await this.loadCurrent({ autoplay: true });
       return;
@@ -230,9 +515,22 @@ class MusicPlaybackService {
   }
 
   async pause() {
-    if (!this.sound) return;
-    await this.sound.pauseAsync();
+    this.userPaused = true;
     this.playing = false;
+    if (this.usingTrackPlayer() && this.rntp) {
+      try {
+        await this.rntp.TrackPlayer.pause();
+      } catch {
+        // ignore
+      }
+      this.emit();
+      return;
+    }
+    if (!this.sound) {
+      this.emit();
+      return;
+    }
+    await this.sound.pauseAsync();
     this.emit();
   }
 
@@ -240,36 +538,71 @@ class MusicPlaybackService {
     if (!this.queue.length) return;
     this.index = (this.index + 1) % this.queue.length;
     this.emit();
-    await this.loadCurrent({ autoplay: options.autoplay ?? this.playing });
+    const autoplay = options.autoplay ?? !this.userPaused;
+    if (this.usingTrackPlayer() && this.rntp) {
+      try {
+        await this.rntp.TrackPlayer.skip(this.index);
+        if (autoplay) {
+          this.userPaused = false;
+          await this.rntp.TrackPlayer.play();
+          this.playing = true;
+        }
+        this.emit();
+      } catch {
+        await this.loadCurrent({ autoplay });
+      }
+      return;
+    }
+    await this.loadCurrent({ autoplay });
   }
 
   async prev() {
     if (!this.queue.length) return;
-    if (this.sound) {
-      const status = await this.sound.getStatusAsync();
-      if (status.isLoaded && status.positionMillis > 3000) {
-        await this.sound.setPositionAsync(0);
-        this.emit();
-        return;
-      }
+    const autoplay = !this.userPaused;
+    const positionSec = this.positionMillis / 1000;
+    if (positionSec > 3) {
+      await this.seekRatio(0);
+      return;
     }
     this.index = (this.index - 1 + this.queue.length) % this.queue.length;
     this.emit();
-    await this.loadCurrent({ autoplay: true });
+    if (this.usingTrackPlayer() && this.rntp) {
+      try {
+        await this.rntp.TrackPlayer.skip(this.index);
+        if (autoplay) await this.rntp.TrackPlayer.play();
+        this.emit();
+      } catch {
+        await this.loadCurrent({ autoplay });
+      }
+      return;
+    }
+    await this.loadCurrent({ autoplay });
   }
 
   async playAt(index: number) {
     if (!this.queue[index]) return;
+    const autoplay = !this.userPaused;
     this.index = index;
     this.emit();
-    await this.loadCurrent({ autoplay: true });
+    await this.loadCurrent({ autoplay });
   }
 
   async seekRatio(ratio: number) {
+    const next = Math.min(1, Math.max(0, ratio));
+    if (this.usingTrackPlayer() && this.rntp) {
+      try {
+        const progress = await this.rntp.TrackPlayer.getProgress();
+        const duration = progress.duration ?? this.durationMillis / 1000;
+        if (duration > 0) await this.rntp.TrackPlayer.seekTo(duration * next);
+        this.emit();
+      } catch {
+        // ignore
+      }
+      return;
+    }
     if (!this.sound) return;
     const status = await this.sound.getStatusAsync();
     if (!status.isLoaded || !status.durationMillis) return;
-    const next = Math.min(1, Math.max(0, ratio));
     await this.sound.setPositionAsync(status.durationMillis * next);
     this.emit();
   }
@@ -277,6 +610,15 @@ class MusicPlaybackService {
   /** Encerra o Play de verdade (para o áudio e limpa a fila). */
   async stop() {
     this.loadToken += 1;
+    this.userPaused = true;
+    this.playing = false;
+    if (this.usingTrackPlayer() && this.rntp) {
+      try {
+        await this.rntp.TrackPlayer.reset();
+      } catch {
+        // ignore
+      }
+    }
     await this.unloadSound();
     this.queue = [];
     this.index = 0;

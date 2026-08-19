@@ -122,4 +122,4 @@ export function optimizedMediaUrl(path?: string | null, options: OptimizedMediaO
   return `${api}/media?${params.toString()}`;
 }
 
-export const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+export const googleClientId = import.meta.env?.VITE_GOOGLE_CLIENT_ID as string | undefined;

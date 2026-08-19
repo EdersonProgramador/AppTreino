@@ -40,8 +40,10 @@ class MusicAudioEngine {
     if (!this.audio) {
       this.audio = new Audio();
       this.audio.preload = "auto";
+      this.audio.autoplay = false;
       this.audio.setAttribute("playsinline", "true");
       this.audio.setAttribute("webkit-playsinline", "true");
+      this.audio.setAttribute("x-webkit-airplay", "allow");
     }
     return this.audio;
   }

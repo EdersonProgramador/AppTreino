@@ -104,6 +104,10 @@ import { StudentSettingsPanel } from "./StudentSettingsPanel";
 import { StudentMusicPlayerHost } from "./StudentMusicPlayerHost";
 import { StudentPlaySection } from "./StudentPlaySection";
 import { useMusicPlayerStore } from "../../stores/musicPlayerStore";
+import { isNativeAppShell } from "../../lib/native-bridge";
+import { readStudentPanel, writeStudentPanel } from "../../lib/student-panel-persist";
+import { clearWorkoutRunner } from "../../lib/workout-runner-persist";
+import { flushShellStateToNative } from "../../lib/shell-persist";
 import { PhysicalAssessmentFormView } from "../shared/PhysicalAssessmentFormView";
 import { uiSounds } from "../../lib/ui-sounds";
 
@@ -126,10 +130,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const markNotificationRead = useStudentSyncStore((state) => state.markNotificationRead);
   const markAllNotificationsRead = useStudentSyncStore((state) => state.markAllNotificationsRead);
   const clearSectionHighlight = useStudentSyncStore((state) => state.clearSectionHighlight);
-  const [studentSection, setStudentSection] = useState<StudentPanelSection>("home");
+  const restoredPanel = readStudentPanel();
+  const [studentSection, setStudentSection] = useState<StudentPanelSection>(restoredPanel?.section ?? "home");
   const studentSectionRef = useRef(studentSection);
   studentSectionRef.current = studentSection;
-  const [playerSessionActive, setPlayerSessionActive] = useState(false);
+  const [playerSessionActive, setPlayerSessionActive] = useState(Boolean(restoredPanel?.playerSessionActive));
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [workout, setWorkout] = useState<WorkoutRow | null>(null);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkoutResponse["workout"] | null>(null);
@@ -137,9 +142,19 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [lockedPreviewModalities, setLockedPreviewModalities] = useState<
     Array<{ id: string; name: string; description: string | null; imageUrl: string | null; locked: boolean }>
   >([]);
-  const [selectedWorkoutModality, setSelectedWorkoutModality] = useState<string | null>(null);
-  const [selectedWorkoutProgramId, setSelectedWorkoutProgramId] = useState<string | null>(null);
-  const [workoutSession, setWorkoutSession] = useState<WorkoutSessionResponse["session"] | null>(null);
+  const [selectedWorkoutModality, setSelectedWorkoutModality] = useState<string | null>(restoredPanel?.modality ?? null);
+  const [selectedWorkoutProgramId, setSelectedWorkoutProgramId] = useState<string | null>(
+    restoredPanel?.programId ?? null
+  );
+  const [workoutSession, setWorkoutSession] = useState<WorkoutSessionResponse["session"] | null>(() =>
+    restoredPanel?.workoutSessionId
+      ? {
+          id: restoredPanel.workoutSessionId,
+          status: "IN_PROGRESS",
+          startedAt: new Date().toISOString()
+        }
+      : null
+  );
   const [consistency, setConsistency] = useState<WorkoutConsistencyResponse | null>(null);
   const [membership, setMembership] = useState<StudentMembershipRow | null>(null);
   const [accessReady, setAccessReady] = useState(false);
@@ -261,7 +276,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [studentLightbox]);
 
-  async function loadUserData() {
+  async function loadUserData(options?: { soft?: boolean }) {
     if (!token) return;
 
     try {
@@ -276,12 +291,16 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       const enrollmentActive = profileResponse.profile.enrollmentStatus === "ACTIVE";
       const hasAccess = activeMembership || enrollmentActive;
       const firstPublishedWorkout = workoutProgramsResponse.workouts[0] ?? null;
+      const restoredProgramId = selectedWorkoutProgramId ?? restoredPanel?.programId ?? null;
+      const restoredWorkout = restoredProgramId
+        ? workoutProgramsResponse.workouts.find((item) => item.programId === restoredProgramId) ?? null
+        : null;
 
       setProfile(profileResponse.profile);
       setMembership(membershipResponse.membership);
       setPayments(paymentsResponse.payments);
       setPublishedWorkouts(workoutProgramsResponse.workouts);
-      setTodayWorkout(firstPublishedWorkout);
+      setTodayWorkout(restoredWorkout ?? firstPublishedWorkout);
       setCheckoutPayment(paymentsResponse.payments.find((item) => item.status === "PENDING") ?? null);
       setAccessReady(true);
 
@@ -385,9 +404,12 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       setStudentWorkoutFavorites(workoutFavoritesResponse.favorites);
 
       // Refresh/abandono: sem resume — reseta sessões órfãs fora do player.
-      if (studentSectionRef.current !== "player") {
+      // Não faz isso no retorno de segundo plano (soft), senão o treino some ao trocar de app.
+      if (!options?.soft && studentSectionRef.current !== "player") {
         await apiPost("/student/workout/reset-abandoned", {}, token).catch(() => {});
         setWorkoutSession(null);
+        clearWorkoutRunner();
+        flushShellStateToNative();
       }
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) return;
@@ -411,12 +433,23 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   }, [token]);
 
   useEffect(() => {
+    writeStudentPanel({
+      section: studentSection,
+      modality: selectedWorkoutModality,
+      programId: selectedWorkoutProgramId,
+      workoutSessionId: workoutSession?.id ?? null,
+      playerSessionActive
+    });
+  }, [studentSection, selectedWorkoutModality, selectedWorkoutProgramId, workoutSession?.id, playerSessionActive]);
+
+  useEffect(() => {
     if (!token) return;
 
     const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible") {
-        void loadUserData();
-      }
+      if (document.visibilityState !== "visible") return;
+      // No Expo, visibility/focus dispara ao trocar de app — não recarregar a Home.
+      if (isNativeAppShell()) return;
+      void loadUserData({ soft: true });
     };
 
     document.addEventListener("visibilitychange", refreshWhenVisible);
@@ -843,6 +876,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     }
 
     uiSounds.open();
+    clearWorkoutRunner();
+    flushShellStateToNative();
+    setSelectedWorkoutProgramId(workoutToStart.programId);
+    setSelectedWorkoutModality(workoutToStart.modality ?? "Hipertrofia");
     setTodayWorkout(workoutToStart);
     setWorkoutSession(null);
     setStudentSection("player");
@@ -890,7 +927,6 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       );
       setWorkoutSession(null);
       await loadUserData();
-      setStudentSection("training");
       setSelectedWorkoutModality(todayWorkout.modality ?? selectedWorkoutModality);
       setSuccess("Treino concluído! Próximo dia liberado.");
       setPlayerSessionActive(false);
@@ -909,6 +945,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     if (!workoutSession?.id) {
       uiSounds.void();
       setWorkoutSession(null);
+      clearWorkoutRunner();
+      flushShellStateToNative();
       return;
     }
 
@@ -921,9 +959,12 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         token
       );
       uiSounds.void();
-      setWorkoutSession(null);
     } catch {
       setError("Não foi possível resetar o treino agora.");
+    } finally {
+      setWorkoutSession(null);
+      clearWorkoutRunner();
+      flushShellStateToNative();
     }
   }
 
@@ -2743,6 +2784,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                    restoreStudentChrome();
                    uiSounds.studentPage();
                    uiSounds.pageChange();
+                   // Minimiza o player expandido, mas não pausa a trilha.
+                   useMusicPlayerStore.getState().collapse();
                    setStudentSection("home");
                  }}
                />

@@ -23,11 +23,17 @@ import {
   homePathForRole,
   isRoleHomePath,
   mustRedirectForRole,
-  normalizeAuthUser
+  normalizeAuthUser,
+  persistStoredUser,
+  readStoredUser
 } from "./session";
 import { paths } from "./paths";
 import { preloadAdminPanel, preloadStudentPanel } from "./RouteGuards";
 import { useMusicPlayerStore } from "../stores/musicPlayerStore";
+import { clearStudentPanel } from "../lib/student-panel-persist";
+import { clearWorkoutRunner } from "../lib/workout-runner-persist";
+import { flushShellStateToNative } from "../lib/shell-persist";
+import { isNativeAppShell, nativeLogout } from "../lib/native-bridge";
 
 type AuthContextValue = {
   phase: ReturnType<typeof useAuthStore.getState>["phase"];
@@ -86,10 +92,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginState: "idle" | "submitting" =
     phase === "signingIn" || phase === "redirecting" ? "submitting" : "idle";
 
-  // Wire 401 → clear session
+  // Wire 401 → clear session (web). No app nativo a sessão é do login nativo:
+  // um /me 401 na hidratação não pode expulsar o usuário de volta à tela de login.
   useEffect(() => {
     setUnauthorizedHandler(() => {
       useMusicPlayerStore.getState().reset();
+      clearStudentPanel();
+      clearWorkoutRunner();
+      flushShellStateToNative();
+      if (isNativeAppShell()) return;
+      nativeLogout();
       useAuthStore.getState().clearSession();
       navigate(paths.home, { replace: true });
     });
@@ -111,11 +123,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .then((response) => {
           if (cancelled) return;
           if (!response.user) {
-            store.clearSession();
-            navigate(paths.home, { replace: true });
+            if (!isNativeAppShell()) {
+              store.clearSession();
+              navigate(paths.home, { replace: true });
+            }
             return;
           }
           const nextUser = normalizeAuthUser(response.user);
+          persistStoredUser(nextUser);
           useAuthStore.setState({ user: nextUser });
           // If /me corrects the role, bounce to the right panel under the gate
           const destination = homePathForRole(nextUser.role);
@@ -127,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .catch((error) => {
           if (cancelled) return;
           // Only drop session on hard auth failure — send guest to Home (topbar), not /login
-          if (error instanceof ApiError && error.status === 401) {
+          if (error instanceof ApiError && error.status === 401 && !isNativeAppShell()) {
             store.clearSession();
             navigate(paths.home, { replace: true });
           }
@@ -138,37 +153,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let cancelled = false;
+    let retryTimer: ReturnType<typeof window.setTimeout> | null = null;
     store.beginRestore();
 
-    apiGet<{ user: AuthUser | null }>("/me", store.token)
-      .then((response) => {
-        if (cancelled) return;
-        if (!response.user) {
-          store.clearSession();
-          navigate(paths.home, { replace: true });
-          return;
-        }
+    const finishRestore = (nextUser: AuthUser) => {
+      const destination = homePathForRole(nextUser.role);
+      persistStoredUser(nextUser);
+      useAuthStore.setState({ user: nextUser });
+      if (mustRedirectForRole(pathnameRef.current, nextUser.role)) {
+        store.beginRedirect(destination);
+        navigate(destination, { replace: true });
+        return;
+      }
+      store.completeRedirect();
+    };
 
-        const nextUser = normalizeAuthUser(response.user);
-        const destination = homePathForRole(nextUser.role);
-        useAuthStore.setState({ user: nextUser });
+    const restore = () => {
+      void apiGet<{ user: AuthUser | null }>("/me", store.token!)
+        .then((response) => {
+          if (cancelled) return;
+          if (!response.user) {
+            if (isNativeAppShell()) {
+              const cachedUser = readStoredUser();
+              if (cachedUser) finishRestore(cachedUser);
+              return;
+            }
+            store.clearSession();
+            navigate(paths.home, { replace: true });
+            return;
+          }
+          finishRestore(normalizeAuthUser(response.user));
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          if (error instanceof ApiError && error.status === 401) {
+            if (isNativeAppShell()) {
+              const cachedUser = readStoredUser();
+              if (cachedUser) finishRestore(cachedUser);
+              return;
+            }
+            store.clearSession();
+            navigate(paths.home, { replace: true });
+            return;
+          }
 
-        if (mustRedirectForRole(location.pathname, nextUser.role)) {
-          store.beginRedirect(destination);
-          navigate(destination, { replace: true });
-          return;
-        }
-
-        store.completeRedirect();
-      })
-      .catch(() => {
-        if (cancelled) return;
-        store.clearSession();
-        navigate(paths.home, { replace: true });
-      });
+          // Offline: usa a identidade validada anteriormente e tenta /me novamente.
+          const cachedUser = readStoredUser();
+          if (cachedUser) {
+            finishRestore(cachedUser);
+            return;
+          }
+          retryTimer = window.setTimeout(restore, 2000);
+        });
+    };
+    restore();
 
     return () => {
       cancelled = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
     };
     // Only on mount / token identity change
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -202,6 +244,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     useMusicPlayerStore.getState().reset();
+    clearStudentPanel();
+    clearWorkoutRunner();
+    nativeLogout();
+    flushShellStateToNative();
     useAuthStore.getState().clearSession();
     navigate(paths.home, { replace: true });
   }, [navigate]);

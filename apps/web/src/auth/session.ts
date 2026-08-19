@@ -7,6 +7,7 @@ import {
 } from "@app-treino/shared";
 
 export const TOKEN_KEY = "app-treino-token";
+export const USER_KEY = "app-treino-user";
 
 export const paths = {
   home: "/",
@@ -77,4 +78,30 @@ export function canAccessRoleRoute(role: UserRole, required: UserRole) {
 export function readStoredToken() {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(TOKEN_KEY);
+}
+
+export function readStoredUser(): AuthUser | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(USER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AuthUser;
+    if (!parsed || typeof parsed !== "object" || typeof parsed.id !== "string") return null;
+    return normalizeAuthUser(parsed);
+  } catch {
+    return null;
+  }
+}
+
+export function persistStoredUser(user: AuthUser | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (!user) {
+      window.localStorage.removeItem(USER_KEY);
+      return;
+    }
+    window.localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch {
+    // ignore
+  }
 }
