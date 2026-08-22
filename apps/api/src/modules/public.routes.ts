@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { initialPlans } from "@app-treino/shared";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
+import { DEFAULT_SYSTEM_SETTINGS, ensureDefaultSystemSettings } from "./commerce.utils.js";
 
 export async function registerPublicRoutes(app: FastifyInstance) {
   app.get("/plans", async () => {
@@ -25,8 +26,10 @@ export async function registerPublicRoutes(app: FastifyInstance) {
 
   app.get("/public/config", async () => {
     if (!env.DATABASE_URL) {
-      return { config: {} };
+      return { config: { ...DEFAULT_SYSTEM_SETTINGS } };
     }
+
+    await ensureDefaultSystemSettings();
 
     const publicKeys = [
       "qr_checkin_url",
@@ -44,10 +47,10 @@ export async function registerPublicRoutes(app: FastifyInstance) {
       where: { key: { in: publicKeys } }
     });
 
-    const config = records.reduce<Record<string, string>>((acc, record) => {
-      acc[record.key] = record.value;
-      return acc;
-    }, {});
+    const config = { ...DEFAULT_SYSTEM_SETTINGS };
+    for (const record of records) {
+      config[record.key] = record.value;
+    }
 
     return { config };
   });

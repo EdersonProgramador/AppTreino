@@ -1,9 +1,22 @@
 import { playSound, type LibrarySoundName } from "react-sounds";
+import { Howler } from "howler";
 import { useUiPrefsStore } from "../stores/uiPrefsStore";
+
+function unlockWebAudio() {
+  try {
+    const ctx = Howler.ctx;
+    if (ctx && ctx.state === "suspended") {
+      void ctx.resume();
+    }
+  } catch {
+    // Autoplay ainda bloqueado — o próximo clique tenta de novo.
+  }
+}
 
 /** Toca som de UI somente se efeitos sonoros estiverem liberados. */
 export const playUiSound = (name: LibrarySoundName, volume = 0.45) => {
   if (!useUiPrefsStore.getState().soundEnabled) return;
+  unlockWebAudio();
   void playSound(name, { volume }).catch(() => {
     // Ignora falhas de autoplay/CDN — a UI continua sem áudio.
   });

@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --default-blue: #2f5bac;
+  --background: #f0f2f5;
+  --gray-1: #aeb7c3;
+  --gray-2: #707070;
+  --gray-3: #eaeaea;
+  --gray-4: #5a5a5a;
+  --online: #00ab26;
+  --offline: #e90000;
+}
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body, #__next { min-height: 100%; }
+  body { min-width: 320px; overflow-x: hidden; background: var(--background); font-family: Ubuntu, ui-sans-serif, system-ui, sans-serif; }
+  body, input, textarea, select, button { font-weight: 400; }
+  h1, h2, h3, h4, h5, h6, strong { font-weight: 500; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: .5; }
+  img { user-select: none; }
+  a { color: inherit; text-decoration: none; }
+}
+
+@layer components {
+  .form-label {
+    @apply mb-1 block text-sm font-medium text-slate-600;
+  }
+  .form-input {
+    @apply mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400;
+  }
+  .form-textarea {
+    @apply mt-1 min-h-[7.5rem] w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/20;
+  }
+  .form-check {
+    @apply h-4 w-4 rounded border-slate-300 accent-brand;
+  }
+}
+
+#__next { display: flex; min-height: 100dvh; flex-direction: column; }
+
+#main-container { display: flex; width: 100%; min-height: calc(100dvh - 4.75rem); align-items: flex-start; gap: 1rem; padding: clamp(.75rem, 2vw, 1.25rem); }
+#main-container.has-bottom-nav { padding-bottom: 5.5rem; }
+#home_main_feed { width: 70%; max-width: 920px; }
+.loadingContainer { display: flex; justify-content: center; color: var(--default-blue); }
+.loadingContainer svg { animation: loading .5s linear infinite; }
+.color-red { color: red; }
+.color-blue { color: var(--default-blue); }
+.modalOverlay { position: fixed; inset: 0; z-index: 99; display: flex; align-items: center; justify-content: center; background: rgb(0 0 0 / .6); }
+.modal-content { position: relative; z-index: 99; width: 100%; max-width: 750px; max-height: 90vh; overflow: auto; border-radius: .5rem; background: white; padding: 2rem 3rem; }
+
+@keyframes loading { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+@media (max-width: 991px) {
+  #main-container { gap: 0; padding: .75rem; }
+  #home_main_feed { width: 100%; max-width: none; }
+}
+@media (max-width: 480px) { #main-container { padding: .5rem; } }

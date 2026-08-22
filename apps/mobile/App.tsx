@@ -1,34 +1,58 @@
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { fetchSessionUser, NativeApiError } from "./src/auth/api";
-import {
-  clearNativeSession,
-  readNativeSession,
-  sessionAsLocalStorage,
-  writeNativeSession
-} from "./src/auth/session";
+import { fetchSessionUser, NativeApiError, setUnauthorizedHandler } from "./src/auth/api";
+import { clearNativeSession, readNativeSession, writeNativeSession } from "./src/auth/session";
 import type { NativeSession } from "./src/auth/types";
-import { panelUrlForRole } from "./src/config";
 import { musicPlayback } from "./src/musicPlayback";
+import { StudentShell } from "./src/navigation/StudentShell";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { PanelWebView, resetPanelShell } from "./src/screens/PanelWebView";
-import { flushShellSnapshot, mergeShellSnapshot } from "./src/shellSnapshot";
-
-const APP_BG = "#08090b";
+import { StudentProvider } from "./src/student/StudentContext";
+import { getTheme, hydrateTheme, setTheme } from "./src/student/prefs";
+import { StudentThemeProvider, tokensFor, useSt } from "./src/student/theme";
+import { hydrateUiSounds, preloadUiSounds, uiSounds } from "./src/student/uiSounds";
 
 function BootScreen() {
+  const bg = tokensFor(getTheme()).bg;
   return (
-    <View style={styles.boot}>
+    <View style={[styles.boot, { backgroundColor: bg }]}>
       <ActivityIndicator color="#f2b461" size="large" />
     </View>
   );
 }
 
+function ThemedStatusBar() {
+  const { st } = useSt();
+  return <StatusBar style="light" backgroundColor={st.headerFrom} />;
+}
+
+function StudentSoundsBoot() {
+  useEffect(() => {
+    uiSounds.bootUp();
+    preloadUiSounds();
+  }, []);
+  return null;
+}
+
 function AppGate() {
   const [ready, setReady] = useState(false);
   const [session, setSession] = useState<NativeSession | null>(null);
+
+  const onLogout = useCallback(() => {
+    uiSounds.toggleOff();
+    resetPanelShell();
+    void musicPlayback.stop();
+    void clearNativeSession();
+    setSession(null);
+  }, []);
+
+  useEffect(() => {
+    setUnauthorizedHandler(onLogout);
+    return () => setUnauthorizedHandler(null);
+  }, [onLogout]);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,47 +95,63 @@ function AppGate() {
 
   const onLoggedIn = useCallback((next: NativeSession) => {
     resetPanelShell();
+    setTheme("light");
     setSession(next);
-    void (async () => {
-      try {
-        await writeNativeSession(next);
-        await mergeShellSnapshot({
-          href: panelUrlForRole(next.user.role),
-          localStorage: sessionAsLocalStorage(next)
-        });
-        await flushShellSnapshot();
-      } catch (error) {
-        console.warn("Falha ao persistir sessão nativa", error);
-      }
-    })();
-  }, []);
-
-  const onLogout = useCallback(() => {
-    resetPanelShell();
-    void musicPlayback.stop();
-    void clearNativeSession();
-    setSession(null);
+    preloadUiSounds();
+    void writeNativeSession(next).catch((error) => {
+      console.warn("Falha ao persistir sessão nativa", error);
+    });
   }, []);
 
   if (!ready) return <BootScreen />;
   if (!session) return <LoginScreen onLoggedIn={onLoggedIn} />;
-  return <PanelWebView session={session} onLogout={onLogout} />;
+  if (session.user.role === "ADMIN") {
+    return <PanelWebView session={session} onLogout={onLogout} />;
+  }
+  return (
+    <StudentProvider session={session} onLogout={onLogout}>
+      <StudentSoundsBoot />
+      <StudentShell />
+    </StudentProvider>
+  );
 }
 
 export default function App() {
+  const [prefsReady, setPrefsReady] = useState(false);
+
+  useEffect(() => {
+    void Promise.all([hydrateTheme(), hydrateUiSounds()]).then(() => setPrefsReady(true));
+  }, []);
+
+  if (!prefsReady) return <BootScreen />;
+
   return (
-    <SafeAreaProvider>
-      <StatusBar style="light" />
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <StudentThemeProvider>
+          <ThemedApp />
+        </StudentThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}
+
+function ThemedApp() {
+  const { st } = useSt();
+  return (
+    <View style={[styles.root, { backgroundColor: st.bg }]}>
+      <ThemedStatusBar />
       <AppGate />
-    </SafeAreaProvider>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   boot: {
     flex: 1,
     alignItems: "center",
-    backgroundColor: APP_BG,
-    justifyContent: "center"
+    justifyContent: "center",
+    backgroundColor: "#f7f2ea"
   }
 });

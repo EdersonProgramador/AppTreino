@@ -245,7 +245,7 @@ export function StudentPlaySection({ token }: Props) {
               <div className="student-play-hero-copy">
                 <p className="student-play-kicker">
                   <Music2 size={14} />
-                  Play App Treino
+                  Play App Treino Social
                 </p>
                 <h2>{greeting}</h2>
                 <p className="student-play-lead">

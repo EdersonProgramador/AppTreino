@@ -8,6 +8,7 @@ export type StudentNotificationType =
   | "WORKOUT_PROGRAM"
   | "SUPPORT"
   | "WORKOUT"
+  | "ACHIEVEMENT"
   | "MUSIC_ALBUM"
   | "MUSIC_TRACK";
 

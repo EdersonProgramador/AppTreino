@@ -13,6 +13,9 @@ import {
 
 export type StudentPanelSection =
   | "home"
+  | "feed"
+  | "club"
+  | "activity"
   | "payments"
   | "training"
   | "products"
@@ -28,6 +31,7 @@ export type StudentPanelSection =
   | "ai"
   | "history"
   | "profile"
+  | "profile-settings"
   | "settings"
   | "membership"
   | "purchases"
@@ -35,7 +39,12 @@ export type StudentPanelSection =
   | "favorites"
   | "ratings"
   | "locations"
-  | "play";
+  | "play"
+  | "reels"
+  | "live"
+  | "messages"
+  | "chat"
+  | "requests";
 
 export type SyncNotification = {
   id: string;

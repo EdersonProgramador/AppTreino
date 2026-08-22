@@ -7,6 +7,50 @@ export const ORDER_PAID_STATUSES: OrderStatus[] = ["CONFIRMED", "READY", "DELIVE
 
 export const DEFAULT_DELIVERY_FEE_CENTS = 1500;
 
+export const DEFAULT_SYSTEM_SETTINGS: Record<string, string> = {
+  module_products: "true",
+  module_purchases: "true",
+  module_qr: "true",
+  module_cards: "true",
+  module_contact: "true",
+  module_ratings: "true",
+  module_favorites: "true",
+  qr_checkin_enabled: "true"
+};
+
+export async function ensureDefaultSystemSettings() {
+  const keys = Object.keys(DEFAULT_SYSTEM_SETTINGS);
+  const existing = await prisma.systemSetting.findMany({
+    where: { key: { in: keys } },
+    select: { key: true }
+  });
+  const present = new Set(existing.map((item) => item.key));
+  const missing = keys.filter((key) => !present.has(key));
+  if (missing.length === 0) return;
+
+  await prisma.$transaction(
+    missing.map((key) =>
+      prisma.systemSetting.create({
+        data: { key, value: DEFAULT_SYSTEM_SETTINGS[key] }
+      })
+    )
+  );
+}
+
+/** Liga todos os módulos públicos do aluno (Configurações do admin). */
+export async function activateSystemModules() {
+  const entries = Object.entries(DEFAULT_SYSTEM_SETTINGS);
+  await prisma.$transaction(
+    entries.map(([key, value]) =>
+      prisma.systemSetting.upsert({
+        where: { key },
+        update: { value },
+        create: { key, value }
+      })
+    )
+  );
+}
+
 export async function isModuleEnabled(key: string, defaultEnabled = true) {
   const setting = await prisma.systemSetting.findUnique({ where: { key } });
   if (!setting) return defaultEnabled;

@@ -16,6 +16,7 @@ import {
   PURCHASE_PAID_STATUSES
 } from "./commerce.utils.js";
 import { createAsaasCheckout, purchaseExternalReference, type AsaasBillingType } from "./asaas.client.js";
+import { ensureProgramCycleRecorded, recordProgramCycleCompletion } from "./program-completion.utils.js";
 
 const substituteSchema = z.object({
   exerciseId: z.string().min(1)
@@ -29,6 +30,10 @@ const completeWorkoutSchema = z.object({
 const startWorkoutSessionSchema = z.object({
   assignmentId: z.string().min(1),
   dayNumber: z.coerce.number().int().min(1).optional()
+});
+
+const repeatWorkoutSchema = z.object({
+  assignmentId: z.string().min(1)
 });
 
 const cancelWorkoutSessionSchema = z.object({
@@ -580,7 +585,7 @@ export async function getPublishedWorkouts(
     new Set(programDaysByProgram.flatMap((day) => day.workoutBlock.exercises.map((exercise) => exercise.exerciseId)))
   );
 
-  const [completedSessionsByProgram, latestProgressByExercise] = await Promise.all([
+  const [completedSessionsByProgram, latestProgressByExercise, cycleCompletionGroups] = await Promise.all([
     prisma.workoutSession.findMany({
       where: {
         userId,
@@ -591,7 +596,8 @@ export async function getPublishedWorkouts(
       },
       select: {
         programId: true,
-        dayNumber: true
+        dayNumber: true,
+        finishedAt: true
       }
     }),
     prisma.userProgress.findMany({
@@ -604,8 +610,24 @@ export async function getPublishedWorkouts(
       orderBy: {
         completedAt: "desc"
       }
+    }),
+    prisma.programCycleCompletion.groupBy({
+      by: ["programId"],
+      where: {
+        userId,
+        programId: {
+          in: allProgramIds
+        }
+      },
+      _count: {
+        _all: true
+      }
     })
   ]);
+
+  const cycleCountByProgramId = new Map(
+    cycleCompletionGroups.map((group) => [group.programId, group._count._all])
+  );
 
   const latestWeightByExercise = new Map<string, number>();
 
@@ -624,22 +646,6 @@ export async function getPublishedWorkouts(
       existing.push(day);
     } else {
       programDaysByProgramId.set(day.programId, [day]);
-    }
-  }
-
-  const sessionsByProgramId = new Map<string, Set<number>>();
-
-  for (const session of completedSessionsByProgram) {
-    if (!session.programId) {
-      continue;
-    }
-
-    const existing = sessionsByProgramId.get(session.programId);
-
-    if (existing) {
-      existing.add(session.dayNumber);
-    } else {
-      sessionsByProgramId.set(session.programId, new Set([session.dayNumber]));
     }
   }
 
@@ -679,11 +685,7 @@ export async function getPublishedWorkouts(
         }
       });
 
-      if (assignment.status === "COMPLETED" && assignment.completedWorkouts >= assignment.totalWorkouts) {
-        return null;
-      }
-
-      if (assignment.status !== "ACTIVE") {
+      if (assignment.status === "CANCELED") {
         return null;
       }
 
@@ -709,20 +711,10 @@ export async function getPublishedWorkouts(
         });
       }
 
-      if (isProgramComplete({
-        completionMode: assignment.program.completionMode,
-        completedSessions: assignment.completedWorkouts,
-        plannedSessions: assignment.totalWorkouts,
-        plannedEndsAt: assignment.plannedEndsAt
-      })) {
-        await prisma.userProgram.update({
-          where: { id: assignment.id },
-          data: { status: "COMPLETED", completedAt: new Date() }
-        });
-        return null;
-      }
-
-      if (!assignment.program.days.some((day) => day.dayNumber === assignment.currentDay)) {
+      if (
+        assignment.status === "ACTIVE" &&
+        !assignment.program.days.some((day) => day.dayNumber === assignment.currentDay)
+      ) {
         assignment = await prisma.userProgram.update({
           where: {
             id: assignment.id
@@ -743,6 +735,27 @@ export async function getPublishedWorkouts(
         });
       }
 
+      const cycleCompleted = assignment.status === "COMPLETED";
+      const metadataPreview = parseProgramMetadata(assignment.program.description);
+      const modalityNamePreview = assignment.program.modality?.name ?? metadataPreview.modality;
+      let completionCount = cycleCountByProgramId.get(assignment.programId) ?? 0;
+      const historicalCompletedSessions = completedSessionsByProgram.filter(
+        (session) => session.programId === assignment.programId
+      ).length;
+
+      if (completionCount === 0 && (cycleCompleted || historicalCompletedSessions >= assignment.totalWorkouts)) {
+        const recorded = await ensureProgramCycleRecorded({
+          userId,
+          programId: assignment.programId,
+          programTitle: assignment.program.title,
+          modalityId: assignment.program.modalityId ?? null,
+          modalityName: modalityNamePreview,
+          completedAt: assignment.completedAt ?? new Date()
+        });
+        completionCount = recorded.cycleNumber;
+        cycleCountByProgramId.set(assignment.programId, completionCount);
+      }
+
       const currentDay = assignment.currentDay;
       const programDays = (programDaysByProgramId.get(assignment.programId) ?? []).filter(
         (day) => day.workoutBlock.exercises.length > 0
@@ -758,8 +771,24 @@ export async function getPublishedWorkouts(
           mapWorkoutExercise(exercise, latestWeightByExercise.get(exercise.exerciseId) ?? 0, block.restTime)
         );
 
-      const completedDayNumbers = sessionsByProgramId.get(assignment.programId) ?? new Set<number>();
-      const completedWorkoutCount = Math.max(assignment.completedWorkouts, completedDayNumbers.size);
+      const completedDayNumbers = new Set(
+        completedSessionsByProgram
+          .filter(
+            (session) =>
+              session.programId === assignment.programId &&
+              Boolean(session.finishedAt) &&
+              session.finishedAt! >= assignment.startedAt
+          )
+          .map((session) => session.dayNumber)
+      );
+      if (cycleCompleted) {
+        for (const day of programDays) {
+          completedDayNumbers.add(day.dayNumber);
+        }
+      }
+      const completedWorkoutCount = cycleCompleted
+        ? Math.max(assignment.completedWorkouts, assignment.totalWorkouts, completedDayNumbers.size)
+        : Math.max(assignment.completedWorkouts, completedDayNumbers.size);
       const metadata = parseProgramMetadata(programDay.program.description);
       const modalityName = programDay.program.modality?.name ?? metadata.modality;
       const sequence = programDays.map((day) => ({
@@ -771,6 +800,8 @@ export async function getPublishedWorkouts(
         totalWorkouts: assignment.totalWorkouts,
         completedWorkouts: completedWorkoutCount,
         completed: completedDayNumbers.has(day.dayNumber),
+        cycleCompleted,
+        completionCount,
         block: {
           title: day.workoutBlock.title,
           identifier: day.workoutBlock.identifier,
@@ -793,6 +824,8 @@ export async function getPublishedWorkouts(
         dayNumber: currentDay,
         totalDays: assignment.program.days.length,
         totalWorkouts: assignment.totalWorkouts,
+        cycleCompleted,
+        completionCount,
         modality: modalityName,
         modalityImageUrl: programDay.program.modality?.imageUrl ?? null,
         description: metadata.description,
@@ -1416,7 +1449,8 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       include: {
         program: {
           include: {
-            days: true
+            days: true,
+            modality: true
           }
         }
       }
@@ -1512,11 +1546,78 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       request.log.warn({ err: attendanceError }, "Falha ao registrar presença após concluir treino.");
     }
 
+    if (isLastWorkout) {
+      const metadata = parseProgramMetadata(assignment.program.description);
+      try {
+        await recordProgramCycleCompletion({
+          userId: authUser.id,
+          programId: assignment.programId,
+          programTitle: assignment.program.title,
+          modalityId: assignment.program.modalityId ?? null,
+          modalityName: assignment.program.modality?.name ?? metadata.modality,
+          completedAt: finishedAt
+        });
+      } catch (completionError) {
+        request.log.warn({ err: completionError }, "Falha ao registrar selo de conclusão do programa.");
+      }
+    }
+
     return {
       assignment: updatedAssignment,
       session: completedSession,
       completed: isLastWorkout,
       nextDayNumber: isLastWorkout ? null : nextDayNumber
+    };
+  });
+
+  app.post("/student/workout/repeat", async (request) => {
+    requireDatabase();
+    const authUser = await requireActiveEnrollment(app, request);
+    const body = repeatWorkoutSchema.parse(request.body);
+
+    const assignment = await prisma.userProgram.findFirstOrThrow({
+      where: {
+        id: body.assignmentId,
+        userId: authUser.id,
+        status: "COMPLETED",
+        program: {
+          status: "PUBLISHED",
+          isActive: true
+        }
+      },
+      include: {
+        program: {
+          include: {
+            days: true
+          }
+        }
+      }
+    });
+
+    const startedAt = new Date();
+    const firstDay =
+      [...assignment.program.days].sort((first, second) => first.dayNumber - second.dayNumber)[0]?.dayNumber ?? 1;
+
+    const updated = await prisma.userProgram.update({
+      where: { id: assignment.id },
+      data: {
+        status: "ACTIVE",
+        currentDay: firstDay,
+        completedWorkouts: 0,
+        completedAt: null,
+        startedAt,
+        plannedEndsAt: calculateProgramEndDate(startedAt, {
+          years: assignment.program.durationYears,
+          months: assignment.program.durationMonths,
+          weeks: assignment.program.durationWeeks,
+          days: assignment.program.durationExtraDays
+        })
+      }
+    });
+
+    return {
+      assignment: updated,
+      repeated: true
     };
   });
 

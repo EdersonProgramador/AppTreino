@@ -4,6 +4,9 @@ const PANEL_KEY = "apptreino.student.panel";
 
 const SECTIONS: StudentPanelSection[] = [
   "home",
+  "feed",
+  "club",
+  "activity",
   "payments",
   "training",
   "products",
@@ -19,6 +22,7 @@ const SECTIONS: StudentPanelSection[] = [
   "ai",
   "history",
   "profile",
+  "profile-settings",
   "settings",
   "membership",
   "purchases",
@@ -26,7 +30,12 @@ const SECTIONS: StudentPanelSection[] = [
   "favorites",
   "ratings",
   "locations",
-  "play"
+  "play",
+  "reels",
+  "live",
+  "messages",
+  "chat",
+  "requests"
 ];
 
 export type StudentPanelPersist = {
@@ -47,7 +56,7 @@ export function readStudentPanel(): StudentPanelPersist | null {
     const parsed = JSON.parse(localStorage.getItem(PANEL_KEY) ?? "null") as Partial<StudentPanelPersist> | null;
     if (!parsed || !isSection(parsed.section)) return null;
     return {
-      section: parsed.section,
+      section: parsed.section === "home" ? "feed" : parsed.section,
       modality: typeof parsed.modality === "string" ? parsed.modality : null,
       programId: typeof parsed.programId === "string" ? parsed.programId : null,
       workoutSessionId: typeof parsed.workoutSessionId === "string" ? parsed.workoutSessionId : null,

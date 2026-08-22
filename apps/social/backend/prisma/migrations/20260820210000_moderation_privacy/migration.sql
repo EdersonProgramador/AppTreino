@@ -1,0 +1,40 @@
+ALTER TABLE "Post" ADD COLUMN IF NOT EXISTS "hidden" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "role" VARCHAR(20) NOT NULL DEFAULT 'user';
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "is_private" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "suspended_at" TIMESTAMP(3);
+ALTER TABLE "Report" ADD COLUMN IF NOT EXISTS "status" VARCHAR(20) NOT NULL DEFAULT 'pending';
+
+CREATE TABLE IF NOT EXISTS "Mute" (
+    "id" SERIAL NOT NULL,
+    "muter_id" VARCHAR(255) NOT NULL,
+    "muted_id" VARCHAR(255) NOT NULL,
+    CONSTRAINT "Mute_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE IF NOT EXISTS "FollowRequest" (
+    "id" SERIAL NOT NULL,
+    "from_id" VARCHAR(255) NOT NULL,
+    "to_id" VARCHAR(255) NOT NULL,
+    "created_on" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "FollowRequest_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "Mute_muter_id_muted_id_key" ON "Mute"("muter_id", "muted_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "FollowRequest_from_id_to_id_key" ON "FollowRequest"("from_id", "to_id");
+
+DO $$ BEGIN
+ ALTER TABLE "Mute" ADD CONSTRAINT "Mute_muter_id_fkey" FOREIGN KEY ("muter_id") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+ ALTER TABLE "Mute" ADD CONSTRAINT "Mute_muted_id_fkey" FOREIGN KEY ("muted_id") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+ ALTER TABLE "FollowRequest" ADD CONSTRAINT "FollowRequest_from_id_fkey" FOREIGN KEY ("from_id") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+ ALTER TABLE "FollowRequest" ADD CONSTRAINT "FollowRequest_to_id_fkey" FOREIGN KEY ("to_id") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

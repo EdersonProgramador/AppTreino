@@ -2,7 +2,7 @@
   "name": "app-treino",
   "private": true,
   "version": "0.1.0",
-  "description": "Monorepo do App Treino com web, API e pacotes compartilhados.",
+  "description": "Monorepo do App Treino (web, API, mobile) preservado, com shell opcional da rede-social em apps/social.",
   "workspaces": [
     "packages/*",
     "apps/web",
@@ -12,6 +12,8 @@
     "dev": "npm run build --workspace @app-treino/shared && npm run dev --workspace @app-treino/web",
     "dev:web": "npm run build --workspace @app-treino/shared && npm run dev --workspace @app-treino/web",
     "dev:api": "npm run build --workspace @app-treino/shared && npm run dev --workspace @app-treino/api",
+    "dev:social": "npm --prefix apps/social run dev:frontend",
+    "dev:social:api": "npm --prefix apps/social run dev:backend",
     "dev:mobile": "npm --prefix apps/mobile start",
     "mobile:android": "npm --prefix apps/mobile run android",
     "mobile:run:android": "npm --prefix apps/mobile run run:android",

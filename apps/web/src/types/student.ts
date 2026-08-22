@@ -56,14 +56,26 @@ export interface StudentProfile {
   city?: string | null;
   state?: string | null;
   avatarUrl?: string | null;
+  bio?: string | null;
+  coverColor?: string | null;
+  coverUrl?: string | null;
+  isPrivate?: boolean;
+  createdAt?: string | null;
   locationId?: string | null;
   /** Liberação administrativa (sem membership Asaas) ou espelho pós-pagamento. */
   enrollmentStatus?: "PENDING" | "ACTIVE" | "CANCELED";
+  achievements?: Array<{
+    modalityId: string;
+    modalityName: string;
+    modalityImageUrl?: string | null;
+    completionCount: number;
+    lastCompletedAt: string;
+  }>;
 }
 
 export interface NotificationRow {
   id: string;
-  type: "WORKOUT_PROGRAM" | "EVENT" | "WORKOUT" | "SUPPORT" | "ANNOUNCEMENT" | "LOCATION" | "PRODUCT" | string;
+  type: "WORKOUT_PROGRAM" | "EVENT" | "WORKOUT" | "ACHIEVEMENT" | "SUPPORT" | "ANNOUNCEMENT" | "LOCATION" | "PRODUCT" | string;
   title: string;
   message: string;
   publishedAt: string;
@@ -99,6 +111,8 @@ export interface TodayWorkoutResponse {
     modalityImageUrl?: string | null;
     description?: string;
     completedWorkouts?: number;
+    cycleCompleted?: boolean;
+    completionCount?: number;
     teacherNames?: string[];
     unitName?: string;
     membershipStartsAt?: string | null;
@@ -127,6 +141,8 @@ export interface TodayWorkoutResponse {
       totalWorkouts: number;
       completedWorkouts?: number;
       completed?: boolean;
+      cycleCompleted?: boolean;
+      completionCount?: number;
       block: {
         title: string;
         identifier?: string | null;
@@ -185,4 +201,130 @@ export interface WorkoutConsistencyResponse {
     finishedAt: string | null;
     durationSeconds: number | null;
   }>;
+}
+
+export type OutdoorSport = "RUN" | "WALK" | "RIDE";
+export type SocialPostKind = "TEXT" | "PHOTO" | "VIDEO" | "ACTIVITY";
+
+export interface SocialAuthor {
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+  following?: boolean;
+}
+
+export interface SocialComment {
+  id: string;
+  body: string;
+  createdAt: string;
+  author: SocialAuthor;
+}
+
+export interface OutdoorActivityRow {
+  id: string;
+  sport: OutdoorSport;
+  sportLabel: string;
+  title: string;
+  status: "LIVE" | "PAUSED" | "COMPLETED" | "CANCELED" | string;
+  startedAt: string;
+  finishedAt?: string | null;
+  pauseMs?: number;
+  elapsedSeconds: number;
+  movingSeconds: number;
+  distanceMeters: number;
+  avgPaceSecPerKm?: number | null;
+  avgSpeedMps?: number | null;
+  maxSpeedMps?: number | null;
+  elevationGainMeters: number;
+  calories: number;
+  mapType: string;
+  activityMap: string;
+  layers?: {
+    pois?: boolean;
+    bikeLanes?: boolean;
+    avalanche?: boolean;
+    slope?: boolean;
+    aspect?: boolean;
+  } | null;
+  is3d: boolean;
+  targetDistanceMeters?: number | null;
+  goals?: {
+    distanceKm?: number;
+    durationSeconds?: number;
+    speedKmh?: number;
+    lapRadiusMeters?: number;
+    lapCounterOn?: boolean;
+    lapMarker?: { lat: number; lng: number; radiusMeters?: number } | null;
+    laps?: Array<{ index: number; lat: number; lng: number; t: number; distanceMeters: number }>;
+  } | null;
+  polyline: Array<{ lat: number; lng: number; t?: number; ele?: number | null }>;
+  summary?: Record<string, unknown> | null;
+  splits?: Array<{
+    km: number;
+    distance: number;
+    elapsedTime: number;
+    paceSecPerKm: number;
+    partial?: boolean;
+  }>;
+  splitsAnalysis?: {
+    bestKm?: number | null;
+    worstKm?: number | null;
+    bestPaceSecPerKm?: number | null;
+    worstPaceSecPerKm?: number | null;
+  } | null;
+  photoUrl?: string | null;
+  videoUrl?: string | null;
+  caption?: string | null;
+}
+
+export interface SocialPostRow {
+  id: string;
+  kind: SocialPostKind | string;
+  body?: string | null;
+  mediaUrl?: string | null;
+  mediaType?: "IMAGE" | "VIDEO" | string | null;
+  mediaItems?: Array<{ url: string; type: "IMAGE" | "VIDEO" | string }>;
+  createdAt: string;
+  author: SocialAuthor;
+  likesCount: number;
+  likedByMe: boolean;
+  dislikesCount?: number;
+  dislikedByMe?: boolean;
+  commentsCount?: number;
+  comments: SocialComment[];
+  activity?: OutdoorActivityRow | null;
+  isMine?: boolean;
+}
+
+export interface SocialStoryItem {
+  id: string;
+  mediaUrl: string;
+  mediaType: string;
+  caption?: string | null;
+  mood: string;
+  createdAt: string;
+  seen: boolean;
+}
+
+export interface SocialStoryRail {
+  userId: string;
+  username: string;
+  image_url?: string | null;
+  isMine: boolean;
+  unseen: boolean;
+  items: SocialStoryItem[];
+}
+
+export interface ClubChallengeRow {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  sport: OutdoorSport;
+  sportLabel: string;
+  goalMeters: number;
+  period: "WEEK" | "MONTH" | "OPEN" | string;
+  joined: boolean;
+  progressMeters: number;
+  percent: number;
 }

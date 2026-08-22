@@ -1,63 +1,26 @@
-# App Treino
+# App Treino Social
 
-Monorepo com web (React/Vite), API (Fastify/Prisma) e pacotes compartilhados.
+Monorepo do **App Treino Social** (web, API, mobile): rede social de atletas focada em treino e corrida, no mesmo stack (Vite + Fastify + Expo). O shell do aluno virou produto social Feed-first (`student-app-header`, bottom nav Feed/Clube/Atividade/Treino/Menu) — sem segundo app.
 
 ## Estrutura
 
 ```txt
 apps/
-  web/      Landing, login, painel admin e área do aluno
-  api/      API Node.js, auth, pagamentos e webhooks
-  mobile/   App Expo (WebView) — login + portais aluno/admin
+  web/      Landing, login, admin CMS e App Treino Social (Feed + treino…)
+  api/      API Fastify/Prisma (social, outdoor, commerce, treinos)
+  mobile/   App Expo nativo (mesmo modelo)
+  social/   Apenas referência do zip rede-social (não é o produto)
 packages/
-  shared/   Tipos e contratos compartilhados
-docs/       Documentação (inclui deploy)
+  shared/
+docs/
 ```
-
-O **app mobile** abre em `/login` (produto de uso diário). A **landing de vendas** fica só no site web.
-
-## Produção
-
-| Camada | Serviço | Domínio |
-|--------|---------|---------|
-| Banco | Neon | PostgreSQL gerenciado |
-| API | Render | https://api.edersonprogramador.com |
-| Web | Vercel | https://edersonprogramador.com |
-| DNS | HostGator | aponta os nomes acima |
-
-Guia completo: [docs/deploy.md](docs/deploy.md).
-
-Arquivos de infra:
-
-- `render.yaml` — blueprint da API no Render
-- `vercel.json` — build/output do frontend na Vercel
 
 ## Desenvolvimento local
 
 ```bash
-cp .env.example .env
 npm install
-npm run prisma:generate
-npm run prisma:migrate
-npm run dev:api
-npm run dev:web
-npm run dev:mobile   # Expo Go — ver apps/mobile/README.md
+npm run dev --workspace=apps/api
+npm run dev --workspace=apps/web
 ```
 
-## GitHub Actions
-
-- `.github/workflows/ci.yml` — typecheck, testes e build em pushes/PRs na `main`
-- Workflows antigos de HostGator/GitHub Pages foram desativados (deploy agora é Render + Vercel)
-
-## Ambiente
-
-Copie `.env.example` para `.env` na raiz.
-
-Produção (resumo):
-
-```txt
-DATABASE_URL=postgresql://...@...neon.tech/...?sslmode=require
-WEB_ORIGIN=https://edersonprogramador.com,https://www.edersonprogramador.com
-PUBLIC_BASE_URL=https://api.edersonprogramador.com
-VITE_API_URL=https://api.edersonprogramador.com
-```
+Mobile: `npm start --workspace=apps/mobile`

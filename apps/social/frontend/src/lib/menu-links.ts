@@ -1,0 +1,23 @@
+export const MENU_LINKS: Array<{ href: string; title: string; hint: string; group: string }> = [
+  { group: "Treino", href: "/treino", title: "Treino", hint: "Programas e sessões" },
+  { group: "Treino", href: "/treino/historico", title: "Histórico", hint: "Treinos concluídos" },
+  { group: "Treino", href: "/atividade", title: "Atividade", hint: "Corrida, caminhada e bike" },
+  { group: "Treino", href: "/clube", title: "Clube", hint: "Desafios semanais" },
+  { group: "Treino", href: "/ia", title: "Plano inteligente", hint: "Sugestão da semana" },
+  { group: "Play e loja", href: "/play", title: "Play", hint: "Músicas para treinar" },
+  { group: "Play e loja", href: "/loja", title: "Vitrine", hint: "Produtos e suplementos" },
+  { group: "Play e loja", href: "/loja/carrinho", title: "Carrinho", hint: "Itens selecionados" },
+  { group: "Play e loja", href: "/loja/pedidos", title: "Pedidos", hint: "Compras recentes" },
+  { group: "Saúde", href: "/saude/avaliacoes", title: "Avaliação física", hint: "Peso, altura e % gordura" },
+  { group: "Saúde", href: "/saude/frequencia", title: "Frequência", hint: "Presença e ritmo" },
+  { group: "Conta", href: "/conta/matriculas", title: "Matrículas", hint: "Plano e benefícios" },
+  { group: "Conta", href: "/conta/pagamentos", title: "Pagamentos", hint: "Histórico financeiro" },
+  { group: "Comunidade", href: "/reels", title: "Clipes", hint: "Vídeos curtos" },
+  { group: "Comunidade", href: "/live", title: "Ao vivo", hint: "Transmissões" },
+  { group: "Comunidade", href: "/messages", title: "Mensagens", hint: "Conversas privadas" },
+  { group: "Comunidade", href: "/chat", title: "Chat global", hint: "Sala geral" },
+  { group: "Comunidade", href: "/requests", title: "Pedidos", hint: "Seguir contas privadas" },
+  { group: "Comunidade", href: "/eventos", title: "Eventos", hint: "Aulas e encontros" },
+  { group: "Comunidade", href: "/unidades", title: "Unidades", hint: "Academias e endereços" },
+  { group: "Ajuda", href: "/suporte", title: "Atendimento", hint: "Abrir chamado" }
+];

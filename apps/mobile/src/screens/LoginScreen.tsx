@@ -15,16 +15,15 @@ import * as Linking from "expo-linking";
 import { API_URL, WEB_URL } from "../config";
 import { loginWithPassword, NativeApiError, requestPasswordReset } from "../auth/api";
 import type { NativeSession } from "../auth/types";
-
-const GOLD = "#f2b461";
-const SAND = "#fff7ec";
-const INK = "#08090b";
+import { useSt } from "../student/theme";
+import { uiSounds } from "../student/uiSounds";
 
 export function LoginScreen({
   onLoggedIn
 }: {
   onLoggedIn: (session: NativeSession) => void | Promise<void>;
 }) {
+  const { st } = useSt();
   const [mode, setMode] = useState<"login" | "forgot">("login");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -33,11 +32,13 @@ export function LoginScreen({
   const [success, setSuccess] = useState<string | null>(null);
 
   async function submit() {
+    uiSounds.submit();
     setError(null);
     setSuccess(null);
     const id = identifier.trim();
     if (!id) {
       setError("Informe e-mail ou telefone.");
+      uiSounds.error();
       return;
     }
 
@@ -46,10 +47,12 @@ export function LoginScreen({
       if (mode === "forgot") {
         const response = await requestPasswordReset(id);
         setSuccess(response.message || "Se a conta existir, enviamos o link de recuperação.");
+        uiSounds.info();
         return;
       }
       if (password.length < 6) {
         setError("A senha precisa ter pelo menos 6 caracteres.");
+        uiSounds.error();
         return;
       }
       const session = await loginWithPassword(id, password);
@@ -62,13 +65,14 @@ export function LoginScreen({
             ? caught.message
             : "Não foi possível entrar. Verifique a API e a rede.";
       setError(message);
+      uiSounds.error();
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "right", "bottom", "left"]}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: st.bg }]} edges={["top", "right", "bottom", "left"]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
@@ -79,15 +83,15 @@ export function LoginScreen({
           keyboardDismissMode="on-drag"
         >
           <View style={styles.panel}>
-            <Text style={styles.eyebrow}>Área de acesso</Text>
-            <Text style={styles.title}>{mode === "forgot" ? "Recuperar acesso" : "Entrar"}</Text>
-            <Text style={styles.copy}>
+            <Text style={[styles.eyebrow, { color: st.gold }]}>Área de acesso</Text>
+            <Text style={[styles.title, { color: st.text }]}>{mode === "forgot" ? "Recuperar acesso" : "Entrar"}</Text>
+            <Text style={[styles.copy, { color: st.muted }]}>
               {mode === "forgot"
                 ? "Informe o e-mail ou telefone cadastrado."
                 : "Acesse com e-mail ou telefone. O painel continua o mesmo; o login agora é nativo."}
             </Text>
 
-            <Text style={styles.label}>E-mail ou telefone</Text>
+            <Text style={[styles.label, { color: st.muted }]}>E-mail ou telefone</Text>
             <TextInput
               autoCapitalize="none"
               autoComplete="username"
@@ -95,22 +99,22 @@ export function LoginScreen({
               keyboardType="email-address"
               onChangeText={setIdentifier}
               placeholder="Seu e-mail ou telefone"
-              placeholderTextColor="#8f887f"
-              style={styles.input}
+              placeholderTextColor={st.faint}
+              style={[styles.input, { color: st.text, borderColor: st.line, backgroundColor: st.inputBg }]}
               value={identifier}
             />
 
             {mode === "login" ? (
               <>
-                <Text style={styles.label}>Senha</Text>
+                <Text style={[styles.label, { color: st.muted }]}>Senha</Text>
                 <TextInput
                   autoComplete="password"
                   onChangeText={setPassword}
                   onSubmitEditing={() => void submit()}
                   placeholder="Mínimo 6 caracteres"
-                  placeholderTextColor="#8f887f"
+                  placeholderTextColor={st.faint}
                   secureTextEntry
-                  style={styles.input}
+                  style={[styles.input, { color: st.text, borderColor: st.line, backgroundColor: st.inputBg }]}
                   value={password}
                 />
               </>
@@ -125,14 +129,15 @@ export function LoginScreen({
               onPress={() => void submit()}
               style={({ pressed }) => [
                 styles.button,
+                { backgroundColor: st.gold },
                 pressed ? styles.buttonPressed : null,
                 submitting ? styles.buttonDisabled : null
               ]}
             >
               {submitting ? (
-                <ActivityIndicator color={INK} />
+                <ActivityIndicator color={st.ink} />
               ) : (
-                <Text style={styles.buttonText}>{mode === "forgot" ? "Enviar link" : "Entrar"}</Text>
+                <Text style={[styles.buttonText, { color: st.ink }]}>{mode === "forgot" ? "Enviar link" : "Entrar"}</Text>
               )}
             </Pressable>
 
@@ -144,15 +149,15 @@ export function LoginScreen({
               }}
               style={styles.linkWrap}
             >
-              <Text style={styles.link}>
+              <Text style={[styles.link, { color: st.gold }]}>
                 {mode === "login" ? "Esqueci a senha" : "Voltar ao login"}
               </Text>
             </Pressable>
 
             <Pressable onPress={() => void Linking.openURL(`${WEB_URL}/login`)} style={styles.linkWrap}>
-              <Text style={styles.muted}>Criar conta no site</Text>
+              <Text style={[styles.muted, { color: st.faint }]}>Criar conta no site</Text>
             </Pressable>
-            {error ? <Text style={styles.debug}>API: {API_URL}</Text> : null}
+            {error ? <Text style={[styles.debug, { color: st.faint }]}>API: {API_URL}</Text> : null}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -162,8 +167,7 @@ export function LoginScreen({
 
 const styles = StyleSheet.create({
   safe: {
-    flex: 1,
-    backgroundColor: INK
+    flex: 1
   },
   flex: {
     flex: 1
@@ -178,54 +182,46 @@ const styles = StyleSheet.create({
     gap: 8
   },
   eyebrow: {
-    color: GOLD,
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 1.4,
     textTransform: "uppercase"
   },
   title: {
-    color: SAND,
     fontSize: 32,
     fontWeight: "800"
   },
   copy: {
-    color: "#c9c0b5",
     fontSize: 15,
     lineHeight: 22,
     marginBottom: 12
   },
   label: {
-    color: "#d8cfc4",
     fontSize: 13,
     fontWeight: "700",
     marginTop: 8
   },
   input: {
-    borderColor: "rgba(255,255,255,0.16)",
     borderRadius: 14,
     borderWidth: 1,
-    color: SAND,
     fontSize: 16,
     paddingHorizontal: 14,
-    paddingVertical: 13,
-    backgroundColor: "rgba(255,255,255,0.04)"
+    paddingVertical: 13
   },
   error: {
-    color: "#ffd8d4",
+    color: "#df3838",
     fontSize: 14,
     fontWeight: "600",
     marginTop: 8
   },
   ok: {
-    color: "#b8f0c8",
+    color: "#1f7a52",
     fontSize: 14,
     fontWeight: "600",
     marginTop: 8
   },
   button: {
     alignItems: "center",
-    backgroundColor: GOLD,
     borderRadius: 14,
     justifyContent: "center",
     marginTop: 18,
@@ -238,7 +234,6 @@ const styles = StyleSheet.create({
     opacity: 0.7
   },
   buttonText: {
-    color: INK,
     fontSize: 16,
     fontWeight: "800"
   },
@@ -247,16 +242,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8
   },
   link: {
-    color: GOLD,
     fontSize: 15,
     fontWeight: "700"
   },
   muted: {
-    color: "#8f887f",
     fontSize: 13
   },
   debug: {
-    color: "#5c564e",
     fontSize: 11,
     textAlign: "center",
     marginTop: 4

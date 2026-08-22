@@ -7,9 +7,9 @@ const THEME_KEY = "app-treino-theme";
 const SOUND_KEY = "app-treino-sound-enabled";
 
 const readTheme = (): UiTheme => {
-  if (typeof window === "undefined") return "dark";
+  if (typeof window === "undefined") return "light";
   const saved = window.localStorage.getItem(THEME_KEY);
-  return saved === "light" ? "light" : "dark";
+  return saved === "dark" ? "dark" : "light";
 };
 
 const readSoundEnabled = (): boolean => {
@@ -27,6 +27,8 @@ export const applyDocumentTheme = (theme: UiTheme) => {
   root.dataset.theme = theme;
   root.style.colorScheme = theme;
   document.body.classList.remove("bg-ink", "bg-sand", "text-sand", "text-ink");
+  document.body.style.backgroundColor = theme === "dark" ? "#07080a" : "#f7f2ea";
+  document.body.style.color = theme === "dark" ? "#f4ebe0" : "#0e1116";
 };
 
 type UiPrefsState = {
@@ -40,17 +42,25 @@ type UiPrefsState = {
 };
 
 export const useUiPrefsStore = create<UiPrefsState>((set, get) => ({
-  theme: "dark",
+  theme: "light",
   soundEnabled: true,
   hydrate: () => {
     const theme = readTheme();
     const soundEnabled = readSoundEnabled();
     applyDocumentTheme(theme);
-    setLibrarySoundEnabled(soundEnabled);
+    try {
+      setLibrarySoundEnabled(soundEnabled);
+    } catch {
+      // howler/react-sounds indisponível
+    }
     set({ theme, soundEnabled });
   },
   setTheme: (theme) => {
-    window.localStorage.setItem(THEME_KEY, theme);
+    try {
+      window.localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      // storage bloqueado
+    }
     applyDocumentTheme(theme);
     set({ theme });
   },
@@ -59,8 +69,16 @@ export const useUiPrefsStore = create<UiPrefsState>((set, get) => ({
     get().setTheme(next);
   },
   setSoundEnabled: (enabled) => {
-    window.localStorage.setItem(SOUND_KEY, enabled ? "1" : "0");
-    setLibrarySoundEnabled(enabled);
+    try {
+      window.localStorage.setItem(SOUND_KEY, enabled ? "1" : "0");
+    } catch {
+      // storage bloqueado
+    }
+    try {
+      setLibrarySoundEnabled(enabled);
+    } catch {
+      // howler/react-sounds indisponível
+    }
     set({ soundEnabled: enabled });
   },
   toggleSound: () => {

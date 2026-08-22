@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Audio smoke</title>
+    <style>
+      body { font-family: system-ui, sans-serif; background: #111; color: #eee; padding: 24px; }
+      button { font-size: 18px; padding: 14px 22px; margin: 8px 8px 8px 0; }
+      pre { background: #222; padding: 12px; overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>Audio smoke test</h1>
+    <p>Clique em Play. Se ouvir som, o arquivo/proxy estão ok.</p>
+    <button id="play" type="button">Play MP3</button>
+    <button id="pause" type="button">Pause</button>
+    <pre id="out">aguardando...</pre>
+    <script>
+      const url = "/uploads/audio/1786931510911-419eac3b-9ed3-4ced-9439-fbaf4e678495.mp3";
+      const audio = new Audio();
+      audio.preload = "auto";
+      audio.volume = 1;
+      const out = document.getElementById("out");
+      function dump(extra) {
+        out.textContent = JSON.stringify(
+          {
+            extra,
+            src: audio.currentSrc || audio.src,
+            paused: audio.paused,
+            t: audio.currentTime,
+            dur: audio.duration,
+            ready: audio.readyState,
+            net: audio.networkState,
+            vol: audio.volume,
+            muted: audio.muted,
+            err: audio.error && { code: audio.error.code, message: audio.error.message }
+          },
+          null,
+          2
+        );
+      }
+      setInterval(() => dump("tick"), 500);
+      document.getElementById("play").onclick = async () => {
+        audio.src = url;
+        try {
+          await audio.play();
+          dump("play-ok");
+        } catch (e) {
+          dump("play-fail: " + e.name + " " + e.message);
+        }
+      };
+      document.getElementById("pause").onclick = () => {
+        audio.pause();
+        dump("paused");
+      };
+    </script>
+  </body>
+</html>

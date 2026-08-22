@@ -44,7 +44,12 @@ export default defineConfig({
       "/me": apiProxy,
       "/health": apiProxy,
       "/plans": apiProxy,
-      "/public": apiProxy
+      "/public": apiProxy,
+      "/socket.io": {
+        target: "http://127.0.0.1:3333",
+        changeOrigin: true,
+        ws: true
+      }
     }
   }
 });

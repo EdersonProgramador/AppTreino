@@ -24,7 +24,7 @@ services:
       - key: WEB_ORIGIN
         value: https://edersonprogramador.com,https://www.edersonprogramador.com
       - key: PUBLIC_BASE_URL
-        value: https://api.edersonprogramador.com
+        value: https://apptreino-backend.onrender.com
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: ASAAS_API_KEY

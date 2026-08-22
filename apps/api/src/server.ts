@@ -19,9 +19,13 @@ import { registerCheckoutRoutes } from "./modules/checkout.routes.js";
 import { registerMediaRoutes } from "./modules/media.routes.js";
 import { registerPublicRoutes } from "./modules/public.routes.js";
 import { registerStudentRoutes } from "./modules/student.routes.js";
+import { registerSocialRoutes } from "./modules/social.routes.js";
+import { registerSocialInfraRoutes } from "./modules/social-infra.routes.js";
+import { registerSocialSockets } from "./modules/social-socket.js";
 import { registerCommerceRoutes } from "./modules/commerce.routes.js";
 import { registerMusicRoutes } from "./modules/music.routes.js";
 import { registerUserRoutes } from "./modules/user.routes.js";
+import type { Server as HttpServer } from "node:http";
 
 const app = Fastify({
   logger: true,
@@ -192,6 +196,8 @@ await registerCheckoutRoutes(app);
 await registerAdminRoutes(app);
 await registerUserRoutes(app);
 await registerStudentRoutes(app);
+await registerSocialRoutes(app);
+await registerSocialInfraRoutes(app);
 await registerMusicRoutes(app);
 await registerCommerceRoutes(app);
 await registerAsaasRoutes(app);
@@ -227,6 +233,8 @@ try {
     port: env.API_PORT,
     host: "0.0.0.0"
   });
+  const httpServer = app.server as HttpServer;
+  registerSocialSockets(app, httpServer);
 } catch (error) {
   app.log.error(error);
   process.exit(1);

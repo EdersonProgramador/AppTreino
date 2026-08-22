@@ -5,7 +5,7 @@ Stack de produção:
 | Camada | Serviço | Domínio |
 |--------|---------|---------|
 | Banco | Neon (PostgreSQL) | — |
-| API | Render | `https://api.edersonprogramador.com` |
+| API | Render | `https://apptreino-backend.onrender.com` (depois `api.edersonprogramador.com`) |
 | Web | Vercel | `https://edersonprogramador.com` |
 | DNS | HostGator | aponta os domínios acima |
 

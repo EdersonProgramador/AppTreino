@@ -20,6 +20,12 @@ async function readError(response: Response) {
   }
 }
 
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  unauthorizedHandler = handler;
+}
+
 async function request<T>(path: string, init: RequestInit = {}, token?: string | null): Promise<T> {
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -29,6 +35,62 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string |
   };
 
   const response = await fetch(`${API_URL}${path}`, { ...init, headers });
+  if (response.status === 401 && token) {
+    unauthorizedHandler?.();
+  }
+  if (!response.ok) {
+    throw new NativeApiError(response.status, await readError(response));
+  }
+  if (response.status === 204) {
+    return undefined as T;
+  }
+  return response.json() as Promise<T>;
+}
+
+export function apiGet<T>(path: string, token?: string | null) {
+  return request<T>(path, { method: "GET" }, token);
+}
+
+export function apiPost<T>(path: string, body: unknown, token?: string | null) {
+  return request<T>(path, { method: "POST", body: JSON.stringify(body) }, token);
+}
+
+export function apiPut<T>(path: string, body: unknown, token?: string | null) {
+  return request<T>(path, { method: "PUT", body: JSON.stringify(body) }, token);
+}
+
+export function apiDelete<T>(path: string, token?: string | null) {
+  return request<T>(path, { method: "DELETE" }, token);
+}
+
+export async function apiUploadFile<T>(
+  path: string,
+  uri: string,
+  token: string,
+  filename = "upload.jpg"
+): Promise<T> {
+  const form = new FormData();
+          form.append("file", {
+            uri,
+            name: filename,
+            type: filename.toLowerCase().endsWith(".png")
+              ? "image/png"
+              : filename.toLowerCase().endsWith(".mp4")
+                ? "video/mp4"
+                : filename.toLowerCase().endsWith(".mov")
+                  ? "video/quicktime"
+                  : "image/jpeg"
+          } as unknown as Blob);
+
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: form
+  });
+  if (response.status === 401) unauthorizedHandler?.();
   if (!response.ok) {
     throw new NativeApiError(response.status, await readError(response));
   }

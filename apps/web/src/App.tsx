@@ -1,11 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { SoundProvider } from "react-sounds";
+import { SoundProvider, useSoundEnabled as useLibrarySoundEnabled } from "react-sounds";
 import { AuthProvider } from "./auth/AuthContext";
 import { AdminPage, DownloadPage, HomePage, LoginPage, StudentPage } from "./auth/pages";
 import { GuestRoute, ProtectedRoute, RoleHomeRedirect, SessionGate } from "./auth/RouteGuards";
 import { paths } from "./auth/paths";
-import { useUiPrefsStore } from "./stores/uiPrefsStore";
+import { applyDocumentTheme, useUiPrefsStore } from "./stores/uiPrefsStore";
 import { ALL_UI_SOUND_PRELOAD } from "./lib/ui-sounds";
 import { installShellStateFlush } from "./lib/shell-persist";
 
@@ -40,6 +40,10 @@ export const App = () => {
   const theme = useUiPrefsStore((state) => state.theme);
   const soundEnabled = useUiPrefsStore((state) => state.soundEnabled);
 
+  useLayoutEffect(() => {
+    applyDocumentTheme(theme);
+  }, [theme]);
+
   useEffect(() => {
     useUiPrefsStore.getState().hydrate();
   }, []);
@@ -50,6 +54,7 @@ export const App = () => {
 
   return (
     <SoundProvider initialEnabled={soundEnabled} preload={ALL_UI_SOUND_PRELOAD}>
+      <SoundLibrarySync enabled={soundEnabled} />
       <AuthProvider>
         <div className={`ui-shell min-h-screen overflow-x-hidden ${theme === "dark" ? "theme-dark" : "theme-light"}`}>
           <AppRoutes />
@@ -58,3 +63,11 @@ export const App = () => {
     </SoundProvider>
   );
 };
+
+function SoundLibrarySync({ enabled }: { enabled: boolean }) {
+  const [, setLibraryEnabled] = useLibrarySoundEnabled();
+  useEffect(() => {
+    setLibraryEnabled(enabled);
+  }, [enabled, setLibraryEnabled]);
+  return null;
+}

@@ -1,0 +1,487 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Comment {
+  id         Int    @id @default(autoincrement())
+  content    String
+  created_on String @db.VarChar(100)
+
+  user       User   @relation(fields: [fk_user_id], references: [id], onDelete: Cascade)
+  fk_user_id String @db.VarChar(255)
+
+  post       Post @relation(fields: [fk_post_id], references: [id], onDelete: Cascade)
+  fk_post_id Int
+}
+
+model Follower {
+  id Int @id @default(autoincrement())
+
+  fk_user_id     String @db.VarChar(255)
+  fk_follower_id String @db.VarChar(255)
+
+  @@unique([fk_user_id, fk_follower_id])
+}
+
+model Post {
+  id         Int       @id @default(autoincrement())
+  content    String
+  created_on String?   @default(dbgenerated("CURRENT_TIMESTAMP")) @db.VarChar(300)
+  images     String?   @db.VarChar(65000)
+  hidden     Boolean   @default(false)
+  Comment    Comment[]
+
+  user       User       @relation(fields: [fk_user_id], references: [id], onDelete: Cascade)
+  fk_user_id String     @db.VarChar(255)
+  dislikes   dislikes[]
+  likes      likes[]
+  Notification Notification[]
+  Report       Report[]
+}
+
+model User {
+  id              String            @id(map: "users_pkey") @db.VarChar(255)
+  username        String            @db.VarChar(255)
+  email           String            @unique @db.VarChar(255)
+  image_url       String?           @db.VarChar(555)
+  created_on      String            @db.VarChar(255)
+  password        String?           @db.VarChar(255)
+  auth_type       String            @db.VarChar(255)
+  bio             String?           @db.VarChar(255)
+  cover_color     String?           @db.VarChar(255)
+  cloudinary_id   String?           @db.VarChar(255)
+  email_verified  Boolean           @default(false)
+  onboarded       Boolean           @default(false)
+  verify_token    String?
+  verify_expires  DateTime?
+  reset_token     String?
+  reset_expires   DateTime?
+  role            String            @default("user") @db.VarChar(20)
+  is_private      Boolean           @default(false)
+  suspended_at    DateTime?
+  Comment         Comment[]
+  Post            Post[]
+  dislikes        dislikes[]
+  global_messages global_messages[]
+  likes           likes[]
+  notifications   Notification[]    @relation("NotificationUser")
+  notificationActs Notification[]   @relation("NotificationActor")
+  blocksMade      Block[]           @relation("Blocker")
+  blocksReceived  Block[]           @relation("Blocked")
+  reportsMade     Report[]
+  messagesSent    DirectMessage[]
+  mutesMade       Mute[]            @relation("Muter")
+  mutesReceived   Mute[]            @relation("Muted")
+  followReqSent   FollowRequest[]   @relation("FollowRequestFrom")
+  followReqRecv   FollowRequest[]   @relation("FollowRequestTo")
+  stories         Story[]
+  storyViews      StoryView[]
+  reels           Reel[]
+  reelLikes       ReelLike[]
+  lives           LiveSession[]
+  liveMessages    LiveMessage[]
+  workoutLogs     WorkoutLog[]
+  outdoorActivities OutdoorActivity[]
+  clubMemberships ClubMembership[]
+  cartItems       ShopCartItem[]
+  shopOrders      ShopOrder[]
+  assessments     PhysicalAssessment[]
+  supportTickets  SupportTicket[]
+  eventRegs       EventRegistration[]
+}
+
+model dislikes {
+  id Int @id @default(autoincrement())
+
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id String @db.VarChar(255)
+
+  post    Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  post_id Int
+
+  @@unique([user_id, post_id])
+}
+
+model global_messages {
+  id         Int    @id @default(autoincrement())
+  message    String @db.VarChar(10485760)
+  created_on String @db.VarChar(255)
+
+  user_id String @db.VarChar(255)
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model likes {
+  id Int @id @default(autoincrement())
+
+  user_id String @db.VarChar(255)
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  post_id Int
+  post    Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, post_id])
+}
+
+model Notification {
+  id         Int      @id @default(autoincrement())
+  type       String   @db.VarChar(40)
+  read       Boolean  @default(false)
+  created_on DateTime @default(now())
+
+  user_id String @db.VarChar(255)
+  user    User   @relation("NotificationUser", fields: [user_id], references: [id], onDelete: Cascade)
+
+  actor_id String @db.VarChar(255)
+  actor    User   @relation("NotificationActor", fields: [actor_id], references: [id], onDelete: Cascade)
+
+  post_id Int?
+  post    Post? @relation(fields: [post_id], references: [id], onDelete: Cascade)
+}
+
+model Conversation {
+  id         String          @id @default(uuid())
+  user_a_id  String          @db.VarChar(255)
+  user_b_id  String          @db.VarChar(255)
+  updated_on DateTime        @default(now())
+  messages   DirectMessage[]
+
+  @@unique([user_a_id, user_b_id])
+}
+
+model DirectMessage {
+  id              Int          @id @default(autoincrement())
+  content         String
+  created_on      DateTime     @default(now())
+  conversation_id String
+  conversation    Conversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+
+  sender_id String @db.VarChar(255)
+  sender    User   @relation(fields: [sender_id], references: [id], onDelete: Cascade)
+}
+
+model Block {
+  id         Int    @id @default(autoincrement())
+  blocker_id String @db.VarChar(255)
+  blocked_id String @db.VarChar(255)
+  blocker    User   @relation("Blocker", fields: [blocker_id], references: [id], onDelete: Cascade)
+  blocked    User   @relation("Blocked", fields: [blocked_id], references: [id], onDelete: Cascade)
+
+  @@unique([blocker_id, blocked_id])
+}
+
+model Report {
+  id          Int      @id @default(autoincrement())
+  target_type String   @db.VarChar(20)
+  reason      String   @db.VarChar(500)
+  status      String   @default("pending") @db.VarChar(20)
+  created_on  DateTime @default(now())
+
+  reporter_id String @db.VarChar(255)
+  reporter    User   @relation(fields: [reporter_id], references: [id], onDelete: Cascade)
+
+  target_user_id String? @db.VarChar(255)
+  post_id        Int?
+  post           Post?   @relation(fields: [post_id], references: [id], onDelete: SetNull)
+}
+
+model Mute {
+  id       Int    @id @default(autoincrement())
+  muter_id String @db.VarChar(255)
+  muted_id String @db.VarChar(255)
+  muter    User   @relation("Muter", fields: [muter_id], references: [id], onDelete: Cascade)
+  muted    User   @relation("Muted", fields: [muted_id], references: [id], onDelete: Cascade)
+
+  @@unique([muter_id, muted_id])
+}
+
+model FollowRequest {
+  id         Int      @id @default(autoincrement())
+  from_id    String   @db.VarChar(255)
+  to_id      String   @db.VarChar(255)
+  created_on DateTime @default(now())
+  from       User     @relation("FollowRequestFrom", fields: [from_id], references: [id], onDelete: Cascade)
+  to         User     @relation("FollowRequestTo", fields: [to_id], references: [id], onDelete: Cascade)
+
+  @@unique([from_id, to_id])
+}
+
+model Story {
+  id         Int         @id @default(autoincrement())
+  media_url  String      @db.VarChar(800)
+  media_type String      @db.VarChar(20)
+  caption    String?     @db.VarChar(120)
+  mood       String?     @db.VarChar(40)
+  created_on DateTime    @default(now())
+  expires_on DateTime
+  user_id    String      @db.VarChar(255)
+  user       User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  views      StoryView[]
+}
+
+model StoryView {
+  id         Int      @id @default(autoincrement())
+  story_id   Int
+  user_id    String   @db.VarChar(255)
+  created_on DateTime @default(now())
+  story      Story    @relation(fields: [story_id], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([story_id, user_id])
+}
+
+model Reel {
+  id         Int        @id @default(autoincrement())
+  video_url  String     @db.VarChar(800)
+  caption    String     @default("")
+  mood       String?    @db.VarChar(40)
+  hidden     Boolean    @default(false)
+  created_on DateTime   @default(now())
+  user_id    String     @db.VarChar(255)
+  user       User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  likes      ReelLike[]
+}
+
+model ReelLike {
+  id      Int    @id @default(autoincrement())
+  reel_id Int
+  user_id String @db.VarChar(255)
+  reel    Reel   @relation(fields: [reel_id], references: [id], onDelete: Cascade)
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([reel_id, user_id])
+}
+
+model LiveSession {
+  id          String        @id @default(uuid())
+  title       String        @db.VarChar(80)
+  mood        String?       @db.VarChar(40)
+  status      String        @default("live") @db.VarChar(20)
+  started_on  DateTime      @default(now())
+  ended_on    DateTime?
+  viewer_peak Int           @default(0)
+  user_id     String        @db.VarChar(255)
+  user        User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  messages    LiveMessage[]
+}
+
+model LiveMessage {
+  id         Int         @id @default(autoincrement())
+  content    String      @db.VarChar(280)
+  created_on DateTime    @default(now())
+  live_id    String
+  user_id    String      @db.VarChar(255)
+  live       LiveSession @relation(fields: [live_id], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+// --- Domínio App Treino (rede social com foco em treinos) ---
+
+model TrainingProgram {
+  id          String            @id @default(cuid())
+  title       String            @db.VarChar(120)
+  description String            @db.VarChar(500)
+  modality    String            @db.VarChar(40)
+  level       String            @default("iniciante") @db.VarChar(30)
+  weeks       Int               @default(4)
+  isActive    Boolean           @default(true)
+  sortOrder   Int               @default(0)
+  createdAt   DateTime          @default(now())
+  workouts    TrainingWorkout[]
+}
+
+model TrainingWorkout {
+  id          String             @id @default(cuid())
+  programId   String
+  program     TrainingProgram    @relation(fields: [programId], references: [id], onDelete: Cascade)
+  title       String             @db.VarChar(120)
+  dayIndex    Int                @default(1)
+  focus       String?            @db.VarChar(80)
+  durationMin Int                @default(45)
+  exercises   WorkoutExercise[]
+  logs        WorkoutLog[]
+}
+
+model WorkoutExercise {
+  id         String          @id @default(cuid())
+  workoutId  String
+  workout    TrainingWorkout @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  name       String          @db.VarChar(120)
+  sets       Int             @default(3)
+  reps       String          @default("10") @db.VarChar(40)
+  restSec    Int             @default(60)
+  sortOrder  Int             @default(0)
+  notes      String?         @db.VarChar(200)
+}
+
+model WorkoutLog {
+  id          String          @id @default(cuid())
+  userId      String          @db.VarChar(255)
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutId   String
+  workout     TrainingWorkout @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  status      String          @default("completed") @db.VarChar(20)
+  startedAt   DateTime        @default(now())
+  finishedAt  DateTime?
+  durationSec Int             @default(0)
+  notes       String?         @db.VarChar(300)
+}
+
+model OutdoorActivity {
+  id             String    @id @default(cuid())
+  userId         String    @db.VarChar(255)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sport          String    @default("CORRIDA") @db.VarChar(30)
+  status         String    @default("LIVE") @db.VarChar(20)
+  startedAt      DateTime  @default(now())
+  finishedAt     DateTime?
+  elapsedSeconds Int       @default(0)
+  distanceMeters Float     @default(0)
+  calories       Int       @default(0)
+  avgPaceSecPerKm Float?
+  publishToFeed  Boolean   @default(true)
+  notes          String?   @db.VarChar(300)
+}
+
+model ClubChallenge {
+  id          String           @id @default(cuid())
+  slug        String           @unique @db.VarChar(80)
+  title       String           @db.VarChar(120)
+  description String           @db.VarChar(400)
+  sport       String           @db.VarChar(30)
+  goalMeters  Float
+  period      String           @default("WEEK") @db.VarChar(20)
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  memberships ClubMembership[]
+}
+
+model ClubMembership {
+  id          String        @id @default(cuid())
+  userId      String        @db.VarChar(255)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeId String
+  challenge   ClubChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  progressM   Float         @default(0)
+  joinedAt    DateTime      @default(now())
+
+  @@unique([userId, challengeId])
+}
+
+model ShopProduct {
+  id          String         @id @default(cuid())
+  name        String         @db.VarChar(120)
+  description String?        @db.VarChar(400)
+  priceCents  Int            @default(0)
+  imageUrl    String?        @db.VarChar(500)
+  category    String?        @db.VarChar(60)
+  stock       Int            @default(50)
+  isActive    Boolean        @default(true)
+  cartItems   ShopCartItem[]
+  orderItems  ShopOrderItem[]
+}
+
+model ShopCartItem {
+  id        String      @id @default(cuid())
+  userId    String      @db.VarChar(255)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   ShopProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  qty       Int         @default(1)
+
+  @@unique([userId, productId])
+}
+
+model ShopOrder {
+  id         String          @id @default(cuid())
+  userId     String          @db.VarChar(255)
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status     String          @default("PAID") @db.VarChar(20)
+  totalCents Int             @default(0)
+  createdAt  DateTime        @default(now())
+  items      ShopOrderItem[]
+}
+
+model ShopOrderItem {
+  id         String      @id @default(cuid())
+  orderId    String
+  order      ShopOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId  String
+  product    ShopProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  qty        Int         @default(1)
+  priceCents Int         @default(0)
+}
+
+model PhysicalAssessment {
+  id        String   @id @default(cuid())
+  userId    String   @db.VarChar(255)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weightKg  Float?
+  heightCm  Float?
+  bodyFatPct Float?
+  notes     String?  @db.VarChar(400)
+  createdAt DateTime @default(now())
+}
+
+model MusicAlbum {
+  id     String       @id @default(cuid())
+  title  String       @db.VarChar(120)
+  artist String       @db.VarChar(120)
+  cover  String?      @db.VarChar(500)
+  tracks MusicTrack[]
+}
+
+model MusicTrack {
+  id       String     @id @default(cuid())
+  albumId  String
+  album    MusicAlbum @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  title    String     @db.VarChar(120)
+  duration Int        @default(180)
+  audioUrl String?    @db.VarChar(500)
+  sortOrder Int       @default(0)
+}
+
+model GymLocation {
+  id       String  @id @default(cuid())
+  name     String  @db.VarChar(120)
+  address  String  @db.VarChar(240)
+  city     String  @db.VarChar(80)
+  phone    String? @db.VarChar(40)
+  isActive Boolean @default(true)
+}
+
+model FitnessEvent {
+  id          String              @id @default(cuid())
+  title       String              @db.VarChar(120)
+  description String              @db.VarChar(400)
+  startsAt    DateTime
+  location    String?             @db.VarChar(160)
+  capacity    Int                 @default(30)
+  regs        EventRegistration[]
+}
+
+model EventRegistration {
+  id      String       @id @default(cuid())
+  eventId String
+  event   FitnessEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId  String       @db.VarChar(255)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@unique([eventId, userId])
+}
+
+model SupportTicket {
+  id        String   @id @default(cuid())
+  userId    String   @db.VarChar(255)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject   String   @db.VarChar(120)
+  body      String   @db.VarChar(1000)
+  status    String   @default("OPEN") @db.VarChar(20)
+  createdAt DateTime @default(now())
+}

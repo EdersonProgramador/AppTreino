@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "App Treino",
+    "name": "App Treino Social",
     "slug": "app-treino",
     "version": "0.1.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "scheme": "apptreino",
     "icon": "./assets/icon.png",
     "splash": {
@@ -16,8 +16,11 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.edersonprogramador.apptreino",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"],
-        "NSCameraUsageDescription": "Permitir a camera para compartilhar o treino.",
+        "UIBackgroundModes": ["audio", "location"],
+        "NSLocationWhenInUseUsageDescription": "Permitir a localização para gravar corrida, caminhada e ciclismo.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Permitir localização em segundo plano para gravar a atividade com o app minimizado.",
+        "NSLocationAlwaysUsageDescription": "Permitir localização em segundo plano para gravar a atividade com o app minimizado.",
+      "NSCameraUsageDescription": "Permitir a camera para compartilhar o treino.",
         "NSMicrophoneUsageDescription": "Permitir o microfone ao gravar video do treino.",
         "NSPhotoLibraryUsageDescription": "Permitir acesso as fotos para compartilhar o treino.",
         "NSAppTransportSecurity": {
@@ -35,12 +38,16 @@
         "backgroundColor": "#08090b"
       },
       "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
         "CAMERA",
         "RECORD_AUDIO",
         "INTERNET",
         "ACCESS_NETWORK_STATE",
         "WAKE_LOCK",
         "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
         "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "POST_NOTIFICATIONS",
         "READ_MEDIA_IMAGES",
@@ -56,9 +63,26 @@
       "expo-asset",
       "expo-font",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Permitir a localização para gravar corrida, caminhada e ciclismo.",
+          "locationAlwaysAndWhenInUsePermission": "Permitir localização em segundo plano para gravar a atividade com o app minimizado.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
         "expo-av",
         {
           "microphonePermission": "Permitir o microfone ao gravar video do treino."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Permitir acesso as fotos para compartilhar o treino.",
+          "cameraPermission": "Permitir a camera para compartilhar o treino."
         }
       ],
       [

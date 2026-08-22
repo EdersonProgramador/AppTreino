@@ -270,12 +270,28 @@ export async function registerUserRoutes(app: FastifyInstance) {
   app.get("/user/profile", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);
-    const profile = await prisma.user.findUniqueOrThrow({
-      where: { id: user.id },
-      include: {
-        profile: true
-      }
-    });
+    const [profile, achievements] = await Promise.all([
+      prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+        include: {
+          profile: true
+        }
+      }),
+      prisma.modalityAchievement.findMany({
+        where: { userId: user.id },
+        include: {
+          modality: {
+            select: {
+              imageUrl: true,
+              name: true
+            }
+          }
+        },
+        orderBy: {
+          lastCompletedAt: "desc"
+        }
+      })
+    ]);
 
     return {
       profile: {
@@ -292,8 +308,20 @@ export async function registerUserRoutes(app: FastifyInstance) {
         city: profile.profile?.city ?? null,
         state: profile.profile?.state ?? null,
         avatarUrl: profile.profile?.avatarUrl ?? null,
+        bio: profile.profile?.bio ?? null,
+        coverColor: profile.profile?.coverColor ?? null,
+        coverUrl: profile.profile?.coverUrl ?? null,
+        isPrivate: Boolean(profile.profile?.isPrivate),
+        createdAt: profile.createdAt,
         locationId: profile.profile?.locationId ?? null,
-        enrollmentStatus: profile.enrollmentStatus
+        enrollmentStatus: profile.enrollmentStatus,
+        achievements: achievements.map((item) => ({
+          modalityId: item.modalityId,
+          modalityName: item.modality?.name ?? item.modalityName,
+          modalityImageUrl: item.modality?.imageUrl ?? null,
+          completionCount: item.completionCount,
+          lastCompletedAt: item.lastCompletedAt
+        }))
       }
     };
   });
@@ -311,6 +339,13 @@ export async function registerUserRoutes(app: FastifyInstance) {
     city: z.string().optional(),
     state: z.string().optional(),
     avatarUrl: z.string().optional().or(z.literal("")),
+    bio: z.string().max(280).optional().or(z.literal("")),
+    coverColor: z
+      .string()
+      .regex(/^#[0-9A-Fa-f]{6}$/)
+      .optional()
+      .or(z.literal("")),
+    coverUrl: z.string().max(2000).optional().nullable().or(z.literal("")),
     locationId: z.string().optional().or(z.literal(""))
   });
 
@@ -355,6 +390,9 @@ export async function registerUserRoutes(app: FastifyInstance) {
               city: body.city,
               state: body.state,
               avatarUrl: body.avatarUrl === undefined ? undefined : body.avatarUrl || null,
+              bio: body.bio === undefined ? undefined : body.bio || null,
+              coverColor: body.coverColor === undefined ? undefined : body.coverColor || null,
+              coverUrl: body.coverUrl === undefined ? undefined : body.coverUrl || null,
               locationId: body.locationId || null
             },
             update: {
@@ -369,6 +407,9 @@ export async function registerUserRoutes(app: FastifyInstance) {
               city: body.city,
               state: body.state,
               avatarUrl: body.avatarUrl === undefined ? undefined : body.avatarUrl || null,
+              bio: body.bio === undefined ? undefined : body.bio || null,
+              coverColor: body.coverColor === undefined ? undefined : body.coverColor || null,
+              coverUrl: body.coverUrl === undefined ? undefined : body.coverUrl || null,
               locationId: body.locationId || null
             }
           }
@@ -394,6 +435,11 @@ export async function registerUserRoutes(app: FastifyInstance) {
         city: updated.profile?.city ?? null,
         state: updated.profile?.state ?? null,
         avatarUrl: updated.profile?.avatarUrl ?? null,
+        bio: updated.profile?.bio ?? null,
+        coverColor: updated.profile?.coverColor ?? null,
+        coverUrl: updated.profile?.coverUrl ?? null,
+        isPrivate: Boolean(updated.profile?.isPrivate),
+        createdAt: updated.createdAt,
         locationId: updated.profile?.locationId ?? null
       }
     };

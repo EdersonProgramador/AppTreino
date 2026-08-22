@@ -32,6 +32,7 @@
     "react-router-dom": "^7.18.2",
     "react-share": "^5.3.0",
     "react-sounds": "^1.0.30",
+    "socket.io-client": "^4.8.3",
     "vite": "^5.3.5",
     "zod": "^3.25.76",
     "zustand": "^5.0.14"

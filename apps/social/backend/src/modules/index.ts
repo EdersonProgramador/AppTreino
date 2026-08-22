@@ -1,0 +1,11 @@
+export { authentication } from "./auth/auth.routes";
+export { user } from "./users/users.routes";
+export { posts } from "./posts/posts.routes";
+export { index as appRoutes } from "./app/app.routes";
+export { notifications } from "./notifications/notifications.routes";
+export { messages } from "./messages/messages.routes";
+export { admin } from "./admin/admin.routes";
+export { stories } from "./stories/stories.routes";
+export { reels } from "./reels/reels.routes";
+export { live } from "./live/live.routes";
+export { fitness } from "./fitness/fitness.routes";

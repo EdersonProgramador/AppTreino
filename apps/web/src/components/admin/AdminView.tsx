@@ -13,6 +13,7 @@ import {
   CreditCard,
   Dumbbell,
   Eye,
+  Flag,
   Headphones,
   Home,
   Image as ImageIcon,
@@ -58,7 +59,6 @@ import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState 
 import { formatPriceInBRL, parseBRLMoneyToCents } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { BRAZILIAN_STATES, CITIES_BY_STATE } from "../../brazil-data";
-import { MusicAdminPanel } from "./MusicAdminPanel";
 import {
   cmsProgramStatusLabel,
   cmsTargetGenderLabel,
@@ -172,6 +172,8 @@ import { StateCityFields } from "./StateCityFields";
 import { AdminDashboardOverview } from "./AdminDashboardOverview";
 import { AdminPaginationBar } from "./AdminPaginationBar";
 import { AdminReports } from "./AdminReports";
+import { MusicAdminPanel } from "./MusicAdminPanel";
+import { OutdoorModerationAdminPanel } from "./OutdoorModerationAdminPanel";
 
 type AdminSelfProfile = {
   id: string;
@@ -205,6 +207,7 @@ type AdminSection =
   | "qr"
   | "cards"
   | "contact"
+  | "outdoorModeration"
   | "favorites"
   | "ratings"
   | "assessments"
@@ -3164,6 +3167,13 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
             <MessageCircle size={18} />
             <span className="sidebar-label">Contato</span>
             {unreadTicketsCount > 0 && <span className="admin-nav-badge">{unreadTicketsCount}</span>}
+          </button>
+          <button
+            className={adminSection === "outdoorModeration" ? "active" : ""}
+            onClick={() => goAdminSection("outdoorModeration")}
+          >
+            <Flag size={18} />
+            <span className="sidebar-label">GPS / Anti-cheat</span>
           </button>
           <button className={adminSection === "ratings" ? "active" : ""} onClick={() => goAdminSection("ratings")}>
             <Star size={18} />
@@ -6603,6 +6613,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       </section>}
 
       {adminSection === "music" && token && <MusicAdminPanel token={token} />}
+      {adminSection === "outdoorModeration" && token && <OutdoorModerationAdminPanel token={token} />}
 
       {adminSection === "products" && <section className="finance-hub commerce-hub" id="admin-products">
         <header className="finance-hub-header">

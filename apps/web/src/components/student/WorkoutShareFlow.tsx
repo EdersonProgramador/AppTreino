@@ -50,7 +50,7 @@ function SharePreviewCard({
 }) {
   return (
     <div className="runner-share-card" data-testid="workout-share-card" ref={cardRef}>
-      <span className="runner-share-card-badge">App Treino</span>
+      <span className="runner-share-card-badge">App Treino Social</span>
       <h3>O TREINO DE HOJE ESTÁ PAGO!</h3>
       {photoUrl ? (
         <div className="runner-share-card-photo">
@@ -107,7 +107,7 @@ export function WorkoutShareFlow({
 
   const shareUrl = sharePageUrl();
   const shareTitle = "O TREINO DE HOJE ESTÁ PAGO!";
-  const shareText = `${shareTitle} Concluí ${blockTitle} (${programTitle}) em ${durationLabel} no App Treino.`;
+  const shareText = `${shareTitle} Concluí ${blockTitle} (${programTitle}) em ${durationLabel} no App Treino Social.`;
   const showCardInline = step === "ready";
 
   function releaseCamera() {
@@ -356,19 +356,11 @@ export function WorkoutShareFlow({
       }
 
       const file = new File([blob], "treino-pago.png", { type: "image/png" });
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({
-          title: shareTitle,
-          text: shareText,
-          files: [file]
-        });
-      } else {
-        await navigator.share({
-          title: shareTitle,
-          text: shareText,
-          url: shareUrl
-        });
-      }
+      await navigator.share({
+        title: shareTitle,
+        text: shareText,
+        files: [file]
+      });
     } catch (error) {
       const aborted = error instanceof DOMException && error.name === "AbortError";
       if (!aborted) uiSounds.error();

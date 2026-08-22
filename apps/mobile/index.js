@@ -1,5 +1,9 @@
+import "react-native-gesture-handler";
 import { registerRootComponent } from "expo";
 import Constants from "expo-constants";
+
+// Task GPS em background (TaskManager) — registrar antes do App montar.
+require("./src/tracking/location/trackingLocationTask");
 
 // Headless service ANTES de importar o App (setupPlayer roda no construtor de musicPlayback).
 if (Constants.appOwnership !== "expo") {

@@ -29,20 +29,27 @@ import {
   Pencil,
   Plus,
   QrCode,
+  Radio,
   Ruler,
+  Search,
   Settings,
   Share2,
   ShieldCheck,
   ShoppingCart,
+  Sparkles,
+  SquarePlus,
   Star,
   Target,
   Trash2,
   Trophy,
+  UserPlus,
   UserRound,
   UsersRound,
+  Video,
   X
 } from "lucide-react";
 import { lazy, Suspense, type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { formatPriceInBRL, initialPlans } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
@@ -62,6 +69,9 @@ import {
 import { labelProductKind, labelPurchaseStatus, labelOrderStatus, labelShippingMethod, purchaseStatusTone } from "../../lib/commerce";
 import { labelLocationType, studentLocationLabel } from "../../lib/locations";
 import { sessionLabelFromBlock, trainingCopy } from "../../lib/training-copy";
+import { brand } from "../../lib/brand";
+import { StudentAthleteProfileSection } from "./StudentAthleteProfileSection";
+import { RunnerIcon } from "../shared/RunnerIcon";
 import { AnimatedList } from "../shared/AnimatedList";
 import { MediaImg } from "../shared/MediaImg";
 import {
@@ -103,7 +113,18 @@ import { LockedOverlay } from "./LockedOverlay";
 import { StudentSettingsPanel } from "./StudentSettingsPanel";
 import { StudentMusicPlayerHost } from "./StudentMusicPlayerHost";
 import { StudentPlaySection } from "./StudentPlaySection";
+import { StudentFeedSection } from "./StudentFeedSection";
+import {
+  StudentChatSection,
+  StudentLiveSection,
+  StudentMessagesSection,
+  StudentReelsSection,
+  StudentRequestsSection
+} from "./StudentSocialInfraSections";
+import { StudentClubSection } from "./StudentClubSection";
+import { StudentActivitySection } from "./StudentActivitySection";
 import { useMusicPlayerStore } from "../../stores/musicPlayerStore";
+import { useFeedChromeStore } from "../../stores/feedChromeStore";
 import { isNativeAppShell } from "../../lib/native-bridge";
 import { readStudentPanel, writeStudentPanel } from "../../lib/student-panel-persist";
 import { clearWorkoutRunner } from "../../lib/workout-runner-persist";
@@ -130,12 +151,23 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const markNotificationRead = useStudentSyncStore((state) => state.markNotificationRead);
   const markAllNotificationsRead = useStudentSyncStore((state) => state.markAllNotificationsRead);
   const clearSectionHighlight = useStudentSyncStore((state) => state.clearSectionHighlight);
+  const [searchParams, setSearchParams] = useSearchParams();
   const restoredPanel = readStudentPanel();
-  const [studentSection, setStudentSection] = useState<StudentPanelSection>(restoredPanel?.section ?? "home");
+  const [studentSection, setStudentSection] = useState<StudentPanelSection>(
+    restoredPanel?.section === "home" || restoredPanel?.section === "feed"
+      ? "training"
+      : restoredPanel?.section ?? "training"
+  );
   const studentSectionRef = useRef(studentSection);
   studentSectionRef.current = studentSection;
   const [playerSessionActive, setPlayerSessionActive] = useState(Boolean(restoredPanel?.playerSessionActive));
   const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [athleteSocial, setAthleteSocial] = useState<{
+    followersCount: number;
+    followingCount: number;
+    postsCount: number;
+    isPrivate: boolean;
+  } | null>(null);
   const [workout, setWorkout] = useState<WorkoutRow | null>(null);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkoutResponse["workout"] | null>(null);
   const [publishedWorkouts, setPublishedWorkouts] = useState<TodayWorkoutResponse["workout"][]>([]);
@@ -166,12 +198,15 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [selectedStudentTicketId, setSelectedStudentTicketId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [socialMenuOpen, setSocialMenuOpen] = useState(false);
+  const [corridaOpenKey, setCorridaOpenKey] = useState(0);
   const [studentLocations, setStudentLocations] = useState<StudentLocationRow[]>([]);
   const [studentAvatarPreview, setStudentAvatarPreview] = useState<string | null>(null);
   const [studentProfileEditing, setStudentProfileEditing] = useState(false);
   const [studentProfileUf, setStudentProfileUf] = useState<string>(profile?.state ?? "");
   const [studentProfileFormKey, setStudentProfileFormKey] = useState(0);
   const [aiPlans, setAiPlans] = useState<AiWorkoutPlanRow[]>([]);
+  const [aiBusy, setAiBusy] = useState(false);
   const [publicConfig, setPublicConfig] = useState<Record<string, string>>({});
   const [showStudentQr, setShowStudentQr] = useState(false);
   const [studentPaymentCards, setStudentPaymentCards] = useState<PaymentCardRow[]>([]);
@@ -210,6 +245,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [ratingDraft, setRatingDraft] = useState<Record<string, { score: number; comment: string }>>({});
   const [submittingRatingId, setSubmittingRatingId] = useState<string | null>(null);
   const [favoritingProgramId, setFavoritingProgramId] = useState<string | null>(null);
+  const [repeatingProgramId, setRepeatingProgramId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorTone, setErrorTone] = useState<"error" | "warning">("error");
   const [errorTick, setErrorTick] = useState(0);
@@ -229,6 +265,43 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     setErrorTick((tick) => tick + 1);
     setError("😅 Esse é o máximo disponível por enquanto.");
   }
+
+  useEffect(() => {
+    if (!token || !accessReady) return;
+    void apiGet<{
+      followersCount: number;
+      followingCount: number;
+      postsCount: number;
+      isPrivate: boolean;
+    }>("/student/social/me", token)
+      .then((data) =>
+        setAthleteSocial({
+          followersCount: data.followersCount,
+          followingCount: data.followingCount,
+          postsCount: data.postsCount,
+          isPrivate: data.isPrivate
+        })
+      )
+      .catch(() => undefined);
+  }, [token, accessReady, studentSection]);
+
+  useEffect(() => {
+    if (studentSection !== "feed" && studentSection !== "home") {
+      setSocialMenuOpen(false);
+    }
+  }, [studentSection]);
+
+  useEffect(() => {
+    if (!socialMenuOpen) return;
+    function onDocClick(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest(".student-avatar-menu-wrap")) return;
+      setSocialMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [socialMenuOpen]);
 
   useEffect(() => {
     if (!success) return;
@@ -468,7 +541,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     const refreshTypes = consumeRefresh();
 
     if (nextSection) {
-      setStudentSection(nextSection);
+      setStudentSection(nextSection === "home" ? "feed" : nextSection);
     }
 
     if (refreshTypes.length === 0 || !token) return;
@@ -598,7 +671,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   };
 
   const goToSection = (section: StudentPanelSection) => {
-    const nextSection = section === "favorites" ? "ratings" : section;
+    const nextSection = section === "favorites" ? "ratings" : section === "home" ? "feed" : section;
     if (studentSection === "player" && nextSection !== "player") {
       // Sair sem concluir = reset do treino do dia.
       void (async () => {
@@ -619,11 +692,61 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     setStudentSection(nextSection);
   };
 
+  useEffect(() => {
+    const raw = searchParams.get("section");
+    if (!raw) return;
+    const next = (raw === "home" ? "feed" : raw === "favorites" ? "ratings" : raw) as StudentPanelSection;
+    const allowed: StudentPanelSection[] = [
+      "feed",
+      "club",
+      "activity",
+      "training",
+      "play",
+      "products",
+      "cart",
+      "menu",
+      "profile",
+      "profile-settings",
+      "membership",
+      "payments",
+      "assessments",
+      "status",
+      "events",
+      "support",
+      "ai",
+      "history",
+      "settings",
+      "purchases",
+      "orders",
+      "ratings",
+      "locations",
+      "reels",
+      "live",
+      "messages",
+      "chat",
+      "requests"
+    ];
+    if (!allowed.includes(next) || next === studentSectionRef.current) return;
+    setStudentSection(next);
+    const cleaned = new URLSearchParams(searchParams);
+    cleaned.delete("section");
+    setSearchParams(cleaned, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const openTrainingCatalog = () => {
     setSelectedWorkoutModality(null);
     setSelectedWorkoutProgramId(null);
     goToSection("training");
   };
+
+  const openCorrida = () => {
+    setCorridaOpenKey((key) => key + 1);
+    goToSection("activity");
+  };
+
+  const CorridaNavIcon = ({ size = 22, strokeWidth: _sw }: { size?: number; strokeWidth?: number }) => (
+    <RunnerIcon size={size} gender={profile?.gender} />
+  );
 
   const openTodaySession = () => {
     const target = todayWorkout ?? (publishedWorkouts.length === 1 ? publishedWorkouts[0] : null);
@@ -758,11 +881,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     const form = event.currentTarget;
     const data = new FormData(form);
 
+    setError(null);
+    setAiBusy(true);
+    uiSounds.submit();
     try {
       await apiPost(
         "/user/ai-workout-plans",
         {
-          objective: String(data.get("objective") ?? profile?.objective ?? "condicionamenão"),
+          objective: String(data.get("objective") ?? profile?.objective ?? "condicionamento"),
           level: String(data.get("level") ?? profile?.level ?? "iniciante"),
           daysPerWeek: Number(data.get("daysPerWeek") ?? 3),
           focus: String(data.get("focus") ?? "")
@@ -771,8 +897,12 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       );
       form.reset();
       await loadUserData();
+      uiSounds.success();
     } catch {
       setError("Não foi possível gerar o plano pelo agente IA.");
+      uiSounds.error();
+    } finally {
+      setAiBusy(false);
     }
   }
 
@@ -866,6 +996,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
   const handleStartWorkoutSession = async (workoutToStart = todayWorkout) => {
     if (!workoutToStart) return;
+    if (workoutToStart.cycleCompleted) {
+      flashError(trainingCopy.programCompleted);
+      return;
+    }
     const currentDayForProgram =
       publishedWorkouts.find((item) => item.programId === workoutToStart.programId)?.dayNumber ??
       todayWorkout?.dayNumber ??
@@ -882,7 +1016,28 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     setSelectedWorkoutModality(workoutToStart.modality ?? "Hipertrofia");
     setTodayWorkout(workoutToStart);
     setWorkoutSession(null);
-    setStudentSection("player");
+      setStudentSection("player");
+  };
+
+  const handleRepeatWorkoutProgram = async (workoutToRepeat: TodayWorkoutResponse["workout"]) => {
+    if (!token || !workoutToRepeat.cycleCompleted) return;
+
+    setRepeatingProgramId(workoutToRepeat.programId);
+    setError(null);
+
+    try {
+      await apiPost("/student/workout/repeat", { assignmentId: workoutToRepeat.assignmentId }, token);
+      await loadUserData();
+      setSelectedWorkoutModality(workoutToRepeat.modality ?? selectedWorkoutModality);
+      setSelectedWorkoutProgramId(workoutToRepeat.programId);
+      setSuccess(trainingCopy.repeatStartedToast);
+    } catch (repeatError) {
+      flashError(
+        repeatError instanceof ApiError ? repeatError.message : "Não foi possível repetir este treino."
+      );
+    } finally {
+      setRepeatingProgramId(null);
+    }
   };
 
   async function handleBeginWorkoutSession() {
@@ -917,7 +1072,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     }
 
     try {
-      await apiPost(
+      const response = await apiPost<{ completed?: boolean }>(
         "/student/workout/complete-day",
         {
           assignmentId: todayWorkout.assignmentId,
@@ -928,7 +1083,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       setWorkoutSession(null);
       await loadUserData();
       setSelectedWorkoutModality(todayWorkout.modality ?? selectedWorkoutModality);
-      setSuccess("Treino concluído! Próximo dia liberado.");
+      setSuccess(
+        response.completed ? trainingCopy.programCompletedToast : "Treino concluído! Próximo dia liberado."
+      );
       setPlayerSessionActive(false);
     } catch (completeError) {
       uiSounds.error();
@@ -1699,7 +1856,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         <Eye size={16} />
         <span>
           <strong>Modo preview</strong>
-          · você está vendo o app como aluno com a sua conta
+          · você está vendo o app como atleta com a sua conta
         </span>
       </div>
       <button
@@ -1791,7 +1948,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     return Array.from(new Set(muscles)).join(", ") || "Músculos não registrados";
   };
   async function handleShareWorkoutHistory(session: WorkoutConsistencyResponse["sessions"][number]) {
-    const text = `Treino dia ${session.dayNumber} concluído em ${new Date(session.startedAt).toLocaleString("pt-BR")} no App Treino.`;
+    const text = `Treino dia ${session.dayNumber} concluído em ${new Date(session.startedAt).toLocaleString("pt-BR")} ${brand.shareSuffix}.`;
 
     if (navigator.share) {
       await navigator.share({
@@ -1898,9 +2055,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       const targetsFromType =
         item.type === "PRODUCT"
           ? (["products"] as PanelDestination[])
-          : item.type === "WORKOUT_PROGRAM" || item.type === "WORKOUT"
-            ? (["training"] as PanelDestination[])
-            : item.type === "LOCATION"
+          :                         item.type === "WORKOUT_PROGRAM" || item.type === "WORKOUT"
+                          ? (["training"] as PanelDestination[])
+                          : item.type === "ACHIEVEMENT"
+                            ? (["profile"] as PanelDestination[])
+                            : item.type === "LOCATION"
               ? (["locations"] as PanelDestination[])
               : item.type === "SUPPORT"
                 ? (["support"] as PanelDestination[])
@@ -1932,7 +2091,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         <div className="pointer-events-none absolute inset-0 [background-image:var(--shell-bg)]" aria-hidden="true" />
         <div className="relative grid animate-fade-up gap-4 rounded-3xl border border-[color:var(--app-border)] bg-ink-elev/70 px-8 py-10 text-center shadow-panel backdrop-blur-sm">
           <Loader2 className="mx-auto animate-spin text-brand-gold" size={36} />
-          <span className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand-gold">área do aluno</span>
+          <span className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand-gold">{brand.areaEyebrow}</span>
           <p className="m-0 text-sand-muted">Verificando sua liberação de acesso...</p>
         </div>
       </main>
@@ -1983,7 +2142,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       <main className="workspace-shell grid min-h-screen grid-cols-[280px_minmax(0,1fr)] bg-ink text-sand max-[980px]:grid-cols-1">
         <aside
           className="workspace-sidebar sticky top-0 grid min-h-0 content-start gap-[22px] self-start border-r border-[color:var(--app-border)] bg-gradient-to-b from-[var(--app-fill)] to-transparent bg-ink-soft px-[18px] py-[22px] min-[981px]:min-h-screen"
-          aria-label="Menu do aluno"
+          aria-label={brand.menuAria}
         >
           <div className="workspace-sidebar-brand flex min-w-0 items-center gap-3 border-b border-[color:var(--app-border)] pb-[18px]">
             <img
@@ -1993,8 +2152,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               aria-hidden="true"
             />
             <div className="grid min-w-0 gap-0.5">
-              <strong className="text-base text-sand">Aluno</strong>
-              <span className="truncate text-[13px] font-extrabold text-sand-faint">{profile?.name ?? "App Treino"}</span>
+              <strong className="text-base text-sand">{brand.athlete}</strong>
+              <span className="truncate text-[13px] font-extrabold text-sand-faint">{profile?.name ?? brand.name}</span>
             </div>
           </div>
           <nav className="workspace-nav grid gap-1.5">
@@ -2021,7 +2180,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         </aside>
         <section className="workspace-content min-w-0 p-[clamp(28px,4vw,48px)]">
         <section className="dashboard-heading grid items-start gap-3">
-          <span className="eyebrow w-fit">área do aluno</span>
+          <span className="eyebrow w-fit">{brand.areaEyebrow}</span>
           <h1 className="font-display m-0 text-[clamp(38px,5.4vw,72px)] leading-[0.95] tracking-tight text-sand">
             {profile?.name ?? "Comece a treinar"}
           </h1>
@@ -2185,28 +2344,57 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     <main
       className={`student-app-shell${hideStudentChrome ? " workout-immersive" : ""}${
         musicQueueLength ? " has-music-dock" : ""
-      }${studentSection === "play" ? " is-play" : ""}`}
+      }${studentSection === "play" ? " is-play" : ""}${studentSection === "activity" ? " is-activity" : ""}${
+        studentSection === "feed" || studentSection === "home" ? " is-feed" : ""
+      }`}
     >
       {adminPreviewBanner}
       {!hideStudentChrome && (
       <section className="student-app-header">
-        <button
-          type="button"
-          className="student-avatar"
-          aria-label="Abrir perfil"
-          onClick={() => goToSection("profile")}
-        >
-          {profile?.avatarUrl ? (
-            <img src={profile.avatarUrl} alt="" />
-          ) : (
-            <UserRound size={34} />
-          )}
-        </button>
-        <div>
-          <strong>{profile?.name ?? "Aluno"}</strong>
-          <span>Código: {studentCode}</span>
+        <div className="student-header-brand">
+          <button
+            type="button"
+            className="student-brand-mark"
+            aria-label={brand.name}
+            onClick={() => openTrainingCatalog()}
+          >
+            <span>TS</span>
+          </button>
+          <button type="button" className="student-brand-copy" onClick={() => openTrainingCatalog()}>
+            <strong className="student-brand-name">{brand.name}</strong>
+            <span className="student-brand-athlete">
+              {profile?.name ?? brand.athlete} · {brand.codeLabel} {studentCode}
+            </span>
+          </button>
         </div>
+
         <div className="student-header-actions">
+          {(studentSection === "feed" || studentSection === "home") && (
+            <>
+              <button
+                type="button"
+                className="student-icon-button"
+                aria-label="Criar"
+                onClick={() => {
+                  uiSounds.popupOpen();
+                  useFeedChromeStore.getState().toggleCreate();
+                }}
+              >
+                <SquarePlus size={22} strokeWidth={2} />
+              </button>
+              <button
+                type="button"
+                className="student-icon-button"
+                aria-label="Pesquisar no Feed"
+                onClick={() => {
+                  uiSounds.popupOpen();
+                  useFeedChromeStore.getState().requestSearch();
+                }}
+              >
+                <Search size={20} strokeWidth={2.2} />
+              </button>
+            </>
+          )}
           <button className="student-streak-button" aria-label={`Ofensiva de ${currentStreak} dias`} onClick={() => {
             uiSounds.popupOpen();
             setStreakCalendarOpen(true);
@@ -2234,7 +2422,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   goToSection("cart");
                 }}
               >
-                <ShoppingCart size={24} strokeWidth={2.25} />
+                <ShoppingCart size={22} strokeWidth={2.25} />
                 <span className="student-notification-badge student-cart-badge">
                   {studentCart!.itemCount > 99 ? "99+" : studentCart!.itemCount}
                 </span>
@@ -2248,9 +2436,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 uiSounds.popupOpen();
                 uiSounds.popupNotify();
               }
+              setSocialMenuOpen(false);
               return !open;
             })}>
-              <Bell size={24} />
+              <Bell size={20} />
               {unreadNotificationsCount > 0 && <span className="student-notification-badge">{unreadNotificationsCount}</span>}
             </button>
             {notificationsOpen && (
@@ -2287,7 +2476,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                         products: "Vitrine",
                         purchases: "Minhas compras",
                         events: "Eventos",
-                        play: "Play"
+                        play: "Play",
+                        profile: brand.athleteProfile
                       };
                       const primaryTarget = notification.targets[0];
                       const openLabel = primaryTarget
@@ -2316,7 +2506,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                                 if (notification.kind === "sync") {
                                   markNotificationRead(notification.id);
                                 }
-                                setStudentSection(primaryTarget as StudentPanelSection);
+                                setStudentSection(
+                                  primaryTarget === "home" ? "feed" : (primaryTarget as StudentPanelSection)
+                                );
                                 setNotificationsOpen(false);
                               }}
                             >
@@ -2333,6 +2525,79 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                     </article>
                   )}
                 </div>
+              </section>
+            )}
+          </div>
+          <div className="student-avatar-menu-wrap">
+            <button
+              type="button"
+              className="student-avatar"
+              aria-label={
+                studentSection === "feed" || studentSection === "home" ? "Menu social" : "Abrir perfil"
+              }
+              aria-expanded={socialMenuOpen}
+              onClick={() => {
+                if (studentSection === "feed" || studentSection === "home") {
+                  setNotificationsOpen(false);
+                  setSocialMenuOpen((open) => {
+                    if (open) uiSounds.popupClose();
+                    else uiSounds.popupOpen();
+                    return !open;
+                  });
+                  return;
+                }
+                goToSection("profile");
+              }}
+            >
+              {profile?.avatarUrl ? (
+                <img src={profile.avatarUrl} alt="" />
+              ) : (
+                <UserRound size={28} />
+              )}
+            </button>
+            {socialMenuOpen && (studentSection === "feed" || studentSection === "home") && (
+              <section className="student-social-menu" aria-label="Menu da rede social">
+                {(
+                  [
+                    { label: "Feed", icon: Home, action: () => goToSection("feed") },
+                    { label: "Treino", icon: Dumbbell, action: () => openTrainingCatalog() },
+                    { label: "Corrida", icon: CorridaNavIcon, action: () => openCorrida() },
+                    { label: "Desafios", icon: Trophy, action: () => goToSection("club") },
+                    { label: "Menu completo", icon: Menu, action: () => goToSection("menu") },
+                    { label: "Meu Perfil", icon: UserRound, action: () => goToSection("profile") },
+                    { label: "Clipes", icon: Video, action: () => goToSection("reels") },
+                    { label: "Ao vivo", icon: Radio, action: () => goToSection("live") },
+                    { label: "Mensagens", icon: MessageCircle, action: () => goToSection("messages") },
+                    { label: "Chat global", icon: UsersRound, action: () => goToSection("chat") },
+                    { label: "Pedidos", icon: UserPlus, action: () => goToSection("requests") }
+                  ] as const
+                ).map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    className="student-social-menu-item"
+                    onClick={() => {
+                      setSocialMenuOpen(false);
+                      uiSounds.itemSelect();
+                      item.action();
+                    }}
+                  >
+                    <item.icon size={18} strokeWidth={2} />
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="student-social-menu-item is-danger"
+                  onClick={() => {
+                    setSocialMenuOpen(false);
+                    uiSounds.toggleOff();
+                    onLogout();
+                  }}
+                >
+                  <LogOut size={18} strokeWidth={2} />
+                  <span>Sair</span>
+                </button>
               </section>
             )}
           </div>
@@ -2356,116 +2621,138 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           </div>
         )}
 
-        {studentSection === "home" && (
-          <>
-            <section className="student-hero-card">
-              <span>{todayWorkout ? "Pronto para treinar" : "Seu treino"}</span>
-              <div className="student-workout-summary">
-                <div className="student-card-icon">
-                  <Dumbbell size={26} />
-                </div>
-                <div>
-                  <h2>
-                    {todayWorkout
-                      ? `${trainingCopy.todayWorkout} · ${sessionLabelFromBlock(todayWorkout.block.identifier ?? todayWorkout.block.title)}`
-                      : trainingCopy.todayWorkout}
-                  </h2>
-                  <p>
-                    {todayWorkout
-                      ? (cmsMusclesToday.join(", ") || todayWorkout.programTitle || trainingCopy.sessionFocusFallback)
-                      : trainingCopy.noWorkoutsHint}
-                  </p>
-                </div>
-                <strong>{trainingCopy.sessionsDone(workoutsCompleted, totalWorkoutDays)}</strong>
-              </div>
-              <div className="student-progress-track">
-                <span style={{ width: `${workoutProgressPercent}%` }} />
-              </div>
-              {cmsExercisesToday.length > 0 && (
-                <ol className="student-exercise-preview">
-                  {cmsExercisesToday.slice(0, 3).map((exercise, index) => (
-                    <li key={exercise.id}>{index + 1}- {exercise.title}</li>
-                  ))}
-                  {cmsExercisesToday.length > 3 && <li>+{cmsExercisesToday.length - 3} exercícios</li>}
-                </ol>
-              )}
-              <div className="student-hero-actions">
-                {todayWorkout ? (
-                  <>
-                    <button
-                      className="student-green-button"
-                      onClick={() => openTodaySession()}
-                    >
-                      {trainingCopy.continueWorkout}
-                    </button>
-                    <button
-                      className="student-outline-button"
-                      onClick={() => openTrainingCatalog()}
-                    >
-                      {trainingCopy.browseWorkouts}
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    className="student-green-button"
-                    onClick={() => openTrainingCatalog()}
-                    disabled={publishedWorkouts.length === 0}
-                  >
-                    {trainingCopy.browseWorkouts}
-                  </button>
-                )}
-                {publicConfig["module_qr"] !== "false" && publicConfig["qr_checkin_enabled"] !== "false" && (
-                  <button
-                    className="student-outline-button"
-                    onClick={() => setShowStudentQr((value) => {
-                      if (value) uiSounds.popupClose();
-                      else uiSounds.popupOpen();
-                      return !value;
-                    })}
-                  >
-                    <QrCode size={18} />
-                    {showStudentQr ? "Fechar QR" : "QR de check-in"}
-                  </button>
-                )}
-              </div>
-              {showStudentQr && (
-                <div className="student-qr-panel">
-                  <div className="dash-qr-box">
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
-                        publicConfig["qr_checkin_url"] || "https://edersonprogramador.com/checkin"
-                      )}`}
-                      alt="QR Code de check-in"
-                    />
-                  </div>
-                  <span>Mostre este código na recepção para registrar sua presença.</span>
-                  <button
-                    className="student-green-button"
-                    type="button"
-                    onClick={() => {
-                      emitSystemEvent(
-                        "CHECKIN_REALIZADO",
-                        {
-                          checkInUrl: publicConfig["qr_checkin_url"] || "https://edersonprogramador.com/checkin",
-                          locationId: profile?.locationId ?? studentLocations[0]?.id,
-                          locationName: studentLocations.find((item) => item.id === profile?.locationId)?.name
-                            ?? studentLocations[0]?.name,
-                          source: "qr_code"
-                        },
-                        { navigateTo: "status" }
-                      );
-                      setShowStudentQr(false);
-                    }}
-                  >
-                    Confirmar check-in
-                  </button>
-                </div>
-              )}
-            </section>
-          </>
+        {(studentSection === "home" || studentSection === "feed") && token && (
+          <StudentFeedSection token={token} onNavigate={(section) => goToSection(section)} />
+        )}
+
+        {studentSection === "reels" && token && <StudentReelsSection token={token} />}
+        {studentSection === "live" && token && <StudentLiveSection token={token} />}
+        {studentSection === "messages" && token && <StudentMessagesSection token={token} />}
+        {studentSection === "chat" && token && <StudentChatSection token={token} />}
+        {studentSection === "requests" && token && <StudentRequestsSection token={token} />}
+
+        {studentSection === "club" && token && <StudentClubSection token={token} />}
+
+        {studentSection === "activity" && token && (
+          <StudentActivitySection
+            token={token}
+            preferredSport="RUN"
+            preferredSportKey={corridaOpenKey}
+            athleteGender={profile?.gender}
+            onOpenPlay={() => goToSection("play")}
+            onPublished={() => goToSection("feed")}
+          />
         )}
 
         {studentSection === "training" && (
+          <>
+            {!selectedWorkoutModality && (
+              <section className="student-hero-card">
+                <span>{todayWorkout ? "Pronto para treinar" : "Seu treino"}</span>
+                <div className="student-workout-summary">
+                  <div className="student-card-icon">
+                    <Dumbbell size={26} />
+                  </div>
+                  <div>
+                    <h2>
+                      {todayWorkout
+                        ? `${trainingCopy.todayWorkout} · ${sessionLabelFromBlock(todayWorkout.block.identifier ?? todayWorkout.block.title)}`
+                        : trainingCopy.todayWorkout}
+                    </h2>
+                    <p>
+                      {todayWorkout
+                        ? (cmsMusclesToday.join(", ") || todayWorkout.programTitle || trainingCopy.sessionFocusFallback)
+                        : trainingCopy.noWorkoutsHint}
+                    </p>
+                  </div>
+                  <strong>{trainingCopy.sessionsDone(workoutsCompleted, totalWorkoutDays)}</strong>
+                </div>
+                <div className="student-progress-track">
+                  <span style={{ width: `${workoutProgressPercent}%` }} />
+                </div>
+                {cmsExercisesToday.length > 0 && (
+                  <ol className="student-exercise-preview">
+                    {cmsExercisesToday.slice(0, 3).map((exercise, index) => (
+                      <li key={exercise.id}>{index + 1}- {exercise.title}</li>
+                    ))}
+                    {cmsExercisesToday.length > 3 && <li>+{cmsExercisesToday.length - 3} exercícios</li>}
+                  </ol>
+                )}
+                <div className="student-hero-actions">
+                  {todayWorkout ? (
+                    <>
+                      <button
+                        className="student-green-button"
+                        onClick={() => openTodaySession()}
+                      >
+                        {trainingCopy.continueWorkout}
+                      </button>
+                      <button
+                        className="student-outline-button"
+                        onClick={() => {
+                          setSelectedWorkoutModality(todayWorkout.modality ?? "Hipertrofia");
+                          setSelectedWorkoutProgramId(null);
+                        }}
+                      >
+                        {trainingCopy.browseWorkouts}
+                      </button>
+                    </>
+                  ) : (
+                    publishedWorkouts.length === 0 ? (
+                      <button className="student-green-button" type="button" disabled>
+                        {trainingCopy.browseWorkouts}
+                      </button>
+                    ) : null
+                  )}
+                  {publicConfig["module_qr"] !== "false" && publicConfig["qr_checkin_enabled"] !== "false" && (
+                    <button
+                      className="student-outline-button"
+                      onClick={() => setShowStudentQr((value) => {
+                        if (value) uiSounds.popupClose();
+                        else uiSounds.popupOpen();
+                        return !value;
+                      })}
+                    >
+                      <QrCode size={18} />
+                      {showStudentQr ? "Fechar QR" : "QR de check-in"}
+                    </button>
+                  )}
+                </div>
+                {showStudentQr && (
+                  <div className="student-qr-panel">
+                    <div className="dash-qr-box">
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+                          publicConfig["qr_checkin_url"] || "https://edersonprogramador.com/checkin"
+                        )}`}
+                        alt="QR Code de check-in"
+                      />
+                    </div>
+                    <span>Mostre este código na recepção para registrar sua presença.</span>
+                    <button
+                      className="student-green-button"
+                      type="button"
+                      onClick={() => {
+                        emitSystemEvent(
+                          "CHECKIN_REALIZADO",
+                          {
+                            checkInUrl: publicConfig["qr_checkin_url"] || "https://edersonprogramador.com/checkin",
+                            locationId: profile?.locationId ?? studentLocations[0]?.id,
+                            locationName: studentLocations.find((item) => item.id === profile?.locationId)?.name
+                              ?? studentLocations[0]?.name,
+                            source: "qr_code"
+                          },
+                          { navigateTo: "status" }
+                        );
+                        setShowStudentQr(false);
+                      }}
+                    >
+                      Confirmar check-in
+                    </button>
+                  </div>
+                )}
+              </section>
+            )}
           <section className="student-sheet">
             {!selectedWorkoutModality && (
               <>
@@ -2540,13 +2827,24 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                       const done = programWorkout.completedWorkouts ?? 0;
                       const total = programWorkout.totalWorkouts ?? programWorkout.totalDays;
                       const isToday = todayWorkout?.programId === programWorkout.programId;
+                      const cycleCompleted = Boolean(programWorkout.cycleCompleted);
+                      const completionCount = programWorkout.completionCount ?? 0;
+                      const showCompletedSeal = cycleCompleted || completionCount > 0;
+                      const repeating = repeatingProgramId === programWorkout.programId;
                       const focus =
                         programWorkout.block?.focus ||
                         programWorkout.sequence?.[0]?.block.focus ||
                         trainingCopy.sessionFocusFallback;
                       return (
                         <article className="student-program-card" key={programWorkout.programId}>
-                          <div className={`student-training-card${isToday ? " active" : ""}`}>
+                          <div className={`student-training-card${isToday ? " active" : ""}${cycleCompleted ? " completed" : ""}`}>
+                            {showCompletedSeal ? (
+                              <span className="student-completed-seal">
+                                <Trophy size={12} />
+                                {trainingCopy.completedBadge}
+                                {completionCount > 1 ? ` · ${completionCount}x` : ""}
+                              </span>
+                            ) : null}
                             {programWorkout.modalityImageUrl ? (
                               <MediaImg
                                 className="student-card-image"
@@ -2559,20 +2857,48 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                                 <Dumbbell size={24} />
                               </div>
                             )}
-                            <div className="student-card-body">
+                            <div
+                              className="student-card-body"
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => {
+                                setSelectedWorkoutProgramId(programWorkout.programId);
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  setSelectedWorkoutProgramId(programWorkout.programId);
+                                }
+                              }}
+                            >
                               <h2>{programWorkout.programTitle}</h2>
                               <p>
                                 {focus} · {trainingCopy.sessionsDone(done, total)}
-                                {isToday ? ` · ${trainingCopy.todayWorkout}` : ""}
+                                {cycleCompleted
+                                  ? ` · ${trainingCopy.completedBadge}`
+                                  : completionCount > 0
+                                    ? ` · ${trainingCopy.completedBadge}${completionCount > 1 ? ` ${completionCount}x` : ""}`
+                                    : isToday
+                                      ? ` · ${trainingCopy.todayWorkout}`
+                                      : ""}
                               </p>
                             </div>
                             <button
                               type="button"
+                              disabled={repeating}
                               onClick={() => {
+                                if (cycleCompleted) {
+                                  void handleRepeatWorkoutProgram(programWorkout);
+                                  return;
+                                }
                                 setSelectedWorkoutProgramId(programWorkout.programId);
                               }}
                             >
-                              {trainingCopy.openWorkout}
+                              {repeating
+                                ? "Abrindo..."
+                                : cycleCompleted
+                                  ? trainingCopy.repeatWorkout
+                                  : trainingCopy.openWorkout}
                             </button>
                           </div>
                         </article>
@@ -2608,6 +2934,23 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   <span>{trainingCopy.workout}</span>
                   <h1>{workoutSheet.programTitle}</h1>
                   <p>{workoutSheet.modality ?? trainingCopy.modality}</p>
+                  {workoutSheet.cycleCompleted ? (
+                    <span className="student-completed-seal student-completed-seal-inline">
+                      <Trophy size={12} />
+                      {trainingCopy.completedBadge}
+                      {(workoutSheet.completionCount ?? 0) > 1 ? ` · ${workoutSheet.completionCount}x` : ""}
+                    </span>
+                  ) : null}
+                  {workoutSheet.cycleCompleted ? (
+                    <button
+                      type="button"
+                      className="student-repeat-workout-button"
+                      disabled={repeatingProgramId === workoutSheet.programId}
+                      onClick={() => void handleRepeatWorkoutProgram(workoutSheet)}
+                    >
+                      {repeatingProgramId === workoutSheet.programId ? "Abrindo..." : trainingCopy.repeatWorkout}
+                    </button>
+                  ) : null}
                   {workoutSheet.favoritedByMe ? (
                     <span className="student-favorite-badge">
                       <Star size={15} fill="currentColor" />
@@ -2681,7 +3024,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                     const programMuscles = Array.from(
                       new Set(programWorkout.block.exercises.flatMap((exercise) => exercise.targetMuscles ?? []))
                     );
-                    const isCurrent = programWorkout.dayNumber === workoutSheet.dayNumber;
+                    const cycleCompleted = Boolean(workoutSheet.cycleCompleted);
+                    const isCurrent = !cycleCompleted && programWorkout.dayNumber === workoutSheet.dayNumber;
                     const blockLabel = sessionLabelFromBlock(
                       programWorkout.block.identifier ?? programWorkout.block.title
                     );
@@ -2691,7 +3035,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
                     return (
                       <article className="student-program-card" key={`${programWorkout.programId}-${programWorkout.dayNumber}`}>
-                        <div className={`student-training-card${isCurrent ? " active" : ""}`}>
+                        <div className={`student-training-card${isCurrent ? " active" : ""}${cycleCompleted ? " completed" : ""}`}>
+                          {cycleCompleted ? (
+                            <span className="student-completed-seal">
+                              <Trophy size={12} />
+                              {trainingCopy.completedBadge}
+                            </span>
+                          ) : null}
                           {cardImage ? (
                             <MediaImg className="student-card-image" src={cardImage} width={640} alt={blockLabel} />
                           ) : (
@@ -2709,10 +3059,20 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                           <button
                             type="button"
                             disabled={!isCurrent}
-                            title={isCurrent ? undefined : "Conclua o dia atual para liberar este treino"}
+                            title={
+                              cycleCompleted
+                                ? trainingCopy.programCompleted
+                                : isCurrent
+                                  ? undefined
+                                  : "Conclua o dia atual para liberar este treino"
+                            }
                             onClick={() => void handleStartWorkoutSession(programWorkout)}
                           >
-                            {isCurrent ? trainingCopy.startSession : "Bloqueado"}
+                            {cycleCompleted
+                              ? trainingCopy.completedBadge
+                              : isCurrent
+                                ? trainingCopy.startSession
+                                : "Bloqueado"}
                           </button>
                         </div>
                       </article>
@@ -2752,6 +3112,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               </article>
             ) : null}
           </section>
+          </>
         )}
 
          {studentSection === "player" && todayWorkout && (
@@ -2786,7 +3147,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                    uiSounds.pageChange();
                    // Minimiza o player expandido, mas não pausa a trilha.
                    useMusicPlayerStore.getState().collapse();
-                   setStudentSection("home");
+                   setStudentSection("feed");
                  }}
                />
              </Suspense>
@@ -3728,7 +4089,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   <div className="student-chat-messages">
                     {selectedStudentTicket.messages.map((message) => (
                       <div key={message.id} className={message.senderType === "STUDENT" ? "student-chat-msg student-chat-msg--me" : "student-chat-msg"}>
-                        <strong>{message.senderType === "STUDENT" ? "Você" : "Equipe App Treino"}</strong>
+                        <strong>{message.senderType === "STUDENT" ? "Você" : brand.supportTeam}</strong>
                         <p>{message.body}</p>
                         <small>
                           {new Date(message.createdAt).toLocaleString("pt-BR", {
@@ -3817,18 +4178,94 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 <option value="5">5 dias</option>
                 <option value="6">6 dias</option>
               </select>
-              <button className="student-green-button">Gerar plano</button>
+              <button className="student-green-button" disabled={aiBusy}>
+                {aiBusy ? "Gerando…" : "Gerar plano"}
+              </button>
             </form>
-            {latestAiPlan && <article className="student-info-card"><Bot size={22} /><div><strong>?ltimo plano</strong><span>{latestAiPlan.plan.summary}</span></div></article>}
+            {latestAiPlan ? (
+              <article className="student-ai-plan">
+                <div className="student-info-card">
+                  <Bot size={22} />
+                  <div>
+                    <strong>Último plano</strong>
+                    <span>{latestAiPlan.plan.summary}</span>
+                    <small>
+                      {latestAiPlan.objective} · {latestAiPlan.level} · {latestAiPlan.daysPerWeek}x
+                    </small>
+                  </div>
+                </div>
+                {(latestAiPlan.plan.days ?? []).map((day) => (
+                  <article className="student-info-card" key={day.title}>
+                    <Dumbbell size={22} />
+                    <div>
+                      <strong>{day.title}</strong>
+                      <span>{day.focus}</span>
+                      {(day.exercises ?? []).map((exercise) => (
+                        <small key={exercise.name}>
+                          {exercise.name} · {exercise.sets}x {exercise.reps}
+                        </small>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+                {(latestAiPlan.plan.recommendations ?? []).length > 0 ? (
+                  <article className="student-info-card">
+                    <Sparkles size={22} />
+                    <div>
+                      <strong>Recomendações</strong>
+                      {latestAiPlan.plan.recommendations.map((item) => (
+                        <span key={item}>{item}</span>
+                      ))}
+                    </div>
+                  </article>
+                ) : null}
+              </article>
+            ) : null}
           </section>
         )}
 
-        {studentSection === "profile" && (
+        {studentSection === "profile" && token && (
+          <StudentAthleteProfileSection
+            token={token}
+            profile={profile}
+            athleteSocial={athleteSocial}
+            onOpenSettings={() => goToSection("profile-settings")}
+            onProfileUpdated={(next) => {
+              setProfile((current) => ({
+                ...current,
+                ...next,
+                enrollmentStatus: current?.enrollmentStatus ?? next.enrollmentStatus
+              }));
+              void apiGet<{
+                followersCount: number;
+                followingCount: number;
+                postsCount: number;
+                isPrivate: boolean;
+              }>("/student/social/me", token)
+                .then((data) =>
+                  setAthleteSocial({
+                    followersCount: data.followersCount,
+                    followingCount: data.followingCount,
+                    postsCount: data.postsCount,
+                    isPrivate: data.isPrivate
+                  })
+                )
+                .catch(() => undefined);
+            }}
+          />
+        )}
+
+        {studentSection === "profile-settings" && (
           <section className="student-sheet student-profile-sheet">
             <div className="student-sheet-heading">
-              <span>Perfil</span>
+              <span>{brand.profileSettings}</span>
               <h1>Dados cadastrais</h1>
-              <p>Atualize suas informações para treinos e contato com a academia.</p>
+              <p>{brand.profileSettingsHint}</p>
+            </div>
+            <div className="student-athlete-social-actions" style={{ marginBottom: 16 }}>
+              <button type="button" className="student-ghost-chip" onClick={() => goToSection("profile")}>
+                ← Voltar ao perfil social
+              </button>
             </div>
 
             <form
@@ -3859,7 +4296,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   )}
                 </label>
                 <div className="student-profile-identity-copy">
-                  <strong>{profile?.name ?? "Aluno"}</strong>
+                  <strong>{profile?.name ?? brand.athlete}</strong>
                   <span>{profile?.email ?? "—"}</span>
                   <em>
                     {profile?.gender === "MALE"
@@ -3869,6 +4306,34 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                         : "Sexo não informado"}
                   </em>
                 </div>
+              </div>
+
+              <div className="student-achievement-panel">
+                <strong>{trainingCopy.achievementsHeading}</strong>
+                <span>{trainingCopy.achievementsHint}</span>
+                {(profile?.achievements?.length ?? 0) > 0 ? (
+                  <div className="student-achievement-grid">
+                    {profile?.achievements?.map((achievement) => (
+                      <article className="student-achievement-seal-card" key={achievement.modalityId}>
+                        <span className="student-achievement-medal">
+                          {achievement.modalityImageUrl ? (
+                            <img src={achievement.modalityImageUrl} alt="" />
+                          ) : (
+                            <Trophy size={26} />
+                          )}
+                        </span>
+                        <strong>{achievement.modalityName}</strong>
+                        <em>
+                          {achievement.completionCount === 1
+                            ? "1 ciclo concluído"
+                            : `${achievement.completionCount} ciclos concluídos`}
+                        </em>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="student-achievement-empty">{trainingCopy.achievementsEmpty}</p>
+                )}
               </div>
 
               <fieldset className="student-profile-group">
@@ -4117,55 +4582,116 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
         {studentSection === "menu" && (
           <section className="student-menu-list p-4 sm:p-6">
-            {[
-              { icon: UserRound, title: "Perfil", action: () => goToSection("profile") },
-              { icon: Dumbbell, title: trainingCopy.workout, action: () => openTrainingCatalog(), favorite: true },
-              { icon: ShieldCheck, title: "Matrículas", action: () => goToSection("membership") },
-              { icon: CreditCard, title: "Pagamentos", action: () => goToSection("payments"), favorite: true },
-              { icon: Ruler, title: trainingCopy.physicalAssessment, action: () => goToSection("assessments") },
-              { icon: CalendarDays, title: "Frequência", action: () => goToSection("status") },
-              {
-                icon: Package,
-                title: "Vitrine",
-                action: () => goToSection("products"),
-                favorite: true,
-                moduleKey: "module_products"
-              },
-              {
-                icon: ShoppingCart,
-                title: "Carrinho",
-                action: () => goToSection("cart"),
-                moduleKey: "module_products"
-              },
-              {
-                icon: ShoppingCart,
-                title: "Pedidos online",
-                action: () => goToSection("orders"),
-                moduleKey: "module_purchases"
-              },
-              {
-                icon: ShoppingCart,
-                title: "Compras rápidas",
-                action: () => goToSection("purchases"),
-                moduleKey: "module_purchases"
-              },
-              { icon: CalendarPlus, title: "Eventos", action: () => goToSection("events") },
-              { icon: Music2, title: "Play", action: () => goToSection("play"), favorite: true },
-              { icon: MapPin, title: "Unidades", action: () => goToSection("locations") },
-              { icon: Headphones, title: "Atendimento", action: () => goToSection("support") },
-              { icon: QrCode, title: "QR Code", action: () => { goToSection("home"); setShowStudentQr(true); } },
-              { icon: CreditCard, title: "Meus Cartões", action: () => goToSection("payments"), moduleKey: "module_cards" },
-              { icon: Settings, title: "Configurações", action: () => goToSection("settings") },
-              { icon: Star, title: trainingCopy.favoritesAndRatings, action: () => goToSection("ratings") }
-            ]
-              .filter((item) => !("moduleKey" in item) || publicConfig[item.moduleKey as string] !== "false")
-              .map((item) => (
-              <button className="student-menu-item" key={item.title} onClick={item.action}>
-                <item.icon size={24} />
-                <span>{item.title}</span>
-                {item.favorite && <Star size={18} />}
-              </button>
-            ))}
+            {(
+              [
+                { group: "Conta", icon: UserRound, title: brand.athleteProfile, action: () => goToSection("profile") },
+                { group: "Conta", icon: Settings, title: "Configurações do perfil", action: () => goToSection("profile-settings") },
+                { group: "Treino", icon: Dumbbell, title: trainingCopy.workout, action: () => openTrainingCatalog(), favorite: true },
+                { group: "Treino", icon: CorridaNavIcon, title: "Corrida", action: () => openCorrida(), favorite: true },
+                { group: "Treino", icon: Trophy, title: "Desafios", action: () => goToSection("club"), favorite: true },
+                { group: "Treino", icon: Sparkles, title: "Plano inteligente", action: () => goToSection("ai") },
+                { group: "Conta", icon: ShieldCheck, title: "Matrículas", action: () => goToSection("membership") },
+                { group: "Conta", icon: CreditCard, title: "Pagamentos", action: () => goToSection("payments"), favorite: true },
+                { group: "Saúde", icon: Ruler, title: trainingCopy.physicalAssessment, action: () => goToSection("assessments") },
+                { group: "Saúde", icon: CalendarDays, title: "Frequência", action: () => goToSection("status") },
+                {
+                  group: "Play e loja",
+                  icon: Package,
+                  title: "Vitrine",
+                  action: () => goToSection("products"),
+                  favorite: true,
+                  moduleKey: "module_products"
+                },
+                {
+                  group: "Play e loja",
+                  icon: ShoppingCart,
+                  title: "Carrinho",
+                  action: () => goToSection("cart"),
+                  moduleKey: "module_products"
+                },
+                {
+                  group: "Play e loja",
+                  icon: ShoppingCart,
+                  title: "Pedidos online",
+                  action: () => goToSection("orders"),
+                  moduleKey: "module_purchases"
+                },
+                {
+                  group: "Play e loja",
+                  icon: ShoppingCart,
+                  title: "Compras rápidas",
+                  action: () => goToSection("purchases"),
+                  moduleKey: "module_purchases"
+                },
+                { group: "Play e loja", icon: Music2, title: "Play", action: () => goToSection("play"), favorite: true },
+                { group: "Comunidade", icon: CalendarPlus, title: "Eventos", action: () => goToSection("events") },
+                { group: "Comunidade", icon: Video, title: "Clipes", action: () => goToSection("reels"), favorite: true },
+                { group: "Comunidade", icon: Radio, title: "Ao vivo", action: () => goToSection("live") },
+                { group: "Comunidade", icon: MessageCircle, title: "Mensagens", action: () => goToSection("messages") },
+                { group: "Comunidade", icon: UsersRound, title: "Chat global", action: () => goToSection("chat") },
+                { group: "Comunidade", icon: UserPlus, title: "Pedidos para seguir", action: () => goToSection("requests") },
+                { group: "Comunidade", icon: MapPin, title: "Unidades", action: () => goToSection("locations") },
+                { group: "Ajuda", icon: Headphones, title: "Atendimento", action: () => goToSection("support") },
+                { group: "Ajuda", icon: QrCode, title: "QR Code", action: () => { openTrainingCatalog(); setShowStudentQr(true); } },
+                { group: "Conta", icon: CreditCard, title: "Meus Cartões", action: () => goToSection("payments"), moduleKey: "module_cards" },
+                {
+                  group: "Ajuda",
+                  icon: Bell,
+                  title: "Notificações",
+                  action: () => {
+                    uiSounds.popupOpen();
+                    uiSounds.popupNotify();
+                    setNotificationsOpen(true);
+                  }
+                },
+                { group: "Conta", icon: Settings, title: "Configurações", action: () => goToSection("settings") },
+                { group: "Conta", icon: Star, title: trainingCopy.favoritesAndRatings, action: () => goToSection("ratings") }
+              ] as Array<{
+                group: string;
+                icon: typeof UserRound;
+                title: string;
+                action: () => void;
+                favorite?: boolean;
+                moduleKey?: string;
+              }>
+            )
+              .filter((item) => !item.moduleKey || publicConfig[item.moduleKey] !== "false")
+              .reduce(
+                (acc, item, index, list) => {
+                  if (index === 0 || list[index - 1].group !== item.group) {
+                    acc.push({ type: "group" as const, title: item.group });
+                  }
+                  acc.push({ type: "item" as const, item });
+                  return acc;
+                },
+                [] as Array<
+                  | { type: "group"; title: string }
+                  | {
+                      type: "item";
+                      item: {
+                        group: string;
+                        icon: typeof UserRound;
+                        title: string;
+                        action: () => void;
+                        favorite?: boolean;
+                        moduleKey?: string;
+                      };
+                    }
+                >
+              )
+              .map((row) =>
+                row.type === "group" ? (
+                  <h2 className="student-menu-group" key={`g-${row.title}`}>
+                    {row.title}
+                  </h2>
+                ) : (
+                  <button className="student-menu-item" key={row.item.title} onClick={row.item.action}>
+                    <row.item.icon size={24} />
+                    <span>{row.item.title}</span>
+                    {row.item.favorite && <Star size={18} />}
+                  </button>
+                )
+              )}
             <button
               className="student-menu-item danger"
               onClick={() => {
@@ -4391,11 +4917,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         />
       )}
       {!hideStudentChrome && (
-      <nav className="student-bottom-nav" aria-label="Navegacao do aluno">
-        <button className={studentSection === "home" ? "active" : ""} onClick={() => goToSection("home")}><Home size={22} />Home</button>
-        <button className={studentSection === "play" ? "active" : ""} onClick={() => goToSection("play")}><Music2 size={22} />Play</button>
+      <nav className="student-bottom-nav" aria-label={brand.navAria}>
+        <button className={studentSection === "feed" || studentSection === "home" ? "active" : ""} onClick={() => goToSection("feed")}><Home size={22} />Feed</button>
+        <button className={studentSection === "activity" ? "active" : ""} onClick={() => openCorrida()}><CorridaNavIcon size={22} />Corrida</button>
         <button className={studentSection === "training" || studentSection === "player" || studentSection === "history" ? "active" : ""} onClick={() => openTrainingCatalog()}><Dumbbell size={22} />Treino</button>
-        <button className={studentSection === "products" ? "active" : ""} onClick={() => goToSection("products")} style={publicConfig["module_products"] === "false" ? { display: "none" } : undefined}><Package size={22} />Vitrine</button>
+        <button className={studentSection === "club" ? "active" : ""} onClick={() => goToSection("club")}><Trophy size={22} />Desafios</button>
         <button className={studentSection === "menu" ? "active" : ""} onClick={() => goToSection("menu")}><Menu size={22} />Menu</button>
       </nav>
       )}

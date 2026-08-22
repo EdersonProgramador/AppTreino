@@ -1,6 +1,7 @@
 node_modules/
 dist/
 build/
+.next/
 .env
 .env.local
 .env.*.local
@@ -11,4 +12,11 @@ coverage/
 .vite/
 .expo/
 apps/api/uploads/
+apps/social/**/node_modules/
+apps/social/frontend/.next/
 .tmp-*
+
+backups/
+apps/api/apps/
+apps/web/test-results/
+

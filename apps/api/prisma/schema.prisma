@@ -40,7 +40,34 @@ model User {
   workoutFavorites    WorkoutFavorite[]
   ratings             Rating[]
   passwordResetTokens PasswordResetToken[]
-  notifications       StudentNotification[]
+  notifications             StudentNotification[]
+  programCycleCompletions   ProgramCycleCompletion[]
+  modalityAchievements      ModalityAchievement[]
+  socialPosts               SocialPost[]
+  socialLikes               SocialLike[]
+  socialDislikes            SocialDislike[]
+  socialComments            SocialComment[]
+  socialReports             SocialReport[]
+  socialFollowing           SocialFollow[]         @relation("SocialFollowFrom")
+  socialFollowers           SocialFollow[]         @relation("SocialFollowTo")
+  socialStories             SocialStory[]
+  socialStoryViews          SocialStoryView[]
+  socialReels               SocialReel[]
+  socialReelLikes           SocialReelLike[]
+  socialLiveSessions        SocialLiveSession[]
+  socialLiveMessages        SocialLiveMessage[]
+  socialConversationsA      SocialConversation[]   @relation("SocialConversationA")
+  socialConversationsB      SocialConversation[]   @relation("SocialConversationB")
+  socialDirectMessages      SocialDirectMessage[]
+  socialGlobalMessages      SocialGlobalMessage[]
+  socialFollowRequestsFrom  SocialFollowRequest[]  @relation("SocialFollowRequestFrom")
+  socialFollowRequestsTo    SocialFollowRequest[]  @relation("SocialFollowRequestTo")
+  socialBlocksFrom          SocialBlock[]          @relation("SocialBlocker")
+  socialBlocksTo            SocialBlock[]          @relation("SocialBlocked")
+  outdoorActivities         OutdoorActivity[]
+  outdoorActivityCells      OutdoorActivityCell[]
+  outdoorSegmentEfforts     OutdoorSegmentEffort[]
+  clubMemberships           ClubMembership[]
   createdAt           DateTime             @default(now()) @map("created_at")
   updatedAt           DateTime             @updatedAt @map("updated_at")
 
@@ -88,6 +115,14 @@ model Profile {
   city           String?
   state          String?
   avatarUrl      String?   @map("avatar_url")
+  /// Conta privada: follow vira pedido.
+  isPrivate      Boolean   @default(false) @map("is_private")
+  /// Bio pública do atleta (perfil social).
+  bio            String?
+  /// Cor de capa do perfil social (hex).
+  coverColor     String?   @map("cover_color")
+  /// Imagem de capa do perfil social (URL).
+  coverUrl       String?   @map("cover_url")
   locationId     String?   @map("location_id")
   location       Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
   createdAt      DateTime  @default(now()) @map("created_at")
@@ -210,6 +245,7 @@ model Modality {
   programs      Program[]
   exerciseLinks ExerciseModality[]
   workoutBlocks WorkoutBlock[]
+  achievements  ModalityAchievement[]
   deletedAt     DateTime?          @map("deleted_at")
   createdAt     DateTime           @default(now()) @map("created_at")
   updatedAt     DateTime           @updatedAt @map("updated_at")
@@ -309,6 +345,7 @@ model Program {
   assignedUsers     UserProgram[]
   workoutSessions   WorkoutSession[]
   favorites         WorkoutFavorite[]
+  cycleCompletions  ProgramCycleCompletion[]
 
   @@index([status, isActive, deletedAt])
   @@index([modalityId])
@@ -1042,6 +1079,40 @@ model MusicTrack {
   @@map("music_tracks")
 }
 
+/// Cada vez que o aluno conclui a sequência completa de um treino (inclusive repetições).
+model ProgramCycleCompletion {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  programId    String   @map("program_id")
+  modalityId   String?  @map("modality_id")
+  modalityName String   @map("modality_name")
+  programTitle String   @map("program_title")
+  cycleNumber  Int      @map("cycle_number")
+  completedAt  DateTime @default(now()) @map("completed_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  program      Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([userId, programId])
+  @@index([userId, modalityId])
+  @@map("program_cycle_completions")
+}
+
+/// Selo de conquista no perfil: uma medalha por modalidade, com contagem de ciclos.
+model ModalityAchievement {
+  id              String    @id @default(cuid())
+  userId          String    @map("user_id")
+  modalityId      String    @map("modality_id")
+  modalityName    String    @map("modality_name")
+  completionCount Int       @default(1) @map("completion_count")
+  lastCompletedAt DateTime  @map("last_completed_at")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  modality        Modality  @relation(fields: [modalityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, modalityId])
+  @@index([userId, lastCompletedAt])
+  @@map("modality_achievements")
+}
+
 /// Inbox individual de notificações por aluno (login).
 model StudentNotification {
   id            String    @id @default(cuid())
@@ -1060,4 +1131,430 @@ model StudentNotification {
   @@index([userId, readAt])
   @@index([userId, sourceType, sourceId])
   @@map("student_notifications")
+}
+
+enum SocialPostKind {
+  TEXT
+  PHOTO
+  VIDEO
+  ACTIVITY
+}
+
+enum OutdoorSport {
+  RUN
+  WALK
+  RIDE
+}
+
+enum OutdoorActivityStatus {
+  LIVE
+  PAUSED
+  COMPLETED
+  CANCELED
+}
+
+enum OutdoorModerationStatus {
+  NONE
+  OPEN
+  CLEARED
+  REJECTED
+}
+
+enum ClubChallengePeriod {
+  WEEK
+  MONTH
+  OPEN
+}
+
+/// Postagens do Feed (rede social do aluno).
+model SocialPost {
+  id         String         @id @default(cuid())
+  authorId   String         @map("author_id")
+  author     User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  kind       SocialPostKind @default(TEXT)
+  body       String?
+  mediaUrl   String?        @map("media_url")
+  mediaType  String?        @map("media_type")
+  /// Carrossel: [{ url, type: "IMAGE"|"VIDEO" }]
+  mediaItems Json?          @map("media_items")
+  activityId String?        @unique @map("activity_id")
+  activity   OutdoorActivity? @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  hidden     Boolean        @default(false)
+  likes      SocialLike[]
+  dislikes   SocialDislike[]
+  comments   SocialComment[]
+  reports    SocialReport[]
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  @@index([createdAt])
+  @@index([authorId, createdAt])
+  @@map("social_posts")
+}
+
+model SocialLike {
+  id        String     @id @default(cuid())
+  userId    String     @map("user_id")
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String     @map("post_id")
+  post      SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  @@unique([userId, postId])
+  @@index([postId])
+  @@map("social_likes")
+}
+
+model SocialDislike {
+  id        String     @id @default(cuid())
+  userId    String     @map("user_id")
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String     @map("post_id")
+  post      SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  @@unique([userId, postId])
+  @@index([postId])
+  @@map("social_dislikes")
+}
+
+model SocialComment {
+  id        String     @id @default(cuid())
+  userId    String     @map("user_id")
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String     @map("post_id")
+  post      SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  @@index([postId, createdAt])
+  @@map("social_comments")
+}
+
+model SocialReport {
+  id        String     @id @default(cuid())
+  userId    String     @map("user_id")
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String     @map("post_id")
+  post      SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reason    String
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  @@index([postId])
+  @@map("social_reports")
+}
+
+model SocialFollow {
+  id          String   @id @default(cuid())
+  followerId  String   @map("follower_id")
+  follower    User     @relation("SocialFollowFrom", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId String   @map("following_id")
+  following   User     @relation("SocialFollowTo", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([followerId, followingId])
+  @@index([followingId])
+  @@map("social_follows")
+}
+
+/// Momentos (stories) — expiram em 24h.
+model SocialStory {
+  id        String           @id @default(cuid())
+  authorId  String           @map("author_id")
+  author    User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  mediaUrl  String           @map("media_url")
+  mediaType String           @default("IMAGE") @map("media_type")
+  caption   String?
+  mood      String           @default("vibe")
+  expiresAt DateTime         @map("expires_at")
+  views     SocialStoryView[]
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@index([authorId, createdAt])
+  @@map("social_stories")
+}
+
+model SocialStoryView {
+  id        String      @id @default(cuid())
+  storyId   String      @map("story_id")
+  story     SocialStory @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  userId    String      @map("user_id")
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  @@unique([storyId, userId])
+  @@map("social_story_views")
+}
+
+model SocialReel {
+  id        String          @id @default(cuid())
+  authorId  String          @map("author_id")
+  author    User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  videoUrl  String          @map("video_url")
+  caption   String          @default("")
+  mood      String?
+  hidden    Boolean         @default(false)
+  likes     SocialReelLike[]
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([authorId, createdAt])
+  @@map("social_reels")
+}
+
+model SocialReelLike {
+  id        String     @id @default(cuid())
+  reelId    String     @map("reel_id")
+  reel      SocialReel @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  userId    String     @map("user_id")
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  @@unique([reelId, userId])
+  @@map("social_reel_likes")
+}
+
+model SocialLiveSession {
+  id         String             @id @default(cuid())
+  hostId     String             @map("host_id")
+  host       User               @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  title      String
+  mood       String?
+  status     String             @default("live")
+  startedAt  DateTime           @default(now()) @map("started_at")
+  endedAt    DateTime?          @map("ended_at")
+  viewerPeak Int                @default(0) @map("viewer_peak")
+  messages   SocialLiveMessage[]
+  createdAt  DateTime           @default(now()) @map("created_at")
+
+  @@index([status, startedAt])
+  @@map("social_live_sessions")
+}
+
+model SocialLiveMessage {
+  id        String           @id @default(cuid())
+  liveId    String           @map("live_id")
+  live      SocialLiveSession @relation(fields: [liveId], references: [id], onDelete: Cascade)
+  userId    String           @map("user_id")
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  @@index([liveId, createdAt])
+  @@map("social_live_messages")
+}
+
+model SocialConversation {
+  id        String                @id @default(cuid())
+  userAId   String                @map("user_a_id")
+  userA     User                  @relation("SocialConversationA", fields: [userAId], references: [id], onDelete: Cascade)
+  userBId   String                @map("user_b_id")
+  userB     User                  @relation("SocialConversationB", fields: [userBId], references: [id], onDelete: Cascade)
+  messages  SocialDirectMessage[]
+  updatedAt DateTime              @updatedAt @map("updated_at")
+  createdAt DateTime              @default(now()) @map("created_at")
+
+  @@unique([userAId, userBId])
+  @@index([updatedAt])
+  @@map("social_conversations")
+}
+
+model SocialDirectMessage {
+  id             String            @id @default(cuid())
+  conversationId String            @map("conversation_id")
+  conversation   SocialConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String            @map("sender_id")
+  sender         User              @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content        String
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  @@index([conversationId, createdAt])
+  @@map("social_direct_messages")
+}
+
+model SocialGlobalMessage {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("social_global_messages")
+}
+
+model SocialFollowRequest {
+  id        String   @id @default(cuid())
+  fromId    String   @map("from_id")
+  from      User     @relation("SocialFollowRequestFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId      String   @map("to_id")
+  to        User     @relation("SocialFollowRequestTo", fields: [toId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([fromId, toId])
+  @@index([toId])
+  @@map("social_follow_requests")
+}
+
+model SocialBlock {
+  id        String   @id @default(cuid())
+  blockerId String   @map("blocker_id")
+  blocker   User     @relation("SocialBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String   @map("blocked_id")
+  blocked   User     @relation("SocialBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([blockerId, blockedId])
+  @@map("social_blocks")
+}
+
+/// Corrida, caminhada ou ciclismo com GPS (resumo no estilo Strava).
+model OutdoorActivity {
+  id                   String                 @id @default(cuid())
+  userId               String                 @map("user_id")
+  user                 User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sport                OutdoorSport
+  status               OutdoorActivityStatus  @default(LIVE)
+  startedAt            DateTime               @default(now()) @map("started_at")
+  pausedAt             DateTime?              @map("paused_at")
+  finishedAt           DateTime?              @map("finished_at")
+  pauseMs              Int                    @default(0) @map("pause_ms")
+  elapsedSeconds       Int                    @default(0) @map("elapsed_seconds")
+  movingSeconds        Int                    @default(0) @map("moving_seconds")
+  distanceMeters       Float                  @default(0) @map("distance_meters")
+  avgPaceSecPerKm      Float?                 @map("avg_pace_sec_per_km")
+  avgSpeedMps          Float?                 @map("avg_speed_mps")
+  maxSpeedMps          Float?                 @map("max_speed_mps")
+  elevationGainMeters  Float                  @default(0) @map("elevation_gain_meters")
+  elevationLossMeters  Float                  @default(0) @map("elevation_loss_meters")
+  stepsCount           Int                    @default(0) @map("steps_count")
+  avgCadenceSpm        Float?                 @map("avg_cadence_spm")
+  avgHeartRateBpm      Float?                 @map("avg_heart_rate_bpm")
+  maxHeartRateBpm      Float?                 @map("max_heart_rate_bpm")
+  estimatedPowerWatts  Float?                 @map("estimated_power_watts")
+  antiCheatScore       Int                    @default(0) @map("anti_cheat_score")
+  quarantineUntil      DateTime?              @map("quarantine_until")
+  calories             Int                    @default(0)
+  mapType              String                 @default("standard") @map("map_type")
+  activityMap          String                 @default("personal") @map("activity_map")
+  layers               Json?
+  is3d                 Boolean                @default(false) @map("is_3d")
+  targetDistanceMeters Float?                 @map("target_distance_meters")
+  polyline             Json?
+  summary              Json?
+  photoUrl             String?                @map("photo_url")
+  videoUrl             String?                @map("video_url")
+  caption              String?
+  flagged              Boolean                   @default(false)
+  moderationStatus     OutdoorModerationStatus   @default(NONE) @map("moderation_status")
+  antiCheatFlags       Json?                     @map("anti_cheat_flags")
+  moderationNote       String?                   @map("moderation_note")
+  moderatedAt          DateTime?                 @map("moderated_at")
+  post                 SocialPost?
+  cells                OutdoorActivityCell[]
+  segmentEfforts       OutdoorSegmentEffort[]
+  createdAt            DateTime                  @default(now()) @map("created_at")
+  updatedAt            DateTime                  @updatedAt @map("updated_at")
+
+  @@index([userId, status])
+  @@index([userId, finishedAt])
+  @@index([status, finishedAt])
+  @@index([flagged, moderationStatus, finishedAt])
+  @@map("outdoor_activities")
+}
+
+/// Células H3-like (res 9/11) para leaderboards de segmento local.
+model OutdoorActivityCell {
+  id             String          @id @default(cuid())
+  activityId     String          @map("activity_id")
+  activity       OutdoorActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  userId         String          @map("user_id")
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sport          OutdoorSport
+  cell           String
+  resolution     Int
+  distanceMeters Float           @map("distance_meters")
+  finishedAt     DateTime        @map("finished_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  @@unique([activityId, cell])
+  @@index([cell, resolution, finishedAt])
+  @@index([userId, finishedAt])
+  @@index([sport, cell, finishedAt])
+  @@map("outdoor_activity_cells")
+}
+
+/// Segmento nomeado (polyline) — matching no finish + PRs.
+model OutdoorSegment {
+  id             String                 @id @default(cuid())
+  slug           String                 @unique
+  name           String
+  sport          OutdoorSport
+  description    String?
+  // Polyline [{lat,lng}] do segmento
+  polyline       Json
+  distanceMeters Float                  @map("distance_meters")
+  startLat       Float                  @map("start_lat")
+  startLng       Float                  @map("start_lng")
+  endLat         Float                  @map("end_lat")
+  endLng         Float                  @map("end_lng")
+  cellH3         String?                @map("cell_h3")
+  isActive       Boolean                @default(true) @map("is_active")
+  efforts        OutdoorSegmentEffort[]
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+
+  @@index([sport, cellH3, isActive])
+  @@map("outdoor_segments")
+}
+
+model OutdoorSegmentEffort {
+  id             String          @id @default(cuid())
+  segmentId      String          @map("segment_id")
+  segment        OutdoorSegment  @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  activityId     String          @map("activity_id")
+  activity       OutdoorActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  userId         String          @map("user_id")
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  elapsedSeconds Int             @map("elapsed_seconds")
+  paceSecPerKm   Float?          @map("pace_sec_per_km")
+  isPr           Boolean         @default(false) @map("is_pr")
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  @@unique([activityId, segmentId])
+  @@index([segmentId, elapsedSeconds])
+  @@index([userId, segmentId])
+  @@map("outdoor_segment_efforts")
+}
+
+model ClubChallenge {
+  id          String              @id @default(cuid())
+  slug        String              @unique
+  title       String
+  description String
+  sport       OutdoorSport
+  goalMeters  Float               @map("goal_meters")
+  period      ClubChallengePeriod @default(WEEK)
+  // Célula H3 res9 opcional — challenge local
+  cellH3      String?             @map("cell_h3")
+  isActive    Boolean             @default(true) @map("is_active")
+  memberships ClubMembership[]
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  @@map("club_challenges")
+}
+
+model ClubMembership {
+  id          String        @id @default(cuid())
+  userId      String        @map("user_id")
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeId String        @map("challenge_id")
+  challenge   ClubChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  joinedAt    DateTime      @default(now()) @map("joined_at")
+
+  @@unique([userId, challengeId])
+  @@index([challengeId])
+  @@map("club_memberships")
 }

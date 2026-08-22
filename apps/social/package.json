@@ -1,0 +1,12 @@
+{
+  "name": "@app-treino/social",
+  "private": true,
+  "description": "Shell da rede social (estrutura rede-social) com módulos do App Treino unificados.",
+  "scripts": {
+    "dev": "npm run dev:frontend",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "npm --prefix backend run dev",
+    "build": "npm --prefix frontend run build",
+    "typecheck": "npm --prefix frontend run typecheck"
+  }
+}

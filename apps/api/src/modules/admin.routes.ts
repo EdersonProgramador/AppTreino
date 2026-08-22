@@ -22,8 +22,11 @@ import {
 import { buildProgramPublishReadiness, studentMatchesProgramTargetGender } from "./cms-publication.utils.js";
 import { syncUserEnrollmentFromMemberships, validActiveMembershipWhere } from "./membership.utils.js";
 import {
+  activateSystemModules,
   assertModuleEnabled,
+  DEFAULT_SYSTEM_SETTINGS,
   decrementProductStock,
+  ensureDefaultSystemSettings,
   normalizeProductShippingMethod,
   PURCHASE_PAID_STATUSES,
   resolvePurchaseTimestamps
@@ -4656,13 +4659,25 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
   app.get("/admin/settings", async () => {
     requireDatabase();
+    await ensureDefaultSystemSettings();
+    const records = await prisma.systemSetting.findMany();
+    const settings = { ...DEFAULT_SYSTEM_SETTINGS };
+    for (const record of records) {
+      settings[record.key] = record.value;
+    }
+
+    return { settings };
+  });
+
+  app.post("/admin/settings/activate-modules", async () => {
+    requireDatabase();
+    await activateSystemModules();
     const records = await prisma.systemSetting.findMany();
     const settings = records.reduce<Record<string, string>>((acc, record) => {
       acc[record.key] = record.value;
       return acc;
     }, {});
-
-    return { settings };
+    return { ok: true, settings };
   });
 
   app.put("/admin/settings", async (request) => {
@@ -4680,5 +4695,191 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     );
 
     return { ok: true };
+  });
+
+  app.get("/admin/outdoor-activities/flagged", async (request) => {
+    requireDatabase();
+    const query = z
+      .object({
+        status: z.enum(["OPEN", "CLEARED", "REJECTED", "ALL"]).default("OPEN"),
+        limit: z.coerce.number().int().min(1).max(100).default(40)
+      })
+      .parse(request.query);
+
+    const rows = await prisma.outdoorActivity.findMany({
+      where: {
+        status: "COMPLETED",
+        ...(query.status === "ALL"
+          ? { OR: [{ flagged: true }, { moderationStatus: { in: ["OPEN", "CLEARED", "REJECTED"] } }] }
+          : { moderationStatus: query.status })
+      },
+      include: {
+        user: { select: { id: true, name: true, email: true, profile: { select: { avatarUrl: true } } } },
+        post: { select: { id: true, body: true, createdAt: true } }
+      },
+      orderBy: { finishedAt: "desc" },
+      take: query.limit
+    });
+
+    return {
+      activities: rows.map((row) => {
+        const flagsRaw = row.antiCheatFlags;
+        const flagsObj =
+          flagsRaw && typeof flagsRaw === "object" && !Array.isArray(flagsRaw)
+            ? (flagsRaw as { flags?: string[]; score?: number })
+            : { flags: Array.isArray(flagsRaw) ? flagsRaw : [], score: row.antiCheatScore };
+        return {
+          id: row.id,
+          sport: row.sport,
+          distanceMeters: row.distanceMeters,
+          elapsedSeconds: row.elapsedSeconds,
+          finishedAt: row.finishedAt?.toISOString() ?? null,
+          caption: row.caption,
+          flagged: row.flagged,
+          moderationStatus: row.moderationStatus,
+          antiCheatFlags: flagsObj.flags ?? [],
+          antiCheatScore: flagsObj.score ?? row.antiCheatScore ?? 0,
+          quarantineUntil: row.quarantineUntil?.toISOString() ?? null,
+          moderationNote: row.moderationNote,
+          moderatedAt: row.moderatedAt?.toISOString() ?? null,
+          pointCount: Array.isArray(row.polyline) ? row.polyline.length : 0,
+          hasPost: Boolean(row.post),
+          postId: row.post?.id ?? null,
+          user: {
+            id: row.user.id,
+            name: row.user.name,
+            email: row.user.email,
+            avatarUrl: row.user.profile?.avatarUrl ?? null
+          }
+        };
+      })
+    };
+  });
+
+  /** Replay GPS do admin — polyline + flags (fatia F). */
+  app.get("/admin/outdoor-activities/:id/replay", async (request) => {
+    requireDatabase();
+    await requireRole(app, request, "ADMIN");
+    const { id } = idParamSchema.parse(request.params);
+    const row = await prisma.outdoorActivity.findUnique({
+      where: { id },
+      include: { user: { select: { id: true, name: true } } }
+    });
+    if (!row) throw httpError(404, "Atividade não encontrada.");
+    const flagsRaw = row.antiCheatFlags;
+    const flagsObj =
+      flagsRaw && typeof flagsRaw === "object" && !Array.isArray(flagsRaw)
+        ? (flagsRaw as { flags?: string[]; score?: number })
+        : { flags: Array.isArray(flagsRaw) ? (flagsRaw as string[]) : [], score: row.antiCheatScore };
+    return {
+      id: row.id,
+      sport: row.sport,
+      user: row.user,
+      distanceMeters: row.distanceMeters,
+      elevationGainMeters: row.elevationGainMeters,
+      elevationLossMeters: row.elevationLossMeters,
+      antiCheatScore: flagsObj.score ?? row.antiCheatScore ?? 0,
+      antiCheatFlags: flagsObj.flags ?? [],
+      quarantineUntil: row.quarantineUntil?.toISOString() ?? null,
+      pointCount: Array.isArray(row.polyline) ? row.polyline.length : 0,
+      polyline: Array.isArray(row.polyline) ? row.polyline : [],
+      summary: row.summary
+    };
+  });
+
+  app.post("/admin/outdoor-activities/:id/moderate", async (request) => {
+    requireDatabase();
+    const admin = await requireRole(app, request, "ADMIN");
+    const { id } = idParamSchema.parse(request.params);
+    const body = z
+      .object({
+        action: z.enum(["clear", "reject", "publish"]),
+        note: z.string().max(2000).optional()
+      })
+      .parse(request.body ?? {});
+
+    const activity = await prisma.outdoorActivity.findUnique({
+      where: { id },
+      include: { post: true, user: { select: { id: true, name: true } } }
+    });
+    if (!activity || activity.status !== "COMPLETED") {
+      throw httpError(404, "Atividade não encontrada.");
+    }
+
+    if (body.action === "reject") {
+      const updated = await prisma.$transaction(async (tx) => {
+        if (activity.post) {
+          await tx.socialPost.update({
+            where: { id: activity.post.id },
+            data: { hidden: true }
+          });
+        }
+        return tx.outdoorActivity.update({
+          where: { id },
+          data: {
+            flagged: false,
+            moderationStatus: "REJECTED",
+            moderationNote: body.note?.trim() || "Rejeitada pela moderação.",
+            moderatedAt: new Date(),
+            caption: null,
+            photoUrl: null,
+            videoUrl: null
+          }
+        });
+      });
+      return { ok: true, activityId: updated.id, moderationStatus: updated.moderationStatus };
+    }
+
+    if (body.action === "clear") {
+      const updated = await prisma.outdoorActivity.update({
+        where: { id },
+        data: {
+          flagged: false,
+          moderationStatus: "CLEARED",
+          moderationNote: body.note?.trim() || "Liberada pela moderação.",
+          moderatedAt: new Date()
+        }
+      });
+      return { ok: true, activityId: updated.id, moderationStatus: updated.moderationStatus };
+    }
+
+    const caption =
+      activity.caption?.trim() ||
+      `${activity.user.name} · ${(activity.distanceMeters / 1000).toFixed(2)} km · ${activity.sport}`;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const next = await tx.outdoorActivity.update({
+        where: { id },
+        data: {
+          flagged: false,
+          moderationStatus: "CLEARED",
+          moderationNote: body.note?.trim() || `Publicada por ${admin.name}.`,
+          moderatedAt: new Date(),
+          caption
+        }
+      });
+
+      if (!activity.post) {
+        await tx.socialPost.create({
+          data: {
+            authorId: activity.userId,
+            kind: "ACTIVITY",
+            body: caption,
+            mediaUrl: activity.photoUrl || activity.videoUrl || null,
+            mediaType: activity.videoUrl ? "VIDEO" : activity.photoUrl ? "IMAGE" : null,
+            activityId: activity.id
+          }
+        });
+      } else if (activity.post.hidden) {
+        await tx.socialPost.update({
+          where: { id: activity.post.id },
+          data: { hidden: false, body: caption }
+        });
+      }
+
+      return next;
+    });
+
+    return { ok: true, activityId: updated.id, moderationStatus: updated.moderationStatus };
   });
 }

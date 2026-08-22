@@ -10,6 +10,7 @@ import {
   readStoredUser
 } from "../auth/session";
 import type { AuthMode, PlanCode } from "../types/auth";
+import { useUiPrefsStore } from "./uiPrefsStore";
 
 /**
  * Auth transition phases — UI must not render app shells while in motion.
@@ -118,6 +119,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     const destination = homePathForRole(user.role);
     window.localStorage.setItem(TOKEN_KEY, response.token);
     persistStoredUser(user);
+    useUiPrefsStore.getState().setTheme("light");
     set({
       token: response.token,
       user,
@@ -133,6 +135,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     const user = normalizeAuthUser(response.user);
     window.localStorage.setItem(TOKEN_KEY, response.token);
     persistStoredUser(user);
+    useUiPrefsStore.getState().setTheme("light");
     set({
       token: response.token,
       user,
