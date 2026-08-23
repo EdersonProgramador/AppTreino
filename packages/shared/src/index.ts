@@ -1,6 +1,6 @@
-import type { UserRole } from "./rbac";
+import type { UserRole } from "./rbac.js";
 
-export type { UserRole, RbacResource, RbacAction, Permission } from "./rbac";
+export type { UserRole, RbacResource, RbacAction, Permission } from "./rbac.js";
 export {
   USER_ROLES,
   ROLE_HOME_PATH,
@@ -16,7 +16,7 @@ export {
   canAccessPanel,
   homePathForRole,
   assertCan
-} from "./rbac";
+} from "./rbac.js";
 
 export type MembershipStatus = "ACTIVE" | "PENDING" | "OVERDUE" | "CANCELED";
 
