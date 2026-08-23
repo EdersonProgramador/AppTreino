@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { access, mkdir, rename, rm } from "node:fs/promises";
 import { dirname, extname, join, normalize, relative, resolve, sep } from "node:path";
 import sharp from "sharp";
+import { downloadObjectToTemp, isObjectStorageEnabled, removeTempDownload } from "./object-storage.js";
 import { uploadsDir } from "./upload-security.js";
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif", "avif"]);
@@ -50,6 +51,24 @@ export function resolveSafeUploadPath(relativePath: string): string | null {
   }
 
   return absolute;
+}
+
+async function resolveReadableUploadPath(relativePath: string): Promise<{ absolutePath: string; tempDownload?: string } | null> {
+  const local = resolveSafeUploadPath(relativePath);
+  if (local && (await pathExists(local))) {
+    return { absolutePath: local };
+  }
+
+  if (!isObjectStorageEnabled()) {
+    return null;
+  }
+
+  try {
+    const tempDownload = await downloadObjectToTemp(relativePath);
+    return { absolutePath: tempDownload, tempDownload };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -182,49 +201,55 @@ export async function getDerivedImage(params: {
 }): Promise<{ absolutePath: string; mimeType: string; cacheHit: boolean } | null> {
   const width = Math.min(Math.max(Math.round(params.width), 48), 2000);
   const quality = Math.min(Math.max(params.quality ?? 72, 40), 90);
-  const sourceAbsolute = resolveSafeUploadPath(params.relativePath);
-  if (!sourceAbsolute) return null;
+  const resolved = await resolveReadableUploadPath(params.relativePath);
+  if (!resolved) return null;
 
-  const ext = extensionOf(sourceAbsolute);
-  if (!IMAGE_EXTENSIONS.has(ext)) return null;
-  if (!(await pathExists(sourceAbsolute))) return null;
-
-  const key = createHash("sha1")
-    .update(`${params.relativePath}|w${width}|q${quality}|v1`)
-    .digest("hex");
-  const cachePath = join(DERIVED_DIR, `w${width}`, `${key}.webp`);
-
-  if (await pathExists(cachePath)) {
-    return { absolutePath: cachePath, mimeType: "image/webp", cacheHit: true };
-  }
-
-  await mkdir(dirname(cachePath), { recursive: true });
-  const tempPath = `${cachePath}.${process.pid}.tmp`;
+  const { absolutePath: sourceAbsolute, tempDownload } = resolved;
 
   try {
-    // GIF: usa o primeiro frame para thumb leve.
-    const input = sharp(sourceAbsolute, {
-      animated: false,
-      failOn: "none",
-      pages: 1
-    });
+    const ext = extensionOf(sourceAbsolute);
+    if (!IMAGE_EXTENSIONS.has(ext)) return null;
 
-    await input
-      .rotate()
-      .resize({
-        width,
-        height: width,
-        fit: "inside",
-        withoutEnlargement: true
-      })
-      .webp({ quality, effort: 4 })
-      .toFile(tempPath);
+    const key = createHash("sha1")
+      .update(`${params.relativePath}|w${width}|q${quality}|v1`)
+      .digest("hex");
+    const cachePath = join(DERIVED_DIR, `w${width}`, `${key}.webp`);
 
-    await rename(tempPath, cachePath);
-    return { absolutePath: cachePath, mimeType: "image/webp", cacheHit: false };
-  } catch {
-    await rm(tempPath, { force: true }).catch(() => undefined);
-    return null;
+    if (await pathExists(cachePath)) {
+      return { absolutePath: cachePath, mimeType: "image/webp", cacheHit: true };
+    }
+
+    await mkdir(dirname(cachePath), { recursive: true });
+    const tempPath = `${cachePath}.${process.pid}.tmp`;
+
+    try {
+      const input = sharp(sourceAbsolute, {
+        animated: false,
+        failOn: "none",
+        pages: 1
+      });
+
+      await input
+        .rotate()
+        .resize({
+          width,
+          height: width,
+          fit: "inside",
+          withoutEnlargement: true
+        })
+        .webp({ quality, effort: 4 })
+        .toFile(tempPath);
+
+      await rename(tempPath, cachePath);
+      return { absolutePath: cachePath, mimeType: "image/webp", cacheHit: false };
+    } catch {
+      await rm(tempPath, { force: true }).catch(() => undefined);
+      return null;
+    }
+  } finally {
+    if (tempDownload) {
+      await removeTempDownload(tempDownload);
+    }
   }
 }
 

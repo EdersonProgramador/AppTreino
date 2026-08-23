@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { env } from "./env.js";
+import { buildObjectPublicUrl, isObjectStorageEnabled } from "./object-storage.js";
 
 export const uploadsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../uploads");
 
@@ -295,10 +296,16 @@ function extensionMatchesGroup(extension: string, group: UploadGroup): boolean {
 }
 
 export function buildPublicUploadUrl(relativePath: string): string {
-  const base = env.PUBLIC_BASE_URL?.replace(/\/+$/, "");
-  if (base) {
-    return `${base}/uploads/${relativePath.replace(/\\/g, "/")}`;
+  const cleaned = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+
+  if (isObjectStorageEnabled()) {
+    return buildObjectPublicUrl(cleaned);
   }
 
-  return `/uploads/${relativePath.replace(/\\/g, "/")}`;
+  const base = env.PUBLIC_BASE_URL?.replace(/\/+$/, "");
+  if (base) {
+    return `${base}/uploads/${cleaned}`;
+  }
+
+  return `/uploads/${cleaned}`;
 }

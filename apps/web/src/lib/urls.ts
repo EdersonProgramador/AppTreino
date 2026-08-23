@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from "../api";
+import { getApiBaseUrl, getMediaBaseUrl } from "../api";
 
 export const assetUrl = (path: string) => `${import.meta.env.BASE_URL}${path}`;
 
@@ -15,11 +15,14 @@ export function uploadRelativePath(path?: string | null): string | null {
   try {
     if (/^https?:\/\//i.test(trimmed)) {
       const url = new URL(trimmed);
-      // Somente pathname que COMEÇA com /uploads/ (API App Treino).
-      if (!/^\/uploads\//i.test(url.pathname)) {
-        return null;
+      if (/^\/uploads\//i.test(url.pathname)) {
+        return decodeURIComponent(url.pathname.slice("/uploads/".length));
       }
-      return decodeURIComponent(url.pathname.slice("/uploads/".length));
+      const cdnPath = url.pathname.replace(/^\/+/, "");
+      if (/^(images|lessons|materials|audio)\//i.test(cdnPath)) {
+        return decodeURIComponent(cdnPath);
+      }
+      return null;
     }
   } catch {
     return null;
@@ -39,9 +42,9 @@ export function uploadRelativePath(path?: string | null): string | null {
 
 function uploadPublicUrl(relativePath: string) {
   const cleaned = relativePath.replace(/^\/+/, "");
-  const api = getApiBaseUrl().replace(/\/+$/, "");
-  if (api) {
-    return `${api}/uploads/${cleaned}`;
+  const mediaBase = getMediaBaseUrl().replace(/\/+$/, "");
+  if (mediaBase) {
+    return `${mediaBase}/${cleaned}`;
   }
   return `/uploads/${cleaned}`;
 }

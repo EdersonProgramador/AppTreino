@@ -7,7 +7,8 @@ import { requireAuth, requirePathRole, requestPathname } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { isImageUploadExtension, optimizeUploadedImage } from "../media-optimize.js";
-import { buildPublicUploadUrl, saveValidatedUpload, uploadsDir } from "../upload-security.js";
+import { saveValidatedUpload, uploadsDir } from "../upload-security.js";
+import { persistUploadedFile } from "../upload-persist.js";
 import { autoCloseStaleTickets, ticketInclude } from "./ticket.utils.js";
 import { calculateBodyFatEstimate, physicalAssessmentFormSchema } from "./physical-assessment.utils.js";
 import { validActiveMembershipWhere } from "./membership.utils.js";
@@ -476,6 +477,7 @@ export async function registerUserRoutes(app: FastifyInstance) {
     let storedFilename = `${baseFilename}.${extension}`;
     let mimeType = file.mimetype;
     let relativePath = `images/${storedFilename}`;
+    let absolutePath = resolve(targetDir, storedFilename);
 
     if (isImageUploadExtension(extension)) {
       const optimized = await optimizeUploadedImage({
@@ -489,17 +491,24 @@ export async function registerUserRoutes(app: FastifyInstance) {
       storedFilename = optimized.filename;
       mimeType = optimized.mimeType;
       relativePath = optimized.relativePath;
+      absolutePath = optimized.absolutePath;
     } else {
       const { rename } = await import("node:fs/promises");
-      await rename(targetPath, resolve(targetDir, storedFilename));
+      await rename(targetPath, absolutePath);
     }
+
+    const publicUrl = await persistUploadedFile({
+      relativePath,
+      absolutePath,
+      mimeType
+    });
 
     return reply.code(201).send({
       file: {
         originalName: file.filename,
         filename: storedFilename,
         mimeType,
-        url: buildPublicUploadUrl(relativePath),
+        url: publicUrl,
         path: relativePath
       }
     });

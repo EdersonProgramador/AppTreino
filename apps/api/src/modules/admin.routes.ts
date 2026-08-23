@@ -8,8 +8,9 @@ import { hashPassword, requirePathRole, requireRole } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { isImageUploadExtension, optimizeUploadedImage } from "../media-optimize.js";
-import { buildPublicUploadUrl, saveValidatedUpload, uploadsDir } from "../upload-security.js";
+import { saveValidatedUpload, uploadsDir } from "../upload-security.js";
 import type { UploadGroup } from "../upload-security.js";
+import { persistUploadedFile } from "../upload-persist.js";
 import { autoCloseStaleTickets, FINALIZE_PROMPT, ticketInclude } from "./ticket.utils.js";
 import { buildPaginationMeta, parsePagination } from "./pagination.js";
 import { calculateBodyFatEstimate, physicalAssessmentFormSchema } from "./physical-assessment.utils.js";
@@ -1202,6 +1203,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     let storedFilename = `${baseFilename}.${extension}`;
     let mimeType = file.mimetype;
     let relativePath = `${group}/${storedFilename}`;
+    let absolutePath = resolve(targetDir, storedFilename);
 
     if ((group === "images" || group === "lessons") && isImageUploadExtension(extension)) {
       const optimized = await optimizeUploadedImage({
@@ -1215,17 +1217,24 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       storedFilename = optimized.filename;
       mimeType = optimized.mimeType;
       relativePath = optimized.relativePath;
+      absolutePath = optimized.absolutePath;
     } else {
       const { rename } = await import("node:fs/promises");
-      await rename(targetPath, resolve(targetDir, storedFilename));
+      await rename(targetPath, absolutePath);
     }
+
+    const publicUrl = await persistUploadedFile({
+      relativePath,
+      absolutePath,
+      mimeType
+    });
 
     return reply.code(201).send({
       file: {
         originalName: file.filename,
         filename: storedFilename,
         mimeType,
-        url: buildPublicUploadUrl(relativePath),
+        url: publicUrl,
         path: relativePath
       }
     });
@@ -1252,10 +1261,16 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       const { createWriteStream } = await import("node:fs");
       await pipeline(file.file, createWriteStream(destination));
 
+      const publicUrl = await persistUploadedFile({
+        relativePath: safePath,
+        absolutePath: destination,
+        mimeType: file.mimetype || "application/octet-stream"
+      });
+
       return reply.code(201).send({
         file: {
           path: safePath,
-          url: buildPublicUploadUrl(safePath)
+          url: publicUrl
         }
       });
     }

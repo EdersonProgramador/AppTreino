@@ -1,5 +1,7 @@
 import { API_URL, WEB_URL } from "../config";
 
+const MEDIA_URL = (process.env.EXPO_PUBLIC_MEDIA_URL ?? "").replace(/\/$/, "");
+
 function originOf(url: string) {
   return url.replace(/\/$/, "");
 }
@@ -56,6 +58,7 @@ export function mediaUrl(path?: string | null): string | undefined {
 
   const api = originOf(API_URL);
   const web = originOf(WEB_URL);
+  const media = MEDIA_URL || `${api}/uploads`;
   let raw = trimmed.startsWith("//") ? `https:${trimmed}` : trimmed;
   if (/^(www\.)?(youtube\.com|youtu\.be|m\.youtube\.com)\//i.test(raw)) {
     raw = `https://${raw}`;
@@ -65,7 +68,12 @@ export function mediaUrl(path?: string | null): string | undefined {
     if (/^https?:\/\//i.test(raw)) {
       const url = new URL(raw);
       if (isUploadPath(url.pathname)) {
-        return encodeSpaces(withOrigin(`${url.pathname}${url.search}`, api));
+        const relative = url.pathname.replace(/^\/uploads\//i, "").replace(/^\/+/, "");
+        return encodeSpaces(`${originOf(media)}/${relative}${url.search}`);
+      }
+      const cdnPath = url.pathname.replace(/^\/+/, "");
+      if (/^(images|lessons|materials|audio)\//i.test(cdnPath)) {
+        return encodeSpaces(`${originOf(media)}/${cdnPath}${url.search}`);
       }
       if (isWebAssetPath(url.pathname)) {
         return encodeSpaces(withOrigin(`${url.pathname}${url.search}`, web));
@@ -84,9 +92,12 @@ export function mediaUrl(path?: string | null): string | undefined {
 
   const cleaned = raw.replace(/^\/+/, "");
   if (/^(images|lessons|materials|audio)\//i.test(cleaned)) {
-    return encodeSpaces(`${api}/uploads/${cleaned}`);
+    return encodeSpaces(`${originOf(media)}/${cleaned}`);
   }
   if (/^uploads\//i.test(cleaned) || /^media(\?|\/|$)/i.test(cleaned)) {
+    if (/^uploads\//i.test(cleaned)) {
+      return encodeSpaces(`${originOf(media)}/${cleaned.slice("uploads/".length)}`);
+    }
     return encodeSpaces(`${api}/${cleaned}`);
   }
   if (/^assets\//i.test(cleaned)) {

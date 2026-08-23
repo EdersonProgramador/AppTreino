@@ -12,6 +12,7 @@ coverage/
 .vite/
 .expo/
 apps/api/uploads/
+.r2-cache/
 apps/social/**/node_modules/
 apps/social/frontend/.next/
 .tmp-*

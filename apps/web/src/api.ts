@@ -19,6 +19,21 @@ export function getApiBaseUrl() {
   return configured || "http://localhost:3333";
 }
 
+/** CDN/base para mídia (R2). Em dev, cai no proxy /uploads da API. */
+export function getMediaBaseUrl() {
+  if (import.meta.env.DEV) {
+    return "";
+  }
+
+  const configured = String(import.meta.env.VITE_MEDIA_URL ?? "").trim().replace(/\/+$/, "");
+  if (configured) {
+    return configured;
+  }
+
+  const api = getApiBaseUrl().replace(/\/+$/, "");
+  return api ? `${api}/uploads` : "";
+}
+
 function apiUrl(path: string) {
   return `${getApiBaseUrl()}${path}`;
 }

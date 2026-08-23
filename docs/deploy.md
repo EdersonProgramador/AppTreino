@@ -53,7 +53,7 @@ ASAAS_WEBHOOK_TOKEN=<token do webhook>
 4. Domínio customizado no Render: `api.edersonprogramador.com`.
 5. Webhook Asaas: `https://api.edersonprogramador.com/webhooks/asaas`
 
-Uploads ficam no disco do container (efêmeros no plano gratuito). Para produção estável de mídia, use storage externo depois.
+Uploads ficam no disco do container (efêmeros no plano gratuito). Para produção estável de mídia, use **Cloudflare R2 + CDN** — veja [deploy-r2.md](./deploy-r2.md).
 
 ## 3. Vercel (frontend)
 

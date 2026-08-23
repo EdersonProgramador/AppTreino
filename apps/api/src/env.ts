@@ -38,10 +38,21 @@ const envSchema = z.object({
     .preprocess((value) => value === "true" || value === "1", z.boolean())
     .default(false),
   RESEND_API_KEY: z.string().optional(),
-  EMAIL_FROM: z.string().optional()
+  EMAIL_FROM: z.string().optional(),
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_BUCKET_NAME: z.string().optional(),
+  R2_PUBLIC_URL: z.string().url().optional()
 });
 
 export const env = envSchema.parse(process.env);
+
+const r2Keys = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME", "R2_PUBLIC_URL"] as const;
+const configuredR2 = r2Keys.filter((key) => Boolean(env[key]));
+if (configuredR2.length > 0 && configuredR2.length < r2Keys.length) {
+  throw new Error(`R2 storage requires all of: ${r2Keys.join(", ")}`);
+}
 
 if (env.NODE_ENV === "production") {
   if (env.JWT_SECRET === "change-me-in-local-development") {

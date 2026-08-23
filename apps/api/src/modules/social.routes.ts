@@ -8,7 +8,8 @@ import { env } from "../env.js";
 import { isImageUploadExtension, optimizeUploadedImage } from "../media-optimize.js";
 import { prisma } from "../prisma.js";
 import type { Prisma } from "@prisma/client";
-import { buildPublicUploadUrl, saveValidatedUpload, uploadsDir } from "../upload-security.js";
+import { saveValidatedUpload, uploadsDir } from "../upload-security.js";
+import { persistUploadedFile } from "../upload-persist.js";
 import { latLngToCell, cellToLatLng, cellDisk } from "./activity-h3.js";
 import {
   evaluateAntiCheat,
@@ -833,6 +834,7 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     let storedFilename = `${baseFilename}.${extension}`;
     let mimeType = file.mimetype;
     let relativePath = `${group}/${storedFilename}`;
+    let absolutePath = resolve(targetDir, storedFilename);
 
     if (!isVideo && isImageUploadExtension(extension)) {
       const optimized = await optimizeUploadedImage({
@@ -846,10 +848,17 @@ export async function registerSocialRoutes(app: FastifyInstance) {
       storedFilename = optimized.filename;
       mimeType = optimized.mimeType;
       relativePath = optimized.relativePath;
+      absolutePath = optimized.absolutePath;
     } else {
       const { rename } = await import("node:fs/promises");
-      await rename(targetPath, resolve(targetDir, storedFilename));
+      await rename(targetPath, absolutePath);
     }
+
+    const publicUrl = await persistUploadedFile({
+      relativePath,
+      absolutePath,
+      mimeType
+    });
 
     return reply.code(201).send({
       file: {
@@ -857,7 +866,7 @@ export async function registerSocialRoutes(app: FastifyInstance) {
         filename: storedFilename,
         mimeType,
         mediaType: isVideo ? "VIDEO" : "IMAGE",
-        url: buildPublicUploadUrl(relativePath),
+        url: publicUrl,
         path: relativePath
       }
     });

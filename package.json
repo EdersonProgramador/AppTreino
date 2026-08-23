@@ -26,7 +26,8 @@
     "prisma:generate": "npm run prisma:generate --workspace @app-treino/api",
     "prisma:migrate": "npm run prisma:migrate --workspace @app-treino/api",
     "prisma:seed": "npm run prisma:seed --workspace @app-treino/api",
-    "push-uploads": "node scripts/push-uploads.mjs"
+    "push-uploads": "node scripts/push-uploads.mjs",
+    "migrate-uploads-to-r2": "node scripts/migrate-uploads-to-r2.mjs"
   },
   "engines": {
     "node": ">=20"
