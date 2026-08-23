@@ -8,6 +8,11 @@ const uploadsDir = process.env.UPLOADS_DIR ?? join(repoRoot, "apps", "api", "upl
 const apiUrl = (process.env.API_URL ?? "https://apptreino-backend.onrender.com").replace(/\/+$/, "");
 const adminEmail = process.env.ADMIN_EMAIL ?? "admin@apptreino.com";
 const adminPassword = process.env.ADMIN_PASSWORD ?? "Admin@123";
+const allowedUploadPrefixes = ["images/", "lessons/", "materials/", "audio/"];
+
+function isUploadRelativePath(relativePath) {
+  return allowedUploadPrefixes.some((prefix) => relativePath.startsWith(prefix));
+}
 
 async function login() {
   const response = await fetch(`${apiUrl}/auth/login`, {
@@ -38,6 +43,10 @@ async function collectFiles(dir) {
   const files = [];
 
   for (const entry of entries) {
+    if (entry.name.startsWith(".")) {
+      continue;
+    }
+
     const absolutePath = join(dir, entry.name);
     if (entry.isDirectory()) {
       files.push(...(await collectFiles(absolutePath)));
@@ -82,7 +91,9 @@ async function main() {
     throw new Error(`Pasta de uploads não encontrada: ${uploadsDir}`);
   }
 
-  const files = await collectFiles(uploadsDir);
+  const files = (await collectFiles(uploadsDir)).filter((filePath) =>
+    isUploadRelativePath(relative(uploadsDir, filePath).replace(/\\/g, "/"))
+  );
   if (files.length === 0) {
     console.log("Nenhum arquivo em apps/api/uploads.");
     return;
