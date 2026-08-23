@@ -2550,7 +2550,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               }}
             >
               {profile?.avatarUrl ? (
-                <img src={profile.avatarUrl} alt="" />
+                <img src={mediaUrl(profile.avatarUrl)} alt="" />
               ) : (
                 <UserRound size={28} />
               )}
@@ -4278,7 +4278,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 <label className="student-avatar-field">
                   <span className="student-avatar-preview">
                     {studentAvatarPreview ?? profile?.avatarUrl ? (
-                      <img src={studentAvatarPreview ?? profile?.avatarUrl ?? ""} alt="" />
+                      <img src={studentAvatarPreview ?? mediaUrl(profile?.avatarUrl ?? "")} alt="" />
                     ) : (
                       <UserRound size={32} className="student-avatar-placeholder" />
                     )}

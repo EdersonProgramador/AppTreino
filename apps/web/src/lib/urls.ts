@@ -37,30 +37,38 @@ export function uploadRelativePath(path?: string | null): string | null {
   return null;
 }
 
+function uploadPublicUrl(relativePath: string) {
+  const cleaned = relativePath.replace(/^\/+/, "");
+  const api = getApiBaseUrl().replace(/\/+$/, "");
+  if (api) {
+    return `${api}/uploads/${cleaned}`;
+  }
+  return `/uploads/${cleaned}`;
+}
+
 /**
  * Resolve URL de mídia cadastrada.
  * - http(s) externos (GIF/vídeo/imagem): intactos
- * - uploads da API: `/uploads/...` (proxy Vite)
+ * - uploads da API: proxy Vite em dev; URL da API em produção
  * - `/assets/...`: assets do front
  */
 export const mediaUrl = (path?: string | null) => {
   if (!path) return "";
   const raw = path.trim();
   if (!raw) return "";
-  if (/^data:/i.test(raw)) return raw;
+  if (/^(data:|blob:)/i.test(raw)) return raw;
 
-  // URLs absolutas: externas ficam iguais; só /uploads/ da API vira same-origin.
   if (/^https?:\/\//i.test(raw)) {
     const relative = uploadRelativePath(raw);
     if (relative) {
-      return `/uploads/${relative}`;
+      return uploadPublicUrl(relative);
     }
     return raw;
   }
 
   const relative = uploadRelativePath(raw);
   if (relative) {
-    return `/uploads/${relative}`;
+    return uploadPublicUrl(relative);
   }
 
   const trimmed = raw.replace(/^\/+/, "");
@@ -68,29 +76,7 @@ export const mediaUrl = (path?: string | null) => {
 };
 
 export function playableMediaUrl(path?: string | null) {
-  const resolved = mediaUrl(path);
-  if (!resolved) return "";
-  if (/^(data:|blob:)/i.test(resolved)) return resolved;
-  if (typeof window === "undefined") return resolved;
-
-  // Relativo same-origin → proxy Vite (/uploads)
-  if (resolved.startsWith("/")) {
-    return resolved;
-  }
-
-  try {
-    const url = new URL(resolved, window.location.href);
-    // Qualquer host apontando para /uploads/ da API → same-origin relativo
-    if (/^\/uploads\//i.test(url.pathname)) {
-      return `${url.pathname}${url.search}`;
-    }
-    if (url.origin === window.location.origin) {
-      return `${url.pathname}${url.search}${url.hash}`;
-    }
-    return url.href;
-  } catch {
-    return resolved;
-  }
+  return mediaUrl(path);
 }
 
 type OptimizedMediaOptions = {

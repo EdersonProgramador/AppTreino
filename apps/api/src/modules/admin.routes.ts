@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { mkdirSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -39,6 +39,23 @@ const uploadGroups = ["lessons", "materials", "images", "audio"] as const;
 const uploadSchema = z.object({
   group: z.enum(uploadGroups).default("materials")
 });
+const mirrorUploadSchema = z.object({
+  path: z.string().min(3).max(500)
+});
+
+function assertMirrorUploadPath(input: string) {
+  const normalized = input.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!normalized || normalized.includes("..")) {
+    throw httpError(400, "Caminho de upload inválido.");
+  }
+
+  const group = normalized.split("/")[0];
+  if (!uploadGroups.includes(group as (typeof uploadGroups)[number])) {
+    throw httpError(400, "Grupo de upload inválido.");
+  }
+
+  return normalized;
+}
 
 const userSchema = z.object({
   name: z.string().min(2),
@@ -1212,6 +1229,35 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         path: relativePath
       }
     });
+    }
+  );
+
+  app.post(
+    "/admin/uploads/mirror",
+    { config: { rateLimit: { max: 120, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+      requireDatabase();
+      const { path: relativePath } = mirrorUploadSchema.parse(request.query);
+      const safePath = assertMirrorUploadPath(relativePath);
+      const file = await request.file();
+
+      if (!file) {
+        throw httpError(400, "Selecione um arquivo para enviar.");
+      }
+
+      const destination = resolve(uploadsDir, safePath);
+      mkdirSync(dirname(destination), { recursive: true });
+
+      const { pipeline } = await import("node:stream/promises");
+      const { createWriteStream } = await import("node:fs");
+      await pipeline(file.file, createWriteStream(destination));
+
+      return reply.code(201).send({
+        file: {
+          path: safePath,
+          url: buildPublicUploadUrl(safePath)
+        }
+      });
     }
   );
 
