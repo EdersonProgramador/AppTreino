@@ -67,6 +67,18 @@ const couponSchema = z
     }
   });
 
+const updateCouponSchema = z.object({
+  code: z.string().trim().min(2).max(40).optional(),
+  description: z.string().trim().max(200).optional().or(z.literal("")),
+  percentOff: z.number().int().min(1).max(100).nullable().optional(),
+  amountOffCents: z.number().int().min(1).nullable().optional(),
+  minOrderCents: z.number().int().min(0).optional(),
+  maxUses: z.number().int().min(1).nullable().optional(),
+  isActive: z.boolean().optional(),
+  startsAt: z.coerce.date().nullable().optional(),
+  endsAt: z.coerce.date().nullable().optional()
+});
+
 const orderStatusSchema = z.object({
   status: z.enum(["PENDING", "CONFIRMED", "READY", "DELIVERED", "CANCELED", "REFUNDED"])
 });
@@ -406,7 +418,7 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
     await requireRole(app, request, "ADMIN");
     await assertModuleEnabled("module_products");
     const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
-    const body = couponSchema.partial().parse(request.body);
+    const body = updateCouponSchema.parse(request.body);
     const coupon = await prisma.coupon.update({
       where: { id },
       data: {

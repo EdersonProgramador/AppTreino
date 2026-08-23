@@ -1,4 +1,5 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
+import type { AppPrismaClient } from "../prisma.js";
 
 /** Matrícula ACTIVE e dentro da vigência (startsAt/endsAt). */
 export function validActiveMembershipWhere(now = new Date()): Prisma.MembershipWhereInput {
@@ -12,7 +13,7 @@ export function validActiveMembershipWhere(now = new Date()): Prisma.MembershipW
 
 /** Sincroniza enrollmentStatus com a existência de matrícula ACTIVE (não deletada). */
 export async function syncUserEnrollmentFromMemberships(
-  db: PrismaClient,
+  db: AppPrismaClient,
   userId: string
 ) {
   const activeMembership = await db.membership.findFirst({

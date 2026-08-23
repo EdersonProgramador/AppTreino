@@ -247,20 +247,9 @@ export async function getOrCreateCart(userId: string) {
   });
 }
 
-export async function buildCartTotals(cart: {
-  couponCode: string | null;
-  items: Array<{
-    quantity: number;
-    product: {
-      priceInCents: number;
-      kind: ProductKind;
-      shippingMethod?: ShippingMethod | null;
-      isActive: boolean;
-      deletedAt: Date | null;
-      stock: number | null;
-    };
-  }>;
-}) {
+type CartWithItems = Awaited<ReturnType<typeof getOrCreateCart>>;
+
+export async function buildCartTotals(cart: Pick<CartWithItems, "couponCode" | "items">) {
   const activeItems = cart.items.filter((item) => item.product.isActive && !item.product.deletedAt);
   const subtotalInCents = activeItems.reduce(
     (sum, item) => sum + item.product.priceInCents * item.quantity,

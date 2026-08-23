@@ -13,3 +13,5 @@ export const prisma = new PrismaClient({
     }
   }
 });
+
+export type AppPrismaClient = typeof prisma;
