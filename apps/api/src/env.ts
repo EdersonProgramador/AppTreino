@@ -78,8 +78,10 @@ if (env.NODE_ENV === "production") {
       throw new Error("ASAAS_WEBHOOK_TOKEN must be configured in production when Asaas is enabled.");
     }
 
-    if (env.ASAAS_API_URL.includes("sandbox")) {
-      throw new Error("ASAAS_API_URL must point to the production Asaas API in production.");
+    if (env.ASAAS_API_URL.includes("sandbox") && !env.ENABLE_SANDBOX_CONFIRM) {
+      throw new Error(
+        "ASAAS_API_URL must point to the production Asaas API in production (or set ENABLE_SANDBOX_CONFIRM=true for staging)."
+      );
     }
   } else {
     throw new Error("ASAAS_API_KEY must be configured in production.");
