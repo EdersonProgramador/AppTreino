@@ -187,10 +187,12 @@ function MediaCarousel({ items }: { items: MediaItem[] }) {
 
 export function StudentFeedSection({
   token,
-  onNavigate
+  onNavigate,
+  onOpenDm
 }: {
   token: string;
   onNavigate?: (section: SocialNav) => void;
+  onOpenDm?: (userId: string) => void;
 }) {
   const cached = useMemo(() => readFeedCache(), []);
   const [posts, setPosts] = useState<SocialPostRow[]>(() => cached?.posts ?? []);
@@ -680,13 +682,20 @@ export function StudentFeedSection({
       {suggestions.length > 0 && (
         <div className="student-feed-people">
           {suggestions.map((person) => (
-            <button key={person.id} type="button" onClick={() => void toggleFollow(person.id)}>
-              {person.avatarUrl ? <img src={mediaUrl(person.avatarUrl)} alt="" /> : <span>{person.name.slice(0, 1)}</span>}
-              <strong>{person.name.split(" ")[0]}</strong>
-              <small>
-                <UserPlus size={12} /> {brand.followAthletes}
-              </small>
-            </button>
+            <div key={person.id} className="student-feed-people-card">
+              <button type="button" onClick={() => void toggleFollow(person.id)}>
+                {person.avatarUrl ? <img src={mediaUrl(person.avatarUrl)} alt="" /> : <span>{person.name.slice(0, 1)}</span>}
+                <strong>{person.name.split(" ")[0]}</strong>
+                <small>
+                  <UserPlus size={12} /> {brand.followAthletes}
+                </small>
+              </button>
+              {onOpenDm ? (
+                <button type="button" className="student-ghost-chip" onClick={() => onOpenDm(person.id)}>
+                  <MessageCircle size={14} /> Mensagem
+                </button>
+              ) : null}
+            </div>
           ))}
         </div>
       )}
@@ -736,15 +745,28 @@ export function StudentFeedSection({
                           <Trash2 size={14} /> Apagar
                         </button>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setReportPostId(post.id);
-                            setMenuPostId(null);
-                          }}
-                        >
-                          <Flag size={14} /> Denunciar
-                        </button>
+                        <>
+                          {onOpenDm ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMenuPostId(null);
+                                onOpenDm(post.author.id);
+                              }}
+                            >
+                              <MessageCircle size={14} /> Mensagem
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReportPostId(post.id);
+                              setMenuPostId(null);
+                            }}
+                          >
+                            <Flag size={14} /> Denunciar
+                          </button>
+                        </>
                       )}
                     </div>
                   )}

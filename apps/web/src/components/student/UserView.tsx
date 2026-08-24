@@ -168,6 +168,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     postsCount: number;
     isPrivate: boolean;
   } | null>(null);
+  const [messagePeerId, setMessagePeerId] = useState<string | null>(null);
   const [workout, setWorkout] = useState<WorkoutRow | null>(null);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkoutResponse["workout"] | null>(null);
   const [publishedWorkouts, setPublishedWorkouts] = useState<TodayWorkoutResponse["workout"][]>([]);
@@ -693,6 +694,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       useMusicPlayerStore.getState().showMiniDock();
     }
     setStudentSection(nextSection);
+  };
+
+  const openDmWithPeer = (userId: string) => {
+    setMessagePeerId(userId);
+    goToSection("messages");
   };
 
   useEffect(() => {
@@ -2569,7 +2575,6 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                     { label: "Clipes", icon: Video, action: () => goToSection("reels") },
                     { label: "Ao vivo", icon: Radio, action: () => goToSection("live") },
                     { label: "Mensagens", icon: MessageCircle, action: () => goToSection("messages") },
-                    { label: "Chat global", icon: UsersRound, action: () => goToSection("chat") },
                     { label: "Pedidos", icon: UserPlus, action: () => goToSection("requests") }
                   ] as const
                 ).map((item) => (
@@ -2623,13 +2628,25 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         )}
 
         {(studentSection === "home" || studentSection === "feed") && token && (
-          <StudentFeedSection token={token} onNavigate={(section) => goToSection(section)} />
+          <StudentFeedSection
+            token={token}
+            onNavigate={(section) => goToSection(section === "chat" ? "messages" : section)}
+            onOpenDm={openDmWithPeer}
+          />
         )}
 
-        {studentSection === "reels" && token && <StudentReelsSection token={token} />}
+        {studentSection === "reels" && token && <StudentReelsSection token={token} onOpenDm={openDmWithPeer} />}
         {studentSection === "live" && token && <StudentLiveSection token={token} />}
-        {studentSection === "messages" && token && <StudentMessagesSection token={token} />}
-        {studentSection === "chat" && token && <StudentChatSection token={token} />}
+        {studentSection === "messages" && token && (
+          <StudentMessagesSection
+            token={token}
+            initialPeerId={messagePeerId}
+            onPeerConsumed={() => setMessagePeerId(null)}
+          />
+        )}
+        {studentSection === "chat" && token && (
+          <StudentChatSection token={token} onGoMessages={() => goToSection("messages")} />
+        )}
         {studentSection === "requests" && token && <StudentRequestsSection token={token} />}
 
         {studentSection === "club" && token && <StudentClubSection token={token} />}
@@ -4168,19 +4185,42 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               <h1>Plano inteligente</h1>
               <p>Gere uma rotina baseada no seu objetivo.</p>
             </div>
-            <form className="student-form" onSubmit={handleCreateAiPlan}>
-              <input name="objective" placeholder="Objetivo" defaultValue={profile?.objective ?? ""} required />
-              <input name="level" placeholder="Nível" defaultValue={profile?.level ?? ""} required />
-              <input name="focus" placeholder="Foco da semana" />
-              <select name="daysPerWeek" defaultValue="3">
-                <option value="2">2 dias</option>
-                <option value="3">3 dias</option>
-                <option value="4">4 dias</option>
-                <option value="5">5 dias</option>
-                <option value="6">6 dias</option>
-              </select>
+            <form className="student-form student-ai-form" onSubmit={handleCreateAiPlan}>
+              <label>
+                <span>Objetivo</span>
+                <select name="objective" defaultValue={profile?.objective || "condicionamento"} required>
+                  <option value="emagrecimento">Emagrecimento</option>
+                  <option value="hipertrofia">Hipertrofia</option>
+                  <option value="força">Força</option>
+                  <option value="condicionamento">Condicionamento</option>
+                  <option value="mobilidade">Mobilidade</option>
+                  <option value="performance">Performance</option>
+                </select>
+              </label>
+              <label>
+                <span>Nível</span>
+                <select name="level" defaultValue={profile?.level || "iniciante"} required>
+                  <option value="iniciante">Iniciante</option>
+                  <option value="intermediario">Intermediário</option>
+                  <option value="avancado">Avançado</option>
+                </select>
+              </label>
+              <label>
+                <span>Foco da semana (opcional)</span>
+                <input name="focus" placeholder="Ex.: pernas, core, cardio" />
+              </label>
+              <label>
+                <span>Dias por semana</span>
+                <select name="daysPerWeek" defaultValue="3">
+                  <option value="2">2 dias</option>
+                  <option value="3">3 dias</option>
+                  <option value="4">4 dias</option>
+                  <option value="5">5 dias</option>
+                  <option value="6">6 dias</option>
+                </select>
+              </label>
               <button className="student-green-button" disabled={aiBusy}>
-                {aiBusy ? "Gerando…" : "Gerar plano"}
+                {aiBusy ? "Gerando rotina…" : "Gerar rotina pelo objetivo"}
               </button>
             </form>
             {latestAiPlan ? (
@@ -4629,8 +4669,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 { group: "Comunidade", icon: Video, title: "Clipes", action: () => goToSection("reels"), favorite: true },
                 { group: "Comunidade", icon: Radio, title: "Ao vivo", action: () => goToSection("live") },
                 { group: "Comunidade", icon: MessageCircle, title: "Mensagens", action: () => goToSection("messages") },
-                { group: "Comunidade", icon: UsersRound, title: "Chat global", action: () => goToSection("chat") },
-                { group: "Comunidade", icon: UserPlus, title: "Pedidos para seguir", action: () => goToSection("requests") },
+                { group: "Comunidade", icon: UserPlus, title: "Pedidos", action: () => goToSection("requests") },
                 { group: "Comunidade", icon: MapPin, title: "Unidades", action: () => goToSection("locations") },
                 { group: "Ajuda", icon: Headphones, title: "Atendimento", action: () => goToSection("support") },
                 { group: "Ajuda", icon: QrCode, title: "QR Code", action: () => { openTrainingCatalog(); setShowStudentQr(true); } },

@@ -19,13 +19,16 @@ export function StudentCameraCapture({
   mode,
   onClose,
   onCapture,
-  maxVideoSeconds = 60
+  maxVideoSeconds = 60,
+  layout = "default"
 }: {
   open: boolean;
   mode: CaptureMode;
   onClose: () => void;
   onCapture: (file: File) => void;
   maxVideoSeconds?: number;
+  /** Vertical 9:16 for Clipes / Live */
+  layout?: "default" | "vertical";
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -81,7 +84,15 @@ export function StudentCameraCapture({
       await bind(
         await navigator.mediaDevices.getUserMedia({
           audio: mode === "video",
-          video: { facingMode: { ideal: nextFacing }, width: { ideal: 1280 }, height: { ideal: 720 } }
+          video:
+            layout === "vertical"
+              ? {
+                  facingMode: { ideal: nextFacing },
+                  width: { ideal: 1080 },
+                  height: { ideal: 1920 },
+                  aspectRatio: { ideal: 9 / 16 }
+                }
+              : { facingMode: { ideal: nextFacing }, width: { ideal: 1280 }, height: { ideal: 720 } }
         })
       );
     } catch {
@@ -114,7 +125,7 @@ export function StudentCameraCapture({
       document.body.style.overflow = previous;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, facing, mode]);
+  }, [open, facing, mode, layout]);
 
   function takePhoto() {
     const video = videoRef.current;
@@ -191,7 +202,12 @@ export function StudentCameraCapture({
   if (!open) return null;
 
   return (
-    <div className="student-camera-sheet" role="dialog" aria-modal="true" aria-label={mode === "video" ? "Câmera de vídeo" : "Câmera"}>
+    <div
+      className={`student-camera-sheet${layout === "vertical" ? " is-vertical" : ""}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={mode === "video" ? "Câmera de vídeo" : "Câmera"}
+    >
       <header>
         <button type="button" onClick={onClose} aria-label="Fechar">
           <X size={22} />
