@@ -2,7 +2,6 @@ import {
   Camera,
   Clapperboard,
   Flag,
-  Heart,
   ImagePlus,
   MessageCircle,
   MoreHorizontal,
@@ -11,8 +10,9 @@ import {
   Radio,
   Search,
   Send,
+  Share2,
   StickyNote,
-  ThumbsDown,
+  ThumbsUp,
   Trash2,
   UserPlus,
   Video,
@@ -370,26 +370,20 @@ export function StudentFeedSection({
     );
   }
 
-  async function toggleDislike(postId: string) {
-    const result = await apiPost<{ disliked: boolean; liked: boolean }>(
-      `/student/social/posts/${postId}/dislike`,
-      {},
-      token
-    );
-    setPosts((current) =>
-      current.map((post) => {
-        if (post.id !== postId) return post;
-        const wasLiked = post.likedByMe;
-        const wasDisliked = Boolean(post.dislikedByMe);
-        return {
-          ...post,
-          dislikedByMe: result.disliked,
-          likedByMe: false,
-          dislikesCount: Math.max(0, (post.dislikesCount ?? 0) + (result.disliked ? 1 : wasDisliked ? -1 : 0)),
-          likesCount: Math.max(0, post.likesCount - (wasLiked ? 1 : 0))
-        };
-      })
-    );
+  async function sharePost(post: SocialPostRow) {
+    const text = [post.body?.trim(), brand.shareSuffix || brand.name].filter(Boolean).join("\n\n");
+    const url = typeof window !== "undefined" ? window.location.origin : "";
+    try {
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+        await navigator.share({ title: brand.name, text, url });
+        return;
+      }
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText([text, url].filter(Boolean).join("\n"));
+      }
+    } catch {
+      // usuário cancelou o compartilhar
+    }
   }
 
   async function sendComment(postId: string) {
@@ -767,17 +761,18 @@ export function StudentFeedSection({
               {post.kind === "ACTIVITY" && <ActivityMiniMap post={post} />}
               <MediaCarousel items={items} />
               <footer>
-                <button type="button" className={post.likedByMe ? "is-on" : ""} onClick={() => void toggleLike(post.id)}>
-                  <Heart size={18} /> {post.likesCount}
-                </button>
-                <button type="button" className={post.dislikedByMe ? "is-on" : ""} onClick={() => void toggleDislike(post.id)}>
-                  <ThumbsDown size={18} /> {post.dislikesCount ?? 0}
+                <button type="button" className={post.likedByMe ? "is-on" : ""} onClick={() => void toggleLike(post.id)} aria-label="Curtir">
+                  <ThumbsUp size={18} fill={post.likedByMe ? "currentColor" : "none"} /> {post.likesCount}
                 </button>
                 <button
                   type="button"
                   onClick={() => setOpenComments((current) => ({ ...current, [post.id]: !current[post.id] }))}
+                  aria-label="Comentar"
                 >
                   <MessageCircle size={18} /> {post.commentsCount ?? post.comments.length}
+                </button>
+                <button type="button" onClick={() => void sharePost(post)} aria-label="Compartilhar">
+                  <Share2 size={18} />
                 </button>
               </footer>
               {(openComments[post.id] ? post.comments : post.comments.slice(-3)).map((comment) => (

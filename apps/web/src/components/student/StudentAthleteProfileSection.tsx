@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Heart, MessageCircle, Pencil, Send, Settings, ThumbsDown, UserRound, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, MessageCircle, Pencil, Send, Settings, Share2, ThumbsUp, UserRound, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { brand } from "../../lib/brand";
@@ -254,23 +254,21 @@ export function StudentAthleteProfileSection({
     }
   }
 
-  async function toggleDislike(postId: string) {
+  async function sharePost(post: SocialPostRow) {
+    const text = [post.body?.trim(), brand.shareSuffix || brand.name].filter(Boolean).join("\n\n");
+    const url = typeof window !== "undefined" ? window.location.origin : "";
     try {
-      const data = await apiPost<{
-        likesCount: number;
-        likedByMe: boolean;
-        dislikesCount?: number;
-        dislikedByMe?: boolean;
-      }>(`/student/social/posts/${postId}/dislike`, {}, token);
-      patchPost(postId, {
-        likesCount: data.likesCount,
-        likedByMe: data.likedByMe,
-        dislikesCount: data.dislikesCount,
-        dislikedByMe: data.dislikedByMe
-      });
-      uiSounds.itemSelect();
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+        await navigator.share({ title: brand.name, text, url });
+        uiSounds.itemSelect();
+        return;
+      }
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText([text, url].filter(Boolean).join("\n"));
+        uiSounds.itemSelect();
+      }
     } catch {
-      uiSounds.error();
+      // usuário cancelou o compartilhar
     }
   }
 
@@ -530,19 +528,16 @@ export function StudentAthleteProfileSection({
                 type="button"
                 className={viewerPost.likedByMe ? "is-on" : ""}
                 onClick={() => void toggleLike(viewerPost.id)}
+                aria-label="Curtir"
               >
-                <Heart size={18} /> {viewerPost.likesCount}
+                <ThumbsUp size={18} fill={viewerPost.likedByMe ? "currentColor" : "none"} /> {viewerPost.likesCount}
               </button>
-              <button
-                type="button"
-                className={viewerPost.dislikedByMe ? "is-on" : ""}
-                onClick={() => void toggleDislike(viewerPost.id)}
-              >
-                <ThumbsDown size={18} /> {viewerPost.dislikesCount ?? 0}
-              </button>
-              <span>
+              <button type="button" aria-label="Comentar">
                 <MessageCircle size={18} /> {viewerPost.commentsCount ?? viewerPost.comments.length}
-              </span>
+              </button>
+              <button type="button" onClick={() => void sharePost(viewerPost)} aria-label="Compartilhar">
+                <Share2 size={18} />
+              </button>
             </footer>
             <div className="student-athlete-post-viewer-comments">
               {viewerPost.comments.map((comment) => (
