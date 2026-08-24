@@ -122,7 +122,18 @@ function authorCard(user: {
   };
 }
 
-function serializeActivity(row: {
+function downsamplePoints(points: GpsPoint[], maxPoints = 120): GpsPoint[] {
+  if (points.length <= maxPoints) return points;
+  const step = (points.length - 1) / (maxPoints - 1);
+  const out: GpsPoint[] = [];
+  for (let i = 0; i < maxPoints; i += 1) {
+    out.push(points[Math.round(i * step)]!);
+  }
+  return out;
+}
+
+function serializeActivity(
+  row: {
   id: string;
   sport: OutdoorSportKind | string;
   status: string;
@@ -154,8 +165,10 @@ function serializeActivity(row: {
   photoUrl: string | null;
   videoUrl: string | null;
   caption: string | null;
-}) {
-  const points = sanitizePoints(row.polyline);
+},
+  options?: { maxPolylinePoints?: number }
+) {
+  const points = downsamplePoints(sanitizePoints(row.polyline), options?.maxPolylinePoints ?? 500);
   const summary =
     row.summary && typeof row.summary === "object" ? (row.summary as Record<string, unknown>) : null;
   const splits = Array.isArray(summary?.splits)
@@ -286,8 +299,10 @@ async function serializePost(
       user: { id: string; name: string; profile?: { avatarUrl?: string | null } | null };
     }>;
     activity: Parameters<typeof serializeActivity>[0] | null;
+    _count?: { likes?: number; dislikes?: number; comments?: number };
   },
-  viewerId: string
+  viewerId: string,
+  options?: { maxPolylinePoints?: number }
 ) {
   const mediaItems = mediaItemsFromPost(post);
   const dislikes = post.dislikes ?? [];
@@ -300,18 +315,18 @@ async function serializePost(
     mediaItems,
     createdAt: post.createdAt.toISOString(),
     author: authorCard(post.author),
-    likesCount: post.likes.length,
+    likesCount: post._count?.likes ?? post.likes.length,
     likedByMe: post.likes.some((like) => like.userId === viewerId),
-    dislikesCount: dislikes.length,
+    dislikesCount: post._count?.dislikes ?? dislikes.length,
     dislikedByMe: dislikes.some((dislike) => dislike.userId === viewerId),
-    commentsCount: post.comments.length,
+    commentsCount: post._count?.comments ?? post.comments.length,
     comments: post.comments.map((comment) => ({
       id: comment.id,
       body: comment.body,
       createdAt: comment.createdAt.toISOString(),
       author: authorCard(comment.user)
     })),
-    activity: post.activity ? serializeActivity(post.activity) : null,
+    activity: post.activity ? serializeActivity(post.activity, options) : null,
     isMine: post.author.id === viewerId
   };
 }
@@ -326,6 +341,55 @@ const postInclude = {
   },
   activity: true
 };
+
+function feedPostInclude(viewerId: string) {
+  return {
+    author: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } },
+    likes: { where: { userId: viewerId }, select: { userId: true }, take: 1 },
+    dislikes: { where: { userId: viewerId }, select: { userId: true }, take: 1 },
+    comments: {
+      orderBy: { createdAt: "desc" as const },
+      take: 5,
+      include: { user: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } } }
+    },
+    _count: { select: { likes: true, dislikes: true, comments: true } },
+    activity: {
+      select: {
+        id: true,
+        sport: true,
+        status: true,
+        startedAt: true,
+        pausedAt: true,
+        finishedAt: true,
+        pauseMs: true,
+        elapsedSeconds: true,
+        movingSeconds: true,
+        distanceMeters: true,
+        avgPaceSecPerKm: true,
+        avgSpeedMps: true,
+        maxSpeedMps: true,
+        elevationGainMeters: true,
+        elevationLossMeters: true,
+        estimatedPowerWatts: true,
+        stepsCount: true,
+        avgCadenceSpm: true,
+        avgHeartRateBpm: true,
+        maxHeartRateBpm: true,
+        calories: true,
+        mapType: true,
+        activityMap: true,
+        layers: true,
+        is3d: true,
+        targetDistanceMeters: true,
+        polyline: true,
+        summary: true,
+        photoUrl: true,
+        videoUrl: true,
+        caption: true
+      }
+    }
+  };
+}
 
 async function notify(userId: string, actorName: string, type: string, title: string, message: string, sourceId: string) {
   await prisma.studentNotification.create({
@@ -427,7 +491,7 @@ export async function registerSocialRoutes(app: FastifyInstance) {
 
     const posts = await prisma.socialPost.findMany({
       where,
-      include: postInclude,
+      include: feedPostInclude(user.id),
       orderBy: { createdAt: "desc" },
       skip: query.cursor ? 0 : query.page * pageSize,
       take: pageSize + 1
@@ -448,7 +512,18 @@ export async function registerSocialRoutes(app: FastifyInstance) {
       followingCount: followingIds.length,
       hasMore,
       nextCursor: hasMore ? pageRows[pageRows.length - 1]?.createdAt.toISOString() ?? null : null,
-      posts: await Promise.all(pageRows.map((post) => serializePost(post, user.id)))
+      posts: await Promise.all(
+        pageRows.map((post) =>
+          serializePost(
+            {
+              ...post,
+              comments: [...post.comments].reverse()
+            },
+            user.id,
+            { maxPolylinePoints: 120 }
+          )
+        )
+      )
     };
   });
 

@@ -202,6 +202,7 @@ export function StudentFeedSection({
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [loadingFeed, setLoadingFeed] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState<Record<string, string>>({});
   const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
@@ -224,25 +225,45 @@ export function StudentFeedSection({
     setRails(data.rails);
   }
 
+  async function loadPeople(search = query) {
+    const peopleRes = await apiGet<{ people: SocialAuthor[] }>(
+      `/student/social/people${search.trim() ? `?q=${encodeURIComponent(search.trim())}` : ""}`,
+      token
+    );
+    setPeople(peopleRes.people);
+  }
+
   async function load(search = query, nextMode = mode, nextPage = 0, append = false) {
-    const [feed, peopleRes] = await Promise.all([
-      apiGet<{ posts: SocialPostRow[]; hasMore: boolean; followingCount: number }>(
-        `/student/social/posts?mode=${nextMode}&page=${nextPage}${search.trim() ? `&q=${encodeURIComponent(search.trim())}` : ""}`,
-        token
-      ),
-      apiGet<{ people: SocialAuthor[] }>("/student/social/people", token)
-    ]);
+    const feed = await apiGet<{ posts: SocialPostRow[]; hasMore: boolean; followingCount: number }>(
+      `/student/social/posts?mode=${nextMode}&page=${nextPage}${search.trim() ? `&q=${encodeURIComponent(search.trim())}` : ""}`,
+      token
+    );
     setPosts((current) => (append ? [...current, ...feed.posts] : feed.posts));
     setHasMore(Boolean(feed.hasMore));
     setFollowingCount(feed.followingCount ?? 0);
     setPage(nextPage);
-    setPeople(peopleRes.people);
   }
 
   useEffect(() => {
-    void Promise.all([load(), loadStories()]).catch((err) =>
-      setError(err instanceof Error ? err.message : "Falha ao carregar o Feed.")
-    );
+    let cancelled = false;
+    setLoadingFeed(true);
+    setError(null);
+    void (async () => {
+      try {
+        await load();
+        if (cancelled) return;
+        setLoadingFeed(false);
+        void loadStories().catch(() => undefined);
+        void loadPeople().catch(() => undefined);
+      } catch (err) {
+        if (cancelled) return;
+        setLoadingFeed(false);
+        setError(err instanceof Error ? err.message : "Falha ao carregar o Feed.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   const suggestions = useMemo(() => people.filter((person) => !person.following).slice(0, 8), [people]);
@@ -553,7 +574,10 @@ export function StudentFeedSection({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter") void load(query, mode, 0, false);
+                if (event.key === "Enter") {
+                  void load(query, mode, 0, false);
+                  void loadPeople(query).catch(() => undefined);
+                }
               }}
               placeholder="Buscar publicações ou pessoas"
             />
@@ -675,7 +699,13 @@ export function StudentFeedSection({
       {error && <div className="error-box">{error}</div>}
 
       <div className="student-feed-list">
-        {posts.length === 0 && (
+        {loadingFeed && posts.length === 0 && (
+          <article className="student-empty-state">
+            <strong>Carregando feed…</strong>
+            <span>Buscando as publicações mais recentes.</span>
+          </article>
+        )}
+        {!loadingFeed && posts.length === 0 && (
           <article className="student-empty-state">
             <strong>{brand.feedEmptyTitle}</strong>
             <span>{brand.feedEmptyText}</span>
