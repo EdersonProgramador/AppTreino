@@ -452,7 +452,7 @@ export function StudentAthleteProfileSection({
       </header>
 
       <div className="student-athlete-posts">
-        <h2>Minhas publicações ({athleteSocial?.postsCount ?? posts.length})</h2>
+        <h2>Minhas publicações ({posts.length})</h2>
         {posts.length === 0 ? (
           <article className="student-athlete-posts-empty">Nenhuma publicação ainda :(</article>
         ) : (

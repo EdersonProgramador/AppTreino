@@ -790,7 +790,7 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     const [followersCount, followingCount, postsCount, profile] = await Promise.all([
       prisma.socialFollow.count({ where: { followingId: user.id } }),
       prisma.socialFollow.count({ where: { followerId: user.id } }),
-      prisma.socialPost.count({ where: { authorId: user.id } }),
+      prisma.socialPost.count({ where: { authorId: user.id, hidden: false } }),
       prisma.profile.findUnique({
         where: { userId: user.id },
         select: {
