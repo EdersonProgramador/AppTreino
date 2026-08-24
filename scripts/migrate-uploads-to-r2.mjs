@@ -3,25 +3,59 @@ import { readdir, stat } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { config } from "dotenv";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
 const uploadsDir = process.env.UPLOADS_DIR ?? join(repoRoot, "apps", "api", "uploads");
 const allowedUploadPrefixes = ["images/", "lessons/", "materials/", "audio/"];
 
-for (const envPath of [join(repoRoot, ".env"), join(repoRoot, "apps", "api", ".env")]) {
-  if (existsSync(envPath)) {
-    config({ path: envPath });
-    break;
+const r2 = {
+  R2_ACCOUNT_ID: "",
+  R2_ACCESS_KEY_ID: "",
+  R2_SECRET_ACCESS_KEY: "",
+  R2_BUCKET_NAME: "",
+  R2_PUBLIC_URL: ""
+};
+
+function loadR2VarsFromEnvFile(filePath) {
+  const text = readFileSync(filePath, "utf8");
+  let count = 0;
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const match = trimmed.match(/^(R2_[A-Z0-9_]+)\s*=\s*(.*)$/);
+    if (!match) continue;
+    let value = match[2].trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (match[1] in r2 && value) {
+      r2[match[1]] = value;
+      count += 1;
+    }
   }
+  return count;
 }
 
-const accountId = process.env.R2_ACCOUNT_ID;
-const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-const bucket = process.env.R2_BUCKET_NAME;
-const publicUrl = process.env.R2_PUBLIC_URL;
+const envCandidates = [
+  join(repoRoot, ".env"),
+  join(process.cwd(), ".env"),
+  join(repoRoot, "apps", "api", ".env")
+];
+
+const seen = new Set();
+for (const envPath of envCandidates) {
+  const resolved = resolve(envPath);
+  if (seen.has(resolved) || !existsSync(resolved)) continue;
+  seen.add(resolved);
+  const count = loadR2VarsFromEnvFile(resolved);
+  if (count > 0) {
+    console.log(`R2 env loaded from ${resolved} (${count} keys).`);
+  }
+}
 
 function requireEnv(name, value) {
   if (!value) {
@@ -30,19 +64,20 @@ function requireEnv(name, value) {
   return value;
 }
 
-requireEnv("R2_ACCOUNT_ID", accountId);
-requireEnv("R2_ACCESS_KEY_ID", accessKeyId);
-requireEnv("R2_SECRET_ACCESS_KEY", secretAccessKey);
-requireEnv("R2_BUCKET_NAME", bucket);
-requireEnv("R2_PUBLIC_URL", publicUrl);
+const accountId = requireEnv("R2_ACCOUNT_ID", r2.R2_ACCOUNT_ID);
+const accessKeyId = requireEnv("R2_ACCESS_KEY_ID", r2.R2_ACCESS_KEY_ID);
+const secretAccessKey = requireEnv("R2_SECRET_ACCESS_KEY", r2.R2_SECRET_ACCESS_KEY);
+const bucket = requireEnv("R2_BUCKET_NAME", r2.R2_BUCKET_NAME);
+const publicUrl = requireEnv("R2_PUBLIC_URL", r2.R2_PUBLIC_URL);
 
 const client = new S3Client({
   region: "auto",
   endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
   credentials: {
-    accessKeyId: accessKeyId,
-    secretAccessKey: secretAccessKey
-  }
+    accessKeyId,
+    secretAccessKey
+  },
+  forcePathStyle: true
 });
 
 const mimeByExt = {
