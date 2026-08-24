@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowLeft,
   Camera,
@@ -6,17 +7,19 @@ import {
   MessageCircle,
   Mic,
   MicOff,
+  Pencil,
   Radio,
   Send,
   SwitchCamera,
+  Trash2,
   Video,
   X
 } from "lucide-react";
-import { apiGet, apiPost, apiUpload } from "../../api";
+import { apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { mediaUrl } from "../../lib/urls";
 import { getSocialSocket } from "../../lib/social-socket";
 import type { SocialAuthor, UploadResponse } from "../../types";
-import { StudentCameraCapture } from "./StudentCameraCapture";
+import { CAMERA_FILTERS, cameraFilterCss, StudentCameraCapture, type CameraFilterId } from "./StudentCameraCapture";
 
 type ReelRow = {
   id: string;
@@ -95,6 +98,8 @@ export function StudentReelsSection({
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editCaption, setEditCaption] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function load() {
@@ -164,12 +169,42 @@ export function StudentReelsSection({
     }
   }
 
+  async function saveEdit() {
+    if (!editingId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await apiPut<{ reel: ReelRow }>(`/student/social/reels/${editingId}`, { caption: editCaption }, token);
+      setReels((current) => current.map((row) => (row.id === editingId ? { ...row, caption: result.reel.caption } : row)));
+      setEditingId(null);
+      setEditCaption("");
+    } catch (err) {
+      setError(readErrorMessage(err, "Não foi possível editar o clipe."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeReel(id: string) {
+    if (!window.confirm("Remover este clipe?")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiDelete(`/student/social/reels/${id}`, token);
+      setReels((current) => current.filter((row) => row.id !== id));
+    } catch (err) {
+      setError(readErrorMessage(err, "Não foi possível remover o clipe."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="student-social-pane student-reels">
       <header className="student-social-pane-head">
         <div>
           <strong>Clipes</strong>
-          <small>Grave em vertical 9:16, como no celular.</small>
+          <small>Câmera tela cheia · adicionar, editar e remover.</small>
         </div>
         <button
           type="button"
@@ -197,7 +232,23 @@ export function StudentReelsSection({
                 <button type="button" className={reel.likedByMe ? "is-on" : ""} onClick={() => void like(reel.id)}>
                   <Heart size={18} /> {reel.likesCount}
                 </button>
-                {!reel.isMine && onOpenDm ? (
+                {reel.isMine ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingId(reel.id);
+                        setEditCaption(reel.caption ?? "");
+                      }}
+                      aria-label="Editar clipe"
+                    >
+                      <Pencil size={18} />
+                    </button>
+                    <button type="button" onClick={() => void removeReel(reel.id)} aria-label="Remover clipe" disabled={busy}>
+                      <Trash2 size={18} />
+                    </button>
+                  </>
+                ) : onOpenDm ? (
                   <button type="button" onClick={() => onOpenDm(reel.author.id)} aria-label="Mensagem">
                     <MessageCircle size={18} />
                   </button>
@@ -242,6 +293,21 @@ export function StudentReelsSection({
         </div>
       )}
 
+      {editingId && (
+        <div className="student-activity-sheet" role="dialog" aria-label="Editar clipe">
+          <header>
+            <strong>Editar clipe</strong>
+            <button type="button" onClick={() => setEditingId(null)} aria-label="Fechar">
+              <X size={18} />
+            </button>
+          </header>
+          <input value={editCaption} onChange={(event) => setEditCaption(event.target.value)} placeholder="Legenda" maxLength={300} />
+          <button type="button" className="student-green-button" disabled={busy} onClick={() => void saveEdit()}>
+            {busy ? "Salvando…" : "Salvar alterações"}
+          </button>
+        </div>
+      )}
+
       <input
         ref={fileRef}
         type="file"
@@ -257,7 +323,7 @@ export function StudentReelsSection({
       <StudentCameraCapture
         open={cameraOpen}
         mode="video"
-        layout="vertical"
+        title="Novo clipe"
         maxVideoSeconds={60}
         onClose={() => setCameraOpen(false)}
         onCapture={(file) => void uploadVideo(file)}
@@ -279,11 +345,16 @@ export function StudentLiveSection({ token }: { token: string }) {
   const [facing, setFacing] = useState<"user" | "environment">("user");
   const [micOn, setMicOn] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [filterId, setFilterId] = useState<CameraFilterId>("none");
+  const [viewportH, setViewportH] = useState(() =>
+    typeof window !== "undefined" ? Math.round(window.visualViewport?.height ?? window.innerHeight) : 0
+  );
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const liveIdRef = useRef<string | null>(null);
+  const studioRef = useRef<HTMLElement | null>(null);
 
   function stopMedia() {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -314,10 +385,36 @@ export function StudentLiveSection({ token }: { token: string }) {
   }, [token]);
 
   useEffect(() => {
+    if (status !== "countdown" && status !== "live") return;
+    const sync = () => {
+      const h = Math.round(window.visualViewport?.height ?? window.innerHeight);
+      setViewportH(h);
+      if (studioRef.current) {
+        studioRef.current.style.height = `${h}px`;
+        studioRef.current.style.top = `${Math.round(window.visualViewport?.offsetTop ?? 0)}px`;
+      }
+    };
+    sync();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.visualViewport?.addEventListener("resize", sync);
+    window.visualViewport?.addEventListener("scroll", sync);
+    window.addEventListener("resize", sync);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.visualViewport?.removeEventListener("resize", sync);
+      window.visualViewport?.removeEventListener("scroll", sync);
+      window.removeEventListener("resize", sync);
+    };
+  }, [status]);
+
+  useEffect(() => {
     if (status !== "countdown" && !(status === "live" && isMine)) return;
     const video = localVideoRef.current;
     const stream = streamRef.current;
     if (!video || !stream) return;
+    video.setAttribute("playsinline", "true");
+    video.setAttribute("webkit-playsinline", "true");
     if (video.srcObject !== stream) {
       video.srcObject = stream;
       void video.play().catch(() => undefined);
@@ -326,17 +423,27 @@ export function StudentLiveSection({ token }: { token: string }) {
 
   async function bindPreview(nextFacing: "user" | "environment") {
     stopMedia();
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: {
-        facingMode: { ideal: nextFacing },
-        width: { ideal: 1080 },
-        height: { ideal: 1920 },
-        aspectRatio: { ideal: 9 / 16 }
-      }
-    });
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: {
+          facingMode: { ideal: nextFacing },
+          width: { ideal: 1080 },
+          height: { ideal: 1920 },
+          aspectRatio: { ideal: 9 / 16 }
+        }
+      });
+    } catch {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: { facingMode: nextFacing }
+      });
+    }
     streamRef.current = stream;
     if (localVideoRef.current) {
+      localVideoRef.current.setAttribute("playsinline", "true");
+      localVideoRef.current.setAttribute("webkit-playsinline", "true");
       localVideoRef.current.srcObject = stream;
       await localVideoRef.current.play().catch(() => undefined);
     }
@@ -535,14 +642,20 @@ export function StudentLiveSection({ token }: { token: string }) {
   }
 
   if (status === "countdown" || (status === "live" && activeId)) {
-    return (
-      <section className="student-live-studio" aria-label="Estúdio ao vivo">
+    const studio = (
+      <section
+        ref={studioRef as never}
+        className="student-live-studio is-fullscreen"
+        aria-label="Estúdio ao vivo"
+        style={viewportH ? { height: viewportH } : undefined}
+      >
         <video
           ref={isMine ? localVideoRef : remoteVideoRef}
           className={`student-live-studio-video${isMine && facing === "user" ? " is-mirror" : ""}`}
           playsInline
           muted={isMine}
           autoPlay
+          style={{ filter: cameraFilterCss(filterId) }}
         />
         <div className="student-live-studio-chrome">
           <header>
@@ -577,14 +690,31 @@ export function StudentLiveSection({ token }: { token: string }) {
               </div>
               <footer>
                 {isMine ? (
-                  <div className="student-live-host-tools">
-                    <button type="button" onClick={() => void flipCamera()} aria-label="Virar câmera">
-                      <SwitchCamera size={18} />
-                    </button>
-                    <button type="button" onClick={toggleMic} aria-label={micOn ? "Silenciar" : "Ativar microfone"}>
-                      {micOn ? <Mic size={18} /> : <MicOff size={18} />}
-                    </button>
-                  </div>
+                  <>
+                    <div className="student-camera-filters student-live-filters" role="listbox" aria-label="Filtros">
+                      {CAMERA_FILTERS.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          role="option"
+                          aria-selected={filterId === item.id}
+                          className={filterId === item.id ? "is-on" : ""}
+                          onClick={() => setFilterId(item.id)}
+                        >
+                          <span className="student-camera-filter-swatch" style={{ filter: item.css }} />
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="student-live-host-tools">
+                      <button type="button" onClick={() => void flipCamera()} aria-label="Virar câmera">
+                        <SwitchCamera size={18} />
+                      </button>
+                      <button type="button" onClick={toggleMic} aria-label={micOn ? "Silenciar" : "Ativar microfone"}>
+                        {micOn ? <Mic size={18} /> : <MicOff size={18} />}
+                      </button>
+                    </div>
+                  </>
                 ) : null}
                 <div className="student-feed-comment-box student-live-composer">
                   <input
@@ -603,6 +733,7 @@ export function StudentLiveSection({ token }: { token: string }) {
         </div>
       </section>
     );
+    return typeof document !== "undefined" ? createPortal(studio, document.body) : studio;
   }
 
   return (
@@ -610,7 +741,7 @@ export function StudentLiveSection({ token }: { token: string }) {
       <header className="student-social-pane-head">
         <div>
           <strong>Ao vivo</strong>
-          <small>Estúdio vertical com chat em tempo real.</small>
+          <small>Tela cheia estilo Instagram · filtros e controles.</small>
         </div>
       </header>
       <SocialErrorBanner message={error} onDismiss={() => setError(null)} />

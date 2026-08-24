@@ -666,6 +666,8 @@ export function StudentFeedSection({
       <StudentCameraCapture
         open={Boolean(cameraMode)}
         mode={cameraMode === "video" ? "video" : "photo"}
+        allowModeSwitch
+        title={createPanel === "story" ? "Momento" : "Publicar"}
         onClose={() => setCameraMode(null)}
         onCapture={(file) => void onCameraCapture(file)}
       />

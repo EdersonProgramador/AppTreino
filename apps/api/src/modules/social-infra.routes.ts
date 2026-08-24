@@ -159,6 +159,46 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  app.put("/student/social/reels/:id", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const body = z
+      .object({
+        caption: z.string().max(300).optional(),
+        mood: z.string().max(40).nullable().optional()
+      })
+      .parse(request.body);
+    const reel = await prisma.socialReel.findUnique({ where: { id } });
+    if (!reel || reel.hidden) throw httpError(404, "Clipe não encontrado.");
+    if (reel.authorId !== user.id) throw httpError(403, "Só o autor pode editar.");
+    const updated = await prisma.socialReel.update({
+      where: { id },
+      data: {
+        ...(body.caption != null ? { caption: body.caption.trim() } : {}),
+        ...(body.mood !== undefined ? { mood: body.mood } : {})
+      },
+      include: {
+        author: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } },
+        likes: { where: { userId: user.id }, select: { userId: true } },
+        _count: { select: { likes: true } }
+      }
+    });
+    return {
+      reel: {
+        id: updated.id,
+        videoUrl: updated.videoUrl,
+        caption: updated.caption,
+        mood: updated.mood,
+        createdAt: updated.createdAt.toISOString(),
+        author: authorCard(updated.author),
+        likesCount: updated._count.likes,
+        likedByMe: updated.likes.length > 0,
+        isMine: true
+      }
+    };
+  });
+
   app.get("/student/social/live", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);
