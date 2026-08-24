@@ -5495,6 +5495,10 @@ html.light .finance-hub-tabs button {
   position: relative;
 }
 
+.student-notification-wrap {
+  position: static;
+}
+
 .student-cart-button {
   transition: background 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
@@ -5532,15 +5536,17 @@ html.light .finance-hub-tabs button {
 .student-notification-panel {
   position: absolute;
   top: calc(100% + 8px);
-  right: -8px;
+  right: max(12px, var(--safe-right));
   left: auto;
   z-index: 60;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  width: min(92vw, 360px);
+  width: min(360px, calc(100% - 24px));
+  max-width: calc(100% - 24px);
   max-height: min(70vh, 480px);
   gap: 0;
   overflow: hidden;
+  box-sizing: border-box;
   border: 1px solid rgba(242, 180, 97, 0.28);
   border-radius: 16px;
   padding: 0;
@@ -21102,13 +21108,7 @@ body:has(.student-app-shell) {
 .student-feed-create-menu.is-header-anchored {
   right: max(8px, var(--safe-right));
   left: auto;
-  max-width: calc(100vw - 24px);
-}
-
-.student-notification-panel {
-  right: 0;
-  width: min(92vw, 360px);
-  max-width: calc(100vw - 16px);
+  max-width: calc(100% - 24px);
 }
 
 .student-social-menu {
