@@ -2395,6 +2395,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               </button>
             </>
           )}
+          {studentSection !== "feed" && studentSection !== "home" && (
           <button className="student-streak-button" aria-label={`Ofensiva de ${currentStreak} dias`} onClick={() => {
             uiSounds.popupOpen();
             setStreakCalendarOpen(true);
@@ -2403,6 +2404,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             <span>Ofensiva</span>
             <strong>{currentStreak}</strong>
           </button>
+          )}
           {publicConfig["module_products"] !== "false" && (studentCart?.itemCount ?? 0) > 0 && (
             <div className="student-cart-wrap">
               <button
@@ -2429,6 +2431,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               </button>
             </div>
           )}
+          {studentSection !== "feed" && studentSection !== "home" && (
           <div className="student-notification-wrap">
             <button className="student-icon-button" aria-label="Notificações" onClick={() => setNotificationsOpen((open) => {
               if (open) uiSounds.popupClose();
@@ -2528,6 +2531,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               </section>
             )}
           </div>
+          )}
           <div className="student-avatar-menu-wrap">
             <button
               type="button"

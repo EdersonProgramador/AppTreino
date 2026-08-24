@@ -22,6 +22,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { apiDelete, apiGet, apiPost, apiUpload } from "../../api";
 import { mediaUrl } from "../../lib/urls";
 import { formatClock, formatKm, formatPace } from "../../lib/activity-geo";
+import { readFeedCache, writeFeedCache } from "../../lib/feed-cache";
 import { useFeedChromeStore } from "../../stores/feedChromeStore";
 import { brand } from "../../lib/brand";
 import type {
@@ -190,19 +191,20 @@ export function StudentFeedSection({
   token: string;
   onNavigate?: (section: SocialNav) => void;
 }) {
-  const [posts, setPosts] = useState<SocialPostRow[]>([]);
-  const [people, setPeople] = useState<SocialAuthor[]>([]);
-  const [rails, setRails] = useState<SocialStoryRail[]>([]);
+  const cached = useMemo(() => readFeedCache(), []);
+  const [posts, setPosts] = useState<SocialPostRow[]>(() => cached?.posts ?? []);
+  const [people, setPeople] = useState<SocialAuthor[]>(() => cached?.people ?? []);
+  const [rails, setRails] = useState<SocialStoryRail[]>(() => cached?.rails ?? []);
   const [body, setBody] = useState("");
   const [noteBody, setNoteBody] = useState("");
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<FeedMode>("for-you");
-  const [followingCount, setFollowingCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(() => cached?.followingCount ?? 0);
   const [page, setPage] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
+  const [hasMore, setHasMore] = useState(() => cached?.hasMore ?? false);
   const [busy, setBusy] = useState(false);
-  const [loadingFeed, setLoadingFeed] = useState(true);
+  const [loadingFeed, setLoadingFeed] = useState(() => !cached?.posts.length);
   const [error, setError] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState<Record<string, string>>({});
   const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
@@ -246,7 +248,8 @@ export function StudentFeedSection({
 
   useEffect(() => {
     let cancelled = false;
-    setLoadingFeed(true);
+    const hasCache = posts.length > 0;
+    if (!hasCache) setLoadingFeed(true);
     setError(null);
     void (async () => {
       try {
@@ -258,13 +261,18 @@ export function StudentFeedSection({
       } catch (err) {
         if (cancelled) return;
         setLoadingFeed(false);
-        setError(err instanceof Error ? err.message : "Falha ao carregar o Feed.");
+        if (!hasCache) setError(err instanceof Error ? err.message : "Falha ao carregar o Feed.");
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [token]);
+
+  useEffect(() => {
+    if (!posts.length) return;
+    writeFeedCache({ posts, rails, people, followingCount, hasMore });
+  }, [posts, rails, people, followingCount, hasMore]);
 
   const suggestions = useMemo(() => people.filter((person) => !person.following).slice(0, 8), [people]);
 
