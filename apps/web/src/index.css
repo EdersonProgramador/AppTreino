@@ -5073,10 +5073,9 @@ html.light .finance-hub-tabs button {
   display: flex;
   flex-direction: column;
   width: var(--student-max);
-  height: 100svh;
-  height: 100dvh;
-  max-height: 100dvh;
-  min-height: 100svh;
+  height: 100%;
+  min-height: 100%;
+  max-height: 100%;
   margin: 0 auto;
   padding: 0;
   overflow: hidden;
@@ -11573,10 +11572,10 @@ html.dark .student-rating-done {
 }
 
 .student-bottom-nav {
-  position: relative;
-  bottom: auto;
-  left: auto;
-  right: auto;
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
   z-index: 60;
   flex: 0 0 auto;
   display: grid;
@@ -11596,10 +11595,10 @@ html.dark .student-rating-done {
 
 /* Play: conteúdo no meio; nav permanece no rodapé via flex */
 .student-app-shell.is-play .student-bottom-nav {
-  position: relative;
-  bottom: auto;
-  left: auto;
-  right: auto;
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
   z-index: 60;
   flex: 0 0 auto;
 }
@@ -20971,9 +20970,35 @@ html.is-native-app.keyboard-open .login-shell {
 }
 
 /* Portal do aluno — web no celular (iPhone/Android): nunca estourar a viewport */
-.ui-shell:has(.student-app-shell) {
-  overflow-x: hidden;
+html:has(.student-app-shell),
+body:has(.student-app-shell) {
+  height: 100%;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+.ui-shell:has(.student-app-shell),
+.ui-shell:has(.student-app-shell).min-h-screen {
+  min-height: 100dvh !important;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
   max-width: 100%;
+}
+
+.ui-shell:has(.student-app-shell) > .app-view-stage {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ui-shell:has(.student-app-shell) > .app-view-stage > .student-app-shell {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
 }
 
 .student-app-shell {
