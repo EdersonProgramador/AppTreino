@@ -139,6 +139,7 @@ export function StudentAthleteProfileSection({
   const [commentDraft, setCommentDraft] = useState<Record<string, string>>({});
   const viewerScrollRef = useRef<HTMLDivElement>(null);
   const viewerPostRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const viewerJumpRef = useRef<number | null>(null);
   const [bio, setBio] = useState(profile?.bio ?? "");
   const [coverColor, setCoverColor] = useState(profile?.coverColor || DEFAULT_COVER);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
@@ -226,14 +227,45 @@ export function StudentAthleteProfileSection({
 
   useEffect(() => {
     if (viewerIndex == null) return;
-    const post = posts[viewerIndex];
+    const jumpTo = viewerJumpRef.current;
+    if (jumpTo == null) return;
+    const post = posts[jumpTo];
     if (!post) return;
     const frame = window.requestAnimationFrame(() => {
       const node = viewerPostRefs.current.get(post.id);
-      node?.scrollIntoView({ block: "start", behavior: "auto" });
+      const scroller = viewerScrollRef.current;
+      if (!node || !scroller) return;
+      viewerJumpRef.current = null;
+      scroller.scrollTo({ top: node.offsetTop, behavior: "auto" });
     });
     return () => window.cancelAnimationFrame(frame);
   }, [viewerIndex, posts]);
+
+  function onViewerScroll() {
+    if (viewerJumpRef.current != null) return;
+    const scroller = viewerScrollRef.current;
+    if (!scroller || !posts.length) return;
+    const mid = scroller.scrollTop + scroller.clientHeight / 2;
+    let nearest = 0;
+    let best = Number.POSITIVE_INFINITY;
+    posts.forEach((post, index) => {
+      const node = viewerPostRefs.current.get(post.id);
+      if (!node) return;
+      const center = node.offsetTop + node.offsetHeight / 2;
+      const distance = Math.abs(center - mid);
+      if (distance < best) {
+        best = distance;
+        nearest = index;
+      }
+    });
+    setViewerIndex((current) => (current === nearest ? current : nearest));
+  }
+
+  function openPostViewer(index: number) {
+    uiSounds.popupOpen();
+    viewerJumpRef.current = index;
+    setViewerIndex(index);
+  }
 
   function closePostViewer() {
     uiSounds.popupClose();
@@ -432,10 +464,7 @@ export function StudentAthleteProfileSection({
                   key={post.id}
                   type="button"
                   className="student-athlete-post-card"
-                  onClick={() => {
-                    uiSounds.popupOpen();
-                    setViewerIndex(index);
-                  }}
+                  onClick={() => openPostViewer(index)}
                 >
                   {thumb ? (
                     post.mediaType === "VIDEO" || post.mediaItems?.[0]?.type === "VIDEO" ? (
@@ -461,14 +490,21 @@ export function StudentAthleteProfileSection({
             </button>
             <div className="student-athlete-post-viewer-bar-title">
               <strong>Publicações</strong>
-              <span>{profile?.name ?? brand.athlete}</span>
+              <span>
+                {profile?.name ?? brand.athlete}
+                {posts.length > 1 ? ` · ${viewerIndex + 1}/${posts.length}` : ""}
+              </span>
             </div>
             <button type="button" className="student-athlete-post-viewer-close" aria-label="Fechar" onClick={closePostViewer}>
               <X size={18} />
             </button>
           </header>
 
-          <div className="student-athlete-post-viewer-scroll" ref={viewerScrollRef}>
+          <div
+            className="student-athlete-post-viewer-scroll"
+            ref={viewerScrollRef}
+            onScroll={onViewerScroll}
+          >
             {posts.map((post) => (
               <article
                 key={post.id}
