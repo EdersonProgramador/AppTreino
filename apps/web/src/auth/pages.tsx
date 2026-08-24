@@ -5,6 +5,7 @@ import { LoginView } from "../components/auth/LoginView";
 import { AppDownloadSoonView } from "../components/home/AppDownloadSoonView";
 import { HomeView } from "../components/home/HomeView";
 import { assetUrl } from "../lib/urls";
+import { brand } from "../lib/brand";
 import { useAuth } from "./AuthContext";
 import { AdminPanel, StudentPanel, TransitionScreen } from "./RouteGuards";
 import { homePathForRole, loginPath, paths } from "./paths";
@@ -127,7 +128,7 @@ function GuestChrome({ variant = "default" }: { variant?: "default" | "login" })
         <img
           className="block h-auto w-[clamp(124px,38vw,200px)] max-w-full rounded-lg drop-shadow-lg"
           src={assetUrl("assets/app-treino-logo.svg")}
-          alt="App Treino"
+          alt={brand.name}
         />
       </Link>
       {variant === "login" ? (

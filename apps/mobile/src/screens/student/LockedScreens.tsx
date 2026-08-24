@@ -133,7 +133,9 @@ export function SubscriptionScreen() {
             onPress={() => void Linking.openURL((paymentUrl || pending?.paymentUrl) as string)}
           />
         ) : null}
-        {paymentId && !paymentUrl ? <OutlineButton label="Finalizar checkout sandbox" onPress={() => void confirmSandbox()} /> : null}
+        {(__DEV__ || process.env.EXPO_PUBLIC_ENABLE_SANDBOX_CONFIRM === "true") && paymentId && !paymentUrl ? (
+          <OutlineButton label="Finalizar checkout sandbox" onPress={() => void confirmSandbox()} />
+        ) : null}
         <GreenButton label={busy ? "Gerando checkout…" : "Assinar agora"} loading={busy} onPress={() => void subscribe()} />
       </View>
     </StudentPage>

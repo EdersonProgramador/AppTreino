@@ -24,7 +24,7 @@ const { useMusicPlayerStore } = await import("./musicPlayerStore.ts");
 const sampleTrack = {
   id: "t1",
   title: "Faixa E2E",
-  artist: "App Treino",
+  artist: "App Treino Social",
   audioUrl: "https://example.com/track.mp3",
   coverUrl: null,
   durationSec: 120

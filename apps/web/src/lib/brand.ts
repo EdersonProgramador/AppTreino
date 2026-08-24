@@ -2,6 +2,7 @@
 export const brand = {
   name: "App Treino Social",
   shortName: "App Treino Social",
+  legalName: "App Treino Social Ltda.",
   tagline: "Rede social de atletas · treino e corrida",
   athlete: "Atleta",
   athletes: "Atletas",

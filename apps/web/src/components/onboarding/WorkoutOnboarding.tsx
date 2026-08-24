@@ -377,7 +377,11 @@ export function WorkoutOnboarding({
           ) : (
             <button type="submit" className="ui-btn-primary flex-1" disabled={submitting}>
               {submitting ? <Loader2 className="animate-spin" size={18} /> : null}
-              {mode === "register" ? "Criar conta e liberar treinos" : "Salvar perfil e ver treinos"}
+              {mode === "register"
+                ? selectedPlanName
+                  ? "Criar conta e ir ao pagamento"
+                  : "Criar conta e assinar"
+                : "Salvar perfil e escolher assinatura"}
             </button>
           )}
         </div>

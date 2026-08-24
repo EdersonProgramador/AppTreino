@@ -12,6 +12,7 @@ import {
   SkipForward
 } from "lucide-react";
 import { playableMediaUrl } from "../../../lib/urls";
+import { brand } from "../../../lib/brand";
 import { useMusicPlayerStore } from "../../../stores/musicPlayerStore";
 import { ControlButton } from "./ControlButton";
 import { MusicProgressBar } from "./MusicProgressBar";
@@ -190,7 +191,7 @@ export function WorkoutMusicPlayer({
                 </div>
                 <span className="student-play-track-meta">
                   <strong>{current?.title || "Escolher álbum"}</strong>
-                  <small>{current?.artist || (hasTrack ? "App Treino" : "Toque para ver álbuns")}</small>
+                  <small>{current?.artist || (hasTrack ? brand.musicDefaultArtist : "Toque para ver álbuns")}</small>
                 </span>
               </button>
               <div className="student-play-track-progress">

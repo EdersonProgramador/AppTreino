@@ -4,6 +4,7 @@ import { isAdminStudentPreview, requireAuth, requireRole } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { createAsaasCheckout, orderExternalReference, type AsaasBillingType } from "./asaas.client.js";
+import { asaasCheckoutItemName } from "./checkout.utils.js";
 import { buildPaginationMeta, parsePagination } from "./pagination.js";
 import {
   assertModuleEnabled,
@@ -296,7 +297,7 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
 
     const asaasCheckout = await createAsaasCheckout({
       externalReference: orderExternalReference(order.id),
-      itemName: `App Treino - Pedido (${order.items.length} item(ns))`,
+      itemName: asaasCheckoutItemName(`Pedido (${order.items.length} item(ns))`),
       itemDescription: `Pedido vitrine - ${authUser.name}`,
       amountInCents: order.amountInCents,
       billingType: body.billingType as AsaasBillingType
@@ -356,7 +357,7 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
 
     const asaasCheckout = await createAsaasCheckout({
       externalReference: orderExternalReference(order.id),
-      itemName: `App Treino - Pedido (${order.items.length} item(ns))`,
+      itemName: asaasCheckoutItemName(`Pedido (${order.items.length} item(ns))`),
       itemDescription: `Pedido vitrine - ${authUser.name}`,
       amountInCents: order.amountInCents,
       billingType: body.billingType as AsaasBillingType

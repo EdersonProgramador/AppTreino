@@ -35,6 +35,7 @@ import {
 import { fanOutStudentNotifications, notifyStudent } from "./notification.utils.js";
 import { createAsaasCheckout } from "./asaas.client.js";
 import { asaasStatusToPaymentStatus } from "./asaas.routes.js";
+import { asaasCheckoutItemDescription, asaasCheckoutItemName } from "./checkout.utils.js";
 
 const uploadGroups = ["lessons", "materials", "images", "audio"] as const;
 const uploadSchema = z.object({
@@ -3915,8 +3916,8 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
     const asaasPayment = await createAsaasCheckout({
       externalReference: payment.id,
-      itemName: `App Treino - ${membership.plan?.name ?? "Assinatura"}`,
-      itemDescription: `Assinatura App Treino - ${membership.user.name}`,
+      itemName: asaasCheckoutItemName(membership.plan?.name ?? "Assinatura"),
+      itemDescription: asaasCheckoutItemDescription(membership.user.name),
       amountInCents: body.amountInCents,
       billingType: body.billingType
     });

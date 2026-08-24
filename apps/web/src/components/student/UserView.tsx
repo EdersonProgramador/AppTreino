@@ -70,6 +70,7 @@ import { labelProductKind, labelPurchaseStatus, labelOrderStatus, labelShippingM
 import { labelLocationType, studentLocationLabel } from "../../lib/locations";
 import { sessionLabelFromBlock, trainingCopy } from "../../lib/training-copy";
 import { brand } from "../../lib/brand";
+import { isSandboxCheckoutEnabled } from "../../lib/sandbox-checkout";
 import { StudentAthleteProfileSection } from "./StudentAthleteProfileSection";
 import { RunnerIcon } from "../shared/RunnerIcon";
 import { AnimatedList } from "../shared/AnimatedList";
@@ -1289,7 +1290,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         token
       );
       setProfile(response.profile);
-      setSuccess("Perfil concluído. Seus treinos foram liberados conforme o público definido.");
+      setSuccess("Perfil concluído. Escolha um plano para liberar os treinos.");
+      setStudentSection("subscription");
       await loadUserData();
     } catch (completeError) {
       const message = completeError instanceof ApiError ? completeError.message : null;
@@ -2114,7 +2116,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         <section className="auth-panel">
           <span className="eyebrow">Personalização</span>
           <h1>Complete seu perfil de treino</h1>
-          <p>Faltam alguns dados para liberar os treinos certos para o seu perfil.</p>
+          <p>Faltam alguns dados do perfil. Depois, escolha a assinatura para liberar os treinos.</p>
           <WorkoutOnboarding
             mode="complete"
             submitting={completingOnboarding}
@@ -2261,7 +2263,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   Abrir checkout do Asaas
                 </button>
               )}
-              {currentCheckoutPayment && !currentCheckoutPayment.paymentUrl && (
+              {isSandboxCheckoutEnabled() && currentCheckoutPayment && !currentCheckoutPayment.paymentUrl && (
                 <button
                   className="outline-button"
                   type="button"

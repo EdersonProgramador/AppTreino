@@ -104,7 +104,7 @@ export const resources: Array<{
 export const testimonials = [
   {
     quote:
-      "Eu sempre começava a academia e parava em 1 mês porque ficava perdido. Com o App Treino, eu só abro o celular e sigo o passo a passo. Já são 5 meses sem faltar!",
+      "Eu sempre começava a academia e parava em 1 mês porque ficava perdido. Com o App Treino Social, eu só abro o celular e sigo o passo a passo. Já são 5 meses sem faltar!",
     name: "Lucas M.",
     meta: "28 anos"
   },
@@ -117,7 +117,7 @@ export const testimonials = [
 ] as const;
 
 export const monthlyPlanPerks = [
-  "Acesso ilimitado ao App Treino",
+  "Acesso ilimitado ao App Treino Social",
   "Acompanhamento de cargas e evolução",
   "Suporte via aplicativo",
   "Renovação mensal automática"
@@ -133,7 +133,7 @@ export const annualPlanPerks = [
 
 export const faqItems = [
   {
-    question: "O App Treino funciona para treino em casa ou só academia?",
+    question: "O App Treino Social funciona para treino em casa ou só academia?",
     answer:
       "Funciona para ambos. Os treinos são adaptados para o ambiente onde você treina e para os equipamentos que possui."
   },

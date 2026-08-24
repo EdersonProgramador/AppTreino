@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { FaApple, FaGooglePlay } from "react-icons/fa";
 import { assetUrl } from "../../lib/urls";
+import { brand } from "../../lib/brand";
 import { paths } from "../../auth/paths";
 import { ThemeModeSwitch } from "../shared/ThemeModeSwitch";
 
@@ -13,7 +14,7 @@ export function AppDownloadSoonView() {
           <img
             className="block h-auto w-[clamp(140px,14vw,190px)]"
             src={assetUrl("assets/app-treino-logo.svg")}
-            alt="App Treino"
+            alt={brand.name}
           />
         </Link>
         <div className="flex items-center gap-3">
@@ -29,7 +30,7 @@ export function AppDownloadSoonView() {
         <div className="grid gap-4">
           <h1 className="ui-display m-0 text-[clamp(2rem,5vw,3.4rem)] leading-tight">Em breve nas lojas</h1>
           <p className="app-download-copy m-0 mx-auto max-w-xl text-base leading-relaxed sm:text-lg">
-            O App Treino estará disponível em breve no Google Play e na App Store. Enquanto isso, você já pode criar sua
+            O {brand.name} estará disponível em breve no Google Play e na App Store. Enquanto isso, você já pode criar sua
             conta e treinar pela versão web.
           </p>
         </div>

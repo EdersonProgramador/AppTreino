@@ -315,8 +315,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const billingType = String(formData.get("billingType") ?? "UNDEFINED");
       const idToken = String(formData.get("idToken") ?? "").trim();
       const credential = String(formData.get("credential") ?? "").trim();
-      const planCode = store.selectedPlanCode;
-      const isCheckoutRegister = mode === "register" && planCode;
+      const planCode = store.selectedPlanCode ?? (mode === "register" ? "monthly" : null);
+      const isCheckoutRegister = mode === "register" && Boolean(planCode);
       const endpoint =
         provider === "GOOGLE"
           ? "/auth/google"
@@ -399,7 +399,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         navigate(destination, { replace: true });
 
         if (isCheckoutRegister && response.payment?.paymentUrl) {
-          window.open(response.payment.paymentUrl, "_blank");
+          window.location.href = response.payment.paymentUrl;
+          return;
         }
       } catch (error) {
         const message = error instanceof ApiError ? error.message : null;

@@ -16,6 +16,7 @@ import {
   PURCHASE_PAID_STATUSES
 } from "./commerce.utils.js";
 import { createAsaasCheckout, purchaseExternalReference, type AsaasBillingType } from "./asaas.client.js";
+import { asaasCheckoutItemName } from "./checkout.utils.js";
 import { ensureProgramCycleRecorded, recordProgramCycleCompletion } from "./program-completion.utils.js";
 
 const substituteSchema = z.object({
@@ -1892,7 +1893,7 @@ export async function registerStudentRoutes(app: FastifyInstance) {
 
     const asaasCheckout = await createAsaasCheckout({
       externalReference: purchaseExternalReference(purchase.id),
-      itemName: `App Treino - ${product.name}`,
+      itemName: asaasCheckoutItemName(product.name),
       itemDescription: `Pedido vitrine - ${authUser.name}`,
       amountInCents: purchase.amountInCents,
       billingType: body.billingType as AsaasBillingType
@@ -1951,7 +1952,7 @@ export async function registerStudentRoutes(app: FastifyInstance) {
 
     const asaasCheckout = await createAsaasCheckout({
       externalReference: purchaseExternalReference(purchase.id),
-      itemName: `App Treino - ${purchase.product.name}`,
+      itemName: asaasCheckoutItemName(purchase.product.name),
       itemDescription: `Pedido vitrine - ${authUser.name}`,
       amountInCents: purchase.amountInCents,
       billingType: body.billingType as AsaasBillingType

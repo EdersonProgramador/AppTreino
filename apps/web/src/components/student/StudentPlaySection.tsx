@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Disc3, Heart, Music2, Pause, Play, Search, Shuffle } from "lucide-react";
 import { apiGet } from "../../api";
 import { musicAudio } from "../../lib/music-audio";
+import { brand } from "../../lib/brand";
 import { isNativeAppShell } from "../../lib/native-bridge";
 import { nativeOpenMusicQueue } from "../../lib/native-music";
 import { playableMediaUrl } from "../../lib/urls";
@@ -245,7 +246,7 @@ export function StudentPlaySection({ token }: Props) {
               <div className="student-play-hero-copy">
                 <p className="student-play-kicker">
                   <Music2 size={14} />
-                  Play App Treino Social
+                  {brand.playTitle}
                 </p>
                 <h2>{greeting}</h2>
                 <p className="student-play-lead">
@@ -312,7 +313,7 @@ export function StudentPlaySection({ token }: Props) {
                       <div className="student-play-track-cover" style={coverStyle(track.coverUrl)} />
                       <span className="student-play-track-meta">
                         <strong>{track.title}</strong>
-                        <small>{track.artist || "App Treino"}</small>
+                        <small>{track.artist || brand.musicDefaultArtist}</small>
                       </span>
                     </button>
                   ))}
@@ -385,7 +386,7 @@ export function StudentPlaySection({ token }: Props) {
                         </div>
                         <span className="student-play-track-meta">
                           <strong>{track.title}</strong>
-                          <small>{track.artist || "App Treino"}</small>
+                          <small>{track.artist || brand.musicDefaultArtist}</small>
                         </span>
                         <span className="student-play-track-duration">
                           {track.durationSec != null ? formatClock(track.durationSec) : "—"}

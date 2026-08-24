@@ -11,6 +11,7 @@ import {
   Zap
 } from "lucide-react";
 import { formatPriceInBRL, initialPlans } from "@app-treino/shared";
+import { brand } from "../../lib/brand";
 import { assetUrl } from "../../lib/urls";
 import {
   annualPlanPerks,
@@ -82,10 +83,10 @@ export function HomeView({
       {/* 02. Navbar fixa */}
       <header className="home-header sticky top-0 z-40 border-b backdrop-blur-md">
         <div className="mx-auto flex min-h-[64px] max-w-6xl items-center justify-between gap-3 px-4 sm:min-h-[72px] sm:gap-4 sm:px-8 md:px-12">
-          <a href="#topo" className="inline-flex min-w-0 items-center gap-2 no-underline" aria-label="App Treino">
+          <a href="#topo" className="inline-flex min-w-0 items-center gap-2 no-underline" aria-label={brand.name}>
             <img
               src={assetUrl("assets/app-treino-logo.svg")}
-              alt="App Treino"
+              alt={brand.name}
               className="h-auto w-[clamp(120px,28vw,190px)]"
             />
             <Zap className="hidden h-4 w-4 shrink-0 text-brand-gold sm:block" aria-hidden="true" />
@@ -181,8 +182,9 @@ export function HomeView({
               Aprovado por +10.000 alunos ativos
             </p>
             <h1 className="mt-5 font-display text-[clamp(2.4rem,6.5vw,4.4rem)] font-semibold leading-[0.98] tracking-tight text-sand">
-              App Treino
+              {brand.name}
             </h1>
+            <p className="mt-3 text-sm font-bold uppercase tracking-[0.12em] text-brand-gold">{brand.tagline}</p>
             <p className="mt-4 font-display text-[clamp(1.35rem,3.4vw,2.15rem)] font-medium leading-tight text-sand">
               Chega de adivinhar o que fazer na academia. Treine com foco, evolua cargas e veja resultados no espelho.
             </p>
@@ -279,7 +281,7 @@ export function HomeView({
             <div className="home-panel rounded-3xl border p-6">
               <p className="mb-5 inline-flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-sand-faint">
                 <X size={16} className="text-brand-ember" />
-                Sem o App Treino
+                Sem o {brand.name}
               </p>
               <ul className="grid gap-4">
                 {painSolutionRows.map((row) => (
@@ -293,7 +295,7 @@ export function HomeView({
             <div className="rounded-3xl border border-brand-gold/35 bg-brand-gold/10 p-6 shadow-glow">
               <p className="mb-5 inline-flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-brand-gold">
                 <Check size={16} />
-                Com o App Treino
+                Com o {brand.name}
               </p>
               <ul className="grid gap-4">
                 {painSolutionRows.map((row) => (
@@ -519,9 +521,9 @@ export function HomeView({
           <div className="flex gap-3">
             <img src={assetUrl("assets/app-treino-mark.svg")} alt="" aria-hidden="true" className="h-10 w-10" />
             <div>
-              <strong className="font-display text-lg text-sand">App Treino</strong>
+              <strong className="font-display text-lg text-sand">{brand.name}</strong>
               <p className="mt-1 text-sm text-sand-muted">
-                Sua rotina fitness com direção, clareza e resultados.
+                {brand.tagline}
               </p>
             </div>
           </div>
@@ -569,7 +571,7 @@ export function HomeView({
           </nav>
         </div>
         <div className="mx-auto mt-10 flex max-w-6xl flex-col gap-2 border-t border-[color:var(--app-border)] pt-6 text-xs text-sand-faint sm:flex-row sm:justify-between">
-          <span>© 2026 App Treino Ltda. Todos os direitos reservados.</span>
+          <span>© 2026 {brand.legalName} Todos os direitos reservados.</span>
           <span>CNPJ: 00.000.000/0001-00</span>
         </div>
       </footer>

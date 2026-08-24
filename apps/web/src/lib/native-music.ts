@@ -1,4 +1,5 @@
 import { absolutePlayableUrl } from "./music-audio";
+import { brand } from "./brand";
 import { isNativeAppShell, postNativeMessage } from "./native-bridge";
 import type { MusicPlayTrack } from "../stores/musicPlayerStore";
 
@@ -14,7 +15,7 @@ export function toNativeMusicTracks(tracks: MusicPlayTrack[]): NativeMusicTrackP
   return tracks.map((track) => ({
     id: track.id,
     title: track.title,
-    artist: track.artist || "App Treino",
+    artist: track.artist || brand.musicDefaultArtist,
     artwork: track.coverUrl ? absolutePlayableUrl(track.coverUrl) : undefined,
     url: absolutePlayableUrl(track.audioUrl)
   }));
@@ -26,7 +27,7 @@ export function fromNativeMusicTracks(tracks: NativeMusicTrackPayload[]): MusicP
     .map((track) => ({
       id: track.id,
       title: track.title,
-      artist: track.artist || "App Treino",
+      artist: track.artist || brand.musicDefaultArtist,
       audioUrl: track.url,
       coverUrl: track.artwork ?? null,
       durationSec: null

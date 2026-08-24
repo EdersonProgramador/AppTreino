@@ -6,6 +6,11 @@ import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { createAsaasCheckout } from "./asaas.client.js";
 import { asaasStatusToPaymentStatus } from "./asaas.routes.js";
+import {
+  asaasCheckoutItemDescription,
+  asaasCheckoutItemName,
+  evaluateSandboxConfirmGate
+} from "./checkout.utils.js";
 
 const checkoutRegisterSchema = z
   .object({
@@ -151,8 +156,8 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       if (!payment.paymentUrl) {
         const asaasPayment = await createAsaasCheckout({
           externalReference: payment.id,
-          itemName: `App Treino - ${pendingMembership.plan?.name ?? planSeed.name}`,
-          itemDescription: `Assinatura App Treino - ${authUser.name}`,
+          itemName: asaasCheckoutItemName(pendingMembership.plan?.name ?? planSeed.name),
+          itemDescription: asaasCheckoutItemDescription(authUser.name),
           amountInCents: payment.amountInCents,
           billingType: body.billingType
         });
@@ -216,8 +221,8 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
 
     const asaasPayment = await createAsaasCheckout({
       externalReference: payment.id,
-      itemName: `App Treino - ${planSeed.name}`,
-      itemDescription: `Assinatura App Treino - ${user.name}`,
+      itemName: asaasCheckoutItemName(planSeed.name),
+      itemDescription: asaasCheckoutItemDescription(user.name),
       amountInCents: payment.amountInCents,
       billingType: body.billingType
     });
@@ -243,10 +248,14 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
   app.post("/checkout/confirm-sandbox", async (request, reply) => {
     requireDatabase();
 
-    if (env.NODE_ENV === "production" || !env.ENABLE_SANDBOX_CONFIRM) {
-      return reply.code(404).send({
-        message: "Recurso não encontrado."
-      });
+    const gate = evaluateSandboxConfirmGate({
+      nodeEnv: env.NODE_ENV,
+      enableSandboxConfirm: env.ENABLE_SANDBOX_CONFIRM,
+      hasAsaasApiKey: Boolean(env.ASAAS_API_KEY),
+      allowManualPaymentConfirmation: env.ALLOW_MANUAL_PAYMENT_CONFIRMATION === "true"
+    });
+    if (!gate.ok) {
+      return reply.code(gate.statusCode).send({ message: gate.message });
     }
 
     const authUser = await requireAuth(app, request);
@@ -257,12 +266,6 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       });
     }
     const body = checkoutSandboxConfirmationSchema.parse(request.body);
-
-    if (env.ASAAS_API_KEY && env.ALLOW_MANUAL_PAYMENT_CONFIRMATION !== "true") {
-      return reply.code(403).send({
-        message: "Confirmação manual disponível apenas no sandbox local sem Asaas configurado."
-      });
-    }
 
     const payment = await prisma.payment.findFirst({
       where: {
@@ -400,8 +403,8 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
 
     const asaasPayment = await createAsaasCheckout({
       externalReference: payment.id,
-      itemName: `App Treino - ${planSeed.name}`,
-      itemDescription: `Assinatura App Treino - ${user.name}`,
+      itemName: asaasCheckoutItemName(planSeed.name),
+      itemDescription: asaasCheckoutItemDescription(user.name),
       amountInCents: payment.amountInCents,
       billingType: body.billingType
     });

@@ -3,6 +3,7 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { can, canAccessPanel, type UserRole } from "@app-treino/shared";
 import { assetUrl } from "../lib/urls";
+import { brand } from "../lib/brand";
 import { useAuth } from "./AuthContext";
 import { canAccessRoleRoute, homePathForRole, isGuestPath, isRoleHomePath, mustRedirectForRole } from "./session";
 import { paths } from "./paths";
@@ -10,7 +11,7 @@ import { paths } from "./paths";
 export function TransitionScreen({ message }: { message?: string }) {
   return (
     <div className="ui-shell app-boot-screen" role="status" aria-live="polite">
-      <img src={assetUrl("assets/app-treino-logo.svg")} alt="App Treino" className="app-boot-logo" />
+      <img src={assetUrl("assets/app-treino-logo.svg")} alt={brand.name} className="app-boot-logo" />
       <Loader2 className="app-boot-spinner animate-spin" size={28} aria-hidden="true" />
       <p>{message ?? "Preparando sua área..."}</p>
     </div>

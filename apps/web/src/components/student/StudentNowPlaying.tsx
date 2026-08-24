@@ -14,6 +14,7 @@ import {
   VolumeX
 } from "lucide-react";
 import { playableMediaUrl } from "../../lib/urls";
+import { brand } from "../../lib/brand";
 import { useMusicPlayerStore } from "../../stores/musicPlayerStore";
 
 function resolveMediaUrl(url: string) {
@@ -73,7 +74,7 @@ export function StudentNowPlaying() {
         </button>
         <div>
           <span>Tocando agora</span>
-          <strong>{current.artist || "App Treino"}</strong>
+          <strong>{current.artist || brand.musicDefaultArtist}</strong>
         </div>
         <button
           aria-label={queueOpen ? "Fechar fila" : "Abrir fila"}
@@ -104,7 +105,7 @@ export function StudentNowPlaying() {
                   />
                   <span>
                     <strong>{track.title}</strong>
-                    <small>{track.artist || "App Treino"}</small>
+                    <small>{track.artist || brand.musicDefaultArtist}</small>
                   </span>
                   <em>{active && playing ? "tocando" : formatClock(track.durationSec ?? 0)}</em>
                 </button>
@@ -120,7 +121,7 @@ export function StudentNowPlaying() {
         <div className="student-now-playing-meta">
           <div>
             <h2>{current.title}</h2>
-            <p>{current.artist || "App Treino"}</p>
+            <p>{current.artist || brand.musicDefaultArtist}</p>
           </div>
           <button
             aria-label={liked ? "Remover dos favoritos" : "Favoritar"}

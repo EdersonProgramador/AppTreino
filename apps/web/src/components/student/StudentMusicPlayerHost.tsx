@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MouseEvent, type PointerEvent } from "react";
+﻿import { useEffect, useRef, type MouseEvent, type PointerEvent } from "react";
 import { Pause, Play, SkipForward } from "lucide-react";
 import { musicAudio } from "../../lib/music-audio";
 import { isNativeAppShell } from "../../lib/native-bridge";
@@ -9,6 +9,7 @@ import {
   subscribeNativeMusicSync
 } from "../../lib/native-music";
 import { playableMediaUrl } from "../../lib/urls";
+import { brand } from "../../lib/brand";
 import { useMusicPlayerStore } from "../../stores/musicPlayerStore";
 import { StudentNowPlaying } from "./StudentNowPlaying";
 
@@ -171,7 +172,7 @@ export function StudentMusicMini({ compact = false }: { compact?: boolean }) {
       />
       <button className="student-play-dock-meta" data-testid="student-music-mini-meta" onClick={() => expand()} type="button">
         <strong>{current.title}</strong>
-        <span>{current.artist || "App Treino"}</span>
+        <span>{current.artist || brand.musicDefaultArtist}</span>
       </button>
       <div className="student-play-dock-center">
         <div className="student-play-dock-controls">
@@ -342,7 +343,7 @@ export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Ho
 
     session.metadata = new MediaMetadata({
       title: current.title,
-      artist: current.artist || "App Treino",
+      artist: current.artist || brand.musicDefaultArtist,
       artwork: current.coverUrl
         ? [{ src: resolveMediaUrl(current.coverUrl), sizes: "512x512", type: "image/jpeg" }]
         : []
