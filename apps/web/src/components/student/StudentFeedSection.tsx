@@ -25,6 +25,7 @@ import { formatClock, formatKm, formatPace } from "../../lib/activity-geo";
 import { readFeedCache, writeFeedCache } from "../../lib/feed-cache";
 import { useFeedChromeStore } from "../../stores/feedChromeStore";
 import { brand } from "../../lib/brand";
+import { shareSocialPost } from "../../lib/share-social-post";
 import type {
   SocialAuthor,
   SocialPostRow,
@@ -371,18 +372,10 @@ export function StudentFeedSection({
   }
 
   async function sharePost(post: SocialPostRow) {
-    const text = [post.body?.trim(), brand.shareSuffix || brand.name].filter(Boolean).join("\n\n");
-    const url = typeof window !== "undefined" ? window.location.origin : "";
     try {
-      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-        await navigator.share({ title: brand.name, text, url });
-        return;
-      }
-      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText([text, url].filter(Boolean).join("\n"));
-      }
+      await shareSocialPost(post);
     } catch {
-      // usuário cancelou o compartilhar
+      // usuário cancelou o compartilhar ou a mídia falhou
     }
   }
 

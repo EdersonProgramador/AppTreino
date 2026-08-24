@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { brand } from "../../lib/brand";
 import { mediaUrl } from "../../lib/urls";
+import { shareSocialPost } from "../../lib/share-social-post";
 import { uiSounds } from "../../lib/ui-sounds";
 import type { SocialPostRow, StudentProfile, UploadResponse } from "../../types";
 
@@ -255,20 +256,12 @@ export function StudentAthleteProfileSection({
   }
 
   async function sharePost(post: SocialPostRow) {
-    const text = [post.body?.trim(), brand.shareSuffix || brand.name].filter(Boolean).join("\n\n");
-    const url = typeof window !== "undefined" ? window.location.origin : "";
     try {
-      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-        await navigator.share({ title: brand.name, text, url });
-        uiSounds.itemSelect();
-        return;
-      }
-      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText([text, url].filter(Boolean).join("\n"));
-        uiSounds.itemSelect();
-      }
-    } catch {
-      // usuário cancelou o compartilhar
+      await shareSocialPost(post);
+      uiSounds.itemSelect();
+    } catch (error) {
+      const aborted = error instanceof DOMException && error.name === "AbortError";
+      if (!aborted) uiSounds.error();
     }
   }
 
