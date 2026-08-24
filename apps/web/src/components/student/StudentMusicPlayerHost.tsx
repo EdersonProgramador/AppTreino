@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, type MouseEvent, type PointerEvent } from "react";
 import { Pause, Play, SkipForward } from "lucide-react";
 import { musicAudio } from "../../lib/music-audio";
 import { isNativeAppShell } from "../../lib/native-bridge";
@@ -21,6 +21,9 @@ function resolveMediaUrl(url: string) {
   return playableMediaUrl(url);
 }
 
+const DISMISS_PX = 72;
+const DISMISS_VELOCITY = 0.55;
+
 export function StudentMusicMini({ compact = false }: { compact?: boolean }) {
   const queue = useMusicPlayerStore((state) => state.queue);
   const index = useMusicPlayerStore((state) => state.index);
@@ -29,7 +32,118 @@ export function StudentMusicMini({ compact = false }: { compact?: boolean }) {
   const setPlaying = useMusicPlayerStore((state) => state.setPlaying);
   const next = useMusicPlayerStore((state) => state.next);
   const expand = useMusicPlayerStore((state) => state.expand);
+  const hideMiniDock = useMusicPlayerStore((state) => state.hideMiniDock);
   const current = queue[index] ?? null;
+  const dockRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef({
+    pointerId: -1,
+    startX: 0,
+    startY: 0,
+    lastX: 0,
+    lastT: 0,
+    vx: 0,
+    axis: null as "x" | "y" | null,
+    swiping: false,
+    suppressClick: false,
+    dismissing: false
+  });
+
+  function applySwipe(x: number, opacity = 1) {
+    const el = dockRef.current;
+    if (!el) return;
+    el.style.transform = x ? `translate3d(${x}px, 0, 0)` : "";
+    el.style.opacity = opacity < 1 ? String(opacity) : "";
+  }
+
+  function finishDismiss(direction: 1 | -1) {
+    const el = dockRef.current;
+    const drag = dragRef.current;
+    if (!el || drag.dismissing) return;
+    drag.dismissing = true;
+    drag.suppressClick = true;
+    const width = Math.max(el.offsetWidth, 280) + 48;
+    el.classList.add("is-dismissing");
+    el.style.transition = "transform 220ms ease, opacity 220ms ease";
+    applySwipe(direction * width, 0);
+    const done = () => hideMiniDock();
+    el.addEventListener("transitionend", done, { once: true });
+    window.setTimeout(done, 280);
+  }
+
+  function onPointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    const drag = dragRef.current;
+    if (drag.dismissing) return;
+    drag.pointerId = event.pointerId;
+    drag.startX = event.clientX;
+    drag.startY = event.clientY;
+    drag.lastX = event.clientX;
+    drag.lastT = event.timeStamp;
+    drag.vx = 0;
+    drag.axis = null;
+    drag.swiping = false;
+    dockRef.current?.classList.add("is-swiping");
+  }
+
+  function onPointerMove(event: PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (drag.pointerId !== event.pointerId || drag.dismissing) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!drag.axis) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      drag.axis = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
+      if (drag.axis === "x") {
+        drag.swiping = true;
+        dockRef.current?.setPointerCapture(event.pointerId);
+      }
+    }
+    if (drag.axis !== "x") return;
+    event.preventDefault();
+    const dt = Math.max(8, event.timeStamp - drag.lastT);
+    drag.vx = (event.clientX - drag.lastX) / dt;
+    drag.lastX = event.clientX;
+    drag.lastT = event.timeStamp;
+    const fade = Math.max(0.35, 1 - Math.abs(dx) / 280);
+    applySwipe(dx, fade);
+  }
+
+  function onPointerUp(event: PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (drag.pointerId !== event.pointerId) return;
+    const dx = event.clientX - drag.startX;
+    const el = dockRef.current;
+    el?.classList.remove("is-swiping");
+    drag.pointerId = -1;
+    if (drag.axis !== "x" || drag.dismissing) {
+      drag.axis = null;
+      return;
+    }
+    const shouldDismiss = Math.abs(dx) >= DISMISS_PX || Math.abs(drag.vx) >= DISMISS_VELOCITY;
+    if (shouldDismiss) {
+      finishDismiss(dx === 0 ? (drag.vx >= 0 ? 1 : -1) : dx > 0 ? 1 : -1);
+      drag.axis = null;
+      return;
+    }
+    if (el) {
+      el.style.transition = "transform 180ms ease, opacity 180ms ease";
+      applySwipe(0, 1);
+      window.setTimeout(() => {
+        if (!drag.dismissing && el) el.style.transition = "";
+      }, 200);
+    }
+    if (drag.swiping) drag.suppressClick = true;
+    drag.axis = null;
+    drag.swiping = false;
+  }
+
+  function onClickCapture(event: MouseEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag.suppressClick) return;
+    event.preventDefault();
+    event.stopPropagation();
+    drag.suppressClick = false;
+  }
 
   if (!current || expanded) return null;
 
@@ -39,8 +153,14 @@ export function StudentMusicMini({ compact = false }: { compact?: boolean }) {
 
   return (
     <div
+      ref={dockRef}
       className={`student-play-dock student-music-mini${playing ? " is-playing" : ""}${compact ? " is-compact" : ""}`}
       data-testid="student-music-mini"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onClickCapture={onClickCapture}
     >
       <button
         className="student-play-dock-cover"
@@ -92,6 +212,7 @@ export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Ho
   const consumeSeek = useMusicPlayerStore((state) => state.consumeSeek);
   const collapse = useMusicPlayerStore((state) => state.collapse);
   const toggleMute = useMusicPlayerStore((state) => state.toggleMute);
+  const miniHidden = useMusicPlayerStore((state) => state.miniHidden);
   const current = queue[index] ?? null;
 
   // Eventos HTML5 só na web. No Expo o áudio é nativo e sincroniza via bridge.
@@ -301,7 +422,7 @@ export function StudentMusicPlayerHost({ compact = false, hideMini = false }: Ho
     return () => window.removeEventListener("keydown", onKey);
   }, [current, expanded, toggle, next, prev, toggleMute, collapse]);
 
-  const showMini = Boolean(current) && !expanded && !hideMini;
+  const showMini = Boolean(current) && !expanded && !hideMini && !miniHidden;
 
   return (
     <>

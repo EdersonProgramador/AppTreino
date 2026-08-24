@@ -164,6 +164,8 @@ type MusicPlayerState = {
   shuffle: boolean;
   repeat: RepeatMode;
   expanded: boolean;
+  /** Mini player dismissed by swipe; audio keeps playing. */
+  miniHidden: boolean;
   queueOpen: boolean;
   likedIds: string[];
   seekRatio: number | null;
@@ -191,6 +193,8 @@ type MusicPlayerState = {
   toggleLike: (id?: string) => void;
   expand: () => void;
   collapse: () => void;
+  hideMiniDock: () => void;
+  showMiniDock: () => void;
   toggleQueueOpen: () => void;
   seek: (ratio: number) => void;
   consumeSeek: () => void;
@@ -216,6 +220,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   shuffle: readShuffle(),
   repeat: readRepeat(),
   expanded: false,
+  miniHidden: false,
   queueOpen: false,
   likedIds: readLiked(),
   seekRatio: null,
@@ -236,6 +241,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       duration: built.queue[built.index]?.durationSec ?? 0,
       shuffle,
       expanded: options?.expand ?? false,
+      miniHidden: false,
       queueOpen: false
     });
     persistSession(get());
@@ -275,6 +281,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       duration: current.durationSec ?? 0,
       shuffle,
       expanded: options?.expand ?? false,
+      miniHidden: false,
       queueOpen: false
     });
 
@@ -478,8 +485,10 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     persist(LIKED_KEY, JSON.stringify(likedIds));
     set({ likedIds });
   },
-  expand: () => set({ expanded: true }),
+  expand: () => set({ expanded: true, miniHidden: false }),
   collapse: () => set({ expanded: false, queueOpen: false }),
+  hideMiniDock: () => set({ miniHidden: true }),
+  showMiniDock: () => set({ miniHidden: false }),
   toggleQueueOpen: () => set({ queueOpen: !get().queueOpen }),
   seek: (ratio) => {
     const next = Math.min(1, Math.max(0, ratio));
@@ -533,6 +542,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       progress: 0,
       duration: 0,
       expanded: false,
+      miniHidden: false,
       queueOpen: false,
       seekRatio: null
     });

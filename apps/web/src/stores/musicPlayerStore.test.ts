@@ -64,4 +64,14 @@ describe("musicPlayerStore keep-playing", () => {
     assert.equal(state.playing, false);
     assert.equal(state.queue.length, 0);
   });
+
+  it("hideMiniDock dismisses the bar without stopping playback", () => {
+    useMusicPlayerStore.setState({ expanded: false, miniHidden: false, playing: true });
+    useMusicPlayerStore.getState().hideMiniDock();
+    const state = useMusicPlayerStore.getState();
+    assert.equal(state.miniHidden, true);
+    assert.equal(state.playing, true);
+    assert.equal(state.queue.length, 1);
+    assert.equal(state.progress, 42);
+  });
 });

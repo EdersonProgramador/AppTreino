@@ -665,6 +665,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const hideStudentChrome =
     studentSection === "player" && (playerSessionActive || Boolean(workoutSession));
   const musicQueueLength = useMusicPlayerStore((state) => state.queue.length);
+  const musicMiniHidden = useMusicPlayerStore((state) => state.miniHidden);
 
   const restoreStudentChrome = () => {
     setPlayerSessionActive(false);
@@ -688,6 +689,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     uiSounds.pageChange();
     if (nextSection !== "play") {
       useMusicPlayerStore.getState().collapse();
+    } else {
+      useMusicPlayerStore.getState().showMiniDock();
     }
     setStudentSection(nextSection);
   };
@@ -2343,7 +2346,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   return (
     <main
       className={`student-app-shell${hideStudentChrome ? " workout-immersive" : ""}${
-        musicQueueLength ? " has-music-dock" : ""
+        musicQueueLength && !musicMiniHidden ? " has-music-dock" : ""
       }${studentSection === "play" ? " is-play" : ""}${studentSection === "activity" ? " is-activity" : ""}${
         studentSection === "feed" || studentSection === "home" ? " is-feed" : ""
       }`}

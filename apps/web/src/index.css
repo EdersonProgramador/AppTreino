@@ -18008,6 +18008,18 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
   animation: student-play-dock-in 280ms ease-out;
   z-index: 55;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.student-music-mini.is-swiping {
+  animation: none;
+  transition: none;
+}
+
+.student-music-mini.is-dismissing {
+  animation: none;
+  pointer-events: none;
 }
 
 .student-play-dock-cover,
