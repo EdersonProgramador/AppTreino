@@ -56,6 +56,7 @@ model User {
   socialReelLikes           SocialReelLike[]
   socialLiveSessions        SocialLiveSession[]
   socialLiveMessages        SocialLiveMessage[]
+  socialLiveSaves           SocialLiveSave[]
   socialConversationsA      SocialConversation[]   @relation("SocialConversationA")
   socialConversationsB      SocialConversation[]   @relation("SocialConversationB")
   socialDirectMessages      SocialDirectMessage[]
@@ -1316,33 +1317,47 @@ model SocialReelLike {
 }
 
 model SocialLiveSession {
-  id         String             @id @default(cuid())
-  hostId     String             @map("host_id")
-  host       User               @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  id         String              @id @default(cuid())
+  hostId     String              @map("host_id")
+  host       User                @relation(fields: [hostId], references: [id], onDelete: Cascade)
   title      String
   mood       String?
-  status     String             @default("live")
-  startedAt  DateTime           @default(now()) @map("started_at")
-  endedAt    DateTime?          @map("ended_at")
-  viewerPeak Int                @default(0) @map("viewer_peak")
+  status     String              @default("live")
+  startedAt  DateTime            @default(now()) @map("started_at")
+  endedAt    DateTime?           @map("ended_at")
+  viewerPeak Int                 @default(0) @map("viewer_peak")
   messages   SocialLiveMessage[]
-  createdAt  DateTime           @default(now()) @map("created_at")
+  saves      SocialLiveSave[]
+  createdAt  DateTime            @default(now()) @map("created_at")
 
   @@index([status, startedAt])
   @@map("social_live_sessions")
 }
 
 model SocialLiveMessage {
-  id        String           @id @default(cuid())
-  liveId    String           @map("live_id")
+  id        String            @id @default(cuid())
+  liveId    String            @map("live_id")
   live      SocialLiveSession @relation(fields: [liveId], references: [id], onDelete: Cascade)
-  userId    String           @map("user_id")
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String            @map("user_id")
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   content   String
-  createdAt DateTime         @default(now()) @map("created_at")
+  createdAt DateTime          @default(now()) @map("created_at")
 
   @@index([liveId, createdAt])
   @@map("social_live_messages")
+}
+
+model SocialLiveSave {
+  id        String            @id @default(cuid())
+  liveId    String            @map("live_id")
+  live      SocialLiveSession @relation(fields: [liveId], references: [id], onDelete: Cascade)
+  userId    String            @map("user_id")
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  @@unique([liveId, userId])
+  @@index([userId, createdAt])
+  @@map("social_live_saves")
 }
 
 model SocialConversation {

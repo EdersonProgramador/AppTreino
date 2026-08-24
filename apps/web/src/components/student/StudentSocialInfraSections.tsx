@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useMemo, useRef, useState, type TouchEvent } from
 import { createPortal } from "react-dom";
 import {
   ArrowLeft,
+  Bookmark,
+  BookmarkCheck,
   Camera,
   Heart,
   MessageCircle,
@@ -39,6 +41,10 @@ type LiveRow = {
   host: SocialAuthor;
   isMine: boolean;
   viewerPeak?: number;
+  status?: string;
+  savedByMe?: boolean;
+  startedAt?: string;
+  endedAt?: string | null;
 };
 
 type ConversationRow = {
@@ -334,17 +340,21 @@ export function StudentReelsSection({
 
 export function StudentLiveSection({ token }: { token: string }) {
   const [lives, setLives] = useState<LiveRow[]>([]);
+  const [savedLives, setSavedLives] = useState<LiveRow[]>([]);
   const [title, setTitle] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Array<{ id: string; content: string; name: string }>>([]);
   const [chat, setChat] = useState("");
   const [isMine, setIsMine] = useState(false);
+  const [savedByMe, setSavedByMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "countdown" | "live" | "joining">("idle");
   const [countdown, setCountdown] = useState(3);
   const [facing, setFacing] = useState<"user" | "environment">("user");
   const [micOn, setMicOn] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
   const [filterId, setFilterId] = useState<CameraFilterId>("none");
   const [zoom, setZoom] = useState(1);
   const [zoomCaps, setZoomCaps] = useState<CameraZoomCaps>({ min: 1, max: 3, step: 0.05, hardware: false });
@@ -368,8 +378,12 @@ export function StudentLiveSection({ token }: { token: string }) {
 
   async function load() {
     try {
-      const data = await apiGet<{ lives: LiveRow[] }>("/student/social/live", token);
-      setLives(data.lives);
+      const [liveData, savedData] = await Promise.all([
+        apiGet<{ lives: LiveRow[] }>("/student/social/live", token),
+        apiGet<{ lives: LiveRow[] }>("/student/social/live/saved", token)
+      ]);
+      setLives(liveData.lives);
+      setSavedLives(savedData.lives);
     } catch (err) {
       setError(readErrorMessage(err, "Não foi possível listar lives."));
     }
@@ -532,6 +546,7 @@ export function StudentLiveSection({ token }: { token: string }) {
       liveIdRef.current = liveId;
       setActiveId(liveId);
       setIsMine(true);
+      setSavedByMe(false);
       setStatus("live");
       setMessages([]);
       const socket = getSocialSocket(token);
@@ -575,13 +590,19 @@ export function StudentLiveSection({ token }: { token: string }) {
     setBusy(true);
     setStatus("joining");
     try {
-      const detail = await apiGet<{ live: { isMine: boolean; messages: Array<{ id: string; content: string; name: string }> } }>(
-        `/student/social/live/${id}`,
-        token
-      );
+      const detail = await apiGet<{
+        live: {
+          isMine: boolean;
+          title?: string;
+          savedByMe?: boolean;
+          messages: Array<{ id: string; content: string; name: string }>;
+        };
+      }>(`/student/social/live/${id}`, token);
       setActiveId(id);
       liveIdRef.current = id;
       setIsMine(detail.live.isMine);
+      setSavedByMe(Boolean(detail.live.savedByMe));
+      if (detail.live.title) setTitle(detail.live.title);
       setMessages(detail.live.messages);
       setStatus("live");
       const socket = getSocialSocket(token);
@@ -639,6 +660,45 @@ export function StudentLiveSection({ token }: { token: string }) {
       setActiveId(null);
       setStatus("idle");
       setError(readErrorMessage(err, "Não foi possível entrar na live."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleSaveLive(liveId: string, currentlySaved: boolean) {
+    setError(null);
+    try {
+      if (currentlySaved) {
+        await apiDelete(`/student/social/live/${liveId}/save`, token);
+        setSavedByMe(false);
+        setLives((current) => current.map((row) => (row.id === liveId ? { ...row, savedByMe: false } : row)));
+        setSavedLives((current) => current.filter((row) => row.id !== liveId));
+      } else {
+        await apiPost(`/student/social/live/${liveId}/save`, {}, token);
+        setSavedByMe(true);
+        setLives((current) => current.map((row) => (row.id === liveId ? { ...row, savedByMe: true } : row)));
+        await load();
+      }
+    } catch (err) {
+      setError(readErrorMessage(err, currentlySaved ? "Não foi possível remover a live salva." : "Não foi possível salvar a live."));
+    }
+  }
+
+  async function saveTitleEdit() {
+    if (!activeId || titleDraft.trim().length < 2) {
+      setError("Título precisa ter pelo menos 2 caracteres.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await apiPut<{ live: { title: string } }>(`/student/social/live/${activeId}`, { title: titleDraft.trim() }, token);
+      setTitle(result.live.title);
+      setEditingTitle(false);
+      setLives((current) => current.map((row) => (row.id === activeId ? { ...row, title: result.live.title } : row)));
+      setSavedLives((current) => current.map((row) => (row.id === activeId ? { ...row, title: result.live.title } : row)));
+    } catch (err) {
+      setError(readErrorMessage(err, "Não foi possível editar o título."));
     } finally {
       setBusy(false);
     }
@@ -708,16 +768,58 @@ export function StudentLiveSection({ token }: { token: string }) {
         <div className="student-live-studio-chrome">
           <header>
             <span className="student-live-badge">{status === "countdown" ? "PREPARANDO" : "AO VIVO"}</span>
-            <strong>{title.trim() || "Live"}</strong>
-            {isMine && status === "live" ? (
-              <button type="button" className="student-live-end" onClick={() => void endLive()}>
-                Encerrar
-              </button>
+            {editingTitle && isMine ? (
+              <div className="student-live-title-edit">
+                <input
+                  value={titleDraft}
+                  onChange={(event) => setTitleDraft(event.target.value)}
+                  maxLength={80}
+                  aria-label="Título da live"
+                />
+                <button type="button" className="student-green-button" disabled={busy} onClick={() => void saveTitleEdit()}>
+                  OK
+                </button>
+                <button type="button" className="student-ghost-chip" onClick={() => setEditingTitle(false)}>
+                  Cancelar
+                </button>
+              </div>
             ) : (
-              <button type="button" className="student-ghost-chip" onClick={leaveLive}>
-                Sair
-              </button>
+              <strong>{title.trim() || "Live"}</strong>
             )}
+            <div className="student-live-header-actions">
+              {status === "live" && activeId ? (
+                <button
+                  type="button"
+                  className="student-live-icon-btn"
+                  onClick={() => void toggleSaveLive(activeId, savedByMe)}
+                  aria-label={savedByMe ? "Remover live salva" : "Salvar live"}
+                >
+                  {savedByMe ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
+                </button>
+              ) : null}
+              {isMine && status === "live" && !editingTitle ? (
+                <button
+                  type="button"
+                  className="student-live-icon-btn"
+                  onClick={() => {
+                    setTitleDraft(title);
+                    setEditingTitle(true);
+                  }}
+                  aria-label="Editar título"
+                >
+                  <Pencil size={18} />
+                </button>
+              ) : null}
+              {isMine && status === "live" ? (
+                <button type="button" className="student-live-end" onClick={() => void endLive()}>
+                  Encerrar
+                </button>
+              ) : (
+                <button type="button" className="student-ghost-chip" onClick={leaveLive}>
+                  Sair
+                </button>
+              )}
+            </div>
           </header>
 
           <SocialErrorBanner message={error} onDismiss={() => setError(null)} />
@@ -802,15 +904,59 @@ export function StudentLiveSection({ token }: { token: string }) {
       </form>
       <div className="student-live-list">
         {lives.map((live) => (
-          <button key={live.id} type="button" className="student-live-row" disabled={busy} onClick={() => void joinLive(live.id)}>
-            <div>
-              <strong>{live.title}</strong>
-              <small>{live.host.name}</small>
-            </div>
-            <span className="student-live-badge is-compact">LIVE</span>
-          </button>
+          <div key={live.id} className="student-live-row-wrap">
+            <button type="button" className="student-live-row" disabled={busy} onClick={() => void joinLive(live.id)}>
+              <div>
+                <strong>{live.title}</strong>
+                <small>{live.host.name}</small>
+              </div>
+              <span className="student-live-badge is-compact">LIVE</span>
+            </button>
+            <button
+              type="button"
+              className="student-live-save-btn"
+              aria-label={live.savedByMe ? "Remover live salva" : "Salvar live"}
+              onClick={() => void toggleSaveLive(live.id, Boolean(live.savedByMe))}
+            >
+              {live.savedByMe ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+            </button>
+          </div>
         ))}
         {lives.length === 0 && <p className="student-activity-hint">Nenhuma live no ar agora.</p>}
+      </div>
+
+      <h3 className="student-live-saved-heading">Lives salvas</h3>
+      <div className="student-live-list">
+        {savedLives.map((live) => (
+          <div key={`saved-${live.id}`} className="student-live-row-wrap">
+            <button
+              type="button"
+              className="student-live-row"
+              disabled={busy || live.status !== "live"}
+              onClick={() => {
+                if (live.status === "live") void joinLive(live.id);
+              }}
+            >
+              <div>
+                <strong>{live.title}</strong>
+                <small>
+                  {live.host.name}
+                  {live.status === "live" ? " · no ar" : " · encerrada"}
+                </small>
+              </div>
+              {live.status === "live" ? <span className="student-live-badge is-compact">LIVE</span> : <span className="student-live-ended-chip">Salva</span>}
+            </button>
+            <button
+              type="button"
+              className="student-live-save-btn is-on"
+              aria-label="Remover live salva"
+              onClick={() => void toggleSaveLive(live.id, true)}
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        ))}
+        {savedLives.length === 0 && <p className="student-activity-hint">Nenhuma live salva ainda.</p>}
       </div>
     </section>
   );

@@ -214,7 +214,10 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
         ...(blocked.size ? { hostId: { notIn: [...blocked] } } : {})
       },
       orderBy: { startedAt: "desc" },
-      include: { host: { select: { id: true, name: true, profile: { select: { avatarUrl: true, isPrivate: true } } } } }
+      include: {
+        host: { select: { id: true, name: true, profile: { select: { avatarUrl: true, isPrivate: true } } } },
+        saves: { where: { userId: user.id }, select: { id: true } }
+      }
     });
     return {
       lives: rows
@@ -231,8 +234,45 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
           startedAt: row.startedAt.toISOString(),
           viewerPeak: row.viewerPeak,
           host: authorCard(row.host),
-          isMine: row.hostId === user.id
+          isMine: row.hostId === user.id,
+          savedByMe: row.saves.length > 0
         }))
+    };
+  });
+
+  app.get("/student/social/live/saved", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const blocked = await blockedIds(user.id);
+    const rows = await prisma.socialLiveSave.findMany({
+      where: {
+        userId: user.id,
+        ...(blocked.size ? { live: { hostId: { notIn: [...blocked] } } } : {})
+      },
+      orderBy: { createdAt: "desc" },
+      take: 40,
+      include: {
+        live: {
+          include: {
+            host: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } }
+          }
+        }
+      }
+    });
+    return {
+      lives: rows.map((row) => ({
+        id: row.live.id,
+        title: row.live.title,
+        mood: row.live.mood,
+        status: row.live.status,
+        startedAt: row.live.startedAt.toISOString(),
+        endedAt: row.live.endedAt?.toISOString() ?? null,
+        viewerPeak: row.live.viewerPeak,
+        host: authorCard(row.live.host),
+        isMine: row.live.hostId === user.id,
+        savedByMe: true,
+        savedAt: row.createdAt.toISOString()
+      }))
     };
   });
 
@@ -272,6 +312,7 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
       where: { id },
       include: {
         host: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } },
+        saves: { where: { userId: user.id }, select: { id: true } },
         messages: {
           orderBy: { createdAt: "desc" },
           take: 40,
@@ -289,6 +330,7 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
         startedAt: row.startedAt.toISOString(),
         host: authorCard(row.host),
         isMine: row.hostId === user.id,
+        savedByMe: row.saves.length > 0,
         messages: row.messages.reverse().map((item) => ({
           id: item.id,
           content: item.content,
@@ -298,6 +340,56 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
         }))
       }
     };
+  });
+
+  app.put("/student/social/live/:id", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const body = z
+      .object({
+        title: z.string().trim().min(2).max(80)
+      })
+      .parse(request.body);
+    const live = await prisma.socialLiveSession.findUnique({ where: { id } });
+    if (!live) throw httpError(404, "Live não encontrada.");
+    if (live.hostId !== user.id) throw httpError(403, "Só o anfitrião pode editar o título.");
+    const updated = await prisma.socialLiveSession.update({
+      where: { id },
+      data: { title: body.title }
+    });
+    return {
+      live: {
+        id: updated.id,
+        title: updated.title,
+        mood: updated.mood,
+        status: updated.status,
+        startedAt: updated.startedAt.toISOString(),
+        isMine: true
+      }
+    };
+  });
+
+  app.post("/student/social/live/:id/save", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const live = await prisma.socialLiveSession.findUnique({ where: { id }, select: { id: true } });
+    if (!live) throw httpError(404, "Live não encontrada.");
+    await prisma.socialLiveSave.upsert({
+      where: { liveId_userId: { liveId: id, userId: user.id } },
+      create: { liveId: id, userId: user.id },
+      update: {}
+    });
+    return { saved: true };
+  });
+
+  app.delete("/student/social/live/:id/save", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    await prisma.socialLiveSave.deleteMany({ where: { liveId: id, userId: user.id } });
+    return { saved: false };
   });
 
   app.post("/student/social/live/:id/end", async (request) => {
