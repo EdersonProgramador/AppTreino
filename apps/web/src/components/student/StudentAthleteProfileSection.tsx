@@ -1,5 +1,6 @@
 import { ChevronLeft, MessageCircle, Pencil, Send, Settings, Share2, ThumbsUp, UserRound, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { brand } from "../../lib/brand";
 import { mediaUrl } from "../../lib/urls";
@@ -221,8 +222,15 @@ export function StudentAthleteProfileSection({
         setViewerIndex(null);
       }
     }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.classList.add("athlete-post-viewer-open");
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.documentElement.classList.remove("athlete-post-viewer-open");
+      window.removeEventListener("keydown", onKey);
+    };
   }, [viewerIndex]);
 
   useEffect(() => {
@@ -240,6 +248,24 @@ export function StudentAthleteProfileSection({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [viewerIndex, posts]);
+
+  useEffect(() => {
+    if (viewerIndex == null) return;
+    function syncViewportHeight() {
+      const height = window.visualViewport?.height ?? window.innerHeight;
+      document.documentElement.style.setProperty("--athlete-viewer-height", `${Math.round(height)}px`);
+    }
+    syncViewportHeight();
+    window.visualViewport?.addEventListener("resize", syncViewportHeight);
+    window.visualViewport?.addEventListener("scroll", syncViewportHeight);
+    window.addEventListener("resize", syncViewportHeight);
+    return () => {
+      window.visualViewport?.removeEventListener("resize", syncViewportHeight);
+      window.visualViewport?.removeEventListener("scroll", syncViewportHeight);
+      window.removeEventListener("resize", syncViewportHeight);
+      document.documentElement.style.removeProperty("--athlete-viewer-height");
+    };
+  }, [viewerIndex]);
 
   function onViewerScroll() {
     if (viewerJumpRef.current != null) return;
@@ -482,99 +508,98 @@ export function StudentAthleteProfileSection({
         )}
       </div>
 
-      {viewerIndex != null && posts.length > 0 && (
-        <div className="student-athlete-post-viewer" role="dialog" aria-modal="true" aria-label="Publicações">
-          <header className="student-athlete-post-viewer-bar">
-            <button type="button" className="student-athlete-post-viewer-back" aria-label="Voltar ao perfil" onClick={closePostViewer}>
-              <ChevronLeft size={24} />
-            </button>
-            <div className="student-athlete-post-viewer-bar-title">
-              <strong>Publicações</strong>
-              <span>
-                {profile?.name ?? brand.athlete}
-                {posts.length > 1 ? ` · ${viewerIndex + 1}/${posts.length}` : ""}
-              </span>
-            </div>
-            <button type="button" className="student-athlete-post-viewer-close" aria-label="Fechar" onClick={closePostViewer}>
-              <X size={18} />
-            </button>
-          </header>
+      {viewerIndex != null &&
+        posts.length > 0 &&
+        createPortal(
+          <div className="student-athlete-post-viewer" role="dialog" aria-modal="true" aria-label="Publicações">
+            <header className="student-athlete-post-viewer-bar">
+              <button type="button" className="student-athlete-post-viewer-back" aria-label="Voltar ao perfil" onClick={closePostViewer}>
+                <ChevronLeft size={24} />
+              </button>
+              <div className="student-athlete-post-viewer-bar-title">
+                <strong>Publicações</strong>
+                <span>
+                  {profile?.name ?? brand.athlete}
+                  {posts.length > 1 ? ` · ${viewerIndex + 1}/${posts.length}` : ""}
+                </span>
+              </div>
+              <button type="button" className="student-athlete-post-viewer-close" aria-label="Fechar" onClick={closePostViewer}>
+                <X size={18} />
+              </button>
+            </header>
 
-          <div
-            className="student-athlete-post-viewer-scroll"
-            ref={viewerScrollRef}
-            onScroll={onViewerScroll}
-          >
-            {posts.map((post) => (
-              <article
-                key={post.id}
-                className="student-feed-card student-athlete-post-viewer-card"
-                ref={(node) => {
-                  if (node) viewerPostRefs.current.set(post.id, node);
-                  else viewerPostRefs.current.delete(post.id);
-                }}
-              >
-                <header>
-                  {post.author.avatarUrl ? (
-                    <img src={mediaUrl(post.author.avatarUrl)} alt="" />
-                  ) : (
-                    <span>{post.author.name.slice(0, 1)}</span>
-                  )}
-                  <div>
-                    <strong>{post.author.name}</strong>
-                    <small>
-                      {new Date(post.createdAt).toLocaleString("pt-BR", {
-                        dateStyle: "short",
-                        timeStyle: "short"
-                      })}
-                    </small>
+            <div className="student-athlete-post-viewer-scroll" ref={viewerScrollRef} onScroll={onViewerScroll}>
+              {posts.map((post) => (
+                <article
+                  key={post.id}
+                  className="student-feed-card student-athlete-post-viewer-card"
+                  ref={(node) => {
+                    if (node) viewerPostRefs.current.set(post.id, node);
+                    else viewerPostRefs.current.delete(post.id);
+                  }}
+                >
+                  <header>
+                    {post.author.avatarUrl ? (
+                      <img src={mediaUrl(post.author.avatarUrl)} alt="" />
+                    ) : (
+                      <span>{post.author.name.slice(0, 1)}</span>
+                    )}
+                    <div>
+                      <strong>{post.author.name}</strong>
+                      <small>
+                        {new Date(post.createdAt).toLocaleString("pt-BR", {
+                          dateStyle: "short",
+                          timeStyle: "short"
+                        })}
+                      </small>
+                    </div>
+                  </header>
+                  {post.body ? <p>{post.body}</p> : null}
+                  <ViewerCarousel key={post.id} items={mediaOf(post)} />
+                  <footer>
+                    <button
+                      type="button"
+                      className={post.likedByMe ? "is-on" : ""}
+                      onClick={() => void toggleLike(post.id)}
+                      aria-label="Curtir"
+                    >
+                      <ThumbsUp size={18} fill={post.likedByMe ? "currentColor" : "none"} /> {post.likesCount}
+                    </button>
+                    <button type="button" aria-label="Comentar">
+                      <MessageCircle size={18} /> {post.commentsCount ?? post.comments.length}
+                    </button>
+                    <button type="button" onClick={() => void sharePost(post)} aria-label="Compartilhar">
+                      <Share2 size={18} />
+                    </button>
+                  </footer>
+                  <div className="student-athlete-post-viewer-comments">
+                    {post.comments.map((comment) => (
+                      <p className="student-feed-comment" key={comment.id}>
+                        <strong>{comment.author.name.split(" ")[0]}</strong> {comment.body}
+                      </p>
+                    ))}
                   </div>
-                </header>
-                {post.body ? <p>{post.body}</p> : null}
-                <ViewerCarousel key={post.id} items={mediaOf(post)} />
-                <footer>
-                  <button
-                    type="button"
-                    className={post.likedByMe ? "is-on" : ""}
-                    onClick={() => void toggleLike(post.id)}
-                    aria-label="Curtir"
-                  >
-                    <ThumbsUp size={18} fill={post.likedByMe ? "currentColor" : "none"} /> {post.likesCount}
-                  </button>
-                  <button type="button" aria-label="Comentar">
-                    <MessageCircle size={18} /> {post.commentsCount ?? post.comments.length}
-                  </button>
-                  <button type="button" onClick={() => void sharePost(post)} aria-label="Compartilhar">
-                    <Share2 size={18} />
-                  </button>
-                </footer>
-                <div className="student-athlete-post-viewer-comments">
-                  {post.comments.map((comment) => (
-                    <p className="student-feed-comment" key={comment.id}>
-                      <strong>{comment.author.name.split(" ")[0]}</strong> {comment.body}
-                    </p>
-                  ))}
-                </div>
-                <div className="student-feed-comment-box">
-                  <input
-                    value={commentDraft[post.id] ?? ""}
-                    onChange={(event) =>
-                      setCommentDraft((current) => ({ ...current, [post.id]: event.target.value }))
-                    }
-                    placeholder="Comentar"
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void sendComment(post.id);
-                    }}
-                  />
-                  <button type="button" onClick={() => void sendComment(post.id)} aria-label="Enviar comentário">
-                    <Send size={16} />
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      )}
+                  <div className="student-feed-comment-box">
+                    <input
+                      value={commentDraft[post.id] ?? ""}
+                      onChange={(event) =>
+                        setCommentDraft((current) => ({ ...current, [post.id]: event.target.value }))
+                      }
+                      placeholder="Comentar"
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") void sendComment(post.id);
+                      }}
+                    />
+                    <button type="button" onClick={() => void sendComment(post.id)} aria-label="Enviar comentário">
+                      <Send size={16} />
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>,
+          document.body
+        )}
 
       {editOpen && (
         <div

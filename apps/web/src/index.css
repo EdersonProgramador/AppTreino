@@ -14638,11 +14638,14 @@ html.light .student-payment-card {
 .student-athlete-post-viewer {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: 120;
+  width: 100%;
+  height: var(--athlete-viewer-height, 100svh);
+  max-height: var(--athlete-viewer-height, 100svh);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  background: #000;
-  color: #f5f5f5;
+  background: var(--app-bg);
+  color: var(--app-text);
   padding:
     max(0px, env(safe-area-inset-top))
     0
@@ -14657,8 +14660,8 @@ html.light .student-payment-card {
   gap: 4px;
   min-height: 48px;
   padding: 4px 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  background: #000;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-bg);
 }
 
 .student-athlete-post-viewer-bar-title {
@@ -14670,12 +14673,12 @@ html.light .student-payment-card {
 
 .student-athlete-post-viewer-bar-title strong {
   font-size: 0.95rem;
-  color: #fff;
+  color: var(--app-text);
 }
 
 .student-athlete-post-viewer-bar-title span {
   font-size: 0.72rem;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--app-text-muted);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -14691,7 +14694,7 @@ html.light .student-payment-card {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #fff;
+  color: var(--app-text);
   cursor: pointer;
 }
 
@@ -14707,10 +14710,10 @@ html.light .student-payment-card {
   padding: 0;
   display: flex;
   flex-direction: column;
-  background: #000;
+  background: var(--app-bg);
 }
 
-/* Instagram: 1 post por tela — mídia grande (cover), ações fixas abaixo */
+/* 1 post por tela — mídia grande; ações reservadas abaixo; cores do tema */
 .student-athlete-post-viewer-card.student-feed-card,
 .student-athlete-post-viewer-card {
   flex: 0 0 100%;
@@ -14723,8 +14726,8 @@ html.light .student-payment-card {
   margin: 0;
   border: 0;
   border-radius: 0;
-  background: #000;
-  color: #f5f5f5;
+  background: var(--app-bg);
+  color: var(--app-text);
   scroll-snap-align: start;
   scroll-snap-stop: always;
   box-shadow: none;
@@ -14738,18 +14741,18 @@ html.light .student-payment-card {
   position: relative;
   z-index: 3;
   flex: 0 0 auto;
-  background: #000;
+  background: var(--app-bg);
   padding: 10px 12px;
   border: 0;
 }
 
-.student-athlete-post-viewer-card > header strong,
-.student-athlete-post-viewer-card > header small {
-  color: #fff;
+.student-athlete-post-viewer-card > header strong {
+  color: var(--app-text);
 }
 
 .student-athlete-post-viewer-card > header small {
-  opacity: 0.65;
+  color: var(--app-text-muted);
+  opacity: 1;
 }
 
 .student-athlete-post-viewer-card > p {
@@ -14759,7 +14762,7 @@ html.light .student-payment-card {
   overflow: auto;
   margin: 0;
   padding: 6px 12px 0;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--app-text);
   font-size: 0.9rem;
 }
 
@@ -14769,7 +14772,7 @@ html.light .student-payment-card {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
-  background: #000;
+  background: var(--app-bg-soft);
 }
 
 .student-athlete-post-viewer-card .student-feed-carousel-frame {
@@ -14782,7 +14785,7 @@ html.light .student-payment-card {
   aspect-ratio: auto;
   margin: 0;
   border-radius: 0;
-  background: #000;
+  background: var(--app-bg-soft);
 }
 
 .student-athlete-post-viewer-card .student-feed-carousel-frame::before {
@@ -14802,7 +14805,7 @@ html.light .student-payment-card {
   max-height: none;
   object-fit: cover;
   object-position: center center;
-  background: #000;
+  background: var(--app-bg-soft);
 }
 
 .student-athlete-post-viewer-card > footer {
@@ -14810,7 +14813,7 @@ html.light .student-payment-card {
   position: relative;
   z-index: 3;
   flex: 0 0 auto;
-  background: #000;
+  background: var(--app-bg);
   padding: 12px 12px 8px;
   margin: 0;
   border: 0;
@@ -14818,11 +14821,11 @@ html.light .student-payment-card {
 }
 
 .student-athlete-post-viewer-card > footer button {
-  color: #fff;
+  color: var(--app-text);
 }
 
 .student-athlete-post-viewer-card > footer button.is-on {
-  color: #3897f0;
+  color: var(--brand-gold, #c4783a);
 }
 
 .student-athlete-post-viewer-comments {
@@ -14833,31 +14836,37 @@ html.light .student-payment-card {
   max-height: 56px;
   overflow: auto;
   flex: 0 0 auto;
-  background: #000;
-  color: rgba(255, 255, 255, 0.85);
+  background: var(--app-bg);
+  color: var(--app-text-muted);
 }
 
 .student-athlete-post-viewer-card .student-feed-comment-box {
   order: 6;
   flex: 0 0 auto;
-  background: #000;
+  background: var(--app-bg);
   margin: 0;
   padding: 8px 12px 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--app-border);
 }
 
 .student-athlete-post-viewer-card .student-feed-comment-box input {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.14);
+  background: var(--app-panel);
+  color: var(--app-text);
+  border-color: var(--app-border);
 }
 
 .student-athlete-post-viewer-card .student-feed-comment-box input::placeholder {
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--app-text-faint);
 }
 
 .student-athlete-post-viewer-card .student-feed-comment-box button {
-  color: #fff;
+  color: var(--app-text);
+}
+
+html.athlete-post-viewer-open,
+html.athlete-post-viewer-open body {
+  overflow: hidden !important;
+  overscroll-behavior: none;
 }
 
 .student-athlete-edit-backdrop {
