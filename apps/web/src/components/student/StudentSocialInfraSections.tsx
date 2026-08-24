@@ -14,6 +14,7 @@ import {
   Send,
   SwitchCamera,
   Trash2,
+  UserRound,
   Video,
   X
 } from "lucide-react";
@@ -91,10 +92,12 @@ const ICE_SERVERS: RTCIceServer[] = [
 
 export function StudentReelsSection({
   token,
-  onOpenDm
+  onOpenDm,
+  onOpenPeerProfile
 }: {
   token: string;
   onOpenDm?: (userId: string) => void;
+  onOpenPeerProfile?: (userId: string) => void;
 }) {
   const [reels, setReels] = useState<ReelRow[]>([]);
   const [busy, setBusy] = useState(false);
@@ -232,7 +235,16 @@ export function StudentReelsSection({
           <article key={reel.id} className="student-reel-card">
             <video src={mediaUrl(reel.videoUrl)} controls playsInline loop preload="metadata" />
             <div className="student-reel-meta">
-              <strong>{reel.author.name}</strong>
+              <button
+                type="button"
+                className="student-reel-author"
+                onClick={() => {
+                  if (reel.isMine) return;
+                  onOpenPeerProfile?.(reel.author.id);
+                }}
+              >
+                <strong>{reel.author.name}</strong>
+              </button>
               <p>{reel.caption}</p>
               <div className="student-reel-actions">
                 <button type="button" className={reel.likedByMe ? "is-on" : ""} onClick={() => void like(reel.id)}>
@@ -254,11 +266,20 @@ export function StudentReelsSection({
                       <Trash2 size={18} />
                     </button>
                   </>
-                ) : onOpenDm ? (
-                  <button type="button" onClick={() => onOpenDm(reel.author.id)} aria-label="Mensagem">
-                    <MessageCircle size={18} />
-                  </button>
-                ) : null}
+                ) : (
+                  <>
+                    {onOpenPeerProfile ? (
+                      <button type="button" onClick={() => onOpenPeerProfile(reel.author.id)} aria-label="Ver perfil">
+                        <UserRound size={18} />
+                      </button>
+                    ) : null}
+                    {onOpenDm ? (
+                      <button type="button" onClick={() => onOpenDm(reel.author.id)} aria-label="Mensagem">
+                        <MessageCircle size={18} />
+                      </button>
+                    ) : null}
+                  </>
+                )}
               </div>
             </div>
           </article>
@@ -338,7 +359,15 @@ export function StudentReelsSection({
   );
 }
 
-export function StudentLiveSection({ token }: { token: string }) {
+export function StudentLiveSection({
+  token,
+  initialLiveId,
+  onLiveConsumed
+}: {
+  token: string;
+  initialLiveId?: string | null;
+  onLiveConsumed?: () => void;
+}) {
   const [lives, setLives] = useState<LiveRow[]>([]);
   const [savedLives, setSavedLives] = useState<LiveRow[]>([]);
   const [title, setTitle] = useState("");
@@ -400,6 +429,11 @@ export function StudentLiveSection({ token }: { token: string }) {
       socket.off("live:ended");
     };
   }, [token]);
+
+  useEffect(() => {
+    if (!initialLiveId) return;
+    void joinLive(initialLiveId).finally(() => onLiveConsumed?.());
+  }, [initialLiveId]);
 
   useEffect(() => {
     if (status !== "countdown" && status !== "live") return;
@@ -965,11 +999,13 @@ export function StudentLiveSection({ token }: { token: string }) {
 export function StudentMessagesSection({
   token,
   initialPeerId,
-  onPeerConsumed
+  onPeerConsumed,
+  onOpenPeerProfile
 }: {
   token: string;
   initialPeerId?: string | null;
   onPeerConsumed?: () => void;
+  onOpenPeerProfile?: (userId: string) => void;
 }) {
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [people, setPeople] = useState<SocialAuthor[]>([]);
@@ -1070,8 +1106,15 @@ export function StudentMessagesSection({
             <ArrowLeft size={16} /> Voltar
           </button>
           <div className="student-dm-peer">
-            {peer.avatarUrl ? <img src={mediaUrl(peer.avatarUrl)} alt="" /> : <span>{peer.name.slice(0, 1)}</span>}
-            <strong>{peer.name}</strong>
+            <button
+              type="button"
+              className="student-dm-peer-open"
+              onClick={() => onOpenPeerProfile?.(peer.id)}
+              aria-label={`Ver perfil de ${peer.name}`}
+            >
+              {peer.avatarUrl ? <img src={mediaUrl(peer.avatarUrl)} alt="" /> : <span>{peer.name.slice(0, 1)}</span>}
+              <strong>{peer.name}</strong>
+            </button>
           </div>
         </header>
         <SocialErrorBanner message={error} onDismiss={() => setError(null)} />

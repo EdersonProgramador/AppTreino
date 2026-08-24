@@ -824,6 +824,91 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     };
   });
 
+  app.get("/student/social/users/:id", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const blocked = await prisma.socialBlock.findFirst({
+      where: {
+        OR: [
+          { blockerId: user.id, blockedId: id },
+          { blockerId: id, blockedId: user.id }
+        ]
+      },
+      select: { id: true }
+    });
+    if (blocked) throw httpError(404, "Perfil indisponível.");
+
+    const target = await prisma.user.findFirst({
+      where: { id, role: "USER", deletedAt: null, status: "ACTIVE" },
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        profile: {
+          select: {
+            avatarUrl: true,
+            isPrivate: true,
+            objective: true,
+            level: true,
+            city: true,
+            state: true,
+            bio: true,
+            coverColor: true,
+            coverUrl: true
+          }
+        }
+      }
+    });
+    if (!target) throw httpError(404, "Atleta não encontrado.");
+
+    const [followersCount, followingCount, postsCount, followRow, requestRow, live] = await Promise.all([
+      prisma.socialFollow.count({ where: { followingId: id } }),
+      prisma.socialFollow.count({ where: { followerId: id } }),
+      prisma.socialPost.count({ where: { authorId: id, hidden: false } }),
+      prisma.socialFollow.findUnique({
+        where: { followerId_followingId: { followerId: user.id, followingId: id } }
+      }),
+      prisma.socialFollowRequest.findUnique({
+        where: { fromId_toId: { fromId: user.id, toId: id } }
+      }),
+      prisma.socialLiveSession.findFirst({
+        where: { hostId: id, status: "live" },
+        select: { id: true, title: true, startedAt: true }
+      })
+    ]);
+
+    const isMe = id === user.id;
+    const following = Boolean(followRow);
+    const isPrivate = Boolean(target.profile?.isPrivate);
+    const canViewPosts = isMe || !isPrivate || following;
+
+    return {
+      id: target.id,
+      name: target.name,
+      avatarUrl: target.profile?.avatarUrl ?? null,
+      bio: target.profile?.bio ?? null,
+      coverColor: target.profile?.coverColor ?? null,
+      coverUrl: target.profile?.coverUrl ?? null,
+      objective: canViewPosts ? target.profile?.objective ?? null : null,
+      level: canViewPosts ? target.profile?.level ?? null : null,
+      city: canViewPosts ? target.profile?.city ?? null : null,
+      state: canViewPosts ? target.profile?.state ?? null : null,
+      isPrivate,
+      followersCount,
+      followingCount,
+      postsCount: canViewPosts ? postsCount : 0,
+      following,
+      requested: Boolean(requestRow),
+      isMe,
+      canViewPosts,
+      memberSince: target.createdAt.toISOString(),
+      live: live
+        ? { id: live.id, title: live.title, startedAt: live.startedAt.toISOString() }
+        : null
+    };
+  });
+
   app.get("/student/social/people", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);

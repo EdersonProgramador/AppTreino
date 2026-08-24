@@ -32,6 +32,7 @@ export type StudentPanelSection =
   | "history"
   | "profile"
   | "profile-settings"
+  | "peer-profile"
   | "settings"
   | "membership"
   | "purchases"

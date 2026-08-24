@@ -36,7 +36,7 @@ import { StudentCameraCapture } from "./StudentCameraCapture";
 
 type FeedMode = "for-you" | "following";
 type MediaItem = { url: string; type: "IMAGE" | "VIDEO" };
-type SocialNav = "reels" | "live" | "messages" | "chat" | "requests";
+type SocialNav = "reels" | "live" | "messages" | "chat" | "requests" | "profile";
 type CreatePanel = "post" | "story" | "note" | null;
 type CameraMode = "photo" | "video" | null;
 
@@ -185,19 +185,31 @@ function MediaCarousel({ items }: { items: MediaItem[] }) {
   );
 }
 
+type ActiveLiveRail = {
+  id: string;
+  title: string;
+  host: { id: string; name: string; avatarUrl?: string | null };
+  isMine: boolean;
+};
+
 export function StudentFeedSection({
   token,
   onNavigate,
-  onOpenDm
+  onOpenDm,
+  onOpenPeerProfile,
+  onOpenLive
 }: {
   token: string;
   onNavigate?: (section: SocialNav) => void;
   onOpenDm?: (userId: string) => void;
+  onOpenPeerProfile?: (userId: string) => void;
+  onOpenLive?: (liveId: string) => void;
 }) {
   const cached = useMemo(() => readFeedCache(), []);
   const [posts, setPosts] = useState<SocialPostRow[]>(() => cached?.posts ?? []);
   const [people, setPeople] = useState<SocialAuthor[]>(() => cached?.people ?? []);
   const [rails, setRails] = useState<SocialStoryRail[]>(() => cached?.rails ?? []);
+  const [activeLives, setActiveLives] = useState<ActiveLiveRail[]>([]);
   const [body, setBody] = useState("");
   const [noteBody, setNoteBody] = useState("");
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
@@ -230,6 +242,15 @@ export function StudentFeedSection({
     setRails(data.rails);
   }
 
+  async function loadActiveLives() {
+    try {
+      const data = await apiGet<{ lives: ActiveLiveRail[] }>("/student/social/live", token);
+      setActiveLives(data.lives);
+    } catch {
+      setActiveLives([]);
+    }
+  }
+
   async function loadPeople(search = query) {
     const peopleRes = await apiGet<{ people: SocialAuthor[] }>(
       `/student/social/people${search.trim() ? `?q=${encodeURIComponent(search.trim())}` : ""}`,
@@ -260,6 +281,7 @@ export function StudentFeedSection({
         if (cancelled) return;
         setLoadingFeed(false);
         void loadStories().catch(() => undefined);
+        void loadActiveLives().catch(() => undefined);
         void loadPeople().catch(() => undefined);
       } catch (err) {
         if (cancelled) return;
@@ -278,6 +300,11 @@ export function StudentFeedSection({
   }, [posts, rails, people, followingCount, hasMore]);
 
   const suggestions = useMemo(() => people.filter((person) => !person.following).slice(0, 8), [people]);
+  const liveByHostId = useMemo(() => new Map(activeLives.map((live) => [live.host.id, live])), [activeLives]);
+  const storyRailsWithoutLiveHosts = useMemo(
+    () => rails.filter((rail) => rail.isMine || !liveByHostId.has(rail.userId)),
+    [rails, liveByHostId]
+  );
 
   async function uploadFile(file: File) {
     const form = new FormData();
@@ -594,12 +621,39 @@ export function StudentFeedSection({
             <span>+</span>
             <small>Seu momento</small>
           </button>
-          {rails.map((rail, index) => (
-            <button key={rail.userId} type="button" className={rail.unseen || rail.isMine ? "is-hot" : ""} onClick={() => void openStory(index)}>
-              {rail.image_url ? <img src={mediaUrl(rail.image_url)} alt="" /> : <span>{rail.username.slice(0, 1)}</span>}
-              <small>{rail.isMine ? "Você" : rail.username.split(" ")[0]}</small>
+          {activeLives.map((live) => (
+            <button
+              key={`live-${live.id}`}
+              type="button"
+              className="is-live"
+              onClick={() => {
+                if (onOpenLive) onOpenLive(live.id);
+                else onNavigate?.("live");
+              }}
+            >
+              {live.host.avatarUrl ? (
+                <img src={mediaUrl(live.host.avatarUrl)} alt="" />
+              ) : (
+                <span>{live.host.name.slice(0, 1)}</span>
+              )}
+              <em className="student-live-rail-badge">AO VIVO</em>
+              <small>{live.isMine ? "Você" : live.host.name.split(" ")[0]}</small>
             </button>
           ))}
+          {storyRailsWithoutLiveHosts.map((rail) => {
+            const storyIndex = rails.findIndex((row) => row.userId === rail.userId);
+            return (
+              <button
+                key={rail.userId}
+                type="button"
+                className={rail.unseen || rail.isMine ? "is-hot" : ""}
+                onClick={() => void openStory(storyIndex >= 0 ? storyIndex : 0)}
+              >
+                {rail.image_url ? <img src={mediaUrl(rail.image_url)} alt="" /> : <span>{rail.username.slice(0, 1)}</span>}
+                <small>{rail.isMine ? "Você" : rail.username.split(" ")[0]}</small>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -685,18 +739,32 @@ export function StudentFeedSection({
         <div className="student-feed-people">
           {suggestions.map((person) => (
             <div key={person.id} className="student-feed-people-card">
-              <button type="button" onClick={() => void toggleFollow(person.id)}>
-                {person.avatarUrl ? <img src={mediaUrl(person.avatarUrl)} alt="" /> : <span>{person.name.slice(0, 1)}</span>}
+              <button
+                type="button"
+                onClick={() => {
+                  if (onOpenPeerProfile) onOpenPeerProfile(person.id);
+                  else void toggleFollow(person.id);
+                }}
+              >
+                <span className={liveByHostId.has(person.id) ? "student-feed-avatar-live" : undefined}>
+                  {person.avatarUrl ? <img src={mediaUrl(person.avatarUrl)} alt="" /> : <span>{person.name.slice(0, 1)}</span>}
+                </span>
+                {liveByHostId.has(person.id) ? <em className="student-live-rail-badge">AO VIVO</em> : null}
                 <strong>{person.name.split(" ")[0]}</strong>
                 <small>
                   <UserPlus size={12} /> {brand.followAthletes}
                 </small>
               </button>
-              {onOpenDm ? (
-                <button type="button" className="student-ghost-chip" onClick={() => onOpenDm(person.id)}>
-                  <MessageCircle size={14} /> Mensagem
+              <div className="student-feed-people-actions">
+                <button type="button" className="student-ghost-chip" onClick={() => void toggleFollow(person.id)}>
+                  Seguir
                 </button>
-              ) : null}
+                {onOpenDm ? (
+                  <button type="button" className="student-ghost-chip" onClick={() => onOpenDm(person.id)}>
+                    <MessageCircle size={14} /> Mensagem
+                  </button>
+                ) : null}
+              </div>
             </div>
           ))}
         </div>
@@ -726,15 +794,34 @@ export function StudentFeedSection({
           return (
             <article className="student-feed-card" key={post.id}>
               <header>
-                {post.author.avatarUrl ? (
-                  <img src={mediaUrl(post.author.avatarUrl)} alt="" />
-                ) : (
-                  <span>{post.author.name.slice(0, 1)}</span>
-                )}
-                <div>
-                  <strong>{post.author.name}</strong>
-                  <small>{new Date(post.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</small>
-                </div>
+                <button
+                  type="button"
+                  className={`student-feed-author${liveByHostId.has(post.author.id) ? " is-live" : ""}`}
+                  onClick={() => {
+                    const live = liveByHostId.get(post.author.id);
+                    if (live && onOpenLive) {
+                      onOpenLive(live.id);
+                      return;
+                    }
+                    if (!post.isMine && onOpenPeerProfile) onOpenPeerProfile(post.author.id);
+                    else if (post.isMine) onNavigate?.("profile");
+                  }}
+                >
+                  {post.author.avatarUrl ? (
+                    <img src={mediaUrl(post.author.avatarUrl)} alt="" />
+                  ) : (
+                    <span>{post.author.name.slice(0, 1)}</span>
+                  )}
+                  <div>
+                    <strong>{post.author.name}</strong>
+                    <small>
+                      {liveByHostId.has(post.author.id)
+                        ? "Ao vivo agora"
+                        : new Date(post.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                    </small>
+                  </div>
+                  {liveByHostId.has(post.author.id) ? <em className="student-live-rail-badge">AO VIVO</em> : null}
+                </button>
                 {post.kind === "ACTIVITY" && post.activity && <em>{post.activity.sportLabel}</em>}
                 <div className="student-feed-menu">
                   <button type="button" aria-label="Opções" onClick={() => setMenuPostId(menuPostId === post.id ? null : post.id)}>
@@ -748,6 +835,17 @@ export function StudentFeedSection({
                         </button>
                       ) : (
                         <>
+                          {onOpenPeerProfile ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMenuPostId(null);
+                                onOpenPeerProfile(post.author.id);
+                              }}
+                            >
+                              Ver perfil
+                            </button>
+                          ) : null}
                           {onOpenDm ? (
                             <button
                               type="button"

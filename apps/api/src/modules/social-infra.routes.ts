@@ -292,6 +292,25 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
     const live = await prisma.socialLiveSession.create({
       data: { hostId: user.id, title: body.title.trim(), mood: body.mood ?? null }
     });
+
+    const followers = await prisma.socialFollow.findMany({
+      where: { followingId: user.id },
+      select: { followerId: true }
+    });
+    if (followers.length) {
+      await prisma.studentNotification.createMany({
+        data: followers.map((row) => ({
+          userId: row.followerId,
+          type: "SOCIAL_LIVE",
+          title: "Ao vivo agora",
+          message: `${user.name} entrou ao vivo: ${live.title}`,
+          targetSection: "live",
+          sourceType: "SOCIAL_LIVE",
+          sourceId: live.id
+        }))
+      });
+    }
+
     return {
       live: {
         id: live.id,

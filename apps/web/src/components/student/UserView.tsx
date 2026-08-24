@@ -72,6 +72,7 @@ import { sessionLabelFromBlock, trainingCopy } from "../../lib/training-copy";
 import { brand } from "../../lib/brand";
 import { isSandboxCheckoutEnabled } from "../../lib/sandbox-checkout";
 import { StudentAthleteProfileSection } from "./StudentAthleteProfileSection";
+import { StudentPeerProfileSection } from "./StudentPeerProfileSection";
 import { RunnerIcon } from "../shared/RunnerIcon";
 import { AnimatedList } from "../shared/AnimatedList";
 import { MediaImg } from "../shared/MediaImg";
@@ -170,6 +171,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     isPrivate: boolean;
   } | null>(null);
   const [messagePeerId, setMessagePeerId] = useState<string | null>(null);
+  const [peerProfileId, setPeerProfileId] = useState<string | null>(null);
+  const [joinLiveId, setJoinLiveId] = useState<string | null>(null);
   const [workout, setWorkout] = useState<WorkoutRow | null>(null);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkoutResponse["workout"] | null>(null);
   const [publishedWorkouts, setPublishedWorkouts] = useState<TodayWorkoutResponse["workout"][]>([]);
@@ -702,6 +705,16 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     goToSection("messages");
   };
 
+  const openPeerProfile = (userId: string) => {
+    setPeerProfileId(userId);
+    goToSection("peer-profile");
+  };
+
+  const openLiveById = (liveId: string) => {
+    setJoinLiveId(liveId);
+    goToSection("live");
+  };
+
   useEffect(() => {
     const raw = searchParams.get("section");
     if (!raw) return;
@@ -717,6 +730,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       "menu",
       "profile",
       "profile-settings",
+      "peer-profile",
       "membership",
       "payments",
       "assessments",
@@ -2061,24 +2075,26 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       read: item.read
     }));
     const remoteItems = notifications.map((item) => {
-      const section = item.targetSection as PanelDestination | null | undefined;
-      const targetsFromSection = section ? ([section] as PanelDestination[]) : [];
+      const section = item.targetSection?.trim() || null;
+      const targetsFromSection = section ? [section] : [];
       const targetsFromType =
         item.type === "PRODUCT"
-          ? (["products"] as PanelDestination[])
-          :                         item.type === "WORKOUT_PROGRAM" || item.type === "WORKOUT"
-                          ? (["training"] as PanelDestination[])
-                          : item.type === "ACHIEVEMENT"
-                            ? (["profile"] as PanelDestination[])
-                            : item.type === "LOCATION"
-              ? (["locations"] as PanelDestination[])
-              : item.type === "SUPPORT"
-                ? (["support"] as PanelDestination[])
-                :         item.type === "EVENT"
-                  ? (["events"] as PanelDestination[])
-                  : item.type === "MUSIC_ALBUM" || item.type === "MUSIC_TRACK"
-                    ? (["play"] as PanelDestination[])
-                    : [];
+          ? ["products"]
+          : item.type === "WORKOUT_PROGRAM" || item.type === "WORKOUT"
+            ? ["training"]
+            : item.type === "ACHIEVEMENT"
+              ? ["profile"]
+              : item.type === "LOCATION"
+                ? ["locations"]
+                : item.type === "SUPPORT"
+                  ? ["support"]
+                  : item.type === "EVENT"
+                    ? ["events"]
+                    : item.type === "MUSIC_ALBUM" || item.type === "MUSIC_TRACK"
+                      ? ["play"]
+                      : item.type === "SOCIAL_LIVE"
+                        ? ["live"]
+                        : [];
       return {
         id: item.id,
         kind: "remote" as const,
@@ -2087,7 +2103,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         message: item.message,
         publishedAt: item.publishedAt,
         origin: null as string | null,
-        targets: targetsFromSection.length ? targetsFromSection : targetsFromType,
+        targets: (targetsFromSection.length ? targetsFromSection : targetsFromType) as StudentPanelSection[],
+        sourceId: item.sourceId ?? null,
         read: Boolean(item.readAt)
       };
     });
@@ -2491,7 +2508,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                         purchases: "Minhas compras",
                         events: "Eventos",
                         play: "Play",
-                        profile: brand.athleteProfile
+                        profile: brand.athleteProfile,
+                        live: "Ao vivo"
                       };
                       const primaryTarget = notification.targets[0];
                       const openLabel = primaryTarget
@@ -2520,9 +2538,18 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                                 if (notification.kind === "sync") {
                                   markNotificationRead(notification.id);
                                 }
-                                setStudentSection(
-                                  primaryTarget === "home" ? "feed" : (primaryTarget as StudentPanelSection)
-                                );
+                                const liveSourceId =
+                                  notification.kind === "remote" &&
+                                  (notification.type === "SOCIAL_LIVE" || primaryTarget === "live")
+                                    ? notification.sourceId
+                                    : null;
+                                if (liveSourceId) {
+                                  openLiveById(liveSourceId);
+                                } else {
+                                  setStudentSection(
+                                    primaryTarget === "home" ? "feed" : (primaryTarget as StudentPanelSection)
+                                  );
+                                }
                                 setNotificationsOpen(false);
                               }}
                             >
@@ -2634,16 +2661,37 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             token={token}
             onNavigate={(section) => goToSection(section === "chat" ? "messages" : section)}
             onOpenDm={openDmWithPeer}
+            onOpenPeerProfile={openPeerProfile}
+            onOpenLive={openLiveById}
           />
         )}
 
-        {studentSection === "reels" && token && <StudentReelsSection token={token} onOpenDm={openDmWithPeer} />}
-        {studentSection === "live" && token && <StudentLiveSection token={token} />}
+        {studentSection === "reels" && token && (
+          <StudentReelsSection token={token} onOpenDm={openDmWithPeer} onOpenPeerProfile={openPeerProfile} />
+        )}
+        {studentSection === "live" && token && (
+          <StudentLiveSection
+            token={token}
+            initialLiveId={joinLiveId}
+            onLiveConsumed={() => setJoinLiveId(null)}
+          />
+        )}
         {studentSection === "messages" && token && (
           <StudentMessagesSection
             token={token}
             initialPeerId={messagePeerId}
             onPeerConsumed={() => setMessagePeerId(null)}
+            onOpenPeerProfile={openPeerProfile}
+          />
+        )}
+        {studentSection === "peer-profile" && token && peerProfileId && (
+          <StudentPeerProfileSection
+            token={token}
+            userId={peerProfileId}
+            onBack={() => goToSection("feed")}
+            onOpenDm={openDmWithPeer}
+            onOpenLive={openLiveById}
+            onOpenOwnProfile={() => goToSection("profile")}
           />
         )}
         {studentSection === "chat" && token && (
