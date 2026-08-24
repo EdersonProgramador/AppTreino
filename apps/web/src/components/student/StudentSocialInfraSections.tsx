@@ -22,7 +22,7 @@ import { apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { mediaUrl } from "../../lib/urls";
 import { getSocialSocket } from "../../lib/social-socket";
 import type { SocialAuthor, UploadResponse } from "../../types";
-import { CAMERA_FILTERS, cameraFilterCss, CameraZoomControl, applyCameraZoom, readCameraZoomCaps, StudentCameraCapture, type CameraFilterId, type CameraZoomCaps } from "./StudentCameraCapture";
+import { CAMERA_FILTERS, cameraFilterCss, applyCameraZoom, clampCameraZoom, readCameraZoomCaps, zoomFromPinch, StudentCameraCapture, type CameraFilterId, type CameraZoomCaps } from "./StudentCameraCapture";
 
 type ReelRow = {
   id: string;
@@ -475,20 +475,24 @@ export function StudentLiveSection({
   async function bindPreview(nextFacing: "user" | "environment") {
     stopMedia();
     let stream: MediaStream;
+    const videoConstraints: MediaTrackConstraints =
+      nextFacing === "user"
+        ? { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        : {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1080 },
+            height: { ideal: 1920 },
+            aspectRatio: { ideal: 9 / 16 }
+          };
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
-        video: {
-          facingMode: { ideal: nextFacing },
-          width: { ideal: 1080 },
-          height: { ideal: 1920 },
-          aspectRatio: { ideal: 9 / 16 }
-        }
+        video: videoConstraints
       });
     } catch {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
-        video: { facingMode: nextFacing }
+        video: { facingMode: { ideal: nextFacing } }
       });
     }
     streamRef.current = stream;
@@ -508,10 +512,10 @@ export function StudentLiveSection({
     });
   }
 
-  async function setLiveZoom(next: number) {
-    const clamped = Math.min(zoomCaps.max, Math.max(zoomCaps.min, next));
+  function setLiveZoom(next: number) {
+    const clamped = clampCameraZoom(next, zoomCaps);
     setZoom(clamped);
-    await applyCameraZoom(streamRef.current?.getVideoTracks()[0], clamped, zoomCaps.hardware);
+    void applyCameraZoom(streamRef.current?.getVideoTracks()[0], clamped, zoomCaps.hardware);
   }
 
   function onLivePinchStart(event: TouchEvent) {
@@ -528,11 +532,16 @@ export function StudentLiveSection({
     event.preventDefault();
     const [a, b] = [event.touches[0], event.touches[1]];
     const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-    void setLiveZoom(pinchRef.current.startZoom * (dist / Math.max(1, pinchRef.current.startDist)));
+    const ratio = dist / Math.max(1, pinchRef.current.startDist);
+    setLiveZoom(zoomFromPinch(pinchRef.current.startZoom, ratio, zoomCaps));
   }
 
   function onLivePinchEnd() {
     pinchRef.current = null;
+  }
+
+  function onLiveDoubleClick() {
+    setLiveZoom(zoomCaps.min);
   }
 
   async function flipCamera() {
@@ -782,6 +791,7 @@ export function StudentLiveSection({
         onTouchMove={isMine ? onLivePinchMove : undefined}
         onTouchEnd={isMine ? onLivePinchEnd : undefined}
         onTouchCancel={isMine ? onLivePinchEnd : undefined}
+        onDoubleClick={isMine ? onLiveDoubleClick : undefined}
       >
         <video
           ref={isMine ? localVideoRef : remoteVideoRef}
@@ -875,7 +885,6 @@ export function StudentLiveSection({
               <footer>
                 {isMine ? (
                   <>
-                    <CameraZoomControl zoom={zoom} caps={zoomCaps} onChange={(next) => void setLiveZoom(next)} />
                     <div className="student-camera-filters student-live-filters" role="listbox" aria-label="Filtros">
                       {CAMERA_FILTERS.map((item) => (
                         <button
