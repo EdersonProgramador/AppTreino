@@ -2539,21 +2539,15 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             <button
               type="button"
               className="student-avatar"
-              aria-label={
-                studentSection === "feed" || studentSection === "home" ? "Menu social" : "Abrir perfil"
-              }
+              aria-label="Menu social"
               aria-expanded={socialMenuOpen}
               onClick={() => {
-                if (studentSection === "feed" || studentSection === "home") {
-                  setNotificationsOpen(false);
-                  setSocialMenuOpen((open) => {
-                    if (open) uiSounds.popupClose();
-                    else uiSounds.popupOpen();
-                    return !open;
-                  });
-                  return;
-                }
-                goToSection("profile");
+                setNotificationsOpen(false);
+                setSocialMenuOpen((open) => {
+                  if (open) uiSounds.popupClose();
+                  else uiSounds.popupOpen();
+                  return !open;
+                });
               }}
             >
               {profile?.avatarUrl ? (
@@ -2562,7 +2556,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 <UserRound size={28} />
               )}
             </button>
-            {socialMenuOpen && (studentSection === "feed" || studentSection === "home") && (
+            {socialMenuOpen && (
               <section className="student-social-menu" aria-label="Menu da rede social">
                 {(
                   [
