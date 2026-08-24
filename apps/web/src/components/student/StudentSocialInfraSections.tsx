@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowLeft,
@@ -19,7 +19,7 @@ import { apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { mediaUrl } from "../../lib/urls";
 import { getSocialSocket } from "../../lib/social-socket";
 import type { SocialAuthor, UploadResponse } from "../../types";
-import { CAMERA_FILTERS, cameraFilterCss, StudentCameraCapture, type CameraFilterId } from "./StudentCameraCapture";
+import { CAMERA_FILTERS, cameraFilterCss, CameraZoomControl, applyCameraZoom, readCameraZoomCaps, StudentCameraCapture, type CameraFilterId, type CameraZoomCaps } from "./StudentCameraCapture";
 
 type ReelRow = {
   id: string;
@@ -346,6 +346,9 @@ export function StudentLiveSection({ token }: { token: string }) {
   const [micOn, setMicOn] = useState(true);
   const [busy, setBusy] = useState(false);
   const [filterId, setFilterId] = useState<CameraFilterId>("none");
+  const [zoom, setZoom] = useState(1);
+  const [zoomCaps, setZoomCaps] = useState<CameraZoomCaps>({ min: 1, max: 3, step: 0.05, hardware: false });
+  const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(null);
   const [viewportH, setViewportH] = useState(() =>
     typeof window !== "undefined" ? Math.round(window.visualViewport?.height ?? window.innerHeight) : 0
   );
@@ -441,6 +444,11 @@ export function StudentLiveSection({ token }: { token: string }) {
       });
     }
     streamRef.current = stream;
+    const videoTrack = stream.getVideoTracks()[0];
+    const nextCaps = readCameraZoomCaps(videoTrack);
+    setZoomCaps(nextCaps);
+    setZoom(nextCaps.min);
+    void applyCameraZoom(videoTrack, nextCaps.min, nextCaps.hardware);
     if (localVideoRef.current) {
       localVideoRef.current.setAttribute("playsinline", "true");
       localVideoRef.current.setAttribute("webkit-playsinline", "true");
@@ -450,6 +458,33 @@ export function StudentLiveSection({ token }: { token: string }) {
     stream.getAudioTracks().forEach((track) => {
       track.enabled = micOn;
     });
+  }
+
+  async function setLiveZoom(next: number) {
+    const clamped = Math.min(zoomCaps.max, Math.max(zoomCaps.min, next));
+    setZoom(clamped);
+    await applyCameraZoom(streamRef.current?.getVideoTracks()[0], clamped, zoomCaps.hardware);
+  }
+
+  function onLivePinchStart(event: TouchEvent) {
+    if (event.touches.length !== 2) return;
+    const [a, b] = [event.touches[0], event.touches[1]];
+    pinchRef.current = {
+      startDist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
+      startZoom: zoom
+    };
+  }
+
+  function onLivePinchMove(event: TouchEvent) {
+    if (event.touches.length !== 2 || !pinchRef.current) return;
+    event.preventDefault();
+    const [a, b] = [event.touches[0], event.touches[1]];
+    const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    void setLiveZoom(pinchRef.current.startZoom * (dist / Math.max(1, pinchRef.current.startDist)));
+  }
+
+  function onLivePinchEnd() {
+    pinchRef.current = null;
   }
 
   async function flipCamera() {
@@ -642,20 +677,33 @@ export function StudentLiveSection({ token }: { token: string }) {
   }
 
   if (status === "countdown" || (status === "live" && activeId)) {
+    const digitalZoom = !zoomCaps.hardware;
     const studio = (
       <section
         ref={studioRef as never}
         className="student-live-studio is-fullscreen"
         aria-label="Estúdio ao vivo"
         style={viewportH ? { height: viewportH } : undefined}
+        onTouchStart={isMine ? onLivePinchStart : undefined}
+        onTouchMove={isMine ? onLivePinchMove : undefined}
+        onTouchEnd={isMine ? onLivePinchEnd : undefined}
+        onTouchCancel={isMine ? onLivePinchEnd : undefined}
       >
         <video
           ref={isMine ? localVideoRef : remoteVideoRef}
-          className={`student-live-studio-video${isMine && facing === "user" ? " is-mirror" : ""}`}
+          className="student-live-studio-video"
           playsInline
           muted={isMine}
           autoPlay
-          style={{ filter: cameraFilterCss(filterId) }}
+          style={{
+            filter: cameraFilterCss(filterId),
+            transform: [
+              isMine && facing === "user" ? "scaleX(-1)" : null,
+              isMine && digitalZoom && zoom !== 1 ? `scale(${zoom})` : null
+            ]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }}
         />
         <div className="student-live-studio-chrome">
           <header>
@@ -691,6 +739,7 @@ export function StudentLiveSection({ token }: { token: string }) {
               <footer>
                 {isMine ? (
                   <>
+                    <CameraZoomControl zoom={zoom} caps={zoomCaps} onChange={(next) => void setLiveZoom(next)} />
                     <div className="student-camera-filters student-live-filters" role="listbox" aria-label="Filtros">
                       {CAMERA_FILTERS.map((item) => (
                         <button

@@ -20301,6 +20301,48 @@ html.is-native-app.keyboard-open .login-shell {
   gap: 8px;
 }
 
+.student-camera-zoom {
+  display: grid;
+  grid-template-columns: 36px 1fr 36px auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+.student-camera-zoom button {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.student-camera-zoom button:disabled {
+  opacity: 0.35;
+}
+
+.student-camera-zoom input[type="range"] {
+  width: 100%;
+  accent-color: #fff;
+}
+
+.student-camera-zoom span {
+  min-width: 2.6rem;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.student-camera-stage video {
+  transform-origin: center center;
+}
+
 .student-camera-filters {
   display: flex;
   gap: 8px;
@@ -20537,10 +20579,7 @@ html.is-native-app.keyboard-open .login-shell {
   height: 100%;
   object-fit: cover;
   background: #000;
-}
-
-.student-live-studio-video.is-mirror {
-  transform: scaleX(-1);
+  transform-origin: center center;
 }
 
 .student-live-studio-chrome {

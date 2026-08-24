@@ -1,5 +1,5 @@
 import { Camera, Image as ImageIcon, RefreshCcw, Sparkles, Video, X, Zap, ZapOff } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type TouchEvent } from "react";
 import { createPortal } from "react-dom";
 
 export type CaptureMode = "photo" | "video";
@@ -22,13 +22,104 @@ export function cameraFilterCss(id: CameraFilterId | string) {
   return CAMERA_FILTERS.find((item) => item.id === id)?.css ?? "none";
 }
 
+export type CameraZoomCaps = { min: number; max: number; step: number; hardware: boolean };
+
+const DIGITAL_ZOOM: CameraZoomCaps = { min: 1, max: 3, step: 0.05, hardware: false };
+
+export function readCameraZoomCaps(track: MediaStreamTrack | null | undefined): CameraZoomCaps {
+  const caps = track?.getCapabilities?.() as (MediaTrackCapabilities & { zoom?: { min: number; max: number; step?: number } }) | undefined;
+  if (caps?.zoom && Number.isFinite(caps.zoom.max) && caps.zoom.max > caps.zoom.min) {
+    return {
+      min: caps.zoom.min,
+      max: caps.zoom.max,
+      step: caps.zoom.step && caps.zoom.step > 0 ? caps.zoom.step : 0.1,
+      hardware: true
+    };
+  }
+  return DIGITAL_ZOOM;
+}
+
+export async function applyCameraZoom(track: MediaStreamTrack | null | undefined, zoom: number, hardware: boolean) {
+  if (!hardware || !track?.applyConstraints) return;
+  try {
+    await track.applyConstraints({ advanced: [{ zoom } as MediaTrackConstraintSet] });
+  } catch {
+    // fallback digital only
+  }
+}
+
+/** Desenha o frame com crop central = zoom digital (+ filtro / espelho). */
+export function drawCameraFrame(
+  ctx: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  opts: { zoom: number; digital: boolean; filterCss: string; mirror: boolean; width: number; height: number }
+) {
+  const { zoom, digital, filterCss, mirror, width, height } = opts;
+  ctx.filter = filterCss === "none" ? "none" : filterCss;
+  const z = digital ? Math.max(1, zoom) : 1;
+  const sw = video.videoWidth / z;
+  const sh = video.videoHeight / z;
+  const sx = (video.videoWidth - sw) / 2;
+  const sy = (video.videoHeight - sh) / 2;
+  if (mirror) {
+    ctx.save();
+    ctx.translate(width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
+    ctx.restore();
+  } else {
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
+  }
+}
+
+export function CameraZoomControl({
+  zoom,
+  caps,
+  disabled,
+  onChange
+}: {
+  zoom: number;
+  caps: CameraZoomCaps;
+  disabled?: boolean;
+  onChange: (next: number) => void;
+}) {
+  const clamp = (value: number) => Math.min(caps.max, Math.max(caps.min, value));
+  return (
+    <div className="student-camera-zoom" aria-label="Zoom">
+      <button
+        type="button"
+        disabled={disabled || zoom <= caps.min}
+        onClick={() => onChange(clamp(zoom - caps.step))}
+        aria-label="Diminuir zoom"
+      >
+        −
+      </button>
+      <input
+        type="range"
+        min={caps.min}
+        max={caps.max}
+        step={caps.step}
+        value={zoom}
+        disabled={disabled}
+        onChange={(event) => onChange(clamp(Number(event.target.value)))}
+        aria-valuetext={`${zoom.toFixed(1)}x`}
+      />
+      <button
+        type="button"
+        disabled={disabled || zoom >= caps.max}
+        onClick={() => onChange(clamp(zoom + caps.step))}
+        aria-label="Aumentar zoom"
+      >
+        +
+      </button>
+      <span>{zoom.toFixed(1)}×</span>
+    </div>
+  );
+}
+
 function recorderMime() {
   const types = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
   return types.find((type) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type)) || "";
-}
-
-function applyFilterToCanvas(ctx: CanvasRenderingContext2D, filterCss: string) {
-  ctx.filter = filterCss === "none" ? "none" : filterCss;
 }
 
 export function StudentCameraCapture({
@@ -68,11 +159,15 @@ export function StudentCameraCapture({
   const [filterId, setFilterId] = useState<CameraFilterId>("none");
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [zoomCaps, setZoomCaps] = useState<CameraZoomCaps>(DIGITAL_ZOOM);
+  const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(null);
   const [viewportH, setViewportH] = useState(() =>
     typeof window !== "undefined" ? Math.round(window.visualViewport?.height ?? window.innerHeight) : 0
   );
 
   const filterCss = cameraFilterCss(filterId);
+  const digitalZoom = !zoomCaps.hardware;
 
   useEffect(() => {
     setCaptureMode(mode);
@@ -131,6 +226,10 @@ export function StudentCameraCapture({
       const videoTrack = stream.getVideoTracks()[0];
       const caps = videoTrack?.getCapabilities?.() as MediaTrackCapabilities & { torch?: boolean } | undefined;
       setTorchSupported(Boolean(caps?.torch));
+      const nextZoomCaps = readCameraZoomCaps(videoTrack);
+      setZoomCaps(nextZoomCaps);
+      setZoom(nextZoomCaps.min);
+      void applyCameraZoom(videoTrack, nextZoomCaps.min, nextZoomCaps.hardware);
       const video = videoRef.current;
       if (video) {
         video.setAttribute("playsinline", "true");
@@ -199,6 +298,33 @@ export function StudentCameraCapture({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, facing, captureMode]);
 
+  async function setCameraZoom(next: number) {
+    const clamped = Math.min(zoomCaps.max, Math.max(zoomCaps.min, next));
+    setZoom(clamped);
+    const track = streamRef.current?.getVideoTracks()[0];
+    await applyCameraZoom(track, clamped, zoomCaps.hardware);
+  }
+
+  function onStageTouchStart(event: TouchEvent) {
+    if (event.touches.length !== 2) return;
+    const [a, b] = [event.touches[0], event.touches[1]];
+    const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    pinchRef.current = { startDist: dist, startZoom: zoom };
+  }
+
+  function onStageTouchMove(event: TouchEvent) {
+    if (event.touches.length !== 2 || !pinchRef.current) return;
+    event.preventDefault();
+    const [a, b] = [event.touches[0], event.touches[1]];
+    const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    const ratio = dist / Math.max(1, pinchRef.current.startDist);
+    void setCameraZoom(pinchRef.current.startZoom * ratio);
+  }
+
+  function onStageTouchEnd() {
+    pinchRef.current = null;
+  }
+
   async function toggleTorch() {
     const track = streamRef.current?.getVideoTracks()[0] as MediaStreamTrack & {
       applyConstraints?: (c: MediaTrackConstraints) => Promise<void>;
@@ -224,12 +350,14 @@ export function StudentCameraCapture({
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    applyFilterToCanvas(ctx, filterCss);
-    if (facing === "user") {
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1);
-    }
-    ctx.drawImage(video, 0, 0);
+    drawCameraFrame(ctx, video, {
+      zoom,
+      digital: digitalZoom,
+      filterCss,
+      mirror: facing === "user",
+      width: canvas.width,
+      height: canvas.height
+    });
     canvas.toBlob(
       (blob) => {
         if (!blob) {
@@ -260,23 +388,22 @@ export function StudentCameraCapture({
       raf = 0;
     };
 
-    if (filterCss !== "none" && video.videoWidth > 0) {
+    const needsCanvas = (filterCss !== "none" || digitalZoom) && video.videoWidth > 0;
+    if (needsCanvas) {
       const canvas = document.createElement("canvas");
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext("2d");
       if (ctx) {
         const draw = () => {
-          applyFilterToCanvas(ctx, filterCss);
-          if (facing === "user") {
-            ctx.save();
-            ctx.translate(canvas.width, 0);
-            ctx.scale(-1, 1);
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            ctx.restore();
-          } else {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          }
+          drawCameraFrame(ctx, video, {
+            zoom,
+            digital: digitalZoom,
+            filterCss,
+            mirror: facing === "user",
+            width: canvas.width,
+            height: canvas.height
+          });
           raf = requestAnimationFrame(draw);
         };
         draw();
@@ -337,7 +464,13 @@ export function StudentCameraCapture({
       aria-label={heading}
       style={viewportH ? { height: viewportH } : undefined}
     >
-      <div className="student-camera-stage">
+      <div
+        className="student-camera-stage"
+        onTouchStart={onStageTouchStart}
+        onTouchMove={onStageTouchMove}
+        onTouchEnd={onStageTouchEnd}
+        onTouchCancel={onStageTouchEnd}
+      >
         {fallback ? (
           <div className="student-camera-fallback">
             <p>{hint || "Use a câmera do aparelho."}</p>
@@ -351,8 +484,15 @@ export function StudentCameraCapture({
             playsInline
             muted
             autoPlay
-            className={facing === "user" ? "is-mirror" : ""}
-            style={{ filter: filterCss }}
+            style={{
+              filter: filterCss,
+              transform: [
+                facing === "user" ? "scaleX(-1)" : null,
+                digitalZoom && zoom !== 1 ? `scale(${zoom})` : null
+              ]
+                .filter(Boolean)
+                .join(" ") || undefined
+            }}
           />
         )}
         {!ready && !fallback && <span className="student-camera-loading">Abrindo câmera…</span>}
@@ -386,6 +526,7 @@ export function StudentCameraCapture({
       </header>
 
       <div className="student-camera-chrome-bottom">
+        <CameraZoomControl zoom={zoom} caps={zoomCaps} disabled={fallback || !ready} onChange={(next) => void setCameraZoom(next)} />
         <div className="student-camera-filters" role="listbox" aria-label="Filtros">
           {CAMERA_FILTERS.map((item) => (
             <button
