@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, MessageCircle, Pencil, Send, Settings, Share2, ThumbsUp, UserRound, X } from "lucide-react";
+import { ChevronLeft, MessageCircle, Pencil, Send, Settings, Share2, ThumbsUp, UserRound, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { brand } from "../../lib/brand";
@@ -136,7 +136,9 @@ export function StudentAthleteProfileSection({
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
-  const [commentDraft, setCommentDraft] = useState("");
+  const [commentDraft, setCommentDraft] = useState<Record<string, string>>({});
+  const viewerScrollRef = useRef<HTMLDivElement>(null);
+  const viewerPostRefs = useRef<Map<string, HTMLElement>>(new Map());
   const [bio, setBio] = useState(profile?.bio ?? "");
   const [coverColor, setCoverColor] = useState(profile?.coverColor || DEFAULT_COVER);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
@@ -162,7 +164,6 @@ export function StudentAthleteProfileSection({
   const metaLine = [profile?.objective, profile?.level, profile?.city && profile?.state ? `${profile.city}/${profile.state}` : profile?.city]
     .filter(Boolean)
     .join(" · ");
-  const viewerPost = viewerIndex != null ? posts[viewerIndex] ?? null : null;
 
   const followersLabel = useMemo(() => {
     const n = athleteSocial?.followersCount ?? 0;
@@ -218,18 +219,26 @@ export function StudentAthleteProfileSection({
         uiSounds.popupClose();
         setViewerIndex(null);
       }
-      if (event.key === "ArrowLeft") {
-        setViewerIndex((current) => (current == null ? current : Math.max(0, current - 1)));
-      }
-      if (event.key === "ArrowRight") {
-        setViewerIndex((current) =>
-          current == null ? current : Math.min(posts.length - 1, current + 1)
-        );
-      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [viewerIndex, posts.length]);
+  }, [viewerIndex]);
+
+  useEffect(() => {
+    if (viewerIndex == null) return;
+    const post = posts[viewerIndex];
+    if (!post) return;
+    const frame = window.requestAnimationFrame(() => {
+      const node = viewerPostRefs.current.get(post.id);
+      node?.scrollIntoView({ block: "start", behavior: "auto" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [viewerIndex, posts]);
+
+  function closePostViewer() {
+    uiSounds.popupClose();
+    setViewerIndex(null);
+  }
 
   function patchPost(postId: string, patch: Partial<SocialPostRow>) {
     setPosts((current) => current.map((post) => (post.id === postId ? { ...post, ...patch } : post)));
@@ -266,7 +275,7 @@ export function StudentAthleteProfileSection({
   }
 
   async function sendComment(postId: string) {
-    const body = commentDraft.trim();
+    const body = (commentDraft[postId] ?? "").trim();
     if (!body) return;
     try {
       const data = await apiPost<{ comment: SocialPostRow["comments"][number]; commentsCount: number }>(
@@ -285,7 +294,7 @@ export function StudentAthleteProfileSection({
             : post
         )
       );
-      setCommentDraft("");
+      setCommentDraft((current) => ({ ...current, [postId]: "" }));
       uiSounds.success();
     } catch {
       uiSounds.error();
@@ -425,7 +434,6 @@ export function StudentAthleteProfileSection({
                   className="student-athlete-post-card"
                   onClick={() => {
                     uiSounds.popupOpen();
-                    setCommentDraft("");
                     setViewerIndex(index);
                   }}
                 >
@@ -445,114 +453,90 @@ export function StudentAthleteProfileSection({
         )}
       </div>
 
-      {viewerPost && viewerIndex != null && (
-        <div
-          className="student-athlete-post-viewer"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Publicação"
-          onClick={() => {
-            uiSounds.popupClose();
-            setViewerIndex(null);
-          }}
-        >
-          <button
-            type="button"
-            className="student-athlete-post-viewer-nav is-prev"
-            disabled={viewerIndex <= 0}
-            aria-label="Publicação anterior"
-            onClick={(event) => {
-              event.stopPropagation();
-              setViewerIndex((current) => (current == null ? current : Math.max(0, current - 1)));
-            }}
-          >
-            <ChevronLeft size={28} />
-          </button>
-          <button
-            type="button"
-            className="student-athlete-post-viewer-nav is-next"
-            disabled={viewerIndex >= posts.length - 1}
-            aria-label="Próxima publicação"
-            onClick={(event) => {
-              event.stopPropagation();
-              setViewerIndex((current) =>
-                current == null ? current : Math.min(posts.length - 1, current + 1)
-              );
-            }}
-          >
-            <ChevronRight size={28} />
-          </button>
+      {viewerIndex != null && posts.length > 0 && (
+        <div className="student-athlete-post-viewer" role="dialog" aria-modal="true" aria-label="Publicações">
+          <header className="student-athlete-post-viewer-bar">
+            <button type="button" className="student-athlete-post-viewer-back" aria-label="Voltar ao perfil" onClick={closePostViewer}>
+              <ChevronLeft size={24} />
+            </button>
+            <div className="student-athlete-post-viewer-bar-title">
+              <strong>Publicações</strong>
+              <span>{profile?.name ?? brand.athlete}</span>
+            </div>
+            <button type="button" className="student-athlete-post-viewer-close" aria-label="Fechar" onClick={closePostViewer}>
+              <X size={18} />
+            </button>
+          </header>
 
-          <article
-            className="student-feed-card student-athlete-post-viewer-card"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header>
-              {viewerPost.author.avatarUrl ? (
-                <img src={mediaUrl(viewerPost.author.avatarUrl)} alt="" />
-              ) : (
-                <span>{viewerPost.author.name.slice(0, 1)}</span>
-              )}
-              <div>
-                <strong>{viewerPost.author.name}</strong>
-                <small>
-                  {new Date(viewerPost.createdAt).toLocaleString("pt-BR", {
-                    dateStyle: "short",
-                    timeStyle: "short"
-                  })}
-                </small>
-              </div>
-              <button
-                type="button"
-                className="student-athlete-post-viewer-close"
-                aria-label="Fechar"
-                onClick={() => {
-                  uiSounds.popupClose();
-                  setViewerIndex(null);
+          <div className="student-athlete-post-viewer-scroll" ref={viewerScrollRef}>
+            {posts.map((post) => (
+              <article
+                key={post.id}
+                className="student-feed-card student-athlete-post-viewer-card"
+                ref={(node) => {
+                  if (node) viewerPostRefs.current.set(post.id, node);
+                  else viewerPostRefs.current.delete(post.id);
                 }}
               >
-                <X size={18} />
-              </button>
-            </header>
-            {viewerPost.body ? <p>{viewerPost.body}</p> : null}
-            <ViewerCarousel key={viewerPost.id} items={mediaOf(viewerPost)} />
-            <footer>
-              <button
-                type="button"
-                className={viewerPost.likedByMe ? "is-on" : ""}
-                onClick={() => void toggleLike(viewerPost.id)}
-                aria-label="Curtir"
-              >
-                <ThumbsUp size={18} fill={viewerPost.likedByMe ? "currentColor" : "none"} /> {viewerPost.likesCount}
-              </button>
-              <button type="button" aria-label="Comentar">
-                <MessageCircle size={18} /> {viewerPost.commentsCount ?? viewerPost.comments.length}
-              </button>
-              <button type="button" onClick={() => void sharePost(viewerPost)} aria-label="Compartilhar">
-                <Share2 size={18} />
-              </button>
-            </footer>
-            <div className="student-athlete-post-viewer-comments">
-              {viewerPost.comments.map((comment) => (
-                <p className="student-feed-comment" key={comment.id}>
-                  <strong>{comment.author.name.split(" ")[0]}</strong> {comment.body}
-                </p>
-              ))}
-            </div>
-            <div className="student-feed-comment-box">
-              <input
-                value={commentDraft}
-                onChange={(event) => setCommentDraft(event.target.value)}
-                placeholder="Comentar"
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void sendComment(viewerPost.id);
-                }}
-              />
-              <button type="button" onClick={() => void sendComment(viewerPost.id)} aria-label="Enviar comentário">
-                <Send size={16} />
-              </button>
-            </div>
-          </article>
+                <header>
+                  {post.author.avatarUrl ? (
+                    <img src={mediaUrl(post.author.avatarUrl)} alt="" />
+                  ) : (
+                    <span>{post.author.name.slice(0, 1)}</span>
+                  )}
+                  <div>
+                    <strong>{post.author.name}</strong>
+                    <small>
+                      {new Date(post.createdAt).toLocaleString("pt-BR", {
+                        dateStyle: "short",
+                        timeStyle: "short"
+                      })}
+                    </small>
+                  </div>
+                </header>
+                {post.body ? <p>{post.body}</p> : null}
+                <ViewerCarousel key={post.id} items={mediaOf(post)} />
+                <footer>
+                  <button
+                    type="button"
+                    className={post.likedByMe ? "is-on" : ""}
+                    onClick={() => void toggleLike(post.id)}
+                    aria-label="Curtir"
+                  >
+                    <ThumbsUp size={18} fill={post.likedByMe ? "currentColor" : "none"} /> {post.likesCount}
+                  </button>
+                  <button type="button" aria-label="Comentar">
+                    <MessageCircle size={18} /> {post.commentsCount ?? post.comments.length}
+                  </button>
+                  <button type="button" onClick={() => void sharePost(post)} aria-label="Compartilhar">
+                    <Share2 size={18} />
+                  </button>
+                </footer>
+                <div className="student-athlete-post-viewer-comments">
+                  {post.comments.map((comment) => (
+                    <p className="student-feed-comment" key={comment.id}>
+                      <strong>{comment.author.name.split(" ")[0]}</strong> {comment.body}
+                    </p>
+                  ))}
+                </div>
+                <div className="student-feed-comment-box">
+                  <input
+                    value={commentDraft[post.id] ?? ""}
+                    onChange={(event) =>
+                      setCommentDraft((current) => ({ ...current, [post.id]: event.target.value }))
+                    }
+                    placeholder="Comentar"
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void sendComment(post.id);
+                    }}
+                  />
+                  <button type="button" onClick={() => void sendComment(post.id)} aria-label="Enviar comentário">
+                    <Send size={16} />
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
         </div>
       )}
 
