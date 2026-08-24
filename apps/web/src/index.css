@@ -5485,7 +5485,10 @@ html.light .finance-hub-tabs button {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .student-cart-wrap,
@@ -11624,6 +11627,9 @@ html.dark .student-rating-done {
   display: grid;
   place-items: center;
   gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 2px;
   border: 0;
   background: transparent;
   color: var(--app-text-muted);
@@ -11631,6 +11637,14 @@ html.dark .student-rating-done {
   font-weight: var(--st-weight-label);
   letter-spacing: 0.02em;
   line-height: var(--st-lh-tight);
+}
+
+.student-bottom-nav button span {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .student-bottom-nav button.active {
@@ -19625,6 +19639,20 @@ html.is-native-app.keyboard-open .login-shell {
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.student-feed-people {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.student-feed-people::-webkit-scrollbar {
+  display: none;
 }
 
 .student-ghost-chip {
@@ -19772,9 +19800,21 @@ html.is-native-app.keyboard-open .login-shell {
 
 .student-feed-card header {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   gap: 10px;
   align-items: center;
+  min-width: 0;
+}
+
+.student-feed-card header > div {
+  min-width: 0;
+}
+
+.student-feed-card header strong,
+.student-feed-card header small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .student-club-card header {
@@ -19799,7 +19839,8 @@ html.is-native-app.keyboard-open .login-shell {
 
 .student-feed-card footer {
   display: flex;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 12px 16px;
   color: var(--app-text-muted);
 }
 
@@ -19843,6 +19884,13 @@ html.is-native-app.keyboard-open .login-shell {
 .student-feed-modes {
   display: flex;
   gap: 8px;
+  overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.student-feed-modes button {
+  flex: 0 0 auto;
 }
 
 .student-feed-modes button {
@@ -20160,7 +20208,15 @@ html.is-native-app.keyboard-open .login-shell {
   display: flex;
   gap: 10px;
   overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
   padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.student-feed-story-rail::-webkit-scrollbar {
+  display: none;
 }
 
 .student-feed-story-rail button,
@@ -20912,4 +20968,197 @@ html.is-native-app.keyboard-open .login-shell {
 
 .spin {
   animation: spin 0.8s linear infinite;
+}
+
+/* Portal do aluno — web no celular (iPhone/Android): nunca estourar a viewport */
+.ui-shell:has(.student-app-shell) {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+.student-app-shell {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+.student-app-header,
+.student-app-scroll,
+.student-bottom-nav,
+.student-feed,
+.student-club,
+.student-social-pane,
+.student-sheet,
+.student-hero-card,
+.student-menu-grid,
+.student-play-shell {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.student-app-scroll {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.student-app-scroll > * {
+  max-width: 100%;
+}
+
+.student-app-shell img,
+.student-app-shell video,
+.student-app-shell iframe,
+.student-app-shell canvas {
+  max-width: 100%;
+}
+
+.student-app-shell table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.student-app-shell p,
+.student-app-shell h1,
+.student-app-shell h2,
+.student-app-shell h3,
+.student-app-shell li,
+.student-app-shell .student-menu-item span,
+.student-app-shell .student-sheet-heading h1,
+.student-app-shell .student-training-card h2 {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.student-app-shell input,
+.student-app-shell select,
+.student-app-shell textarea {
+  max-width: 100%;
+  font-size: 16px;
+}
+
+.student-feed,
+.student-club,
+.student-social-pane {
+  padding-left: max(12px, var(--safe-left));
+  padding-right: max(12px, var(--safe-right));
+}
+
+.student-feature-grid,
+.student-metric-grid,
+.student-history-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 148px), 1fr));
+}
+
+.student-feed-card,
+.student-club-card,
+.student-feed-composer,
+.student-info-card,
+.student-training-card,
+.student-exercise-card,
+.student-product-card,
+.student-rating-card {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.student-feed-comment-box input {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.student-feed-create-menu.is-header-anchored {
+  right: max(8px, var(--safe-right));
+  left: auto;
+  max-width: calc(100vw - 24px);
+}
+
+.student-notification-panel {
+  right: 0;
+  width: min(92vw, 360px);
+  max-width: calc(100vw - 16px);
+}
+
+.student-social-menu {
+  max-width: min(240px, calc(100vw - 24px));
+}
+
+@media (max-width: 430px) {
+  .student-app-shell {
+    width: 100%;
+    --student-max: 100%;
+    box-shadow: none;
+  }
+
+  .student-app-header {
+    gap: 8px;
+    padding-left: max(10px, var(--safe-left));
+    padding-right: max(10px, var(--safe-right));
+  }
+
+  .student-header-actions {
+    gap: 4px;
+  }
+
+  .student-icon-button {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+  }
+
+  .student-brand-mark {
+    width: 36px;
+    height: 36px;
+  }
+
+  .student-feed,
+  .student-club,
+  .student-social-pane {
+    padding: 12px 10px 24px;
+  }
+
+  .student-feed-activity-stats {
+    font-size: 10px;
+  }
+
+  .student-feed-activity-stats strong {
+    font-size: 13px;
+  }
+
+  .student-feed-modes button {
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+
+  .student-bottom-nav {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  .student-hero-card,
+  .student-sheet,
+  .student-workout-history-page {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 360px) {
+  .student-app-header {
+    gap: 6px;
+  }
+
+  .student-brand-athlete {
+    font-size: 10px;
+  }
+
+  .student-feed-people button {
+    width: 76px;
+  }
 }
