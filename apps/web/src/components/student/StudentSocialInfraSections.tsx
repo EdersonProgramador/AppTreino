@@ -21,7 +21,7 @@ import {
   Video,
   X
 } from "lucide-react";
-import { apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { mediaUrl } from "../../lib/urls";
 import { getSocialSocket } from "../../lib/social-socket";
 import type { SocialAuthor, UploadResponse } from "../../types";
@@ -109,6 +109,22 @@ function formatLiveElapsed(totalSeconds: number) {
     return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   }
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(() => resolve(fallback), ms);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        window.clearTimeout(timer);
+        resolve(fallback);
+      }
+    );
+  });
 }
 
 function frameFromVideo(video: HTMLVideoElement, mirror = false): Promise<Blob | null> {
@@ -430,6 +446,7 @@ export function StudentLiveSection({
   const studioRef = useRef<HTMLElement | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  const recordedSegmentsRef = useRef<Blob[]>([]);
   const [saveSheet, setSaveSheet] = useState<{
     liveId: string;
     title: string;
@@ -443,32 +460,42 @@ export function StudentLiveSection({
   const [saveDurationSec, setSaveDurationSec] = useState(1);
   const savePreviewRef = useRef<HTMLVideoElement>(null);
   const [savingLive, setSavingLive] = useState(false);
+  const [preparingReplay, setPreparingReplay] = useState(false);
   const [replayLive, setReplayLive] = useState<LiveRow | null>(null);
   const [liveElapsedSec, setLiveElapsedSec] = useState(0);
   const liveStartedAtRef = useRef<number | null>(null);
 
-  function stopRecorder() {
+  function mergeRecordingBlobs(parts: Blob[]) {
+    const usable = parts.filter((part) => part.size > 0);
+    if (!usable.length) return null;
+    const type = usable.find((part) => part.type)?.type || "video/webm";
+    return new Blob(usable, { type });
+  }
+
+  function stopRecorder(options?: { finalize?: boolean }) {
+    const finalize = options?.finalize !== false;
     const recorder = recorderRef.current;
-    if (!recorder) return Promise.resolve(null as Blob | null);
+    if (!recorder) {
+      return Promise.resolve(finalize ? mergeRecordingBlobs(recordedSegmentsRef.current.splice(0)) : null);
+    }
     return new Promise<Blob | null>((resolve) => {
       let settled = false;
       const finish = (blob: Blob | null) => {
         if (settled) return;
         settled = true;
-        resolve(blob);
+        if (blob && blob.size > 0) recordedSegmentsRef.current.push(blob);
+        recordedChunksRef.current = [];
+        recorderRef.current = null;
+        resolve(finalize ? mergeRecordingBlobs(recordedSegmentsRef.current.splice(0)) : blob);
       };
       const timer = window.setTimeout(() => {
-        recorderRef.current = null;
         const chunks = recordedChunksRef.current.slice();
-        recordedChunksRef.current = [];
-        finish(chunks.length ? new Blob(chunks, { type: chunks[0]?.type || "video/webm" }) : null);
-      }, 2500);
+        finish(chunks.length ? new Blob(chunks, { type: chunks[0]?.type || recorder.mimeType || "video/webm" }) : null);
+      }, 8000);
       recorder.onstop = () => {
         window.clearTimeout(timer);
         const chunks = recordedChunksRef.current.slice();
-        recordedChunksRef.current = [];
-        recorderRef.current = null;
-        finish(chunks.length ? new Blob(chunks, { type: chunks[0]?.type || "video/webm" }) : null);
+        finish(chunks.length ? new Blob(chunks, { type: chunks[0]?.type || recorder.mimeType || "video/webm" }) : null);
       };
       try {
         if (recorder.state === "recording") {
@@ -490,12 +517,19 @@ export function StudentLiveSection({
     });
   }
 
-  function startRecorder(stream: MediaStream) {
+  function startRecorder(stream: MediaStream, reset = true) {
     if (typeof MediaRecorder === "undefined") return;
     try {
-      recordedChunksRef.current = [];
+      if (reset) {
+        recordedSegmentsRef.current = [];
+        recordedChunksRef.current = [];
+      } else {
+        recordedChunksRef.current = [];
+      }
       const mimeType = pickRecorderMime();
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2_500_000 })
+        : new MediaRecorder(stream, { videoBitsPerSecond: 2_500_000 });
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) recordedChunksRef.current.push(event.data);
       };
@@ -507,7 +541,7 @@ export function StudentLiveSection({
   }
 
   function stopMedia() {
-    void stopRecorder();
+    void stopRecorder({ finalize: true });
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     pcRef.current?.close();
@@ -690,9 +724,9 @@ export function StudentLiveSection({
     setFacing(next);
     try {
       const wasRecording = Boolean(recorderRef.current);
-      if (wasRecording) await stopRecorder();
+      if (wasRecording) await stopRecorder({ finalize: false });
       await bindPreview(next);
-      if (wasRecording && streamRef.current && status === "live") startRecorder(streamRef.current);
+      if (wasRecording && streamRef.current && status === "live") startRecorder(streamRef.current, false);
     } catch (err) {
       setError(readErrorMessage(err, "Não foi possível virar a câmera."));
     }
@@ -733,7 +767,7 @@ export function StudentLiveSection({
       liveIdRef.current = liveId;
       setActiveId(liveId);
       setIsMine(true);
-      setSavedByMe(true);
+      setSavedByMe(false);
       setStatus("live");
       setMessages([]);
       startRecorder(stream);
@@ -762,11 +796,24 @@ export function StudentLiveSection({
       socket.on("live:chat", (msg: { id: string; content: string; name: string }) => {
         setMessages((current) => [...current, msg]);
       });
+      socket.off("live:ended");
+      socket.on("live:ended", () => {
+        if (endingLiveRef.current) return;
+        endingLiveRef.current = false;
+        setEndCountdown(null);
+        stopMedia();
+        setActiveId(null);
+        liveIdRef.current = null;
+        setStatus("idle");
+        setError("A live foi encerrada.");
+        void load();
+      });
       await load();
     } catch (err) {
       stopMedia();
       setStatus("idle");
       setActiveId(null);
+      liveIdRef.current = null;
       setError(readErrorMessage(err, "Não foi possível iniciar a live. Permita câmera e microfone."));
     } finally {
       setBusy(false);
@@ -875,9 +922,9 @@ export function StudentLiveSection({
     });
 
     if (!isMine) return;
-    const videoBlob = await stopRecorder();
+    const videoBlob = await stopRecorder({ finalize: false });
     if (streamRef.current && !afterEnd && status === "live") {
-      startRecorder(streamRef.current);
+      startRecorder(streamRef.current, false);
     }
     if (!videoBlob) return;
     const blobUrl = URL.createObjectURL(videoBlob);
@@ -894,7 +941,7 @@ export function StudentLiveSection({
   async function captureCoverFromPreview() {
     const video = savePreviewRef.current;
     if (!video || !saveSheet) return;
-    const frame = await frameFromVideo(video, Boolean(saveSheet.videoBlob && saveSheet.mirror));
+    const frame = await frameFromVideo(video, false);
     if (!frame) return;
     if (saveSheet.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(saveSheet.coverPreview);
     setSaveSheet({ ...saveSheet, coverPreview: URL.createObjectURL(frame) });
@@ -908,9 +955,11 @@ export function StudentLiveSection({
     try {
       let videoUrl: string | undefined;
       let coverUrl: string | undefined;
-      if (sheet.videoBlob && (sheet.afterEnd || isMine)) {
+      if (sheet.videoBlob) {
         const ext = sheet.videoBlob.type.includes("mp4") ? "mp4" : "webm";
-        videoUrl = await uploadLiveFile(new File([sheet.videoBlob], `live-${sheet.liveId}.${ext}`, { type: sheet.videoBlob.type || "video/webm" }));
+        videoUrl = await uploadLiveFile(
+          new File([sheet.videoBlob], `live-${sheet.liveId}.${ext}`, { type: sheet.videoBlob.type || "video/webm" })
+        );
       }
       if (sheet.coverPreview) {
         const coverBlob = await fetch(sheet.coverPreview).then((res) => res.blob());
@@ -920,15 +969,10 @@ export function StudentLiveSection({
         try {
           await apiPut(`/student/social/live/${sheet.liveId}/media`, { videoUrl, coverUrl }, token);
         } catch {
-          // Host-only route; viewers just save bookmark with cover.
+          // Host-only; continue to bookmark save.
         }
       }
-      if (sheet.afterEnd) {
-        // Live already ended in endLive(); keep save/publish side effects.
-        await apiPost(`/student/social/live/${sheet.liveId}/save`, { coverUrl }, token);
-      } else {
-        await apiPost(`/student/social/live/${sheet.liveId}/save`, { coverUrl }, token);
-      }
+      await apiPost(`/student/social/live/${sheet.liveId}/save`, { coverUrl }, token);
       setSavedByMe(true);
       if (sheet.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(sheet.coverPreview);
       if (sheet.videoUrl?.startsWith("blob:")) URL.revokeObjectURL(sheet.videoUrl);
@@ -941,7 +985,36 @@ export function StudentLiveSection({
     }
   }
 
+  async function discardSaveSheet() {
+    if (!saveSheet || savingLive) return;
+    const sheet = saveSheet;
+    setSavingLive(true);
+    setError(null);
+    try {
+      if (sheet.afterEnd) {
+        try {
+          await apiDelete(`/student/social/live/${sheet.liveId}/save`, token);
+        } catch {
+          // May not have been saved yet.
+        }
+      }
+      if (sheet.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(sheet.coverPreview);
+      if (sheet.videoUrl?.startsWith("blob:")) URL.revokeObjectURL(sheet.videoUrl);
+      setSaveSheet(null);
+      setSavedByMe(false);
+      await load();
+    } catch (err) {
+      setError(readErrorMessage(err, "Não foi possível descartar a live."));
+    } finally {
+      setSavingLive(false);
+    }
+  }
+
   function cancelSaveSheet() {
+    if (saveSheet?.afterEnd) {
+      void discardSaveSheet();
+      return;
+    }
     if (!saveSheet) return;
     if (saveSheet.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(saveSheet.coverPreview);
     if (saveSheet.videoUrl?.startsWith("blob:")) URL.revokeObjectURL(saveSheet.videoUrl);
@@ -969,75 +1042,91 @@ export function StudentLiveSection({
     await openSaveConfirm(liveId, false);
   }
 
-  async function finishEndLive() {
-    if (!activeId || !isMine) return;
-    const liveId = activeId;
-    const videoEl = localVideoRef.current;
-    const mirror = facing === "user";
-    setBusy(true);
-    setError(null);
-
-    let coverPreview: string | null = null;
-    if (videoEl) {
-      try {
-        const frame = await frameFromVideo(videoEl, mirror);
-        if (frame) coverPreview = URL.createObjectURL(frame);
-      } catch {
-        // cover is optional
-      }
-    }
-    const videoBlobPromise = stopRecorder();
-
-    try {
-      await apiPost(`/student/social/live/${liveId}/end`, {}, token);
-      getSocialSocket(token).emit("live:end", liveId);
-    } catch (err) {
-      endingLiveRef.current = false;
-      setBusy(false);
-      setEndCountdown(null);
-      setError(readErrorMessage(err, "Não foi possível encerrar a live."));
-      if (coverPreview?.startsWith("blob:")) URL.revokeObjectURL(coverPreview);
-      if (streamRef.current && status === "live") startRecorder(streamRef.current);
-      return;
-    }
-
-    stopMedia();
-    setActiveId(null);
-    setStatus("idle");
-    setEndCountdown(null);
-    setBusy(false);
-    endingLiveRef.current = false;
-    void load();
-
-    const videoBlob = await videoBlobPromise;
-    const blobUrl = videoBlob ? URL.createObjectURL(videoBlob) : null;
-    setSaveCoverAt(0);
-    setSaveDurationSec(1);
-    setSaveSheet({
-      liveId,
-      title: title.trim() || "Live",
-      videoBlob,
-      videoUrl: blobUrl,
-      coverPreview,
-      mirror,
-      afterEnd: true
-    });
-  }
-
   async function endLive() {
-    if (!activeId || !isMine || busy || savingLive || endCountdown != null || endingLiveRef.current) return;
+    const liveId = activeId || liveIdRef.current;
+    if (!liveId || !isMine || endingLiveRef.current || savingLive) return;
+
     endingLiveRef.current = true;
     setError(null);
     setFiltersOpen(false);
     setEditingTitle(false);
-    for (let n = 3; n >= 1; n -= 1) {
+
+    const mirror = facing === "user";
+    const titleSnapshot = title.trim() || "Live";
+
+    try {
+      for (let n = 3; n >= 1; n -= 1) {
+        if (!endingLiveRef.current) return;
+        setEndCountdown(n);
+        await new Promise((resolve) => setTimeout(resolve, 850));
+      }
       if (!endingLiveRef.current) return;
-      setEndCountdown(n);
-      await new Promise((resolve) => setTimeout(resolve, 900));
+      setEndCountdown(0);
+      setPreparingReplay(true);
+
+      const coverFrame = await withTimeout(
+        (async () => {
+          const videoEl = localVideoRef.current;
+          if (!videoEl) return null;
+          return frameFromVideo(videoEl, mirror);
+        })(),
+        800,
+        null
+      );
+
+      // Finish the full recording before killing camera tracks.
+      const videoBlob = await stopRecorder({ finalize: true });
+
+      setBusy(true);
+      try {
+        await apiPost(`/student/social/live/${liveId}/end`, {}, token);
+      } catch (err) {
+        const alreadyEnded = err instanceof ApiError && err.status === 404;
+        if (!alreadyEnded) {
+          setError(readErrorMessage(err, "Não foi possível encerrar a live."));
+          if (streamRef.current) startRecorder(streamRef.current, true);
+          return;
+        }
+      }
+
+      try {
+        getSocialSocket(token).emit("live:end", liveId);
+      } catch {
+        // best-effort
+      }
+
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      pcRef.current?.close();
+      pcRef.current = null;
+      recorderRef.current = null;
+      liveIdRef.current = null;
+      setActiveId(null);
+      setStatus("idle");
+      setMessages([]);
+      setEndCountdown(null);
+      setSavedByMe(false);
+      void load();
+
+      const coverPreview = coverFrame ? URL.createObjectURL(coverFrame) : null;
+      const blobUrl = videoBlob && videoBlob.size > 0 ? URL.createObjectURL(videoBlob) : null;
+      setSaveCoverAt(0);
+      setSaveDurationSec(1);
+      setSaveSheet({
+        liveId,
+        title: titleSnapshot,
+        videoBlob: videoBlob && videoBlob.size > 0 ? videoBlob : null,
+        videoUrl: blobUrl,
+        coverPreview,
+        mirror,
+        afterEnd: true
+      });
+    } finally {
+      endingLiveRef.current = false;
+      setBusy(false);
+      setEndCountdown(null);
+      setPreparingReplay(false);
     }
-    if (!endingLiveRef.current) return;
-    setEndCountdown(0);
-    await finishEndLive();
   }
 
   async function saveTitleEdit() {
@@ -1065,6 +1154,7 @@ export function StudentLiveSection({
     setEndCountdown(null);
     stopMedia();
     setActiveId(null);
+    liveIdRef.current = null;
     setStatus("idle");
     setMessages([]);
     void load();
@@ -1199,10 +1289,15 @@ export function StudentLiveSection({
                 <button
                   type="button"
                   className="student-live-end"
-                  disabled={endCountdown != null || busy}
-                  onClick={() => void endLive()}
+                  disabled={endCountdown != null}
+                  aria-busy={endCountdown != null}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void endLive();
+                  }}
                 >
-                  {endCountdown != null ? `Encerrando ${endCountdown}` : "Encerrar"}
+                  {endCountdown != null ? String(endCountdown || "…") : "Encerrar"}
                 </button>
               ) : (
                 <button type="button" className="student-live-icon-btn" onClick={leaveLive} aria-label="Sair">
@@ -1418,20 +1513,32 @@ export function StudentLiveSection({
         )}
       </div>
 
+      {preparingReplay ? (
+        createPortal(
+          <div className="student-live-save-sheet" role="status" aria-live="polite">
+            <div className="student-live-save-card is-compact">
+              <strong>Preparando replay…</strong>
+              <p className="student-activity-hint">Finalizando a gravação completa da live.</p>
+            </div>
+          </div>,
+          document.body
+        )
+      ) : null}
+
       {saveSheet
         ? createPortal(
-            <div className="student-live-save-sheet" role="dialog" aria-label="Confirmar salvar live">
+            <div className="student-live-save-sheet" role="dialog" aria-label="Salvar ou descartar live">
               <div className="student-live-save-card">
                 <header>
-                  <strong>{saveSheet.afterEnd ? "Salvar replay" : "Salvar live"}</strong>
+                  <strong>{saveSheet.afterEnd ? "Salvar esta live?" : "Salvar live"}</strong>
                   <button type="button" onClick={cancelSaveSheet} aria-label="Fechar" disabled={savingLive}>
                     <X size={18} />
                   </button>
                 </header>
                 <p className="student-activity-hint">
                   {saveSheet.afterEnd
-                    ? "A live já foi encerrada. Escolha a capa e confirme para guardar nas Lives salvas."
-                    : "Confirme para guardar em Lives salvas e publicar no feed. Arraste o vídeo para escolher a capa."}
+                    ? "A live já encerrou. Escolha se quer guardar o vídeo nas Lives salvas ou descartar."
+                    : "Confirme para guardar em Lives salvas e publicar no feed."}
                 </p>
                 <div className="student-live-save-preview">
                   {saveSheet.videoUrl ? (
@@ -1440,10 +1547,11 @@ export function StudentLiveSection({
                       src={saveSheet.videoUrl}
                       playsInline
                       controls
+                      preload="metadata"
                       onLoadedMetadata={(event) => {
                         const duration = Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 1;
                         setSaveDurationSec(Math.max(duration, 0.1));
-                        event.currentTarget.currentTime = Math.min(0.1, duration);
+                        event.currentTarget.currentTime = Math.min(0.05, duration);
                       }}
                       onSeeked={() => void captureCoverFromPreview()}
                     />
@@ -1456,18 +1564,18 @@ export function StudentLiveSection({
                 </div>
                 {saveSheet.videoUrl ? (
                   <label className="student-live-save-scrub">
-                    <span>Frame da capa</span>
+                    <span>Escolher capa · {formatLiveElapsed(Math.floor(saveDurationSec))} de vídeo</span>
                     <input
                       type="range"
                       min={0}
-                      max={Math.max(1, Math.floor(saveDurationSec * 10))}
+                      max={1000}
                       value={saveCoverAt}
                       onChange={(event) => {
                         const next = Number(event.target.value);
                         setSaveCoverAt(next);
                         const video = savePreviewRef.current;
-                        if (video && Number.isFinite(video.duration)) {
-                          video.currentTime = (next / 10);
+                        if (video && Number.isFinite(video.duration) && video.duration > 0) {
+                          video.currentTime = (next / 1000) * video.duration;
                         }
                       }}
                     />
@@ -1475,10 +1583,15 @@ export function StudentLiveSection({
                 ) : null}
                 <div className="student-live-save-actions">
                   <button type="button" className="student-ghost-chip" onClick={cancelSaveSheet} disabled={savingLive}>
-                    {saveSheet.afterEnd ? "Agora não" : "Cancelar"}
+                    {saveSheet.afterEnd ? "Não salvar" : "Cancelar"}
                   </button>
-                  <button type="button" className="student-green-button" onClick={() => void confirmSaveLive()} disabled={savingLive}>
-                    {savingLive ? "Salvando…" : saveSheet.afterEnd ? "Salvar replay" : "Confirmar e publicar"}
+                  <button
+                    type="button"
+                    className="student-green-button"
+                    onClick={() => void confirmSaveLive()}
+                    disabled={savingLive || (saveSheet.afterEnd && !saveSheet.videoBlob && !saveSheet.coverPreview)}
+                  >
+                    {savingLive ? "Salvando…" : saveSheet.afterEnd ? "Salvar live" : "Confirmar e publicar"}
                   </button>
                 </div>
               </div>

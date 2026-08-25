@@ -978,7 +978,7 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     requireDatabase();
     await requireAuth(app, request);
     const file = await request.file({
-      limits: { fileSize: 80 * 1024 * 1024, files: 1 }
+      limits: { fileSize: 200 * 1024 * 1024, files: 1 }
     });
     if (!file) return reply.code(400).send({ error: "Selecione uma foto ou vídeo." });
 

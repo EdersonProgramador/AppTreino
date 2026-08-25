@@ -21207,6 +21207,12 @@ html.is-native-app.keyboard-open .login-shell {
   gap: 12px;
 }
 
+.student-live-save-card.is-compact {
+  place-self: center;
+  text-align: center;
+  max-width: 280px;
+}
+
 .student-live-save-card header {
   display: flex;
   align-items: center;
@@ -21219,8 +21225,10 @@ html.is-native-app.keyboard-open .login-shell {
   border-radius: 14px;
   overflow: hidden;
   background: #0b0b0b;
-  aspect-ratio: 3 / 4;
-  max-height: 52vh;
+  aspect-ratio: 9 / 16;
+  max-height: min(52vh, 480px);
+  width: min(100%, 280px);
+  margin: 0 auto;
 }
 
 .student-live-save-preview.is-replay {

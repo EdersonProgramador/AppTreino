@@ -428,11 +428,7 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
     });
 
     try {
-      await prisma.socialLiveSave.upsert({
-        where: { liveId_userId: { liveId: live.id, userId: user.id } },
-        create: { liveId: live.id, userId: user.id },
-        update: {}
-      });
+      // Temporary "ao vivo" feed card while on air — permanent save is chosen after ending.
       await publishLiveFeedPost({
         authorId: user.id,
         liveId: live.id,
@@ -441,7 +437,7 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
         isHost: true
       });
     } catch {
-      // Save/feed publish must not block going on air.
+      // Feed publish must not block going on air.
     }
 
     try {
@@ -669,38 +665,32 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
       })
       .parse(request.body ?? {});
     const live = await prisma.socialLiveSession.findFirst({
-      where: { id, hostId: user.id, status: "live" },
-      select: { id: true, title: true, videoUrl: true, coverUrl: true, host: { select: { name: true } } }
+      where: { id, hostId: user.id },
+      select: { id: true, title: true, status: true, videoUrl: true, coverUrl: true, host: { select: { name: true } } }
     });
     if (!live) throw httpError(404, "Live não encontrada.");
-    const updated = await prisma.socialLiveSession.update({
-      where: { id },
-      data: {
-        status: "ended",
-        endedAt: new Date(),
-        ...(body.videoUrl ? { videoUrl: body.videoUrl } : {}),
-        ...(body.coverUrl ? { coverUrl: body.coverUrl } : {})
-      }
-    });
-    try {
-      await prisma.socialLiveSave.upsert({
-        where: { liveId_userId: { liveId: id, userId: user.id } },
-        create: { liveId: id, userId: user.id, coverUrl: body.coverUrl ?? updated.coverUrl },
-        update: { ...(body.coverUrl ? { coverUrl: body.coverUrl } : {}) }
-      });
-      await publishLiveFeedPost({
-        authorId: user.id,
-        liveId: updated.id,
-        title: updated.title,
-        hostName: live.host.name,
-        isHost: true,
-        videoUrl: updated.videoUrl,
-        coverUrl: updated.coverUrl
-      });
-    } catch {
-      // Ending must succeed even if save/publish fails.
-    }
-    return { ok: true, videoUrl: updated.videoUrl, coverUrl: updated.coverUrl };
+
+    const updated =
+      live.status === "live"
+        ? await prisma.socialLiveSession.update({
+            where: { id },
+            data: {
+              status: "ended",
+              endedAt: new Date(),
+              ...(body.videoUrl ? { videoUrl: body.videoUrl } : {}),
+              ...(body.coverUrl ? { coverUrl: body.coverUrl } : {})
+            }
+          })
+        : await prisma.socialLiveSession.update({
+            where: { id },
+            data: {
+              ...(body.videoUrl ? { videoUrl: body.videoUrl } : {}),
+              ...(body.coverUrl ? { coverUrl: body.coverUrl } : {})
+            }
+          });
+
+    // Persist media if provided; keep/remove from "Lives salvas" is a separate user choice.
+    return { ok: true, videoUrl: updated.videoUrl, coverUrl: updated.coverUrl, alreadyEnded: live.status !== "live" };
   });
 
   app.get("/student/social/conversations", async (request) => {
