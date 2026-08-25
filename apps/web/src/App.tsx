@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { SoundProvider, useSoundEnabled as useLibrarySoundEnabled } from "react-sounds";
 import { AuthProvider } from "./auth/AuthContext";
-import { AdminPage, DownloadPage, HomePage, LoginPage, StudentPage } from "./auth/pages";
+import { AdminPage, DownloadPage, HomePage, LoginPage, SharedPostRoute, StudentPage } from "./auth/pages";
 import { GuestRoute, ProtectedRoute, RoleHomeRedirect, SessionGate } from "./auth/RouteGuards";
 import { paths } from "./auth/paths";
 import { applyDocumentTheme, useUiPrefsStore } from "./stores/uiPrefsStore";
@@ -15,6 +15,7 @@ const AppRoutes = () => (
       <Routes>
         <Route path={paths.home} element={<HomePage />} />
         <Route path={paths.download} element={<DownloadPage />} />
+        <Route path={paths.sharedPost} element={<SharedPostRoute />} />
 
         <Route element={<GuestRoute />}>
           <Route path={paths.login} element={<LoginPage />} />

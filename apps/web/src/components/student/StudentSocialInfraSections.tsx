@@ -26,10 +26,13 @@ import { mediaUrl } from "../../lib/urls";
 import { getSocialSocket } from "../../lib/social-socket";
 import type { SocialAuthor, UploadResponse } from "../../types";
 import { CAMERA_FILTERS, cameraFilterCss, applyCameraZoom, clampCameraZoom, readCameraZoomCaps, zoomFromPinch, StudentCameraCapture, type CameraFilterId, type CameraZoomCaps } from "./StudentCameraCapture";
+import { VideoCoverPicker } from "./VideoCoverPicker";
+import { frameFromVideo } from "../../lib/video-cover";
 
 type ReelRow = {
   id: string;
   videoUrl: string;
+  coverUrl?: string | null;
   caption: string;
   mood?: string | null;
   author: SocialAuthor;
@@ -127,21 +130,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
   });
 }
 
-function frameFromVideo(video: HTMLVideoElement, mirror = false): Promise<Blob | null> {
-  if (!video.videoWidth || !video.videoHeight) return Promise.resolve(null);
-  const canvas = document.createElement("canvas");
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return Promise.resolve(null);
-  if (mirror) {
-    ctx.translate(canvas.width, 0);
-    ctx.scale(-1, 1);
-  }
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.9));
-}
-
 export function StudentReelsSection({
   token,
   onOpenDm,
@@ -157,6 +145,7 @@ export function StudentReelsSection({
   const [cameraOpen, setCameraOpen] = useState(false);
   const [caption, setCaption] = useState("");
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [reelCoverPreview, setReelCoverPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -184,6 +173,8 @@ export function StudentReelsSection({
       const form = new FormData();
       form.append("file", file);
       const uploaded = await apiUpload<UploadResponse>("/student/social/uploads", form, token);
+      if (reelCoverPreview?.startsWith("blob:")) URL.revokeObjectURL(reelCoverPreview);
+      setReelCoverPreview(null);
       setVideoUrl(uploaded.file.url);
       setComposer(true);
       setCameraOpen(false);
@@ -203,10 +194,24 @@ export function StudentReelsSection({
     setBusy(true);
     setError(null);
     try {
-      await apiPost("/student/social/reels", { videoUrl, caption }, token);
+      let coverUrl: string | null = null;
+      if (reelCoverPreview) {
+        if (reelCoverPreview.startsWith("blob:")) {
+          const blob = await fetch(reelCoverPreview).then((res) => res.blob());
+          const form = new FormData();
+          form.append("file", new File([blob], `reel-cover-${Date.now()}.jpg`, { type: "image/jpeg" }));
+          const uploaded = await apiUpload<UploadResponse>("/student/social/uploads", form, token);
+          coverUrl = uploaded.file.url;
+        } else {
+          coverUrl = reelCoverPreview;
+        }
+      }
+      await apiPost("/student/social/reels", { videoUrl, coverUrl, caption }, token);
+      if (reelCoverPreview?.startsWith("blob:")) URL.revokeObjectURL(reelCoverPreview);
       setComposer(false);
       setCaption("");
       setVideoUrl(null);
+      setReelCoverPreview(null);
       await load();
     } catch (err) {
       setError(readErrorMessage(err, "Não foi possível publicar o clipe."));
@@ -291,6 +296,7 @@ export function StudentReelsSection({
           <article key={reel.id} className="student-reel-card">
             <video
               src={mediaUrl(reel.videoUrl)}
+              poster={reel.coverUrl ? mediaUrl(reel.coverUrl) : undefined}
               playsInline
               loop
               muted
@@ -337,8 +343,10 @@ export function StudentReelsSection({
             <button
               type="button"
               onClick={() => {
+                if (reelCoverPreview?.startsWith("blob:")) URL.revokeObjectURL(reelCoverPreview);
                 setComposer(false);
                 setVideoUrl(null);
+                setReelCoverPreview(null);
                 setCaption("");
               }}
               aria-label="Fechar"
@@ -347,7 +355,17 @@ export function StudentReelsSection({
             </button>
           </header>
           <SocialErrorBanner message={error} onDismiss={() => setError(null)} />
-          {videoUrl ? <video className="student-feed-media student-reel-preview" src={mediaUrl(videoUrl)} controls playsInline /> : null}
+          {videoUrl ? (
+            <VideoCoverPicker
+              videoSrc={videoUrl}
+              coverPreview={reelCoverPreview}
+              onCoverChange={(previewUrl) => {
+                if (reelCoverPreview?.startsWith("blob:")) URL.revokeObjectURL(reelCoverPreview);
+                setReelCoverPreview(previewUrl);
+              }}
+              label="Escolher capa do clipe"
+            />
+          ) : null}
           <input value={caption} onChange={(event) => setCaption(event.target.value)} placeholder="Legenda" maxLength={220} />
           <div className="student-reel-composer-actions">
             <button type="button" className="student-ghost-chip" onClick={() => setCameraOpen(true)}>

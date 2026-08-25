@@ -18,6 +18,7 @@ export const LoginView = ({
   success,
   selectedPlanCode,
   resetToken,
+  preferRegister = false,
   onSubmit,
   onRegisterOnboarding,
   onForgotPassword,
@@ -29,20 +30,23 @@ export const LoginView = ({
   success: string | null;
   selectedPlanCode: PlanCode | null;
   resetToken: string | null;
+  preferRegister?: boolean;
   onSubmit: (mode: AuthMode, formData: FormData, provider?: "EMAIL" | "GOOGLE") => Promise<void>;
   onRegisterOnboarding: (payload: WorkoutOnboardingSubmitPayload) => Promise<void>;
   onForgotPassword: (formData: FormData) => Promise<void>;
   onResetPassword: (formData: FormData) => Promise<void>;
   onClearResetToken: () => void;
 }) => {
-  const [mode, setMode] = useState<AuthMode>(resetToken ? "reset" : selectedPlanCode ? "register" : "login");
+  const [mode, setMode] = useState<AuthMode>(
+    resetToken ? "reset" : Boolean(selectedPlanCode) || preferRegister ? "register" : "login"
+  );
   const formRef = useRef<HTMLFormElement | null>(null);
   const googleButtonRef = useRef<HTMLDivElement | null>(null);
   const selectedPlan = initialPlans.find((plan) => plan.code === selectedPlanCode);
 
   useEffect(() => {
-    if (selectedPlanCode) setMode("register");
-  }, [selectedPlanCode]);
+    if (selectedPlanCode || preferRegister) setMode("register");
+  }, [selectedPlanCode, preferRegister]);
 
   useEffect(() => {
     if (resetToken) setMode("reset");

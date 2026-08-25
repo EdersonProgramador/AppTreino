@@ -12,11 +12,12 @@ import {
 
 describe("session role routing", () => {
   it("marks guest paths for redirect after login", () => {
-    assert.equal(isGuestPath("/"), true);
-    assert.equal(isGuestPath("/login"), true);
-    assert.equal(isGuestPath("/baixar-app"), true);
-    assert.equal(isGuestPath("/aluno"), false);
-    assert.equal(isGuestPath("/admin"), false);
+  assert.equal(isGuestPath("/"), true);
+  assert.equal(isGuestPath("/login"), true);
+  assert.equal(isGuestPath("/baixar-app"), true);
+  assert.equal(isGuestPath("/p/abc123"), true);
+  assert.equal(isGuestPath("/aluno"), false);
+  assert.equal(isGuestPath("/admin"), false);
   });
 
   it("student must leave /, /login and /admin", () => {

@@ -1284,6 +1284,7 @@ model SocialStory {
   author    User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
   mediaUrl  String           @map("media_url")
   mediaType String           @default("IMAGE") @map("media_type")
+  coverUrl  String?          @map("cover_url")
   caption   String?
   mood      String           @default("vibe")
   expiresAt DateTime         @map("expires_at")
@@ -1312,6 +1313,7 @@ model SocialReel {
   authorId  String          @map("author_id")
   author    User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
   videoUrl  String          @map("video_url")
+  coverUrl  String?         @map("cover_url")
   caption   String          @default("")
   mood      String?
   hidden    Boolean         @default(false)

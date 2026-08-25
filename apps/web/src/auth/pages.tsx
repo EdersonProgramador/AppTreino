@@ -4,6 +4,7 @@ import { ArrowLeft, LogIn } from "lucide-react";
 import { LoginView } from "../components/auth/LoginView";
 import { AppDownloadSoonView } from "../components/home/AppDownloadSoonView";
 import { HomeView } from "../components/home/HomeView";
+import { SharedPostPage } from "../components/shared/SharedPostPage";
 import { assetUrl } from "../lib/urls";
 import { brand } from "../lib/brand";
 import { useAuth } from "./AuthContext";
@@ -52,6 +53,10 @@ export function DownloadPage() {
   return <AppDownloadSoonView />;
 }
 
+export function SharedPostRoute() {
+  return <SharedPostPage />;
+}
+
 export function LoginPage() {
   const {
     user,
@@ -90,6 +95,8 @@ export function LoginPage() {
     }
   }, [searchParams, setSelectedPlanCode]);
 
+  const forceRegister = searchParams.get("mode") === "register";
+
   // signingIn: mantém o formulário (spinner no botão). Só bloqueia em restore/redirect.
   if (phase === "restoring" || phase === "redirecting") {
     return <TransitionScreen message={transitionMessage} />;
@@ -107,6 +114,7 @@ export function LoginPage() {
         error={loginError}
         success={loginSuccess}
         selectedPlanCode={selectedPlanCode}
+        preferRegister={forceRegister}
         resetToken={resetToken}
         onSubmit={submitAuth}
         onRegisterOnboarding={submitRegisterOnboarding}

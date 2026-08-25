@@ -21,7 +21,7 @@ const COVER_COLORS = [
 
 const DEFAULT_COVER = "#c4783a";
 
-type MediaItem = { url: string; type: "IMAGE" | "VIDEO" };
+type MediaItem = { url: string; type: "IMAGE" | "VIDEO"; coverUrl?: string | null };
 
 type AthleteSocial = {
   followersCount: number;
@@ -59,11 +59,12 @@ function mediaOf(post: SocialPostRow): MediaItem[] {
   if (post.mediaItems?.length) {
     return post.mediaItems.map((item) => ({
       url: item.url,
-      type: item.type === "VIDEO" ? "VIDEO" : "IMAGE"
+      type: item.type === "VIDEO" ? "VIDEO" : "IMAGE",
+      coverUrl: item.coverUrl ?? null
     }));
   }
   if (post.mediaUrl) {
-    return [{ url: post.mediaUrl, type: post.mediaType === "VIDEO" ? "VIDEO" : "IMAGE" }];
+    return [{ url: post.mediaUrl, type: post.mediaType === "VIDEO" ? "VIDEO" : "IMAGE", coverUrl: null }];
   }
   return [];
 }
@@ -93,7 +94,15 @@ function ViewerCarousel({ items }: { items: MediaItem[] }) {
     >
       <div className="student-feed-carousel-frame" data-ratio="4:5">
         {current.type === "VIDEO" ? (
-          <video className="student-feed-media" src={mediaUrl(current.url)} controls playsInline autoPlay key={current.url} />
+          <video
+            className="student-feed-media"
+            src={mediaUrl(current.url)}
+            poster={current.coverUrl ? mediaUrl(current.coverUrl) : undefined}
+            controls
+            playsInline
+            autoPlay
+            key={current.url}
+          />
         ) : (
           <img className="student-feed-media" src={mediaUrl(current.url)} alt="" key={current.url} />
         )}
@@ -484,7 +493,9 @@ export function StudentAthleteProfileSection({
         ) : (
           <div className="student-athlete-posts-grid">
             {posts.map((post, index) => {
-              const thumb = post.mediaItems?.[0]?.url || post.mediaUrl || null;
+              const first = post.mediaItems?.[0];
+              const isVideo = post.mediaType === "VIDEO" || first?.type === "VIDEO";
+              const thumb = (isVideo ? first?.coverUrl : null) || first?.url || post.mediaUrl || null;
               return (
                 <button
                   key={post.id}
@@ -493,7 +504,7 @@ export function StudentAthleteProfileSection({
                   onClick={() => openPostViewer(index)}
                 >
                   {thumb ? (
-                    post.mediaType === "VIDEO" || post.mediaItems?.[0]?.type === "VIDEO" ? (
+                    isVideo && !first?.coverUrl ? (
                       <video src={mediaUrl(thumb)} muted playsInline />
                     ) : (
                       <img src={mediaUrl(thumb)} alt="" />

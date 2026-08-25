@@ -288,7 +288,7 @@ export interface SocialPostRow {
   body?: string | null;
   mediaUrl?: string | null;
   mediaType?: "IMAGE" | "VIDEO" | string | null;
-  mediaItems?: Array<{ url: string; type: "IMAGE" | "VIDEO" | string }>;
+  mediaItems?: Array<{ url: string; type: "IMAGE" | "VIDEO" | string; coverUrl?: string | null }>;
   createdAt: string;
   author: SocialAuthor;
   likesCount: number;
@@ -305,6 +305,7 @@ export interface SocialStoryItem {
   id: string;
   mediaUrl: string;
   mediaType: string;
+  coverUrl?: string | null;
   caption?: string | null;
   mood: string;
   createdAt: string;

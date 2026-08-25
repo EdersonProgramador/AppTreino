@@ -222,13 +222,17 @@ export function StudentPeerProfileSection({ token, userId, onBack, onOpenDm, onO
             ) : (
               <div className="student-athlete-grid">
                 {posts.map((post) => {
-                  const media = post.mediaItems?.[0] ?? (post.mediaUrl ? { url: post.mediaUrl, type: post.mediaType } : null);
+                  const media = post.mediaItems?.[0] ?? (post.mediaUrl ? { url: post.mediaUrl, type: post.mediaType, coverUrl: null } : null);
+                  const isVideo = media?.type === "VIDEO";
+                  const thumb = (isVideo ? media?.coverUrl : null) || media?.url || null;
                   return (
                     <article key={post.id} className="student-athlete-grid-item">
-                      {media?.type === "VIDEO" ? (
-                        <video src={mediaUrl(media.url)} muted playsInline />
-                      ) : media ? (
-                        <img src={mediaUrl(media.url)} alt="" />
+                      {thumb ? (
+                        isVideo && !media?.coverUrl ? (
+                          <video src={mediaUrl(thumb)} muted playsInline />
+                        ) : (
+                          <img src={mediaUrl(thumb)} alt="" />
+                        )
                       ) : (
                         <p>{post.body?.slice(0, 80) || brand.athlete}</p>
                       )}

@@ -15,7 +15,8 @@ export const paths = {
   download: "/baixar-app",
   admin: "/admin",
   student: "/aluno",
-  app: "/app"
+  app: "/app",
+  sharedPost: "/p/:postId"
 } as const;
 
 export { normalizeRole, canAccessPanel };
@@ -42,6 +43,7 @@ export function isGuestPath(pathname: string) {
     pathname === paths.home ||
     pathname === paths.login ||
     pathname === paths.download ||
+    pathname.startsWith("/p/") ||
     pathname === "" ||
     pathname === "/"
   );

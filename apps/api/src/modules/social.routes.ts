@@ -252,17 +252,18 @@ function serializeActivity(
   };
 }
 
-function parseMediaItems(raw: unknown): Array<{ url: string; type: "IMAGE" | "VIDEO" }> {
+function parseMediaItems(raw: unknown): Array<{ url: string; type: "IMAGE" | "VIDEO"; coverUrl?: string | null }> {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((item) => {
       if (!item || typeof item !== "object") return null;
-      const row = item as { url?: unknown; type?: unknown };
+      const row = item as { url?: unknown; type?: unknown; coverUrl?: unknown };
       if (typeof row.url !== "string" || !row.url) return null;
       const type = row.type === "VIDEO" ? "VIDEO" : "IMAGE";
-      return { url: row.url, type };
+      const coverUrl = typeof row.coverUrl === "string" && row.coverUrl.trim() ? row.coverUrl.trim() : null;
+      return { url: row.url, type, coverUrl };
     })
-    .filter((item): item is { url: string; type: "IMAGE" | "VIDEO" } => Boolean(item))
+    .filter((item): item is { url: string; type: "IMAGE" | "VIDEO"; coverUrl?: string | null } => Boolean(item))
     .slice(0, 10);
 }
 
@@ -581,7 +582,8 @@ export async function registerSocialRoutes(app: FastifyInstance) {
           .array(
             z.object({
               url: z.string().url().or(z.string().startsWith("/")),
-              type: z.enum(["IMAGE", "VIDEO"])
+              type: z.enum(["IMAGE", "VIDEO"]),
+              coverUrl: z.string().url().or(z.string().startsWith("/")).optional().nullable()
             })
           )
           .max(10)
@@ -590,7 +592,13 @@ export async function registerSocialRoutes(app: FastifyInstance) {
       .parse(request.body);
 
     const text = body.body?.trim() ?? "";
-    const mediaItems = parseMediaItems(body.mediaItems?.length ? body.mediaItems : body.mediaUrl ? [{ url: body.mediaUrl, type: body.mediaType ?? "IMAGE" }] : []);
+    const mediaItems = parseMediaItems(
+      body.mediaItems?.length ? body.mediaItems : body.mediaUrl ? [{ url: body.mediaUrl, type: body.mediaType ?? "IMAGE" }] : []
+    ).map((item) =>
+      item.type === "IMAGE"
+        ? { url: item.url, type: item.type, coverUrl: item.coverUrl || item.url }
+        : { url: item.url, type: item.type, coverUrl: item.coverUrl || null }
+    );
     if (!text && !mediaItems.length) {
       throw httpError(400, "Escreva algo ou anexe uma foto/vídeo.");
     }
@@ -793,6 +801,7 @@ export async function registerSocialRoutes(app: FastifyInstance) {
           id: string;
           mediaUrl: string;
           mediaType: string;
+          coverUrl: string | null;
           caption: string | null;
           mood: string;
           createdAt: string;
@@ -803,25 +812,31 @@ export async function registerSocialRoutes(app: FastifyInstance) {
 
     for (const story of stories) {
       const seen = story.views.length > 0;
-      const current = byAuthor.get(story.authorId) ?? {
-        userId: story.authorId,
-        username: story.author.name,
-        image_url: story.author.profile?.avatarUrl ?? null,
-        isMine: story.authorId === user.id,
-        unseen: false,
-        items: []
-      };
-      current.items.push({
+      const item = {
         id: story.id,
         mediaUrl: story.mediaUrl,
         mediaType: story.mediaType,
+        coverUrl: story.coverUrl,
         caption: story.caption,
         mood: story.mood,
         createdAt: story.createdAt.toISOString(),
         seen
-      });
+      };
+      const current = byAuthor.get(story.authorId);
+      if (!current) {
+        // Capa do rail: cover escolhida ou mídia do momento mais recente.
+        byAuthor.set(story.authorId, {
+          userId: story.authorId,
+          username: story.author.name,
+          image_url: story.coverUrl || story.mediaUrl,
+          isMine: story.authorId === user.id,
+          unseen: !seen && story.authorId !== user.id,
+          items: [item]
+        });
+        continue;
+      }
+      current.items.push(item);
       if (!seen && story.authorId !== user.id) current.unseen = true;
-      byAuthor.set(story.authorId, current);
     }
 
     const rails = [...byAuthor.values()].sort((a, b) => {
@@ -840,6 +855,7 @@ export async function registerSocialRoutes(app: FastifyInstance) {
       .object({
         mediaUrl: z.string().url().or(z.string().startsWith("/")),
         mediaType: z.enum(["IMAGE", "VIDEO"]).optional().default("IMAGE"),
+        coverUrl: z.string().url().or(z.string().startsWith("/")).optional().nullable(),
         caption: z.string().max(200).optional(),
         mood: z.string().max(40).optional().default("vibe")
       })
@@ -851,6 +867,7 @@ export async function registerSocialRoutes(app: FastifyInstance) {
         authorId: user.id,
         mediaUrl: body.mediaUrl,
         mediaType: body.mediaType,
+        coverUrl: body.coverUrl?.trim() || (body.mediaType === "IMAGE" ? body.mediaUrl : null),
         caption: body.caption?.trim() || null,
         mood: body.mood,
         expiresAt
@@ -861,6 +878,7 @@ export async function registerSocialRoutes(app: FastifyInstance) {
         id: story.id,
         mediaUrl: story.mediaUrl,
         mediaType: story.mediaType,
+        coverUrl: story.coverUrl,
         caption: story.caption,
         mood: story.mood,
         expiresAt: story.expiresAt.toISOString(),

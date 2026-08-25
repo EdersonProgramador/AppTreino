@@ -36,9 +36,10 @@ import type {
   UploadResponse
 } from "../../types";
 import { StudentCameraCapture } from "./StudentCameraCapture";
+import { VideoCoverPicker } from "./VideoCoverPicker";
 
 type FeedMode = "for-you" | "following";
-type MediaItem = { url: string; type: "IMAGE" | "VIDEO" };
+type MediaItem = { url: string; type: "IMAGE" | "VIDEO"; coverUrl?: string | null };
 type SocialNav = "reels" | "live" | "messages" | "chat" | "requests" | "profile";
 type CreatePanel = "post" | "story" | "note" | null;
 type CameraMode = "photo" | "video" | null;
@@ -144,7 +145,7 @@ function ActivityMiniMap({ post }: { post: SocialPostRow }) {
 function MediaCarousel({ items }: { items: MediaItem[] }) {
   const [index, setIndex] = useState(0);
   const touchX = useRef<number | null>(null);
-  const itemsKey = items.map((item) => item.url).join("|");
+  const itemsKey = items.map((item) => `${item.url}:${item.coverUrl ?? ""}`).join("|");
   useEffect(() => {
     setIndex(0);
   }, [itemsKey]);
@@ -172,7 +173,14 @@ function MediaCarousel({ items }: { items: MediaItem[] }) {
     >
       <div className="student-feed-carousel-frame" data-ratio="4:5">
         {current.type === "VIDEO" ? (
-          <video className="student-feed-media" src={mediaUrl(current.url)} controls playsInline key={current.url} />
+          <video
+            className="student-feed-media"
+            src={mediaUrl(current.url)}
+            poster={current.coverUrl ? mediaUrl(current.coverUrl) : undefined}
+            controls
+            playsInline
+            key={current.url}
+          />
         ) : (
           <img className="student-feed-media" src={mediaUrl(current.url)} alt="" key={current.url} />
         )}
@@ -270,11 +278,13 @@ export function StudentFeedSection({
   const [cameraMode, setCameraMode] = useState<CameraMode>(null);
   const [storyCaption, setStoryCaption] = useState("");
   const [storyMedia, setStoryMedia] = useState<MediaItem | null>(null);
+  const [storyCoverPreview, setStoryCoverPreview] = useState<string | null>(null);
   const [viewer, setViewer] = useState<{ rail: number; item: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const storyFileRef = useRef<HTMLInputElement>(null);
   const createMenuRef = useRef<HTMLDivElement>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
+  const replyToRef = useRef<ReplyTarget>(null);
 
   async function loadStories() {
     const data = await apiGet<{ rails: SocialStoryRail[] }>("/student/social/stories", token);
@@ -351,8 +361,37 @@ export function StudentFeedSection({
     const uploaded = await apiUpload<UploadResponse>("/student/social/uploads", form, token);
     return {
       url: uploaded.file.url,
-      type: (file.type.startsWith("video/") ? "VIDEO" : "IMAGE") as "IMAGE" | "VIDEO"
+      type: (file.type.startsWith("video/") ? "VIDEO" : "IMAGE") as "IMAGE" | "VIDEO",
+      coverUrl: file.type.startsWith("video/") ? null : uploaded.file.url
     };
+  }
+
+  async function uploadCoverFromPreview(previewUrl: string) {
+    const blob = await fetch(previewUrl).then((res) => res.blob());
+    const form = new FormData();
+    form.append("file", new File([blob], `cover-${Date.now()}.jpg`, { type: "image/jpeg" }));
+    const uploaded = await apiUpload<UploadResponse>("/student/social/uploads", form, token);
+    return uploaded.file.url;
+  }
+
+  async function resolveMediaCovers(items: MediaItem[]) {
+    const next: MediaItem[] = [];
+    for (const item of items) {
+      if (item.type !== "VIDEO") {
+        next.push({ ...item, coverUrl: item.coverUrl || item.url });
+        continue;
+      }
+      if (item.coverUrl && !item.coverUrl.startsWith("blob:")) {
+        next.push(item);
+        continue;
+      }
+      if (item.coverUrl?.startsWith("blob:")) {
+        next.push({ ...item, coverUrl: await uploadCoverFromPreview(item.coverUrl) });
+        continue;
+      }
+      next.push(item);
+    }
+    return next;
   }
 
   async function onPickFiles(files: FileList | null) {
@@ -400,16 +439,20 @@ export function StudentFeedSection({
     setBusy(true);
     setError(null);
     try {
+      const prepared = await resolveMediaCovers(mediaItems);
       const created = await apiPost<{ post: SocialPostRow }>(
         "/student/social/posts",
         {
           body: body.trim(),
-          mediaItems,
-          mediaUrl: mediaItems[0]?.url,
-          mediaType: mediaItems[0]?.type
+          mediaItems: prepared,
+          mediaUrl: prepared[0]?.url,
+          mediaType: prepared[0]?.type
         },
         token
       );
+      for (const item of mediaItems) {
+        if (item.coverUrl?.startsWith("blob:")) URL.revokeObjectURL(item.coverUrl);
+      }
       setPosts((current) => [created.post, ...current]);
       setBody("");
       setMediaItems([]);
@@ -452,8 +495,26 @@ export function StudentFeedSection({
     setSheetComments([]);
     setSheetDraft("");
     setReplyTo(null);
+    replyToRef.current = null;
     setSheetLoading(false);
     setSheetBusy(false);
+  }
+
+  function startReply(target: { rootId: string; name: string }) {
+    const next = { id: target.rootId, name: target.name };
+    replyToRef.current = next;
+    setReplyTo(next);
+    setSheetDraft((current) => {
+      const mention = `@${target.name} `;
+      if (current.trim().startsWith(`@${target.name}`)) return current;
+      return current.trim() ? `${mention}${current}` : mention;
+    });
+    requestAnimationFrame(() => commentInputRef.current?.focus());
+  }
+
+  function clearReply() {
+    replyToRef.current = null;
+    setReplyTo(null);
   }
 
   async function openCommentsSheet(postId: string) {
@@ -461,7 +522,7 @@ export function StudentFeedSection({
     setSearchOpen(false);
     setCommentsPostId(postId);
     setSheetDraft("");
-    setReplyTo(null);
+    clearReply();
     setSheetLoading(true);
     try {
       const data = await apiGet<{ comments: SocialComment[] }>(`/student/social/posts/${postId}/comments`, token);
@@ -478,39 +539,40 @@ export function StudentFeedSection({
     if (!commentsPostId) return;
     const text = sheetDraft.trim();
     if (!text || sheetBusy) return;
+    const parentId = replyToRef.current?.id ?? replyTo?.id ?? null;
     setSheetBusy(true);
     try {
       const result = await apiPost<{ comment: SocialComment }>(
         `/student/social/posts/${commentsPostId}/comments`,
-        { body: text, parentId: replyTo?.id ?? null },
+        { body: text, parentId },
         token
       );
       const comment = result.comment;
       setSheetDraft("");
-      setReplyTo(null);
+      clearReply();
       setSheetComments((current) => {
-        if (comment.parentId) {
-          return current.map((row) =>
-            row.id === comment.parentId
-              ? {
-                  ...row,
-                  replies: [...(row.replies ?? []), comment],
-                  repliesCount: (row.repliesCount ?? row.replies?.length ?? 0) + 1
-                }
-              : row
-          );
+        const replyParentId = comment.parentId ?? parentId;
+        if (replyParentId) {
+          let nested = false;
+          const next = current.map((row) => {
+            if (row.id !== replyParentId) return row;
+            nested = true;
+            return {
+              ...row,
+              replies: [...(row.replies ?? []).filter((item) => item.id !== comment.id), { ...comment, replies: [] }],
+              repliesCount: (row.repliesCount ?? row.replies?.length ?? 0) + 1
+            };
+          });
+          if (nested) return next;
         }
-        return [...current, { ...comment, replies: comment.replies ?? [] }];
+        return [...current.filter((row) => row.id !== comment.id), { ...comment, replies: comment.replies ?? [] }];
       });
       setPosts((current) =>
         current.map((post) =>
           post.id === commentsPostId
             ? {
                 ...post,
-                commentsCount: (post.commentsCount ?? post.comments.length) + 1,
-                comments: comment.parentId
-                  ? post.comments
-                  : [...post.comments.slice(-1), comment].slice(-2)
+                commentsCount: (post.commentsCount ?? post.comments.length) + 1
               }
             : post
         )
@@ -562,19 +624,28 @@ export function StudentFeedSection({
     if (!storyMedia) return;
     setBusy(true);
     try {
+      let coverUrl = storyMedia.type === "IMAGE" ? storyMedia.url : null;
+      if (storyMedia.type === "VIDEO" && storyCoverPreview) {
+        coverUrl = storyCoverPreview.startsWith("blob:")
+          ? await uploadCoverFromPreview(storyCoverPreview)
+          : storyCoverPreview;
+      }
       await apiPost(
         "/student/social/stories",
         {
           mediaUrl: storyMedia.url,
           mediaType: storyMedia.type,
+          coverUrl,
           caption: storyCaption.trim() || undefined,
           mood: "vibe"
         },
         token
       );
+      if (storyCoverPreview?.startsWith("blob:")) URL.revokeObjectURL(storyCoverPreview);
       setCreatePanel(null);
       setStoryCaption("");
       setStoryMedia(null);
+      setStoryCoverPreview(null);
       await loadStories();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível publicar o momento.");
@@ -719,6 +790,8 @@ export function StudentFeedSection({
     if (panel === "story") {
       setStoryCaption("");
       setStoryMedia(null);
+      if (storyCoverPreview?.startsWith("blob:")) URL.revokeObjectURL(storyCoverPreview);
+      setStoryCoverPreview(null);
     }
     setCreatePanel(panel);
   }
@@ -827,6 +900,9 @@ export function StudentFeedSection({
           ))}
           {storyRailsWithoutLiveHosts.map((rail) => {
             const storyIndex = rails.findIndex((row) => row.userId === rail.userId);
+            const cover = rail.items[0];
+            const coverUrl = cover?.coverUrl || (String(cover?.mediaType || "").toUpperCase() === "IMAGE" ? cover?.mediaUrl : null) || rail.image_url;
+            const isVideoFallback = !cover?.coverUrl && String(cover?.mediaType || "").toUpperCase() === "VIDEO";
             return (
               <button
                 key={rail.userId}
@@ -834,7 +910,15 @@ export function StudentFeedSection({
                 className={rail.unseen || rail.isMine ? "is-hot" : ""}
                 onClick={() => void openStory(storyIndex >= 0 ? storyIndex : 0)}
               >
-                {rail.image_url ? <img src={mediaUrl(rail.image_url)} alt="" /> : <span>{rail.username.slice(0, 1)}</span>}
+                {coverUrl ? (
+                  isVideoFallback ? (
+                    <video src={mediaUrl(coverUrl)} muted playsInline preload="metadata" aria-hidden />
+                  ) : (
+                    <img src={mediaUrl(coverUrl)} alt="" />
+                  )
+                ) : (
+                  <span>{rail.username.slice(0, 1)}</span>
+                )}
                 <small>{rail.isMine ? "Você" : rail.username.split(" ")[0]}</small>
               </button>
             );
@@ -861,10 +945,21 @@ export function StudentFeedSection({
             <div className="student-feed-composer-media">
               {mediaItems.map((item) => (
                 <div key={item.url} className="student-feed-composer-thumb">
-                  {item.type === "VIDEO" ? <video src={mediaUrl(item.url)} muted /> : <img src={mediaUrl(item.url)} alt="" />}
+                  {item.type === "VIDEO" ? (
+                    item.coverUrl ? (
+                      <img src={mediaUrl(item.coverUrl)} alt="" />
+                    ) : (
+                      <video src={mediaUrl(item.url)} muted preload="metadata" />
+                    )
+                  ) : (
+                    <img src={mediaUrl(item.url)} alt="" />
+                  )}
                   <button
                     type="button"
-                    onClick={() => setMediaItems((current) => current.filter((row) => row.url !== item.url))}
+                    onClick={() => {
+                      if (item.coverUrl?.startsWith("blob:")) URL.revokeObjectURL(item.coverUrl);
+                      setMediaItems((current) => current.filter((row) => row.url !== item.url));
+                    }}
                     aria-label="Remover"
                   >
                     <X size={14} />
@@ -874,6 +969,26 @@ export function StudentFeedSection({
               {mediaItems.length > 1 && <em>Carrossel · {mediaItems.length} itens</em>}
             </div>
           )}
+          {mediaItems
+            .filter((item) => item.type === "VIDEO")
+            .map((item) => (
+              <VideoCoverPicker
+                key={`cover-${item.url}`}
+                videoSrc={item.url}
+                coverPreview={item.coverUrl}
+                onCoverChange={(previewUrl) => {
+                  setMediaItems((current) =>
+                    current.map((row) => {
+                      if (row.url !== item.url) return row;
+                      if (row.coverUrl?.startsWith("blob:")) URL.revokeObjectURL(row.coverUrl);
+                      return { ...row, coverUrl: previewUrl };
+                    })
+                  );
+                }}
+                label="Escolher capa do vídeo"
+                compact
+              />
+            ))}
           <div className="student-feed-composer-bar">
             <input ref={fileRef} type="file" accept="image/*,video/*" multiple hidden onChange={(event) => void onPickFiles(event.target.files)} />
             <button type="button" className="student-ghost-chip" onClick={() => fileRef.current?.click()} disabled={busy || mediaItems.length >= MAX_MEDIA}>
@@ -976,7 +1091,7 @@ export function StudentFeedSection({
           const items = (post.mediaItems?.length
             ? post.mediaItems
             : post.mediaUrl && !isLiveCard
-              ? [{ url: post.mediaUrl, type: post.mediaType === "VIDEO" ? "VIDEO" : "IMAGE" }]
+              ? [{ url: post.mediaUrl, type: post.mediaType === "VIDEO" ? "VIDEO" : "IMAGE", coverUrl: null }]
               : []) as MediaItem[];
           return (
             <article className="student-feed-card" key={post.id}>
@@ -1091,21 +1206,6 @@ export function StudentFeedSection({
                   <Share2 size={18} />
                 </button>
               </footer>
-              {post.comments.slice(0, 2).map((comment) => (
-                <button
-                  type="button"
-                  className="student-feed-comment"
-                  key={comment.id}
-                  onClick={() => void openCommentsSheet(post.id)}
-                >
-                  <strong>{comment.author.name.split(" ")[0]}</strong> {comment.body}
-                </button>
-              ))}
-              {(post.commentsCount ?? post.comments.length) > 2 ? (
-                <button type="button" className="student-feed-comments-more" onClick={() => void openCommentsSheet(post.id)}>
-                  Ver todos os {(post.commentsCount ?? post.comments.length)} comentários
-                </button>
-              ) : null}
             </article>
           );
         })}
@@ -1130,6 +1230,7 @@ export function StudentFeedSection({
             onClick={() => {
               setCreatePanel(null);
               setStoryMedia(null);
+              setStoryCoverPreview(null);
               setStoryCaption("");
             }}
           >
@@ -1144,8 +1245,10 @@ export function StudentFeedSection({
                 <button
                   type="button"
                   onClick={() => {
+                    if (storyCoverPreview?.startsWith("blob:")) URL.revokeObjectURL(storyCoverPreview);
                     setCreatePanel(null);
                     setStoryMedia(null);
+                    setStoryCoverPreview(null);
                     setStoryCaption("");
                   }}
                   aria-label="Fechar"
@@ -1158,13 +1261,21 @@ export function StudentFeedSection({
                   <p className="student-activity-hint">Foto ou vídeo curto. Some em 24 horas.</p>
                 ) : null}
                 {storyMedia ? (
-                  <div className="student-feed-preview student-feed-preview-story">
-                    {storyMedia.type === "VIDEO" ? (
-                      <video src={mediaUrl(storyMedia.url)} controls playsInline preload="metadata" />
-                    ) : (
+                  storyMedia.type === "VIDEO" ? (
+                    <VideoCoverPicker
+                      videoSrc={storyMedia.url}
+                      coverPreview={storyCoverPreview}
+                      onCoverChange={(previewUrl) => {
+                        if (storyCoverPreview?.startsWith("blob:")) URL.revokeObjectURL(storyCoverPreview);
+                        setStoryCoverPreview(previewUrl);
+                      }}
+                      label="Escolher capa do momento"
+                    />
+                  ) : (
+                    <div className="student-feed-preview student-feed-preview-story">
                       <img src={mediaUrl(storyMedia.url)} alt="" />
-                    )}
-                  </div>
+                    </div>
+                  )
                 ) : null}
               </div>
               <input
@@ -1178,6 +1289,8 @@ export function StudentFeedSection({
                   if (!file) return;
                   setBusy(true);
                   try {
+                    if (storyCoverPreview?.startsWith("blob:")) URL.revokeObjectURL(storyCoverPreview);
+                    setStoryCoverPreview(null);
                     setStoryMedia(await uploadFile(file));
                   } catch (err) {
                     setError(err instanceof Error ? err.message : "Falha no envio da mídia.");
@@ -1313,10 +1426,12 @@ export function StudentFeedSection({
                               ) : null}
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setReplyTo({ id: comment.id, name: comment.author.name.split(" ")[0] });
-                                  commentInputRef.current?.focus();
-                                }}
+                                onClick={() =>
+                                  startReply({
+                                    rootId: comment.id,
+                                    name: comment.author.name.split(" ")[0]
+                                  })
+                                }
                               >
                                 Responder
                               </button>
@@ -1332,47 +1447,53 @@ export function StudentFeedSection({
                           </button>
                         </article>
 
-                        {(comment.replies ?? []).map((reply) => (
-                          <article className="student-comments-item is-reply" key={reply.id}>
-                            <div className="student-comments-avatar" aria-hidden>
-                              {reply.author.avatarUrl ? (
-                                <img src={mediaUrl(reply.author.avatarUrl)} alt="" />
-                              ) : (
-                                <span>{reply.author.name.slice(0, 1)}</span>
-                              )}
-                            </div>
-                            <div className="student-comments-body">
-                              <p>
-                                <strong>{reply.author.name.split(" ")[0]}</strong> {reply.body}
-                              </p>
-                              <div className="student-comments-meta">
-                                <time dateTime={reply.createdAt}>{formatCompactRelative(reply.createdAt)}</time>
-                                {(reply.likesCount ?? 0) > 0 ? (
-                                  <span>
-                                    {reply.likesCount} curtida{(reply.likesCount ?? 0) === 1 ? "" : "s"}
-                                  </span>
-                                ) : null}
+                        {(comment.replies ?? []).length > 0 ? (
+                          <div className="student-comments-replies">
+                            {(comment.replies ?? []).map((reply) => (
+                              <article className="student-comments-item is-reply" key={reply.id}>
+                                <div className="student-comments-avatar" aria-hidden>
+                                  {reply.author.avatarUrl ? (
+                                    <img src={mediaUrl(reply.author.avatarUrl)} alt="" />
+                                  ) : (
+                                    <span>{reply.author.name.slice(0, 1)}</span>
+                                  )}
+                                </div>
+                                <div className="student-comments-body">
+                                  <p>
+                                    <strong>{reply.author.name.split(" ")[0]}</strong> {reply.body}
+                                  </p>
+                                  <div className="student-comments-meta">
+                                    <time dateTime={reply.createdAt}>{formatCompactRelative(reply.createdAt)}</time>
+                                    {(reply.likesCount ?? 0) > 0 ? (
+                                      <span>
+                                        {reply.likesCount} curtida{(reply.likesCount ?? 0) === 1 ? "" : "s"}
+                                      </span>
+                                    ) : null}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        startReply({
+                                          rootId: comment.id,
+                                          name: reply.author.name.split(" ")[0]
+                                        })
+                                      }
+                                    >
+                                      Responder
+                                    </button>
+                                  </div>
+                                </div>
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setReplyTo({ id: comment.id, name: reply.author.name.split(" ")[0] });
-                                    commentInputRef.current?.focus();
-                                  }}
+                                  className={`student-comments-like${reply.likedByMe ? " is-on" : ""}`}
+                                  aria-label="Curtir comentário"
+                                  onClick={() => void toggleCommentLike(reply.id)}
                                 >
-                                  Responder
+                                  <Heart size={14} fill={reply.likedByMe ? "currentColor" : "none"} />
                                 </button>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              className={`student-comments-like${reply.likedByMe ? " is-on" : ""}`}
-                              aria-label="Curtir comentário"
-                              onClick={() => void toggleCommentLike(reply.id)}
-                            >
-                              <Heart size={14} fill={reply.likedByMe ? "currentColor" : "none"} />
-                            </button>
-                          </article>
-                        ))}
+                              </article>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     ))
                   )}
@@ -1404,7 +1525,7 @@ export function StudentFeedSection({
                   {replyTo ? (
                     <div className="student-comments-replying">
                       <span>Respondendo a {replyTo.name}</span>
-                      <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancelar resposta">
+                      <button type="button" onClick={clearReply} aria-label="Cancelar resposta">
                         <X size={14} />
                       </button>
                     </div>

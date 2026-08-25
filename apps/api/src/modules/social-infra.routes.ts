@@ -145,6 +145,7 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
       reels: rows.map((row) => ({
         id: row.id,
         videoUrl: row.videoUrl,
+        coverUrl: row.coverUrl,
         caption: row.caption,
         mood: row.mood,
         createdAt: row.createdAt.toISOString(),
@@ -162,18 +163,21 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
     const body = z
       .object({
         videoUrl: z.string().url().or(z.string().startsWith("/")),
+        coverUrl: z.string().url().or(z.string().startsWith("/")).optional().nullable(),
         caption: z.string().max(300).optional().default(""),
         mood: z.string().max(40).optional()
       })
       .parse(request.body);
     const caption = body.caption.trim();
-    const mediaItems = [{ url: body.videoUrl, type: "VIDEO" as const }];
+    const coverUrl = body.coverUrl?.trim() || null;
+    const mediaItems = [{ url: body.videoUrl, type: "VIDEO" as const, coverUrl }];
 
     const [reel] = await prisma.$transaction([
       prisma.socialReel.create({
         data: {
           authorId: user.id,
           videoUrl: body.videoUrl,
+          coverUrl,
           caption,
           mood: body.mood ?? null
         },
@@ -199,6 +203,7 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
       reel: {
         id: reel.id,
         videoUrl: reel.videoUrl,
+        coverUrl: reel.coverUrl,
         caption: reel.caption,
         mood: reel.mood,
         createdAt: reel.createdAt.toISOString(),
