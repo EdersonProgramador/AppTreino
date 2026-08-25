@@ -21177,22 +21177,55 @@ html.is-native-app.keyboard-open .login-shell {
   z-index: 130;
   display: grid;
   place-items: center;
-  padding: 16px;
+  padding:
+    max(12px, var(--safe-top, env(safe-area-inset-top, 0px)))
+    12px
+    max(12px, calc(12px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))));
   background: rgba(8, 10, 14, 0.58);
+  box-sizing: border-box;
 }
 
 .student-feed-modal-card {
   width: min(100%, 420px);
-  max-height: min(88vh, 720px);
-  overflow: auto;
+  max-height: calc(
+    100dvh - 24px - var(--safe-top, env(safe-area-inset-top, 0px)) - var(--safe-bottom, env(safe-area-inset-bottom, 0px))
+  );
+  overflow: hidden;
   background: var(--app-panel);
   color: var(--app-text);
   border: 1px solid var(--app-border);
   border-radius: 24px;
-  padding: 18px;
-  display: grid;
-  gap: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+}
+
+.student-feed-modal-card > .student-activity-hint {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.student-feed-modal-card > .student-feed-modal-actions,
+.student-feed-modal-card > input,
+.student-feed-modal-card > .student-green-button {
+  flex: 0 0 auto;
+}
+
+.student-feed-modal-card .student-feed-preview {
+  flex: 1 1 auto;
+  width: min(100%, 280px);
+  max-height: min(38dvh, 300px);
+  aspect-ratio: 4 / 5;
+  margin: 0 auto;
+  min-height: 0;
+}
+
+.student-feed-modal-card .student-feed-preview::before {
+  content: none;
+  display: none;
+  padding: 0;
 }
 
 .student-feed-modal-card header {
@@ -21200,6 +21233,7 @@ html.is-native-app.keyboard-open .login-shell {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex: 0 0 auto;
 }
 
 .student-feed-modal-card header button {
@@ -21226,6 +21260,19 @@ html.is-native-app.keyboard-open .login-shell {
   border-radius: 12px;
   padding: 10px 12px;
   font: inherit;
+}
+
+@media (max-height: 700px) {
+  .student-feed-modal-card {
+    padding: 12px;
+    gap: 8px;
+    border-radius: 18px;
+  }
+
+  .student-feed-modal-card .student-feed-preview {
+    width: min(100%, 220px);
+    max-height: min(32dvh, 240px);
+  }
 }
 
 .student-feed-more {
