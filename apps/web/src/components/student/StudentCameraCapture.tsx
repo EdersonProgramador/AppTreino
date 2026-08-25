@@ -7,13 +7,35 @@ type Facing = "user" | "environment";
 
 export const CAMERA_FILTERS = [
   { id: "none", label: "Original", css: "none" },
-  { id: "clarendon", label: "Claro", css: "contrast(1.15) saturate(1.25)" },
-  { id: "gingham", label: "Suave", css: "brightness(1.08) sepia(0.12) contrast(0.95)" },
-  { id: "moon", label: "Lua", css: "grayscale(1) contrast(1.15) brightness(1.05)" },
-  { id: "lark", label: "Lark", css: "brightness(1.12) contrast(0.92) saturate(1.1)" },
-  { id: "reyes", label: "Reyes", css: "sepia(0.22) brightness(1.1) contrast(0.9)" },
-  { id: "juno", label: "Juno", css: "contrast(1.12) saturate(1.4) hue-rotate(-8deg)" },
-  { id: "valencia", label: "Valencia", css: "sepia(0.18) contrast(1.08) brightness(1.08) saturate(1.2)" }
+  // CapCut-inspired looks (CSS approximations; CSSgram/Instagram family on GitHub)
+  { id: "soft", label: "Soft", css: "brightness(1.12) contrast(0.92) saturate(0.95)" },
+  { id: "glow", label: "Glow", css: "brightness(1.18) contrast(0.88) saturate(1.05)" },
+  { id: "vivid", label: "Vivid", css: "contrast(1.22) saturate(1.55) brightness(1.04)" },
+  { id: "pop", label: "Pop", css: "contrast(1.35) saturate(1.35) brightness(1.02)" },
+  { id: "cinema", label: "Cinema", css: "contrast(1.18) saturate(0.85) brightness(0.92) sepia(0.08)" },
+  { id: "teal", label: "Teal", css: "contrast(1.12) saturate(1.15) hue-rotate(165deg) brightness(0.96)" },
+  { id: "warm", label: "Quente", css: "sepia(0.28) saturate(1.35) brightness(1.08) contrast(1.05)" },
+  { id: "cool", label: "Frio", css: "saturate(0.9) brightness(1.05) hue-rotate(195deg) contrast(1.08)" },
+  { id: "sunset", label: "Sunset", css: "sepia(0.35) saturate(1.45) hue-rotate(-12deg) brightness(1.06) contrast(1.1)" },
+  { id: "vintage", label: "Vintage", css: "sepia(0.4) contrast(1.15) brightness(0.95) saturate(0.85)" },
+  { id: "retro", label: "Retrô", css: "sepia(0.25) contrast(1.25) saturate(1.2) brightness(1.05)" },
+  { id: "fade", label: "Fade", css: "contrast(0.85) brightness(1.12) saturate(0.75)" },
+  { id: "film", label: "Filme", css: "contrast(1.2) saturate(0.7) brightness(0.98) sepia(0.12)" },
+  { id: "pink", label: "Rosa", css: "brightness(1.1) contrast(0.95) saturate(1.25) hue-rotate(-25deg)" },
+  { id: "mono", label: "P&B", css: "grayscale(1) contrast(1.18) brightness(1.02)" },
+  { id: "night", label: "Noite", css: "brightness(0.82) contrast(1.25) saturate(0.8) hue-rotate(210deg)" },
+  // CSSgram classics (una/cssgram) still popular in CapCut packs
+  { id: "clarendon", label: "Claro", css: "contrast(1.2) saturate(1.35)" },
+  { id: "gingham", label: "Suave", css: "brightness(1.05) hue-rotate(-10deg)" },
+  { id: "moon", label: "Lua", css: "grayscale(1) contrast(1.1) brightness(1.1)" },
+  { id: "lark", label: "Lark", css: "contrast(0.9) brightness(1.1) saturate(1.1)" },
+  { id: "reyes", label: "Reyes", css: "sepia(0.22) brightness(1.1) contrast(0.85) saturate(0.75)" },
+  { id: "juno", label: "Juno", css: "contrast(1.2) brightness(1.1) saturate(1.4) hue-rotate(-5deg)" },
+  { id: "valencia", label: "Valencia", css: "contrast(1.08) brightness(1.08) sepia(0.08)" },
+  { id: "lofi", label: "Lo-Fi", css: "contrast(1.5) saturate(1.1)" },
+  { id: "toaster", label: "Toaster", css: "contrast(1.5) brightness(0.9) sepia(0.2)" },
+  { id: "inkwell", label: "Ink", css: "sepia(0.3) contrast(1.1) brightness(1.1) grayscale(1)" },
+  { id: "nashville", label: "Nash", css: "sepia(0.2) contrast(1.2) brightness(1.05) saturate(1.2)" }
 ] as const;
 
 export type CameraFilterId = (typeof CAMERA_FILTERS)[number]["id"];
@@ -506,6 +528,38 @@ export function StudentCameraCapture({
           </div>
         )}
         {zoomHint ? <div className="student-camera-zoom-hint">{zoomHint}</div> : null}
+
+        <aside className={`student-camera-filter-rail${filtersOpen ? " is-open" : ""}`}>
+          <button
+            type="button"
+            className={`student-camera-filter-toggle${filtersOpen || filterId !== "none" ? " is-on" : ""}`}
+            disabled={recording || fallback}
+            onClick={() => setFiltersOpen((open) => !open)}
+            aria-expanded={filtersOpen}
+            aria-label="Filtros"
+          >
+            <Sparkles size={18} />
+            <span>Filtros</span>
+          </button>
+          {filtersOpen ? (
+            <div className="student-camera-filters is-side" role="listbox" aria-label="Efeitos CapCut">
+              {CAMERA_FILTERS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="option"
+                  aria-selected={filterId === item.id}
+                  className={filterId === item.id ? "is-on" : ""}
+                  disabled={recording}
+                  onClick={() => setFilterId(item.id)}
+                >
+                  <span className="student-camera-filter-swatch" style={{ filter: item.css === "none" ? undefined : item.css }} />
+                  <small>{item.label}</small>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </aside>
       </div>
 
       <header className="student-camera-chrome-top">
@@ -531,25 +585,6 @@ export function StudentCameraCapture({
       </header>
 
       <div className="student-camera-chrome-bottom">
-        {filtersOpen ? (
-          <div className="student-camera-filters" role="listbox" aria-label="Filtros">
-            {CAMERA_FILTERS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                role="option"
-                aria-selected={filterId === item.id}
-                className={filterId === item.id ? "is-on" : ""}
-                disabled={recording}
-                onClick={() => setFilterId(item.id)}
-              >
-                <span className="student-camera-filter-swatch" style={{ filter: item.css }} />
-                {item.label}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
         {hint && !fallback ? <small className="student-camera-hint">{hint}</small> : null}
 
         {allowModeSwitch ? (
@@ -590,15 +625,7 @@ export function StudentCameraCapture({
           >
             {captureMode === "photo" ? <Camera size={26} /> : recording ? <span className="student-camera-stop" /> : <Video size={26} />}
           </button>
-          <button
-            type="button"
-            className={`student-camera-side-btn${filtersOpen || filterId !== "none" ? " is-on" : ""}`}
-            disabled={recording}
-            onClick={() => setFiltersOpen((open) => !open)}
-            aria-label="Filtros"
-          >
-            <Sparkles size={20} />
-          </button>
+          <span className="student-camera-side-btn is-spacer" aria-hidden />
         </div>
       </div>
 

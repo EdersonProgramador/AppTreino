@@ -20444,6 +20444,70 @@ html.is-native-app.keyboard-open .login-shell {
   display: none;
 }
 
+.student-camera-filter-rail {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  z-index: 4;
+  transform: translateY(-50%);
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  max-height: min(62vh, 520px);
+  pointer-events: none;
+}
+
+.student-camera-filter-rail > * {
+  pointer-events: auto;
+}
+
+.student-camera-filter-toggle {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  border: 0;
+  border-radius: 14px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.42);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+
+.student-camera-filter-toggle.is-on {
+  background: rgba(223, 102, 60, 0.88);
+}
+
+.student-camera-filters.is-side {
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: min(52vh, 440px);
+  padding: 8px 6px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+  scrollbar-width: thin;
+}
+
+.student-camera-filters.is-side button {
+  width: 58px;
+}
+
+.student-camera-filters.is-side small {
+  max-width: 58px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-camera-side-btn.is-spacer {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .student-camera-filters button {
   flex: 0 0 auto;
   display: grid;

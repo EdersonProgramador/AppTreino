@@ -12,6 +12,7 @@ import {
   Pencil,
   Radio,
   Send,
+  Sparkles,
   SwitchCamera,
   Trash2,
   UserRound,
@@ -376,6 +377,7 @@ export function StudentLiveSection({
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [filterId, setFilterId] = useState<CameraFilterId>("none");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [zoomCaps, setZoomCaps] = useState<CameraZoomCaps>({ min: 1, max: 3, step: 0.05, hardware: false });
   const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(null);
@@ -796,6 +798,37 @@ export function StudentLiveSection({
               .join(" ") || undefined
           }}
         />
+        {isMine ? (
+          <aside className={`student-camera-filter-rail${filtersOpen ? " is-open" : ""}`}>
+            <button
+              type="button"
+              className={`student-camera-filter-toggle${filtersOpen || filterId !== "none" ? " is-on" : ""}`}
+              onClick={() => setFiltersOpen((open) => !open)}
+              aria-expanded={filtersOpen}
+              aria-label="Filtros"
+            >
+              <Sparkles size={18} />
+              <span>Filtros</span>
+            </button>
+            {filtersOpen ? (
+              <div className="student-camera-filters is-side" role="listbox" aria-label="Efeitos CapCut">
+                {CAMERA_FILTERS.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="option"
+                    aria-selected={filterId === item.id}
+                    className={filterId === item.id ? "is-on" : ""}
+                    onClick={() => setFilterId(item.id)}
+                  >
+                    <span className="student-camera-filter-swatch" style={{ filter: item.css === "none" ? undefined : item.css }} />
+                    <small>{item.label}</small>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </aside>
+        ) : null}
         <div className="student-live-studio-chrome">
           <header>
             <span className="student-live-badge">{status === "countdown" ? "PREPARANDO" : "AO VIVO"}</span>
@@ -871,23 +904,7 @@ export function StudentLiveSection({
               </div>
               <footer>
                 {isMine ? (
-                  <>
-                    <div className="student-camera-filters student-live-filters" role="listbox" aria-label="Filtros">
-                      {CAMERA_FILTERS.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          role="option"
-                          aria-selected={filterId === item.id}
-                          className={filterId === item.id ? "is-on" : ""}
-                          onClick={() => setFilterId(item.id)}
-                        >
-                          <span className="student-camera-filter-swatch" style={{ filter: item.css }} />
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="student-live-host-tools">
+                  <div className="student-live-host-tools">
                       <button type="button" onClick={() => void flipCamera()} aria-label="Virar câmera">
                         <SwitchCamera size={18} />
                       </button>
@@ -895,7 +912,6 @@ export function StudentLiveSection({
                         {micOn ? <Mic size={18} /> : <MicOff size={18} />}
                       </button>
                     </div>
-                  </>
                 ) : null}
                 <div className="student-feed-comment-box student-live-composer">
                   <input
