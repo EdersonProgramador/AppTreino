@@ -20682,6 +20682,136 @@ html.is-native-app.keyboard-open .login-shell {
   gap: 10px;
 }
 
+.student-live-start input {
+  width: 100%;
+  border: 1px solid var(--app-border);
+  background: var(--app-fill);
+  color: var(--app-text);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+  box-sizing: border-box;
+}
+
+.student-live-start .student-green-button {
+  width: 100%;
+  justify-content: center;
+}
+
+.student-live-start-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-text);
+}
+
+.student-live-start-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--app-muted, #6b7280);
+}
+
+.student-live-refresh {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  background: var(--app-panel);
+  color: var(--app-text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.student-live-refresh:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.student-live-joining {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 28px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--app-border);
+  background: var(--app-fill, var(--app-panel));
+  text-align: center;
+}
+
+.student-live-joining strong {
+  font-size: 15px;
+}
+
+.student-live-joining small {
+  color: var(--app-muted, #6b7280);
+}
+
+.student-live-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 18px 0 8px;
+}
+
+.student-live-section-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.student-live-section-head span {
+  font-size: 12px;
+  color: var(--app-muted, #6b7280);
+}
+
+.student-live-empty {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 22px 14px;
+  border-radius: 14px;
+  border: 1px dashed var(--app-border);
+  text-align: center;
+  color: var(--app-muted, #6b7280);
+}
+
+.student-live-empty.is-compact {
+  padding: 14px;
+}
+
+.student-live-empty strong {
+  color: var(--app-text);
+  font-size: 14px;
+}
+
+.student-live-empty p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  max-width: 28ch;
+}
+
+.student-live-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@keyframes student-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.student-live-refresh .is-spinning,
+.student-live-joining .is-spinning,
+.student-live-loading .is-spinning {
+  animation: student-spin 0.85s linear infinite;
+}
+
 .student-live-badge {
   display: inline-flex;
   align-items: center;
@@ -21183,9 +21313,6 @@ html.is-native-app.keyboard-open .login-shell {
     max(12px, calc(12px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))));
   background: rgba(8, 10, 14, 0.58);
   box-sizing: border-box;
-  /* Prefer dynamic viewport units on mobile browsers (URL bar show/hide). */
-  height: 100vh;
-  height: 100dvh;
 }
 
 .student-feed-modal-card {
@@ -21223,12 +21350,16 @@ html.is-native-app.keyboard-open .login-shell {
 
 .student-feed-modal-card .student-feed-preview,
 .student-feed-modal-card .student-feed-preview-story {
-  flex: 1 1 auto;
+  position: relative;
+  flex: 0 1 auto;
   width: min(100%, 280px);
-  max-height: min(38dvh, 300px);
+  max-height: min(42dvh, 320px);
   aspect-ratio: 4 / 5;
   margin: 0 auto;
   min-height: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #0b0d12;
 }
 
 .student-feed-modal-card .student-feed-preview::before,
@@ -21239,13 +21370,12 @@ html.is-native-app.keyboard-open .login-shell {
 }
 
 .student-feed-modal-card.has-media .student-feed-preview-story {
-  width: 100%;
+  width: min(100%, 320px);
   max-width: 100%;
-  max-height: none;
-  aspect-ratio: auto;
-  flex: 1 1 auto;
-  min-height: 120px;
-  background: #0b0d12;
+  max-height: min(48dvh, 380px);
+  aspect-ratio: 4 / 5;
+  flex: 0 1 auto;
+  min-height: 160px;
 }
 
 .student-feed-modal-card.has-media .student-feed-preview-story img,
@@ -21271,15 +21401,8 @@ html.is-native-app.keyboard-open .login-shell {
 
 .student-feed-modal-actions {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 8px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.student-feed-modal-actions::-webkit-scrollbar {
-  display: none;
 }
 
 .student-feed-modal-card input[type="text"],
@@ -21300,10 +21423,13 @@ html.is-native-app.keyboard-open .login-shell {
   width: 100%;
 }
 
-@media (max-width: 640px), (max-height: 760px) {
+/* Full-bleed sheet only on phones — not on short desktop windows. */
+@media (max-width: 640px) {
   .student-feed-modal {
     padding: 0;
-    place-items: stretch stretch;
+    place-items: stretch;
+    height: 100vh;
+    height: 100dvh;
   }
 
   .student-feed-modal-card {
@@ -21320,14 +21446,36 @@ html.is-native-app.keyboard-open .login-shell {
     gap: 8px;
   }
 
+  .student-feed-modal-actions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .student-feed-modal-actions::-webkit-scrollbar {
+    display: none;
+  }
+
   .student-feed-modal-card.has-media .student-feed-modal-actions .student-ghost-chip {
     padding: 6px 10px;
     font-size: 12px;
+    flex: 0 0 auto;
   }
 
+  .student-feed-modal-card .student-feed-preview,
+  .student-feed-modal-card .student-feed-preview-story,
   .student-feed-modal-card.has-media .student-feed-preview-story {
+    width: 100%;
+    max-width: 100%;
+    max-height: none;
     min-height: 0;
     flex: 1 1 0;
+    aspect-ratio: auto;
+  }
+
+  .student-feed-modal-card:not(.has-media) .student-feed-modal-footer {
+    margin-top: auto;
   }
 
   .student-feed-modal-footer input {
@@ -21335,14 +21483,17 @@ html.is-native-app.keyboard-open .login-shell {
   }
 }
 
-@media (max-height: 620px) {
+@media (max-height: 620px) and (min-width: 641px) {
   .student-feed-modal-card header strong {
     font-size: 15px;
   }
 
-  .student-feed-modal-card:not(.has-media) .student-feed-preview {
+  .student-feed-modal-card .student-feed-preview,
+  .student-feed-modal-card .student-feed-preview-story,
+  .student-feed-modal-card.has-media .student-feed-preview-story {
     width: min(100%, 200px);
     max-height: min(28dvh, 200px);
+    min-height: 120px;
   }
 }
 

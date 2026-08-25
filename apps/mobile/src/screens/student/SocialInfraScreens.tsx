@@ -102,9 +102,26 @@ export function LiveScreen() {
   const navigation = useNavigation<Nav>();
   const [lives, setLives] = useState<Array<{ id: string; title: string; host: SocialAuthor; isMine: boolean }>>([]);
   const [title, setTitle] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function loadLives() {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiGet<{ lives: typeof lives }>("/student/social/live", session.token);
+      setLives(data.lives);
+    } catch (err) {
+      setLives([]);
+      setError(err instanceof Error ? err.message : "Não foi possível listar lives.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    void apiGet<{ lives: typeof lives }>("/student/social/live", session.token).then((data) => setLives(data.lives));
+    void loadLives();
   }, [session.token]);
 
   return (
@@ -113,23 +130,50 @@ export function LiveScreen() {
         <Text style={styles.back}>← Feed</Text>
       </Pressable>
       <Text style={styles.title}>Ao vivo</Text>
-      <TextInput value={title} onChangeText={setTitle} placeholder="Título da live" style={styles.input} placeholderTextColor={st.faint} />
+      {error ? <Text style={styles.meta}>{error}</Text> : null}
+      <TextInput
+        value={title}
+        onChangeText={setTitle}
+        placeholder="Ex.: Treino de hoje"
+        style={styles.input}
+        placeholderTextColor={st.faint}
+        editable={!busy}
+      />
       <GreenButton
-        label="Iniciar ao vivo"
+        label={busy ? "Abrindo…" : "Entrar no ar"}
         onPress={async () => {
-          if (title.trim().length < 2) return;
-          await apiPost("/student/social/live", { title: title.trim() }, session.token);
-          const data = await apiGet<{ lives: typeof lives }>("/student/social/live", session.token);
-          setLives(data.lives);
-          setTitle("");
+          if (title.trim().length < 2) {
+            setError("Digite um título com pelo menos 2 caracteres.");
+            return;
+          }
+          setBusy(true);
+          setError(null);
+          try {
+            await apiPost("/student/social/live", { title: title.trim() }, session.token);
+            setTitle("");
+            await loadLives();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "Não foi possível iniciar a live.");
+          } finally {
+            setBusy(false);
+          }
         }}
       />
-      {lives.map((live) => (
-        <View key={live.id} style={styles.card}>
-          <Text style={styles.name}>{live.title}</Text>
-          <Text style={styles.meta}>{live.host.name}</Text>
-        </View>
-      ))}
+      {loading ? (
+        <Text style={styles.meta}>Carregando lives…</Text>
+      ) : lives.length === 0 ? (
+        <Text style={styles.meta}>Ninguém no ar agora. Comece a sua transmissão acima.</Text>
+      ) : (
+        lives.map((live) => (
+          <View key={live.id} style={styles.card}>
+            <Text style={styles.name}>{live.title}</Text>
+            <Text style={styles.meta}>
+              {live.host.name}
+              {live.isMine ? " · você" : ""}
+            </Text>
+          </View>
+        ))
+      )}
     </StudentPage>
   );
 }

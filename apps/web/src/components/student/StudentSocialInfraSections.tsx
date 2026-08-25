@@ -6,11 +6,13 @@ import {
   BookmarkCheck,
   Camera,
   Heart,
+  Loader2,
   MessageCircle,
   Mic,
   MicOff,
   Pencil,
   Radio,
+  RefreshCw,
   Send,
   Sparkles,
   SwitchCamera,
@@ -362,6 +364,7 @@ export function StudentLiveSection({
 }) {
   const [lives, setLives] = useState<LiveRow[]>([]);
   const [savedLives, setSavedLives] = useState<LiveRow[]>([]);
+  const [loadingList, setLoadingList] = useState(true);
   const [title, setTitle] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Array<{ id: string; content: string; name: string }>>([]);
@@ -379,7 +382,7 @@ export function StudentLiveSection({
   const [filterId, setFilterId] = useState<CameraFilterId>("none");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
-  const [zoomCaps, setZoomCaps] = useState<CameraZoomCaps>({ min: 1, max: 3, step: 0.05, hardware: false });
+  const [zoomCaps, setZoomCaps] = useState<CameraZoomCaps>({ min: 1, max: 5, step: 0.01, hardware: false });
   const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(null);
   const [viewportH, setViewportH] = useState(() =>
     typeof window !== "undefined" ? Math.round(window.visualViewport?.height ?? window.innerHeight) : 0
@@ -399,16 +402,27 @@ export function StudentLiveSection({
   }
 
   async function load() {
-    try {
-      const [liveData, savedData] = await Promise.all([
-        apiGet<{ lives: LiveRow[] }>("/student/social/live", token),
-        apiGet<{ lives: LiveRow[] }>("/student/social/live/saved", token)
-      ]);
-      setLives(liveData.lives);
-      setSavedLives(savedData.lives);
-    } catch (err) {
-      setError(readErrorMessage(err, "Não foi possível listar lives."));
+    setLoadingList(true);
+    setError(null);
+    const [liveResult, savedResult] = await Promise.allSettled([
+      apiGet<{ lives: LiveRow[] }>("/student/social/live", token),
+      apiGet<{ lives: LiveRow[] }>("/student/social/live/saved", token)
+    ]);
+    if (liveResult.status === "fulfilled") {
+      setLives(liveResult.value.lives);
+    } else {
+      setLives([]);
+      setError(readErrorMessage(liveResult.reason, "Não foi possível listar lives no ar."));
     }
+    if (savedResult.status === "fulfilled") {
+      setSavedLives(savedResult.value.lives);
+    } else {
+      setSavedLives([]);
+      if (liveResult.status === "fulfilled") {
+        setError(readErrorMessage(savedResult.reason, "Não foi possível carregar lives salvas."));
+      }
+    }
+    setLoadingList(false);
   }
 
   useEffect(() => {
@@ -756,6 +770,7 @@ export function StudentLiveSection({
     setActiveId(null);
     setStatus("idle");
     setMessages([]);
+    void load();
   }
 
   function sendChat() {
@@ -938,71 +953,133 @@ export function StudentLiveSection({
       <header className="student-social-pane-head">
         <div>
           <strong>Ao vivo</strong>
-          <small>Tela cheia estilo Instagram · filtros e controles.</small>
+          <small>Transmita em tela cheia ou assista quem está no ar.</small>
         </div>
+        <button
+          type="button"
+          className="student-live-refresh"
+          disabled={loadingList || busy}
+          onClick={() => void load()}
+          aria-label="Atualizar lives"
+        >
+          <RefreshCw size={16} className={loadingList ? "is-spinning" : undefined} />
+        </button>
       </header>
       <SocialErrorBanner message={error} onDismiss={() => setError(null)} />
-      <form className="student-feed-composer student-live-start" onSubmit={(event) => void beginGoLive(event)}>
-        <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Título da live" maxLength={80} />
-        <button type="submit" className="student-green-button" disabled={busy}>
-          <Radio size={16} /> {busy ? "Abrindo câmera…" : "Entrar no ar"}
-        </button>
-      </form>
+
+      {status === "joining" ? (
+        <div className="student-live-joining" role="status" aria-live="polite">
+          <Loader2 size={28} className="is-spinning" />
+          <strong>Entrando na live…</strong>
+          <small>Conectando vídeo e chat</small>
+        </div>
+      ) : (
+        <form className="student-feed-composer student-live-start" onSubmit={(event) => void beginGoLive(event)}>
+          <label className="student-live-start-label" htmlFor="student-live-title">
+            Começar transmissão
+          </label>
+          <input
+            id="student-live-title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Ex.: Treino de hoje"
+            maxLength={80}
+            disabled={busy}
+            autoComplete="off"
+          />
+          <button type="submit" className="student-green-button" disabled={busy || title.trim().length < 2}>
+            <Radio size={16} /> {busy ? "Abrindo câmera…" : "Entrar no ar"}
+          </button>
+          <p className="student-live-start-hint">Vamos pedir câmera e microfone. Você tem 3 segundos de contagem antes de ir ao ar.</p>
+        </form>
+      )}
+
+      <div className="student-live-section-head">
+        <h3>No ar agora</h3>
+        {!loadingList ? <span>{lives.length}</span> : null}
+      </div>
       <div className="student-live-list">
-        {lives.map((live) => (
-          <div key={live.id} className="student-live-row-wrap">
-            <button type="button" className="student-live-row" disabled={busy} onClick={() => void joinLive(live.id)}>
-              <div>
-                <strong>{live.title}</strong>
-                <small>{live.host.name}</small>
-              </div>
-              <span className="student-live-badge is-compact">LIVE</span>
-            </button>
-            <button
-              type="button"
-              className="student-live-save-btn"
-              aria-label={live.savedByMe ? "Remover live salva" : "Salvar live"}
-              onClick={() => void toggleSaveLive(live.id, Boolean(live.savedByMe))}
-            >
-              {live.savedByMe ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
-            </button>
+        {loadingList ? (
+          <p className="student-activity-hint student-live-loading">
+            <Loader2 size={14} className="is-spinning" /> Carregando lives…
+          </p>
+        ) : lives.length === 0 ? (
+          <div className="student-live-empty">
+            <Radio size={22} />
+            <strong>Ninguém no ar</strong>
+            <p>Quando alguém entrar ao vivo, aparece aqui. Você também pode começar a sua.</p>
           </div>
-        ))}
-        {lives.length === 0 && <p className="student-activity-hint">Nenhuma live no ar agora.</p>}
+        ) : (
+          lives.map((live) => (
+            <div key={live.id} className="student-live-row-wrap">
+              <button type="button" className="student-live-row" disabled={busy} onClick={() => void joinLive(live.id)}>
+                <div>
+                  <strong>{live.title}</strong>
+                  <small>
+                    {live.host.name}
+                    {live.isMine ? " · você" : ""}
+                  </small>
+                </div>
+                <span className="student-live-badge is-compact">LIVE</span>
+              </button>
+              <button
+                type="button"
+                className={`student-live-save-btn${live.savedByMe ? " is-on" : ""}`}
+                aria-label={live.savedByMe ? "Remover live salva" : "Salvar live"}
+                onClick={() => void toggleSaveLive(live.id, Boolean(live.savedByMe))}
+              >
+                {live.savedByMe ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+              </button>
+            </div>
+          ))
+        )}
       </div>
 
-      <h3 className="student-live-saved-heading">Lives salvas</h3>
+      <div className="student-live-section-head">
+        <h3>Lives salvas</h3>
+        {!loadingList ? <span>{savedLives.length}</span> : null}
+      </div>
       <div className="student-live-list">
-        {savedLives.map((live) => (
-          <div key={`saved-${live.id}`} className="student-live-row-wrap">
-            <button
-              type="button"
-              className="student-live-row"
-              disabled={busy || live.status !== "live"}
-              onClick={() => {
-                if (live.status === "live") void joinLive(live.id);
-              }}
-            >
-              <div>
-                <strong>{live.title}</strong>
-                <small>
-                  {live.host.name}
-                  {live.status === "live" ? " · no ar" : " · encerrada"}
-                </small>
-              </div>
-              {live.status === "live" ? <span className="student-live-badge is-compact">LIVE</span> : <span className="student-live-ended-chip">Salva</span>}
-            </button>
-            <button
-              type="button"
-              className="student-live-save-btn is-on"
-              aria-label="Remover live salva"
-              onClick={() => void toggleSaveLive(live.id, true)}
-            >
-              <Trash2 size={16} />
-            </button>
+        {loadingList ? (
+          <p className="student-activity-hint student-live-loading">
+            <Loader2 size={14} className="is-spinning" /> Carregando salvas…
+          </p>
+        ) : savedLives.length === 0 ? (
+          <div className="student-live-empty is-compact">
+            <Bookmark size={18} />
+            <p>Salve lives para achar depois. Toque no marcador ao lado de uma transmissão.</p>
           </div>
-        ))}
-        {savedLives.length === 0 && <p className="student-activity-hint">Nenhuma live salva ainda.</p>}
+        ) : (
+          savedLives.map((live) => (
+            <div key={`saved-${live.id}`} className="student-live-row-wrap">
+              <button
+                type="button"
+                className="student-live-row"
+                disabled={busy || live.status !== "live"}
+                onClick={() => {
+                  if (live.status === "live") void joinLive(live.id);
+                }}
+              >
+                <div>
+                  <strong>{live.title}</strong>
+                  <small>
+                    {live.host.name}
+                    {live.status === "live" ? " · no ar — toque para assistir" : " · encerrada"}
+                  </small>
+                </div>
+                {live.status === "live" ? <span className="student-live-badge is-compact">LIVE</span> : <span className="student-live-ended-chip">Salva</span>}
+              </button>
+              <button
+                type="button"
+                className="student-live-save-btn is-on"
+                aria-label="Remover live salva"
+                onClick={() => void toggleSaveLive(live.id, true)}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))
+        )}
       </div>
     </section>
   );
