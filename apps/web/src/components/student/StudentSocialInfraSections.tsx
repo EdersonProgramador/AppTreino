@@ -977,164 +977,174 @@ export function StudentLiveSection({
 
   if (status === "countdown" || (status === "live" && activeId)) {
     const digitalZoom = !zoomCaps.hardware;
+    const zoomValue = isMine && digitalZoom && zoom > 1 ? zoom : 1;
     const studio = (
       <section
         ref={studioRef as never}
         className="student-live-studio is-fullscreen"
         aria-label="Estúdio ao vivo"
         style={viewportH ? { height: viewportH } : undefined}
-        onTouchStart={isMine ? onLivePinchStart : undefined}
-        onTouchMove={isMine ? onLivePinchMove : undefined}
-        onTouchEnd={isMine ? onLivePinchEnd : undefined}
-        onTouchCancel={isMine ? onLivePinchEnd : undefined}
-        onDoubleClick={isMine ? onLiveDoubleClick : undefined}
       >
-        <video
-          ref={isMine ? localVideoRef : remoteVideoRef}
-          className="student-live-studio-video"
-          playsInline
-          muted={isMine}
-          autoPlay
-          style={{
-            filter: cameraFilterCss(filterId),
-            transform: [
-              isMine && facing === "user" ? "scaleX(-1)" : null,
-              isMine && digitalZoom && zoom !== 1 ? `scale(${zoom})` : null
-            ]
-              .filter(Boolean)
-              .join(" ") || undefined
-          }}
-        />
-        {isMine ? (
-          <aside className={`student-camera-filter-rail${filtersOpen ? " is-open" : ""}`}>
-            <button
-              type="button"
-              className={`student-camera-filter-toggle${filtersOpen || filterId !== "none" ? " is-on" : ""}`}
-              onClick={() => setFiltersOpen((open) => !open)}
-              aria-expanded={filtersOpen}
-              aria-label="Filtros"
-            >
-              <Sparkles size={18} />
-              <span>Filtros</span>
-            </button>
-            {filtersOpen ? (
-              <div className="student-camera-filters is-side" role="listbox" aria-label="Efeitos CapCut">
-                {CAMERA_FILTERS.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    role="option"
-                    aria-selected={filterId === item.id}
-                    className={filterId === item.id ? "is-on" : ""}
-                    onClick={() => setFilterId(item.id)}
-                  >
-                    <span className="student-camera-filter-swatch" style={{ filter: item.css === "none" ? undefined : item.css }} />
-                    <small>{item.label}</small>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </aside>
-        ) : null}
-        <div className="student-live-studio-chrome">
-          <header>
-            <span className="student-live-badge">{status === "countdown" ? "PREPARANDO" : "AO VIVO"}</span>
-            {editingTitle && isMine ? (
-              <div className="student-live-title-edit">
-                <input
-                  value={titleDraft}
-                  onChange={(event) => setTitleDraft(event.target.value)}
-                  maxLength={80}
-                  aria-label="Título da live"
-                />
-                <button type="button" className="student-green-button" disabled={busy} onClick={() => void saveTitleEdit()}>
-                  OK
-                </button>
-                <button type="button" className="student-ghost-chip" onClick={() => setEditingTitle(false)}>
-                  Cancelar
-                </button>
-              </div>
-            ) : (
-              <strong>{title.trim() || "Live"}</strong>
-            )}
-            <div className="student-live-header-actions">
-              {status === "live" && activeId ? (
-                <button
-                  type="button"
-                  className="student-live-icon-btn"
-                  onClick={() => void toggleSaveLive(activeId, savedByMe)}
-                  aria-label={savedByMe ? "Remover live salva" : "Salvar live"}
-                >
-                  {savedByMe ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
-                </button>
+        <div
+          className="student-live-stage"
+          onTouchStart={isMine ? onLivePinchStart : undefined}
+          onTouchMove={isMine ? onLivePinchMove : undefined}
+          onTouchEnd={isMine ? onLivePinchEnd : undefined}
+          onTouchCancel={isMine ? onLivePinchEnd : undefined}
+          onDoubleClick={isMine ? onLiveDoubleClick : undefined}
+        >
+          <video
+            ref={isMine ? localVideoRef : remoteVideoRef}
+            className={`student-live-studio-video${isMine && facing === "user" ? " is-mirror" : ""}`}
+            playsInline
+            muted={isMine}
+            autoPlay
+            style={{
+              filter: cameraFilterCss(filterId),
+              transform: isMine
+                ? facing === "user"
+                  ? `scale(${-zoomValue}, ${zoomValue})`
+                  : zoomValue !== 1
+                    ? `scale(${zoomValue})`
+                    : undefined
+                : undefined
+            }}
+          />
+          {isMine ? (
+            <aside className={`student-camera-filter-rail${filtersOpen ? " is-open" : ""}`}>
+              <button
+                type="button"
+                className={`student-camera-filter-toggle${filtersOpen || filterId !== "none" ? " is-on" : ""}`}
+                onClick={() => setFiltersOpen((open) => !open)}
+                aria-expanded={filtersOpen}
+                aria-label="Filtros"
+              >
+                <Sparkles size={18} />
+                <span>Filtros</span>
+              </button>
+              {filtersOpen ? (
+                <div className="student-camera-filters is-side" role="listbox" aria-label="Efeitos CapCut">
+                  {CAMERA_FILTERS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="option"
+                      aria-selected={filterId === item.id}
+                      className={filterId === item.id ? "is-on" : ""}
+                      onClick={() => setFilterId(item.id)}
+                    >
+                      <span className="student-camera-filter-swatch" style={{ filter: item.css === "none" ? undefined : item.css }} />
+                      <small>{item.label}</small>
+                    </button>
+                  ))}
+                </div>
               ) : null}
-              {isMine && status === "live" && !editingTitle ? (
-                <button
-                  type="button"
-                  className="student-live-icon-btn"
-                  onClick={() => {
-                    setTitleDraft(title);
-                    setEditingTitle(true);
-                  }}
-                  aria-label="Editar título"
-                >
-                  <Pencil size={18} />
-                </button>
-              ) : null}
-              {isMine && status === "live" ? (
-                <button type="button" className="student-live-end" onClick={() => void endLive()}>
-                  Encerrar
-                </button>
-              ) : (
-                <button type="button" className="student-ghost-chip" onClick={leaveLive}>
-                  Sair
-                </button>
-              )}
-            </div>
-          </header>
-
-          <SocialErrorBanner message={error} onDismiss={() => setError(null)} />
-
+            </aside>
+          ) : null}
           {status === "countdown" ? (
             <div className="student-live-countdown" aria-live="polite">
               <span>{countdown}</span>
               <p>Entrando no ar…</p>
             </div>
+          ) : null}
+        </div>
+
+        <header className="student-live-chrome-top">
+          <span className="student-live-badge">{status === "countdown" ? "PREPARANDO" : "AO VIVO"}</span>
+          {editingTitle && isMine ? (
+            <div className="student-live-title-edit">
+              <input
+                value={titleDraft}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                maxLength={80}
+                aria-label="Título da live"
+              />
+              <button type="button" className="student-green-button" disabled={busy} onClick={() => void saveTitleEdit()}>
+                OK
+              </button>
+              <button type="button" className="student-ghost-chip" onClick={() => setEditingTitle(false)}>
+                Cancelar
+              </button>
+            </div>
           ) : (
-            <>
-              <div className="student-live-studio-chat">
-                {messages.map((msg) => (
-                  <p key={msg.id}>
-                    <strong>{msg.name.split(" ")[0]}</strong> {msg.content}
-                  </p>
-                ))}
-              </div>
-              <footer>
-                {isMine ? (
-                  <div className="student-live-host-tools">
-                      <button type="button" onClick={() => void flipCamera()} aria-label="Virar câmera">
-                        <SwitchCamera size={18} />
-                      </button>
-                      <button type="button" onClick={toggleMic} aria-label={micOn ? "Silenciar" : "Ativar microfone"}>
-                        {micOn ? <Mic size={18} /> : <MicOff size={18} />}
-                      </button>
-                    </div>
-                ) : null}
-                <div className="student-feed-comment-box student-live-composer">
-                  <input
-                    value={chat}
-                    onChange={(event) => setChat(event.target.value)}
-                    placeholder="Comentar ao vivo"
-                    onKeyDown={(event) => event.key === "Enter" && sendChat()}
-                  />
-                  <button type="button" onClick={sendChat} aria-label="Enviar">
-                    <Send size={16} />
+            <strong>{title.trim() || "Live"}</strong>
+          )}
+          <div className="student-live-header-actions">
+            {status === "live" && activeId ? (
+              <button
+                type="button"
+                className="student-live-icon-btn"
+                onClick={() => void toggleSaveLive(activeId, savedByMe)}
+                aria-label={savedByMe ? "Remover live salva" : "Salvar live"}
+              >
+                {savedByMe ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
+              </button>
+            ) : null}
+            {isMine && status === "live" && !editingTitle ? (
+              <button
+                type="button"
+                className="student-live-icon-btn"
+                onClick={() => {
+                  setTitleDraft(title);
+                  setEditingTitle(true);
+                }}
+                aria-label="Editar título"
+              >
+                <Pencil size={18} />
+              </button>
+            ) : null}
+            {isMine && status === "live" ? (
+              <button type="button" className="student-live-end" onClick={() => void endLive()}>
+                Encerrar
+              </button>
+            ) : (
+              <button type="button" className="student-live-icon-btn" onClick={leaveLive} aria-label="Sair">
+                <X size={18} />
+              </button>
+            )}
+          </div>
+        </header>
+
+        {error ? (
+          <div className="student-live-studio-error">
+            <SocialErrorBanner message={error} onDismiss={() => setError(null)} />
+          </div>
+        ) : null}
+
+        {status === "live" ? (
+          <>
+            <div className="student-live-studio-chat">
+              {messages.map((msg) => (
+                <p key={msg.id}>
+                  <strong>{msg.name.split(" ")[0]}</strong> {msg.content}
+                </p>
+              ))}
+            </div>
+            <footer className="student-live-chrome-bottom">
+              {isMine ? (
+                <div className="student-live-host-tools">
+                  <button type="button" onClick={() => void flipCamera()} aria-label="Virar câmera">
+                    <SwitchCamera size={18} />
+                  </button>
+                  <button type="button" onClick={toggleMic} aria-label={micOn ? "Silenciar" : "Ativar microfone"}>
+                    {micOn ? <Mic size={18} /> : <MicOff size={18} />}
                   </button>
                 </div>
-              </footer>
-            </>
-          )}
-        </div>
+              ) : null}
+              <div className="student-feed-comment-box student-live-composer">
+                <input
+                  value={chat}
+                  onChange={(event) => setChat(event.target.value)}
+                  placeholder="Comentar ao vivo"
+                  onKeyDown={(event) => event.key === "Enter" && sendChat()}
+                />
+                <button type="button" onClick={sendChat} aria-label="Enviar">
+                  <Send size={16} />
+                </button>
+              </div>
+            </footer>
+          </>
+        ) : null}
       </section>
     );
     return typeof document !== "undefined" ? createPortal(studio, document.body) : studio;

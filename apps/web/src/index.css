@@ -20850,39 +20850,68 @@ html.is-native-app.keyboard-open .login-shell {
   margin: 0;
   border-radius: 0;
   min-height: 100dvh;
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: 1fr;
   overscroll-behavior: none;
   touch-action: none;
 }
 
-.student-live-studio-video {
+.student-live-stage {
   position: absolute;
   inset: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  background: #000;
+  overflow: hidden;
+}
+
+.student-live-studio-video {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center center;
   background: #000;
   transform-origin: center center;
+  max-width: none;
+  max-height: none;
 }
 
-.student-live-studio-chrome {
-  position: relative;
-  z-index: 2;
-  min-height: inherit;
-  height: 100%;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  padding: calc(12px + var(--safe-top, env(safe-area-inset-top, 0px))) 14px calc(14px + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0%, transparent 18%, transparent 62%, rgba(0, 0, 0, 0.72) 100%);
+.student-live-chrome-top,
+.student-live-chrome-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.student-live-chrome-top {
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(12px + var(--safe-top, env(safe-area-inset-top, 0px))) 14px 18px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.62) 0%, transparent 100%);
+}
+
+.student-live-chrome-bottom {
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 14px calc(16px + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.72) 0%, transparent 100%);
+}
+
+.student-live-chrome-top > *,
+.student-live-chrome-bottom > * {
+  pointer-events: auto;
 }
 
 .student-live-filters {
   margin-bottom: 4px;
-}
-
-.student-live-studio-chrome header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 
 .student-live-header-actions {
@@ -20890,6 +20919,15 @@ html.is-native-app.keyboard-open .login-shell {
   align-items: center;
   gap: 8px;
   margin-left: auto;
+  flex-shrink: 0;
+}
+
+.student-live-studio-error {
+  position: absolute;
+  top: calc(64px + var(--safe-top, env(safe-area-inset-top, 0px)));
+  left: 14px;
+  right: 14px;
+  z-index: 6;
 }
 
 .student-live-icon-btn {
@@ -21222,12 +21260,13 @@ html.is-native-app.keyboard-open .login-shell {
   }
 }
 
-.student-live-studio-chrome header strong {
+.student-live-chrome-top strong {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 15px;
 }
 
 .student-live-end {
@@ -21241,8 +21280,14 @@ html.is-native-app.keyboard-open .login-shell {
 }
 
 .student-live-countdown {
-  place-self: center;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-content: center;
   text-align: center;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.28);
 }
 
 .student-live-countdown span {
@@ -21255,34 +21300,46 @@ html.is-native-app.keyboard-open .login-shell {
   border: 2px solid rgba(255, 255, 255, 0.55);
   font-size: 42px;
   font-weight: 700;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.student-live-countdown p {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .student-live-studio-chat {
-  align-self: end;
-  max-height: 38vh;
+  position: absolute;
+  left: 12px;
+  right: 72px;
+  bottom: calc(78px + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
+  z-index: 4;
+  max-height: min(34vh, 280px);
   overflow: auto;
   display: grid;
+  align-content: end;
   gap: 8px;
   padding: 8px 2px;
+  pointer-events: none;
+  mask-image: linear-gradient(180deg, transparent, #000 18%);
 }
 
 .student-live-studio-chat p {
   margin: 0;
-  max-width: 85%;
+  max-width: 92%;
+  width: fit-content;
   padding: 8px 10px;
   border-radius: 12px;
   background: rgba(0, 0, 0, 0.45);
   font-size: 13px;
-}
-
-.student-live-studio-chrome footer {
-  display: grid;
-  gap: 10px;
+  pointer-events: auto;
 }
 
 .student-live-host-tools {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .student-live-host-tools button {
@@ -21298,9 +21355,18 @@ html.is-native-app.keyboard-open .login-shell {
 }
 
 .student-live-composer {
+  flex: 1;
+  min-width: 0;
   background: rgba(0, 0, 0, 0.35);
   border-radius: 999px;
   padding: 4px;
+}
+
+.student-live-stage .student-camera-filter-rail {
+  top: auto;
+  bottom: calc(96px + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
+  transform: none;
+  max-height: min(48vh, 420px);
 }
 
 .student-dm-peer {
