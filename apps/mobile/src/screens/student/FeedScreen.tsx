@@ -427,9 +427,11 @@ export function FeedScreen() {
             }}
           >
             <View style={[styles.storyCircle, styles.storyAddCircle]}>
-              <Ionicons name="add" size={28} color={st.text} />
+              <Ionicons name="add" size={28} color={st.coral} />
             </View>
-            <Text style={styles.storyName}>Seu momento</Text>
+            <Text style={styles.storyName} numberOfLines={2}>
+              Seu momento
+            </Text>
           </Pressable>
           {rails.map((rail, index) => (
             <Pressable key={rail.userId} style={styles.storyAdd} onPress={() => setViewer({ rail: index, item: 0 })}>
@@ -623,17 +625,17 @@ export function FeedScreen() {
         </Pressable>
       ) : null}
 
-      <Modal visible={createPanel === "story"} transparent animationType="fade" onRequestClose={() => setCreatePanel(null)}>
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => {
-            setCreatePanel(null);
-            setStoryMedia(null);
-            setStoryCaption("");
-          }}
-        />
-        <View style={styles.modalCard} pointerEvents="box-none">
-          <View style={styles.modalInner}>
+      <Modal visible={createPanel === "story"} transparent animationType="slide" onRequestClose={() => setCreatePanel(null)}>
+        <View style={styles.modalRoot}>
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => {
+              setCreatePanel(null);
+              setStoryMedia(null);
+              setStoryCaption("");
+            }}
+          />
+          <View style={[styles.modalInner, storyMedia ? styles.modalInnerFilled : styles.modalInnerSheet]}>
             <View style={styles.composerHead}>
               <Text style={styles.sectionTitle}>Novo momento</Text>
               <Pressable
@@ -647,7 +649,7 @@ export function FeedScreen() {
                 <Ionicons name="close" size={22} color={st.muted} />
               </Pressable>
             </View>
-            <Text style={styles.meta}>Foto ou vídeo curto. Some em 24 horas.</Text>
+            {!storyMedia ? <Text style={styles.meta}>Foto ou vídeo curto. Some em 24 horas.</Text> : null}
             <View style={styles.row}>
               <Pressable style={styles.chip} onPress={() => void pickMedia(true)}>
                 <Ionicons name="images-outline" size={16} color={st.text} />
@@ -663,7 +665,7 @@ export function FeedScreen() {
               </Pressable>
             </View>
             {storyMedia?.localUri ? (
-              <Image source={{ uri: storyMedia.localUri }} style={styles.media} resizeMode="cover" />
+              <Image source={{ uri: storyMedia.localUri }} style={styles.storyPreview} resizeMode="contain" />
             ) : null}
             <TextInput
               value={storyCaption}
@@ -805,9 +807,9 @@ function createStyles(st: StudentTokens) {
     },
     comment: { color: st.text, fontSize: 13 },
     error: { color: st.danger, marginHorizontal: 16, fontWeight: "700" },
-    stories: { marginHorizontal: 16, marginTop: 8, marginBottom: 4, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: st.line, backgroundColor: st.card, gap: 10 },
-    sectionTitle: { color: st.text, fontWeight: "800", fontSize: 16 },
-    storyAdd: { width: 72, alignItems: "center", gap: 6 },
+    stories: { marginHorizontal: 16, marginTop: 8, marginBottom: 4, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: st.line, backgroundColor: st.card, gap: 8 },
+    sectionTitle: { color: st.text, fontWeight: "800", fontSize: 15 },
+    storyAdd: { width: 76, alignItems: "center", gap: 6 },
     storyCircle: { width: 58, height: 58, borderRadius: 29, backgroundColor: st.fill, alignItems: "center", justifyContent: "center" },
     storyAddCircle: {
       borderWidth: 2,
@@ -815,13 +817,17 @@ function createStyles(st: StudentTokens) {
       backgroundColor: st.fill
     },
     storyHot: { borderWidth: 2, borderColor: "#df663c" },
-    storyName: { color: st.text, fontSize: 11, fontWeight: "700", maxWidth: 72 },
+    storyName: { color: st.text, fontSize: 11, fontWeight: "700", maxWidth: 76, textAlign: "center", lineHeight: 14 },
     plus: { fontSize: 24, color: st.coral, fontWeight: "800" },
     backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)" },
     sheet: { backgroundColor: st.card, padding: 16, gap: 10, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
     modalBackdrop: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: "rgba(8, 10, 14, 0.58)"
+    },
+    modalRoot: {
+      flex: 1,
+      justifyContent: "flex-end"
     },
     modalCard: {
       ...StyleSheet.absoluteFillObject,
@@ -831,13 +837,31 @@ function createStyles(st: StudentTokens) {
     },
     modalInner: {
       width: "100%",
-      maxWidth: 420,
       backgroundColor: st.card,
-      borderRadius: 24,
       borderWidth: 1,
       borderColor: st.line,
-      padding: 18,
-      gap: 12
+      padding: 16,
+      gap: 10
+    },
+    modalInnerSheet: {
+      borderTopLeftRadius: 22,
+      borderTopRightRadius: 22,
+      paddingBottom: 20,
+      maxHeight: "92%"
+    },
+    modalInnerFilled: {
+      flex: 1,
+      borderRadius: 0,
+      borderWidth: 0,
+      maxHeight: "100%",
+      paddingTop: 48
+    },
+    storyPreview: {
+      width: "100%",
+      flex: 1,
+      minHeight: 220,
+      borderRadius: 16,
+      backgroundColor: "#0b0d12"
     },
     viewer: { flex: 1, backgroundColor: "#000", justifyContent: "center", padding: 16 },
     viewerClose: { position: "absolute", top: 48, right: 20, zIndex: 2 },

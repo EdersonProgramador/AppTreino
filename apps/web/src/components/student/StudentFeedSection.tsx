@@ -613,7 +613,7 @@ export function StudentFeedSection({
         <header>
           <div>
             <strong>Momentos</strong>
-            <small>24 horas, no clima do treino</small>
+            <small>Somem em 24h</small>
           </div>
         </header>
         <div className="student-feed-story-rail">

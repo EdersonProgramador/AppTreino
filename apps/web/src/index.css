@@ -21204,9 +21204,10 @@ html.is-native-app.keyboard-open .login-shell {
   background: var(--app-panel);
   border: 1px solid var(--app-border);
   border-radius: 18px;
-  padding: 14px;
+  padding: 12px 12px 10px;
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .student-feed-stories header {
@@ -21217,19 +21218,25 @@ html.is-native-app.keyboard-open .login-shell {
 
 .student-feed-stories header strong {
   display: block;
+  font-size: 15px;
+  line-height: 1.2;
 }
 
 .student-feed-stories header small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.3;
   color: var(--app-text-muted);
 }
 
 .student-feed-story-rail {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   overflow-x: auto;
   overflow-y: hidden;
   max-width: 100%;
-  padding-bottom: 4px;
+  padding: 4px 2px 2px;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
@@ -21240,15 +21247,17 @@ html.is-native-app.keyboard-open .login-shell {
 
 .student-feed-story-rail button,
 .student-feed-story-add {
-  width: 72px;
+  width: 76px;
   flex-shrink: 0;
   border: 0;
   background: transparent;
   display: grid;
   justify-items: center;
+  align-content: start;
   gap: 6px;
   cursor: pointer;
   color: var(--app-text);
+  padding: 0;
 }
 
 .student-feed-story-rail img,
@@ -21263,11 +21272,12 @@ html.is-native-app.keyboard-open .login-shell {
   background: var(--app-fill);
   font-weight: 800;
   font-size: 22px;
+  box-sizing: border-box;
 }
 
 .student-feed-story-rail button.is-hot img,
 .student-feed-story-rail button.is-hot span {
-  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #df663c;
+  box-shadow: 0 0 0 2px var(--app-panel), 0 0 0 4px #df663c;
 }
 
 .student-feed-story-rail button.is-live {
@@ -21291,14 +21301,20 @@ html.is-native-app.keyboard-open .login-shell {
 .student-feed-story-add small {
   font-size: 11px;
   font-weight: 700;
-  max-width: 72px;
+  line-height: 1.2;
+  max-width: 76px;
+  text-align: center;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .student-feed-story-add span {
-  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #df663c;
+  box-shadow: 0 0 0 2px var(--app-panel), 0 0 0 4px #df663c;
+  color: #df663c;
 }
 
 .student-feed-modal {
@@ -21423,11 +21439,11 @@ html.is-native-app.keyboard-open .login-shell {
   width: 100%;
 }
 
-/* Full-bleed sheet only on phones — not on short desktop windows. */
+/* Full-bleed / sheet only on phones — never on short desktop windows. */
 @media (max-width: 640px) {
   .student-feed-modal {
     padding: 0;
-    place-items: stretch;
+    place-items: end stretch;
     height: 100vh;
     height: 100dvh;
   }
@@ -21435,15 +21451,27 @@ html.is-native-app.keyboard-open .login-shell {
   .student-feed-modal-card {
     width: 100%;
     max-width: 100%;
+    height: auto;
+    max-height: min(92dvh, 100%);
+    border-radius: 22px 22px 0 0;
+    border: 0;
+    border-top: 1px solid var(--app-border);
+    padding:
+      12px
+      12px
+      max(12px, calc(10px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))));
+    gap: 8px;
+  }
+
+  .student-feed-modal-card.has-media {
     height: 100%;
     max-height: 100%;
     border-radius: 0;
-    border: 0;
+    border-top: 0;
     padding:
       max(10px, var(--safe-top, env(safe-area-inset-top, 0px)))
       12px
       max(12px, calc(10px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))));
-    gap: 8px;
   }
 
   .student-feed-modal-actions {
@@ -21463,8 +21491,7 @@ html.is-native-app.keyboard-open .login-shell {
     flex: 0 0 auto;
   }
 
-  .student-feed-modal-card .student-feed-preview,
-  .student-feed-modal-card .student-feed-preview-story,
+  .student-feed-modal-card.has-media .student-feed-preview,
   .student-feed-modal-card.has-media .student-feed-preview-story {
     width: 100%;
     max-width: 100%;
@@ -21472,10 +21499,6 @@ html.is-native-app.keyboard-open .login-shell {
     min-height: 0;
     flex: 1 1 0;
     aspect-ratio: auto;
-  }
-
-  .student-feed-modal-card:not(.has-media) .student-feed-modal-footer {
-    margin-top: auto;
   }
 
   .student-feed-modal-footer input {
@@ -21504,27 +21527,37 @@ html.is-native-app.keyboard-open .login-shell {
 .student-feed-story-viewer {
   position: fixed;
   inset: 0;
-  z-index: 80;
-  background: rgba(0, 0, 0, 0.72);
+  z-index: 140;
+  background: rgba(0, 0, 0, 0.88);
   display: grid;
   place-items: center;
-  padding: 16px;
+  padding:
+    max(12px, var(--safe-top, env(safe-area-inset-top, 0px)))
+    12px
+    max(12px, calc(12px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))));
+  box-sizing: border-box;
 }
 
 .student-feed-story-viewer-card {
   width: min(420px, 100%);
-  background: #111;
+  max-height: 100%;
+  background: #0b0d12;
   color: #fff;
   border-radius: 18px;
   padding: 12px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .student-feed-story-viewer-card header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex: 0 0 auto;
+  gap: 10px;
 }
 
 .student-feed-story-viewer-card header button {
@@ -21532,15 +21565,53 @@ html.is-native-app.keyboard-open .login-shell {
   background: transparent;
   color: #fff;
   cursor: pointer;
+  padding: 4px;
 }
 
 .student-feed-story-viewer-card img,
 .student-feed-story-viewer-card video {
   width: 100%;
-  max-height: 70vh;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(70dvh, 640px);
   object-fit: contain;
   border-radius: 12px;
   background: #000;
+}
+
+.student-feed-story-viewer-card p {
+  margin: 0;
+  flex: 0 0 auto;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.student-feed-story-viewer-card .student-feed-carousel-nav {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  .student-feed-story-viewer {
+    padding: 0;
+    place-items: stretch;
+  }
+
+  .student-feed-story-viewer-card {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+    padding:
+      max(10px, var(--safe-top, env(safe-area-inset-top, 0px)))
+      12px
+      max(12px, calc(10px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))));
+  }
+
+  .student-feed-story-viewer-card img,
+  .student-feed-story-viewer-card video {
+    max-height: none;
+  }
 }
 
 .student-social-hub {
@@ -21640,8 +21711,9 @@ html.is-native-app.keyboard-open .login-shell {
 }
 
 .student-feed-story-add span,
-.student-feed-story-rail button.is-hot {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-coral) 70%, transparent);
+.student-feed-story-rail button.is-hot img,
+.student-feed-story-rail button.is-hot > span {
+  box-shadow: 0 0 0 2px var(--app-panel), 0 0 0 4px color-mix(in srgb, var(--brand-coral) 85%, #df663c);
 }
 
 .student-social-pane {
