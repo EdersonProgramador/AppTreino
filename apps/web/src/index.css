@@ -21229,30 +21229,39 @@ html.is-native-app.keyboard-open .login-shell {
   max-height: min(52vh, 480px);
   width: min(100%, 280px);
   margin: 0 auto;
+  isolation: isolate;
 }
 
 .student-live-save-preview.is-replay {
   aspect-ratio: 9 / 16;
 }
 
-.student-live-save-preview video,
-.student-live-save-preview > img {
+.student-live-save-preview > video,
+.student-live-save-preview > img:not(.student-live-save-cover-thumb) {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
+  object-position: center;
   background: #0b0b0b;
+  border: 0;
+  display: block;
 }
 
-.student-live-save-cover-thumb {
+.student-live-save-preview > .student-live-save-cover-thumb {
   position: absolute;
   right: 10px;
   bottom: 10px;
+  z-index: 2;
   width: 56px;
   height: 72px;
   object-fit: cover;
   border-radius: 10px;
   border: 2px solid #fff;
   box-shadow: 0 6px 18px color-mix(in srgb, #000 35%, transparent);
+  background: #111;
+  pointer-events: none;
 }
 
 .student-live-save-fallback {
