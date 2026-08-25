@@ -661,8 +661,13 @@ export function StudentCameraCapture({
         {fallback ? (
           <div className="student-camera-fallback">
             <p>{hint || "Use a câmera do aparelho."}</p>
-            <button type="button" className="student-green-button" onClick={() => nativeRef.current?.click()}>
-              Abrir câmera do dispositivo
+            <button
+              type="button"
+              className="student-green-button"
+              disabled={applyingFilter}
+              onClick={() => nativeRef.current?.click()}
+            >
+              {applyingFilter ? "Aplicando filtro…" : "Abrir câmera do dispositivo"}
             </button>
           </div>
         ) : (
