@@ -195,12 +195,16 @@ export function StudentReelsSection({
   }
 
   async function removeReel(id: string) {
-    if (!window.confirm("Remover este clipe?")) return;
+    if (!window.confirm("Remover este clipe do seu perfil e do feed?")) return;
     setBusy(true);
     setError(null);
     try {
       await apiDelete(`/student/social/reels/${id}`, token);
       setReels((current) => current.filter((row) => row.id !== id));
+      if (editingId === id) {
+        setEditingId(null);
+        setEditCaption("");
+      }
     } catch (err) {
       setError(readErrorMessage(err, "Não foi possível remover o clipe."));
     } finally {
@@ -213,7 +217,7 @@ export function StudentReelsSection({
       <header className="student-social-pane-head">
         <div>
           <strong>Clipes</strong>
-          <small>Câmera tela cheia · adicionar, editar e remover.</small>
+          <small>Só os seus · também aparecem no feed e no perfil.</small>
         </div>
         <button
           type="button"
@@ -233,54 +237,41 @@ export function StudentReelsSection({
       <div className="student-reels-scroller">
         {reels.map((reel) => (
           <article key={reel.id} className="student-reel-card">
-            <video src={mediaUrl(reel.videoUrl)} controls playsInline loop preload="metadata" />
-            <div className="student-reel-meta">
+            <video
+              src={mediaUrl(reel.videoUrl)}
+              playsInline
+              loop
+              muted
+              preload="metadata"
+              onClick={(event) => {
+                const video = event.currentTarget;
+                if (video.paused) void video.play().catch(() => undefined);
+                else video.pause();
+              }}
+            />
+            <div className="student-reel-side-actions">
+              <button type="button" className={reel.likedByMe ? "is-on" : ""} onClick={() => void like(reel.id)}>
+                <Heart size={20} />
+                <span>{reel.likesCount}</span>
+              </button>
               <button
                 type="button"
-                className="student-reel-author"
                 onClick={() => {
-                  if (reel.isMine) return;
-                  onOpenPeerProfile?.(reel.author.id);
+                  setEditingId(reel.id);
+                  setEditCaption(reel.caption ?? "");
                 }}
               >
-                <strong>{reel.author.name}</strong>
+                <Pencil size={20} />
+                <span>Editar</span>
               </button>
-              <p>{reel.caption}</p>
-              <div className="student-reel-actions">
-                <button type="button" className={reel.likedByMe ? "is-on" : ""} onClick={() => void like(reel.id)}>
-                  <Heart size={18} /> {reel.likesCount}
-                </button>
-                {reel.isMine ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingId(reel.id);
-                        setEditCaption(reel.caption ?? "");
-                      }}
-                      aria-label="Editar clipe"
-                    >
-                      <Pencil size={18} />
-                    </button>
-                    <button type="button" onClick={() => void removeReel(reel.id)} aria-label="Remover clipe" disabled={busy}>
-                      <Trash2 size={18} />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    {onOpenPeerProfile ? (
-                      <button type="button" onClick={() => onOpenPeerProfile(reel.author.id)} aria-label="Ver perfil">
-                        <UserRound size={18} />
-                      </button>
-                    ) : null}
-                    {onOpenDm ? (
-                      <button type="button" onClick={() => onOpenDm(reel.author.id)} aria-label="Mensagem">
-                        <MessageCircle size={18} />
-                      </button>
-                    ) : null}
-                  </>
-                )}
-              </div>
+              <button type="button" onClick={() => void removeReel(reel.id)} disabled={busy}>
+                <Trash2 size={20} />
+                <span>Excluir</span>
+              </button>
+            </div>
+            <div className="student-reel-meta">
+              <strong>{reel.author.name}</strong>
+              {reel.caption ? <p>{reel.caption}</p> : null}
             </div>
           </article>
         ))}
@@ -475,15 +466,11 @@ export function StudentLiveSection({
   async function bindPreview(nextFacing: "user" | "environment") {
     stopMedia();
     let stream: MediaStream;
-    const videoConstraints: MediaTrackConstraints =
-      nextFacing === "user"
-        ? { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 } }
-        : {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1080 },
-            height: { ideal: 1920 },
-            aspectRatio: { ideal: 9 / 16 }
-          };
+    const videoConstraints: MediaTrackConstraints = {
+      facingMode: { ideal: nextFacing },
+      width: { ideal: nextFacing === "user" ? 1280 : 1920 },
+      height: { ideal: nextFacing === "user" ? 720 : 1080 }
+    };
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: true,

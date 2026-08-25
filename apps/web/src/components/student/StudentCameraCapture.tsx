@@ -88,71 +88,17 @@ export function drawCameraFrame(
   }
 }
 
-export function CameraZoomControl({
-  zoom,
-  caps,
-  disabled,
-  onChange
-}: {
-  zoom: number;
-  caps: CameraZoomCaps;
-  disabled?: boolean;
-  onChange: (next: number) => void;
-}) {
-  const clamp = (value: number) => clampCameraZoom(value, caps);
-  const display = caps.hardware && caps.min > 0 ? zoom / caps.min : zoom;
-  return (
-    <div className="student-camera-zoom" aria-label="Zoom">
-      <button
-        type="button"
-        disabled={disabled || zoom <= caps.min}
-        onClick={() => onChange(clamp(zoom - Math.max(caps.step, (caps.max - caps.min) * 0.04)))}
-        aria-label="Diminuir zoom"
-      >
-        −
-      </button>
-      <input
-        type="range"
-        min={caps.min}
-        max={caps.max}
-        step={caps.step}
-        value={zoom}
-        disabled={disabled}
-        onChange={(event) => onChange(clamp(Number(event.target.value)))}
-        aria-valuetext={`${display.toFixed(1)}x`}
-      />
-      <button
-        type="button"
-        disabled={disabled || zoom >= caps.max}
-        onClick={() => onChange(clamp(zoom + Math.max(caps.step, (caps.max - caps.min) * 0.04)))}
-        aria-label="Aumentar zoom"
-      >
-        +
-      </button>
-      <span>{display.toFixed(1)}×</span>
-    </div>
-  );
-}
-
 function recorderMime() {
   const types = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
   return types.find((type) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type)) || "";
 }
 
 function buildVideoConstraints(facing: Facing): MediaTrackConstraints {
-  if (facing === "user") {
-    // Front cams often only expose landscape/native modes; forcing 9:16 stretches the feed.
-    return {
-      facingMode: { ideal: "user" },
-      width: { ideal: 1280 },
-      height: { ideal: 720 }
-    };
-  }
+  // Prefer native device modes. Aggressive 9:16/1080x1920 often stretches front cams on mobile browsers.
   return {
-    facingMode: { ideal: "environment" },
-    width: { ideal: 1080 },
-    height: { ideal: 1920 },
-    aspectRatio: { ideal: 9 / 16 }
+    facingMode: { ideal: facing },
+    width: { ideal: facing === "user" ? 1280 : 1920 },
+    height: { ideal: facing === "user" ? 720 : 1080 }
   };
 }
 
@@ -191,10 +137,12 @@ export function StudentCameraCapture({
   const [fallback, setFallback] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [filterId, setFilterId] = useState<CameraFilterId>("none");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [zoomCaps, setZoomCaps] = useState<CameraZoomCaps>(DIGITAL_ZOOM);
+  const [zoomHint, setZoomHint] = useState<string | null>(null);
   const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(null);
   const zoomTrackRef = useRef<MediaStreamTrack | null>(null);
   const zoomHardwareRef = useRef(false);
@@ -208,6 +156,10 @@ export function StudentCameraCapture({
 
   useEffect(() => {
     setCaptureMode(mode);
+    if (open) {
+      setFiltersOpen(false);
+      setZoomHint(null);
+    }
   }, [mode, open]);
 
   useEffect(() => {
@@ -335,6 +287,9 @@ export function StudentCameraCapture({
   function setCameraZoom(next: number) {
     const clamped = clampCameraZoom(next, zoomCaps);
     setZoom(clamped);
+    const display = zoomCaps.hardware && zoomCaps.min > 0 ? clamped / zoomCaps.min : clamped;
+    if (display > 1.04) setZoomHint(`${display.toFixed(1)}×`);
+    else setZoomHint(null);
     if (!zoomHardwareRef.current) return;
     if (zoomApplyTimerRef.current) window.clearTimeout(zoomApplyTimerRef.current);
     zoomApplyTimerRef.current = window.setTimeout(() => {
@@ -550,6 +505,7 @@ export function StudentCameraCapture({
             <span /> REC {elapsed}s
           </div>
         )}
+        {zoomHint ? <div className="student-camera-zoom-hint">{zoomHint}</div> : null}
       </div>
 
       <header className="student-camera-chrome-top">
@@ -575,22 +531,24 @@ export function StudentCameraCapture({
       </header>
 
       <div className="student-camera-chrome-bottom">
-        <div className="student-camera-filters" role="listbox" aria-label="Filtros">
-          {CAMERA_FILTERS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="option"
-              aria-selected={filterId === item.id}
-              className={filterId === item.id ? "is-on" : ""}
-              disabled={recording}
-              onClick={() => setFilterId(item.id)}
-            >
-              <span className="student-camera-filter-swatch" style={{ filter: item.css }} />
-              {item.label}
-            </button>
-          ))}
-        </div>
+        {filtersOpen ? (
+          <div className="student-camera-filters" role="listbox" aria-label="Filtros">
+            {CAMERA_FILTERS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="option"
+                aria-selected={filterId === item.id}
+                className={filterId === item.id ? "is-on" : ""}
+                disabled={recording}
+                onClick={() => setFilterId(item.id)}
+              >
+                <span className="student-camera-filter-swatch" style={{ filter: item.css }} />
+                {item.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {hint && !fallback ? <small className="student-camera-hint">{hint}</small> : null}
 
@@ -613,15 +571,7 @@ export function StudentCameraCapture({
               <Video size={14} /> Vídeo
             </button>
           </div>
-        ) : (
-          <p className="student-camera-caption">
-            {captureMode === "video"
-              ? recording
-                ? "Toque para parar"
-                : `Até ${maxVideoSeconds}s · filtro aplicado na prévia`
-              : "Toque para capturar · filtro na foto"}
-          </p>
-        )}
+        ) : null}
 
         <div className="student-camera-shutter-row">
           <button type="button" className="student-camera-side-btn" onClick={() => nativeRef.current?.click()} aria-label="Galeria">
@@ -642,10 +592,10 @@ export function StudentCameraCapture({
           </button>
           <button
             type="button"
-            className="student-camera-side-btn"
+            className={`student-camera-side-btn${filtersOpen || filterId !== "none" ? " is-on" : ""}`}
             disabled={recording}
-            onClick={() => setFilterId((current) => (current === "none" ? "clarendon" : "none"))}
-            aria-label="Filtro rápido"
+            onClick={() => setFiltersOpen((open) => !open)}
+            aria-label="Filtros"
           >
             <Sparkles size={20} />
           </button>

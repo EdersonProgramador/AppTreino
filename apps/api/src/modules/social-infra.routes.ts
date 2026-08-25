@@ -55,22 +55,16 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
     requireDatabase();
     const user = await requireAuth(app, request);
     const query = z.object({ page: z.coerce.number().int().min(0).max(200).optional().default(0) }).parse(request.query);
-    const following = await prisma.socialFollow.findMany({
-      where: { followerId: user.id },
-      select: { followingId: true }
-    });
-    const followingIds = following.map((row) => row.followingId);
-    const blocked = await blockedIds(user.id);
 
+    // Clipes = biblioteca do próprio aluno (editar / apagar). O feed recebe cópia via SocialPost.
     const rows = await prisma.socialReel.findMany({
       where: {
         hidden: false,
-        authorId: blocked.size ? { notIn: [...blocked] } : undefined,
-        OR: [{ authorId: user.id }, { authorId: { in: followingIds } }, { author: { profile: { isPrivate: false } } }]
+        authorId: user.id
       },
       orderBy: { createdAt: "desc" },
-      skip: query.page * 8,
-      take: 8,
+      skip: query.page * 24,
+      take: 24,
       include: {
         author: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } },
         likes: { where: { userId: user.id }, select: { userId: true } },
@@ -88,7 +82,7 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
         author: authorCard(row.author),
         likesCount: row._count.likes,
         likedByMe: row.likes.length > 0,
-        isMine: row.authorId === user.id
+        isMine: true
       }))
     };
   });
@@ -103,19 +97,35 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
         mood: z.string().max(40).optional()
       })
       .parse(request.body);
-    const reel = await prisma.socialReel.create({
-      data: {
-        authorId: user.id,
-        videoUrl: body.videoUrl,
-        caption: body.caption.trim(),
-        mood: body.mood ?? null
-      },
-      include: {
-        author: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } },
-        likes: { where: { userId: user.id }, select: { userId: true } },
-        _count: { select: { likes: true } }
-      }
-    });
+    const caption = body.caption.trim();
+    const mediaItems = [{ url: body.videoUrl, type: "VIDEO" as const }];
+
+    const [reel] = await prisma.$transaction([
+      prisma.socialReel.create({
+        data: {
+          authorId: user.id,
+          videoUrl: body.videoUrl,
+          caption,
+          mood: body.mood ?? null
+        },
+        include: {
+          author: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } },
+          likes: { where: { userId: user.id }, select: { userId: true } },
+          _count: { select: { likes: true } }
+        }
+      }),
+      prisma.socialPost.create({
+        data: {
+          authorId: user.id,
+          kind: "VIDEO",
+          body: caption || null,
+          mediaUrl: body.videoUrl,
+          mediaType: "VIDEO",
+          mediaItems
+        }
+      })
+    ]);
+
     return {
       reel: {
         id: reel.id,
@@ -137,6 +147,7 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
     const reel = await prisma.socialReel.findUnique({ where: { id } });
     if (!reel || reel.hidden) throw httpError(404, "Clipe não encontrado.");
+    if (reel.authorId !== user.id) throw httpError(403, "Clipes são só do autor nesta área.");
     const existing = await prisma.socialReelLike.findUnique({
       where: { reelId_userId: { reelId: id, userId: user.id } }
     });
@@ -155,7 +166,18 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
     const reel = await prisma.socialReel.findUnique({ where: { id } });
     if (!reel) throw httpError(404, "Clipe não encontrado.");
     if (reel.authorId !== user.id) throw httpError(403, "Só o autor pode apagar.");
-    await prisma.socialReel.update({ where: { id }, data: { hidden: true } });
+    await prisma.$transaction([
+      prisma.socialReel.update({ where: { id }, data: { hidden: true } }),
+      prisma.socialPost.updateMany({
+        where: {
+          authorId: user.id,
+          mediaUrl: reel.videoUrl,
+          kind: "VIDEO",
+          hidden: false
+        },
+        data: { hidden: true }
+      })
+    ]);
     return { ok: true };
   });
 
@@ -172,10 +194,11 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
     const reel = await prisma.socialReel.findUnique({ where: { id } });
     if (!reel || reel.hidden) throw httpError(404, "Clipe não encontrado.");
     if (reel.authorId !== user.id) throw httpError(403, "Só o autor pode editar.");
+    const caption = body.caption != null ? body.caption.trim() : undefined;
     const updated = await prisma.socialReel.update({
       where: { id },
       data: {
-        ...(body.caption != null ? { caption: body.caption.trim() } : {}),
+        ...(caption != null ? { caption } : {}),
         ...(body.mood !== undefined ? { mood: body.mood } : {})
       },
       include: {
@@ -184,6 +207,17 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
         _count: { select: { likes: true } }
       }
     });
+    if (caption != null) {
+      await prisma.socialPost.updateMany({
+        where: {
+          authorId: user.id,
+          mediaUrl: reel.videoUrl,
+          kind: "VIDEO",
+          hidden: false
+        },
+        data: { body: caption || null }
+      });
+    }
     return {
       reel: {
         id: updated.id,
