@@ -12,12 +12,19 @@ type ShareablePost = {
   mediaItems?: ShareMediaItem[] | null;
 };
 
-/** Link público do post (HTML na API com OG + página /p/:id no web). */
+/**
+ * Link público do post — HTML com OG tags para preview no WhatsApp/Telegram.
+ * Produção: mesma origem do web (Vercel faz proxy de /public/share/* → API).
+ * Dev: proxy Vite encaminha /public/* para a API local.
+ */
 export function buildPostShareUrl(postId: string) {
   if (typeof window === "undefined") return "";
+
+  if (!import.meta.env.DEV) {
+    return `${window.location.origin}/public/share/posts/${encodeURIComponent(postId)}`;
+  }
+
   const api = getApiBaseUrl().replace(/\/+$/, "");
-  // Em produção a API serve HTML com og:image para WhatsApp/Telegram.
-  // Em dev (api="") o proxy Vite encaminha /public/* para a API.
   const base = api || window.location.origin;
   return `${base}/public/share/posts/${encodeURIComponent(postId)}`;
 }

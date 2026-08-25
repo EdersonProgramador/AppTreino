@@ -6,6 +6,14 @@
   "framework": "vite",
   "rewrites": [
     {
+      "source": "/public/share/:path*",
+      "destination": "https://apptreino-backend.onrender.com/public/share/:path*"
+    },
+    {
+      "source": "/public/posts/:path*",
+      "destination": "https://apptreino-backend.onrender.com/public/posts/:path*"
+    },
+    {
       "source": "/((?!assets/).*)",
       "destination": "/index.html"
     }

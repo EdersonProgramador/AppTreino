@@ -34,17 +34,47 @@ function absolutePublicMediaUrl(path?: string | null) {
   return buildPublicUploadUrl(cleaned);
 }
 
-function parseMediaItems(raw: unknown): Array<{ url: string; type: "IMAGE" | "VIDEO" }> {
+type ParsedMediaItem = { url: string; type: "IMAGE" | "VIDEO"; coverUrl: string | null };
+
+function parseMediaItems(raw: unknown): ParsedMediaItem[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((item) => {
       if (!item || typeof item !== "object") return null;
-      const row = item as { url?: unknown; type?: unknown };
+      const row = item as { url?: unknown; type?: unknown; coverUrl?: unknown };
       if (typeof row.url !== "string" || !row.url) return null;
-      return { url: row.url, type: row.type === "VIDEO" ? ("VIDEO" as const) : ("IMAGE" as const) };
+      const coverUrl = typeof row.coverUrl === "string" && row.coverUrl.trim() ? row.coverUrl.trim() : null;
+      return { url: row.url, type: row.type === "VIDEO" ? ("VIDEO" as const) : ("IMAGE" as const), coverUrl };
     })
-    .filter((item): item is { url: string; type: "IMAGE" | "VIDEO" } => Boolean(item))
+    .filter((item): item is ParsedMediaItem => item !== null)
     .slice(0, 10);
+}
+
+function isLikelyImageUrl(url: string) {
+  return /\.(jpe?g|png|webp|gif|avif)(\?|#|$)/i.test(url);
+}
+
+function pickShareImage(
+  items: Array<{ url: string; type: "IMAGE" | "VIDEO"; coverUrl?: string | null }>,
+  avatarUrl: string | null,
+  webFallback: string
+) {
+  const imageItem = items.find((item) => item.type === "IMAGE");
+  if (imageItem?.url && isLikelyImageUrl(imageItem.url)) {
+    return imageItem.url;
+  }
+
+  for (const item of items) {
+    if (item.coverUrl && isLikelyImageUrl(item.coverUrl)) {
+      return item.coverUrl;
+    }
+  }
+
+  if (avatarUrl && isLikelyImageUrl(avatarUrl)) {
+    return avatarUrl;
+  }
+
+  return webFallback;
 }
 
 async function loadPublicPost(id: string) {
@@ -59,25 +89,32 @@ async function loadPublicPost(id: string) {
   if (post.author.profile?.isPrivate) return null;
 
   const mediaItems = parseMediaItems(post.mediaItems);
-  const items =
+  const items: ParsedMediaItem[] =
     mediaItems.length > 0
       ? mediaItems
       : post.mediaUrl
-        ? [{ url: post.mediaUrl, type: (post.mediaType === "VIDEO" ? "VIDEO" : "IMAGE") as "IMAGE" | "VIDEO" }]
+        ? [
+            {
+              url: post.mediaUrl,
+              type: (post.mediaType === "VIDEO" ? "VIDEO" : "IMAGE") as "IMAGE" | "VIDEO",
+              coverUrl: null
+            }
+          ]
         : [];
 
   const resolvedItems = items
     .map((item) => {
       const url = absolutePublicMediaUrl(item.url);
-      return url ? { url, type: item.type } : null;
+      if (!url) return null;
+      const coverUrl = absolutePublicMediaUrl(item.coverUrl);
+      return { url, type: item.type, coverUrl };
     })
-    .filter((item): item is { url: string; type: "IMAGE" | "VIDEO" } => Boolean(item));
+    .filter((item): item is { url: string; type: "IMAGE" | "VIDEO"; coverUrl: string | null } => Boolean(item));
 
-  const cover =
-    resolvedItems.find((item) => item.type === "IMAGE")?.url ??
-    resolvedItems[0]?.url ??
-    absolutePublicMediaUrl(post.author.profile?.avatarUrl) ??
-    null;
+  const avatarUrl = absolutePublicMediaUrl(post.author.profile?.avatarUrl);
+  const web = getWebAppOrigin().replace(/\/+$/, "");
+  const logoFallback = `${web}/assets/app-treino-logo.svg`;
+  const cover = pickShareImage(resolvedItems, avatarUrl, logoFallback);
 
   const body = (post.body ?? "").replace(/\n?\[\[LIVE:[^\]]+\]\]/g, "").trim();
 

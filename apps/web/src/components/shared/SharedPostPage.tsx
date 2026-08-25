@@ -67,7 +67,11 @@ export function SharedPostPage() {
       node.content = content;
     };
     const description = post.body?.slice(0, 160) || `Veja a publicação de ${post.author.name} no ${brand.name}.`;
-    const image = post.coverUrl || post.mediaItems[0]?.url || assetUrl("assets/app-treino-logo.svg");
+    const firstMedia = post.mediaItems[0];
+    const image =
+      mediaUrl(post.coverUrl) ||
+      (firstMedia?.type === "IMAGE" ? mediaUrl(firstMedia.url) : "") ||
+      assetUrl("assets/app-treino-logo.svg");
     ensureMeta("og:title", title);
     ensureMeta("og:description", description);
     ensureMeta("og:image", image);

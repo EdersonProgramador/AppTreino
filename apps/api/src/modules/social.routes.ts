@@ -252,18 +252,18 @@ function serializeActivity(
   };
 }
 
-function parseMediaItems(raw: unknown): Array<{ url: string; type: "IMAGE" | "VIDEO"; coverUrl?: string | null }> {
+function parseMediaItems(raw: unknown): Array<{ url: string; type: "IMAGE" | "VIDEO"; coverUrl: string | null }> {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((item) => {
       if (!item || typeof item !== "object") return null;
       const row = item as { url?: unknown; type?: unknown; coverUrl?: unknown };
       if (typeof row.url !== "string" || !row.url) return null;
-      const type = row.type === "VIDEO" ? "VIDEO" : "IMAGE";
+      const type = row.type === "VIDEO" ? ("VIDEO" as const) : ("IMAGE" as const);
       const coverUrl = typeof row.coverUrl === "string" && row.coverUrl.trim() ? row.coverUrl.trim() : null;
       return { url: row.url, type, coverUrl };
     })
-    .filter((item): item is { url: string; type: "IMAGE" | "VIDEO"; coverUrl?: string | null } => Boolean(item))
+    .filter((item): item is { url: string; type: "IMAGE" | "VIDEO"; coverUrl: string | null } => item !== null)
     .slice(0, 10);
 }
 
@@ -275,10 +275,28 @@ function mediaItemsFromPost(post: {
   const fromJson = parseMediaItems(post.mediaItems);
   if (fromJson.length) return fromJson;
   if (post.mediaUrl) {
-    return [{ url: post.mediaUrl, type: (post.mediaType === "VIDEO" ? "VIDEO" : "IMAGE") as "IMAGE" | "VIDEO" }];
+    return [
+      {
+        url: post.mediaUrl,
+        type: (post.mediaType === "VIDEO" ? "VIDEO" : "IMAGE") as "IMAGE" | "VIDEO",
+        coverUrl: null
+      }
+    ];
   }
   return [];
 }
+
+type SerializedComment = {
+  id: string;
+  body: string;
+  parentId: string | null;
+  createdAt: string;
+  author: ReturnType<typeof authorCard>;
+  likesCount: number;
+  likedByMe: boolean;
+  repliesCount: number;
+  replies: SerializedComment[];
+};
 
 function serializeComment(
   comment: {
@@ -300,7 +318,7 @@ function serializeComment(
     }>;
   },
   viewerId: string
-) {
+): SerializedComment {
   return {
     id: comment.id,
     body: comment.body,

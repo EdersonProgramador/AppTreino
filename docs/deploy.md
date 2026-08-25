@@ -102,3 +102,12 @@ No Google Cloud Console, Authorized JavaScript origins:
 - [ ] Confirme que não há erro de CORS no DevTools
 - [ ] Teste upload e URL pública sob `https://api.edersonprogramador.com/uploads/...`
 - [ ] Configure o webhook Asaas e confirme um pagamento de teste/produção
+- [ ] `https://apptreino-backend.onrender.com/public/share/posts/POST_ID` → HTML com `og:image` (não JSON 404)
+- [ ] Compartilhe um post no WhatsApp e confirme preview (pode levar alguns minutos por cache)
+
+### Preview de compartilhamento (posts sociais)
+
+1. **Redeploy da API** no Render após push com `public.routes.ts` (rotas `/public/share/posts/:id` e `/public/posts/:id`).
+2. O link compartilhado usa o domínio do web: `https://seusite.com/public/share/posts/:id` (proxy Vercel → API).
+3. Se o preview não atualizar, limpe o cache do WhatsApp (reenvie com `?v=2` ou use o [Facebook Sharing Debugger](https://developers.facebook.com/tools/debug/)).
+4. Posts só com vídeo precisam de **capa/frame** escolhida — o `og:image` não aceita `.mp4`.

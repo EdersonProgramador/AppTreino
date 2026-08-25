@@ -1374,11 +1374,10 @@ export function StudentFeedSection({
               role="presentation"
               style={
                 sheetViewport.height
-                  ? {
-                      top: sheetViewport.offsetTop,
-                      height: sheetViewport.height,
-                      ["--comments-keyboard" as string]: `${sheetViewport.keyboard}px`
-                    }
+                  ? ({
+                      ["--comments-vv-top" as string]: `${sheetViewport.offsetTop}px`,
+                      ["--comments-vv-height" as string]: `${sheetViewport.height}px`
+                    } as React.CSSProperties)
                   : undefined
               }
               onClick={closeCommentsSheet}
@@ -1499,24 +1498,15 @@ export function StudentFeedSection({
                   )}
                 </div>
 
-                <div
-                  className="student-comments-composer"
-                  style={
-                    sheetViewport.keyboard > 0
-                      ? { paddingBottom: 10 }
-                      : undefined
-                  }
-                >
+                <div className="student-comments-composer">
                   <div className="student-comments-emojis" role="list">
                     {COMMENT_EMOJIS.map((emoji) => (
                       <button
                         key={emoji}
                         type="button"
                         role="listitem"
-                        onClick={() => {
-                          setSheetDraft((current) => `${current}${emoji}`);
-                          commentInputRef.current?.focus();
-                        }}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => setSheetDraft((current) => `${current}${emoji}`)}
                       >
                         {emoji}
                       </button>
@@ -1536,6 +1526,8 @@ export function StudentFeedSection({
                       value={sheetDraft}
                       onChange={(event) => setSheetDraft(event.target.value)}
                       placeholder={replyTo ? `Responder a ${replyTo.name}...` : "Adicione um comentário..."}
+                      enterKeyHint="send"
+                      maxLength={500}
                       onKeyDown={(event) => {
                         if (event.key === "Enter") void sendSheetComment();
                       }}
