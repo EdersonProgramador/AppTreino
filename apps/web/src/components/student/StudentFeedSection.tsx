@@ -32,14 +32,22 @@ import type {
   SocialAuthor,
   SocialComment,
   SocialPostRow,
+  SocialStoryGalleryItem,
   SocialStoryRail,
   UploadResponse
 } from "../../types";
 import { StudentCameraCapture } from "./StudentCameraCapture";
 import { VideoCoverPicker } from "./VideoCoverPicker";
+import { StoryViewer } from "./StoryViewer";
+import { assertStoryVideoWithinLimit } from "../../lib/video-cover";
 
 type FeedMode = "for-you" | "following";
-type MediaItem = { url: string; type: "IMAGE" | "VIDEO"; coverUrl?: string | null };
+type MediaItem = { url: string; type: "IMAGE" | "VIDEO"; coverUrl?: string | null; localSrc?: string | null };
+
+function revokeMediaItem(item: MediaItem) {
+  if (item.localSrc?.startsWith("blob:")) URL.revokeObjectURL(item.localSrc);
+  if (item.coverUrl?.startsWith("blob:")) URL.revokeObjectURL(item.coverUrl);
+}
 type SocialNav = "reels" | "live" | "messages" | "chat" | "requests" | "profile";
 type CreatePanel = "post" | "story" | "note" | null;
 type CameraMode = "photo" | "video" | null;
@@ -280,6 +288,9 @@ export function StudentFeedSection({
   const [storyMedia, setStoryMedia] = useState<MediaItem | null>(null);
   const [storyCoverPreview, setStoryCoverPreview] = useState<string | null>(null);
   const [viewer, setViewer] = useState<{ rail: number; item: number } | null>(null);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryItems, setGalleryItems] = useState<SocialStoryGalleryItem[]>([]);
+  const [galleryViewerIndex, setGalleryViewerIndex] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const storyFileRef = useRef<HTMLInputElement>(null);
   const createMenuRef = useRef<HTMLDivElement>(null);
@@ -359,10 +370,12 @@ export function StudentFeedSection({
     const form = new FormData();
     form.append("file", file);
     const uploaded = await apiUpload<UploadResponse>("/student/social/uploads", form, token);
+    const isVideo = file.type.startsWith("video/");
     return {
       url: uploaded.file.url,
-      type: (file.type.startsWith("video/") ? "VIDEO" : "IMAGE") as "IMAGE" | "VIDEO",
-      coverUrl: file.type.startsWith("video/") ? null : uploaded.file.url
+      type: (isVideo ? "VIDEO" : "IMAGE") as "IMAGE" | "VIDEO",
+      coverUrl: isVideo ? null : uploaded.file.url,
+      localSrc: isVideo ? URL.createObjectURL(file) : null
     };
   }
 
@@ -416,6 +429,7 @@ export function StudentFeedSection({
     setBusy(true);
     setError(null);
     try {
+      if (forStory) await assertStoryVideoWithinLimit(file);
       const uploaded = await uploadFile(file);
       if (forStory) {
         setStoryMedia(uploaded);
@@ -451,7 +465,7 @@ export function StudentFeedSection({
         token
       );
       for (const item of mediaItems) {
-        if (item.coverUrl?.startsWith("blob:")) URL.revokeObjectURL(item.coverUrl);
+        revokeMediaItem(item);
       }
       setPosts((current) => [created.post, ...current]);
       setBody("");
@@ -642,6 +656,7 @@ export function StudentFeedSection({
         token
       );
       if (storyCoverPreview?.startsWith("blob:")) URL.revokeObjectURL(storyCoverPreview);
+      if (storyMedia) revokeMediaItem(storyMedia);
       setCreatePanel(null);
       setStoryCaption("");
       setStoryMedia(null);
@@ -676,9 +691,19 @@ export function StudentFeedSection({
 
   async function openStory(railIndex: number) {
     setViewer({ rail: railIndex, item: 0 });
-    const first = rails[railIndex]?.items[0];
-    if (first && !first.seen) {
-      await apiPost(`/student/social/stories/${first.id}/view`, {}, token).catch(() => undefined);
+  }
+
+  async function loadGallery() {
+    const data = await apiGet<{ items: SocialStoryGalleryItem[] }>("/student/social/stories/gallery", token);
+    setGalleryItems(data.items);
+  }
+
+  async function openGallery() {
+    setGalleryOpen(true);
+    try {
+      await loadGallery();
+    } catch {
+      setGalleryItems([]);
     }
   }
 
@@ -789,6 +814,7 @@ export function StudentFeedSection({
     setSearchOpen(false);
     if (panel === "story") {
       setStoryCaption("");
+      if (storyMedia) revokeMediaItem(storyMedia);
       setStoryMedia(null);
       if (storyCoverPreview?.startsWith("blob:")) URL.revokeObjectURL(storyCoverPreview);
       setStoryCoverPreview(null);
@@ -797,7 +823,29 @@ export function StudentFeedSection({
   }
 
   const viewerRail = viewer ? rails[viewer.rail] : null;
-  const viewerItem = viewer && viewerRail ? viewerRail.items[viewer.item] : null;
+  const galleryViewerRail = useMemo((): SocialStoryRail | null => {
+    if (galleryViewerIndex == null) return null;
+    const entry = galleryItems[galleryViewerIndex];
+    if (!entry) return null;
+    return {
+      userId: "gallery",
+      username: "Galeria",
+      isMine: true,
+      unseen: false,
+      items: [
+        {
+          id: entry.id,
+          mediaUrl: entry.mediaUrl,
+          mediaType: entry.mediaType,
+          coverUrl: entry.coverUrl,
+          caption: entry.caption,
+          mood: entry.mood,
+          createdAt: entry.savedAt,
+          seen: true
+        }
+      ]
+    };
+  }, [galleryItems, galleryViewerIndex]);
 
   return (
     <section className="student-feed">
@@ -873,6 +921,9 @@ export function StudentFeedSection({
             <strong>Momentos</strong>
             <small>Somem em 24h</small>
           </div>
+          <button type="button" className="student-feed-story-gallery-link" onClick={() => void openGallery()}>
+            Galeria
+          </button>
         </header>
         <div className="student-feed-story-rail">
           <button type="button" className="student-feed-story-add" onClick={() => openCreate("story")}>
@@ -957,7 +1008,7 @@ export function StudentFeedSection({
                   <button
                     type="button"
                     onClick={() => {
-                      if (item.coverUrl?.startsWith("blob:")) URL.revokeObjectURL(item.coverUrl);
+                      revokeMediaItem(item);
                       setMediaItems((current) => current.filter((row) => row.url !== item.url));
                     }}
                     aria-label="Remover"
@@ -975,6 +1026,7 @@ export function StudentFeedSection({
               <VideoCoverPicker
                 key={`cover-${item.url}`}
                 videoSrc={item.url}
+                localSrc={item.localSrc}
                 coverPreview={item.coverUrl}
                 onCoverChange={(previewUrl) => {
                   setMediaItems((current) =>
@@ -1021,6 +1073,7 @@ export function StudentFeedSection({
         open={Boolean(cameraMode)}
         mode={cameraMode === "video" ? "video" : "photo"}
         allowModeSwitch
+        maxVideoSeconds={createPanel === "story" ? 60 : 120}
         title={createPanel === "story" ? "Momento" : "Publicar"}
         onClose={() => setCameraMode(null)}
         onCapture={(file) => void onCameraCapture(file)}
@@ -1258,12 +1311,13 @@ export function StudentFeedSection({
               </header>
               <div className="student-feed-modal-body">
                 {!storyMedia ? (
-                  <p className="student-activity-hint">Foto ou vídeo curto. Some em 24 horas.</p>
+                  <p className="student-activity-hint">Foto (6s) ou vídeo curto (até 1 min). Some em 24 horas.</p>
                 ) : null}
                 {storyMedia ? (
                   storyMedia.type === "VIDEO" ? (
                     <VideoCoverPicker
                       videoSrc={storyMedia.url}
+                      localSrc={storyMedia.localSrc}
                       coverPreview={storyCoverPreview}
                       onCoverChange={(previewUrl) => {
                         if (storyCoverPreview?.startsWith("blob:")) URL.revokeObjectURL(storyCoverPreview);
@@ -1290,7 +1344,9 @@ export function StudentFeedSection({
                   setBusy(true);
                   try {
                     if (storyCoverPreview?.startsWith("blob:")) URL.revokeObjectURL(storyCoverPreview);
+                    if (storyMedia) revokeMediaItem(storyMedia);
                     setStoryCoverPreview(null);
+                    await assertStoryVideoWithinLimit(file);
                     setStoryMedia(await uploadFile(file));
                   } catch (err) {
                     setError(err instanceof Error ? err.message : "Falha no envio da mídia.");
@@ -1549,55 +1605,71 @@ export function StudentFeedSection({
           )
         : null}
 
-      {viewer && viewerRail && viewerItem
+      {viewer && viewerRail
         ? createPortal(
-            <div
-              className="student-feed-story-viewer"
-              onClick={() => setViewer(null)}
-              role="dialog"
-              aria-label="Momento"
-            >
-              <div className="student-feed-story-viewer-card" onClick={(event) => event.stopPropagation()}>
-                <header>
-                  <strong>{viewerRail.isMine ? "Você" : viewerRail.username}</strong>
-                  <button type="button" onClick={() => setViewer(null)} aria-label="Fechar">
-                    <X size={18} />
-                  </button>
-                </header>
-                {viewerItem.mediaType === "VIDEO" ? (
-                  <video src={mediaUrl(viewerItem.mediaUrl)} controls autoPlay playsInline />
-                ) : (
-                  <img src={mediaUrl(viewerItem.mediaUrl)} alt="" />
-                )}
-                {viewerItem.caption && <p>{viewerItem.caption}</p>}
-                <div className="student-feed-carousel-nav">
-                  <button
-                    type="button"
-                    disabled={viewer.item <= 0}
-                    onClick={() => setViewer((current) => (current ? { ...current, item: current.item - 1 } : current))}
-                  >
-                    ‹
-                  </button>
-                  <span>
-                    {viewer.item + 1}/{viewerRail.items.length}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={viewer.item >= viewerRail.items.length - 1}
-                    onClick={() => {
-                      const next = viewer.item + 1;
-                      const nextItem = viewerRail.items[next];
-                      if (nextItem && !nextItem.seen) {
-                        void apiPost(`/student/social/stories/${nextItem.id}/view`, {}, token);
-                      }
-                      setViewer((current) => (current ? { ...current, item: next } : current));
-                    }}
-                  >
-                    ›
-                  </button>
+            <StoryViewer
+              rails={rails}
+              startRail={viewer.rail}
+              startItem={viewer.item}
+              token={token}
+              onClose={() => setViewer(null)}
+              onSaved={() => void loadGallery().catch(() => undefined)}
+            />,
+            document.body
+          )
+        : null}
+
+      {galleryOpen
+        ? createPortal(
+            <div className="student-feed-story-gallery-sheet" role="dialog" aria-label="Galeria de momentos">
+              <header>
+                <strong>Galeria</strong>
+                <button type="button" onClick={() => setGalleryOpen(false)} aria-label="Fechar">
+                  <X size={18} />
+                </button>
+              </header>
+              <p className="student-activity-hint">Momentos salvos não expiram. Os ativos somem em 24h.</p>
+              {galleryItems.length === 0 ? (
+                <p className="student-feed-story-gallery-empty">Nenhum momento salvo ainda.</p>
+              ) : (
+                <div className="student-feed-story-gallery-grid">
+                  {galleryItems.map((entry, index) => {
+                    const thumb =
+                      entry.coverUrl ||
+                      (String(entry.mediaType).toUpperCase() === "IMAGE" ? entry.mediaUrl : entry.coverUrl) ||
+                      entry.mediaUrl;
+                    return (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        className="student-feed-story-gallery-tile"
+                        onClick={() => setGalleryViewerIndex(index)}
+                      >
+                        {String(entry.mediaType).toUpperCase() === "VIDEO" && !entry.coverUrl ? (
+                          <video src={mediaUrl(entry.mediaUrl)} muted playsInline preload="metadata" aria-hidden />
+                        ) : (
+                          <img src={mediaUrl(thumb || entry.mediaUrl)} alt="" />
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
-              </div>
+              )}
             </div>,
+            document.body
+          )
+        : null}
+
+      {galleryViewerRail && galleryViewerIndex != null
+        ? createPortal(
+            <StoryViewer
+              rails={[galleryViewerRail]}
+              startRail={0}
+              startItem={0}
+              token={token}
+              archiveMode
+              onClose={() => setGalleryViewerIndex(null)}
+            />,
             document.body
           )
         : null}

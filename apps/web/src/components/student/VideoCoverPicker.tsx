@@ -1,40 +1,85 @@
 import { useEffect, useRef, useState } from "react";
 import { mediaUrl } from "../../lib/urls";
-import { formatVideoClock, frameFromVideo } from "../../lib/video-cover";
+import {
+  ensureVideoDuration,
+  formatVideoClock,
+  frameFromVideo,
+  isBlobPlaybackUrl,
+  readVideoDuration
+} from "../../lib/video-cover";
 
 type Props = {
+  /** URL persistida (upload/API) — usada se não houver `localSrc`. */
   videoSrc: string;
+  /** Blob local do arquivo/gravação — evita CORS na captura de frames. */
+  localSrc?: string | null;
   coverPreview?: string | null;
   onCoverChange: (previewUrl: string) => void;
   label?: string;
   compact?: boolean;
+  mirror?: boolean;
 };
 
 /** Seletor de frame/capa para qualquer publicação com vídeo. */
 export function VideoCoverPicker({
   videoSrc,
+  localSrc,
   coverPreview,
   onCoverChange,
   label = "Escolher capa",
-  compact = false
+  compact = false,
+  mirror = false
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [durationSec, setDurationSec] = useState(0.1);
   const [coverAt, setCoverAt] = useState(0);
-  const src = mediaUrl(videoSrc);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const playbackSrc = localSrc || (isBlobPlaybackUrl(videoSrc) ? videoSrc : mediaUrl(videoSrc));
+  const needsCrossOrigin = !localSrc && !isBlobPlaybackUrl(playbackSrc);
 
   useEffect(() => {
     setCoverAt(0);
     setDurationSec(0.1);
-  }, [src]);
+    setCaptureError(null);
+    setLoading(true);
+  }, [playbackSrc]);
+
+  async function syncDuration(video: HTMLVideoElement) {
+    const duration = await ensureVideoDuration(video);
+    setDurationSec(Math.max(duration, 0.1));
+    setLoading(false);
+    try {
+      video.currentTime = Math.min(0.05, Math.max(duration - 0.05, 0));
+    } catch {
+      // ignore
+    }
+  }
 
   async function captureFrame() {
     const video = videoRef.current;
     if (!video) return;
-    const frame = await frameFromVideo(video, false);
-    if (!frame) return;
-    const next = URL.createObjectURL(frame);
-    onCoverChange(next);
+    const frame = await frameFromVideo(video, mirror);
+    if (!frame) {
+      setCaptureError("Não foi possível gerar a capa deste vídeo.");
+      return;
+    }
+    setCaptureError(null);
+    onCoverChange(URL.createObjectURL(frame));
+  }
+
+  function seekToRatio(ratio: number) {
+    const video = videoRef.current;
+    if (!video) return;
+    const duration = readVideoDuration(video) || durationSec;
+    if (duration <= 0) return;
+    const safeRatio = Math.min(Math.max(ratio, 0), 1);
+    try {
+      video.currentTime = safeRatio * duration;
+    } catch {
+      setCaptureError("Não foi possível avançar no vídeo.");
+    }
   }
 
   return (
@@ -42,17 +87,25 @@ export function VideoCoverPicker({
       <div className="student-video-cover-preview">
         <video
           ref={videoRef}
-          src={src}
+          src={playbackSrc}
           playsInline
           muted
-          preload="metadata"
+          preload="auto"
+          crossOrigin={needsCrossOrigin ? "anonymous" : undefined}
           onLoadedMetadata={(event) => {
-            const duration = Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 1;
-            setDurationSec(Math.max(duration, 0.1));
-            event.currentTarget.currentTime = Math.min(0.05, duration);
+            void syncDuration(event.currentTarget);
+          }}
+          onDurationChange={(event) => {
+            const duration = readVideoDuration(event.currentTarget);
+            if (duration > 0) setDurationSec(duration);
           }}
           onSeeked={() => void captureFrame()}
+          onError={() => {
+            setLoading(false);
+            setCaptureError("Não foi possível carregar o vídeo para escolher a capa.");
+          }}
         />
+        {loading ? <span className="student-video-cover-loading">Carregando vídeo…</span> : null}
         {coverPreview ? <img className="student-video-cover-thumb" src={coverPreview} alt="Capa" /> : null}
       </div>
       <label className="student-video-cover-scrub">
@@ -64,16 +117,15 @@ export function VideoCoverPicker({
           min={0}
           max={1000}
           value={coverAt}
+          disabled={loading || Boolean(captureError && !coverPreview)}
           onChange={(event) => {
             const next = Number(event.target.value);
             setCoverAt(next);
-            const video = videoRef.current;
-            if (video && Number.isFinite(video.duration) && video.duration > 0) {
-              video.currentTime = (next / 1000) * video.duration;
-            }
+            seekToRatio(next / 1000);
           }}
         />
       </label>
+      {captureError ? <p className="student-video-cover-error">{captureError}</p> : null}
     </div>
   );
 }

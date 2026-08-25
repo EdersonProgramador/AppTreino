@@ -53,6 +53,7 @@ model User {
   socialFollowers           SocialFollow[]         @relation("SocialFollowTo")
   socialStories             SocialStory[]
   socialStoryViews          SocialStoryView[]
+  socialStoryGallery        SocialStoryGallery[]
   socialReels               SocialReel[]
   socialReelLikes           SocialReelLike[]
   socialLiveSessions        SocialLiveSession[]
@@ -1306,6 +1307,24 @@ model SocialStoryView {
 
   @@unique([storyId, userId])
   @@map("social_story_views")
+}
+
+/// Momentos salvos na galeria pessoal (persistem após expirar em 24h).
+model SocialStoryGallery {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storyId   String?  @map("story_id")
+  mediaUrl  String   @map("media_url")
+  mediaType String   @default("IMAGE") @map("media_type")
+  coverUrl  String?  @map("cover_url")
+  caption   String?
+  mood      String   @default("vibe")
+  savedAt   DateTime @default(now()) @map("saved_at")
+
+  @@unique([userId, storyId])
+  @@index([userId, savedAt])
+  @@map("social_story_gallery")
 }
 
 model SocialReel {

@@ -154,6 +154,10 @@ await app.register(staticFiles, {
     response.setHeader("X-Content-Type-Options", "nosniff");
     response.setHeader("Cache-Control", mediaCacheControl(true));
     const isPlayableMedia = /\.(mp4|webm|ogv|mov|mp3|m4a|aac|ogg|wav|flac|opus)$/i.test(filePath);
+    const isRasterImage = /\.(jpe?g|png|webp|gif|avif)$/i.test(filePath);
+    if (isPlayableMedia || isRasterImage) {
+      response.setHeader("Access-Control-Allow-Origin", "*");
+    }
     if (isPlayableMedia) {
       // Sem CSP no media: sandbox/default-src no response já quebrou <audio> no Chrome.
       response.setHeader("Accept-Ranges", "bytes");

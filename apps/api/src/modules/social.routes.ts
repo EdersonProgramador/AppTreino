@@ -797,6 +797,7 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     requireDatabase();
     const user = await requireAuth(app, request);
     const now = new Date();
+    await prisma.socialStory.deleteMany({ where: { expiresAt: { lte: now } } });
     const stories = await prisma.socialStory.findMany({
       where: { expiresAt: { gt: now } },
       include: {
@@ -823,6 +824,7 @@ export async function registerSocialRoutes(app: FastifyInstance) {
           caption: string | null;
           mood: string;
           createdAt: string;
+          expiresAt: string;
           seen: boolean;
         }>;
       }
@@ -838,6 +840,7 @@ export async function registerSocialRoutes(app: FastifyInstance) {
         caption: story.caption,
         mood: story.mood,
         createdAt: story.createdAt.toISOString(),
+        expiresAt: story.expiresAt.toISOString(),
         seen
       };
       const current = byAuthor.get(story.authorId);
@@ -857,11 +860,16 @@ export async function registerSocialRoutes(app: FastifyInstance) {
       if (!seen && story.authorId !== user.id) current.unseen = true;
     }
 
-    const rails = [...byAuthor.values()].sort((a, b) => {
-      if (a.isMine !== b.isMine) return a.isMine ? -1 : 1;
-      if (a.unseen !== b.unseen) return a.unseen ? -1 : 1;
-      return 0;
-    });
+    const rails = [...byAuthor.values()]
+      .map((rail) => ({
+        ...rail,
+        items: [...rail.items].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      }))
+      .sort((a, b) => {
+        if (a.isMine !== b.isMine) return a.isMine ? -1 : 1;
+        if (a.unseen !== b.unseen) return a.unseen ? -1 : 1;
+        return 0;
+      });
 
     return { rails };
   });
@@ -916,6 +924,79 @@ export async function registerSocialRoutes(app: FastifyInstance) {
       create: { storyId: id, userId: user.id },
       update: {}
     });
+    return { ok: true };
+  });
+
+  app.get("/student/social/stories/gallery", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const rows = await prisma.socialStoryGallery.findMany({
+      where: { userId: user.id },
+      orderBy: { savedAt: "desc" },
+      take: 120
+    });
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        storyId: row.storyId,
+        mediaUrl: row.mediaUrl,
+        mediaType: row.mediaType,
+        coverUrl: row.coverUrl,
+        caption: row.caption,
+        mood: row.mood,
+        savedAt: row.savedAt.toISOString()
+      }))
+    };
+  });
+
+  app.post("/student/social/stories/:id/gallery", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const story = await prisma.socialStory.findUnique({ where: { id } });
+    if (!story || story.expiresAt <= new Date()) throw httpError(404, "Momento expirado ou indisponível.");
+    if (story.authorId !== user.id) throw httpError(403, "Só é possível salvar seus próprios momentos.");
+    const saved = await prisma.socialStoryGallery.upsert({
+      where: { userId_storyId: { userId: user.id, storyId: id } },
+      create: {
+        userId: user.id,
+        storyId: id,
+        mediaUrl: story.mediaUrl,
+        mediaType: story.mediaType,
+        coverUrl: story.coverUrl,
+        caption: story.caption,
+        mood: story.mood
+      },
+      update: {
+        mediaUrl: story.mediaUrl,
+        mediaType: story.mediaType,
+        coverUrl: story.coverUrl,
+        caption: story.caption,
+        mood: story.mood,
+        savedAt: new Date()
+      }
+    });
+    return {
+      saved: true,
+      item: {
+        id: saved.id,
+        storyId: saved.storyId,
+        mediaUrl: saved.mediaUrl,
+        mediaType: saved.mediaType,
+        coverUrl: saved.coverUrl,
+        caption: saved.caption,
+        mood: saved.mood,
+        savedAt: saved.savedAt.toISOString()
+      }
+    };
+  });
+
+  app.delete("/student/social/stories/gallery/:id", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const deleted = await prisma.socialStoryGallery.deleteMany({ where: { id, userId: user.id } });
+    if (!deleted.count) throw httpError(404, "Item não encontrado na galeria.");
     return { ok: true };
   });
 

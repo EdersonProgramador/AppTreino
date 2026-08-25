@@ -145,6 +145,7 @@ export function StudentReelsSection({
   const [cameraOpen, setCameraOpen] = useState(false);
   const [caption, setCaption] = useState("");
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [reelLocalSrc, setReelLocalSrc] = useState<string | null>(null);
   const [reelCoverPreview, setReelCoverPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -174,7 +175,9 @@ export function StudentReelsSection({
       form.append("file", file);
       const uploaded = await apiUpload<UploadResponse>("/student/social/uploads", form, token);
       if (reelCoverPreview?.startsWith("blob:")) URL.revokeObjectURL(reelCoverPreview);
+      if (reelLocalSrc?.startsWith("blob:")) URL.revokeObjectURL(reelLocalSrc);
       setReelCoverPreview(null);
+      setReelLocalSrc(URL.createObjectURL(file));
       setVideoUrl(uploaded.file.url);
       setComposer(true);
       setCameraOpen(false);
@@ -208,9 +211,11 @@ export function StudentReelsSection({
       }
       await apiPost("/student/social/reels", { videoUrl, coverUrl, caption }, token);
       if (reelCoverPreview?.startsWith("blob:")) URL.revokeObjectURL(reelCoverPreview);
+      if (reelLocalSrc?.startsWith("blob:")) URL.revokeObjectURL(reelLocalSrc);
       setComposer(false);
       setCaption("");
       setVideoUrl(null);
+      setReelLocalSrc(null);
       setReelCoverPreview(null);
       await load();
     } catch (err) {
@@ -344,8 +349,10 @@ export function StudentReelsSection({
               type="button"
               onClick={() => {
                 if (reelCoverPreview?.startsWith("blob:")) URL.revokeObjectURL(reelCoverPreview);
+                if (reelLocalSrc?.startsWith("blob:")) URL.revokeObjectURL(reelLocalSrc);
                 setComposer(false);
                 setVideoUrl(null);
+                setReelLocalSrc(null);
                 setReelCoverPreview(null);
                 setCaption("");
               }}
@@ -358,6 +365,7 @@ export function StudentReelsSection({
           {videoUrl ? (
             <VideoCoverPicker
               videoSrc={videoUrl}
+              localSrc={reelLocalSrc}
               coverPreview={reelCoverPreview}
               onCoverChange={(previewUrl) => {
                 if (reelCoverPreview?.startsWith("blob:")) URL.revokeObjectURL(reelCoverPreview);
@@ -474,9 +482,6 @@ export function StudentLiveSection({
     mirror: boolean;
     afterEnd: boolean;
   } | null>(null);
-  const [saveCoverAt, setSaveCoverAt] = useState(0);
-  const [saveDurationSec, setSaveDurationSec] = useState(1);
-  const savePreviewRef = useRef<HTMLVideoElement>(null);
   const [savingLive, setSavingLive] = useState(false);
   const [preparingReplay, setPreparingReplay] = useState(false);
   const [replayLive, setReplayLive] = useState<LiveRow | null>(null);
@@ -927,8 +932,6 @@ export function StudentLiveSection({
       if (frame) coverPreview = URL.createObjectURL(frame);
     }
     const known = [...lives, ...savedLives].find((row) => row.id === liveId);
-    setSaveCoverAt(0);
-    setSaveDurationSec(1);
     setSaveSheet({
       liveId,
       title: title.trim() || known?.title || "Live",
@@ -954,15 +957,6 @@ export function StudentLiveSection({
       if (current.videoUrl?.startsWith("blob:")) URL.revokeObjectURL(current.videoUrl);
       return { ...current, videoBlob, videoUrl: blobUrl };
     });
-  }
-
-  async function captureCoverFromPreview() {
-    const video = savePreviewRef.current;
-    if (!video || !saveSheet) return;
-    const frame = await frameFromVideo(video, false);
-    if (!frame) return;
-    if (saveSheet.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(saveSheet.coverPreview);
-    setSaveSheet({ ...saveSheet, coverPreview: URL.createObjectURL(frame) });
   }
 
   async function confirmSaveLive() {
@@ -1128,8 +1122,6 @@ export function StudentLiveSection({
 
       const coverPreview = coverFrame ? URL.createObjectURL(coverFrame) : null;
       const blobUrl = videoBlob && videoBlob.size > 0 ? URL.createObjectURL(videoBlob) : null;
-      setSaveCoverAt(0);
-      setSaveDurationSec(1);
       setSaveSheet({
         liveId,
         title: titleSnapshot,
@@ -1558,47 +1550,32 @@ export function StudentLiveSection({
                     ? "A live já encerrou. Escolha se quer guardar o vídeo nas Lives salvas ou descartar."
                     : "Confirme para guardar em Lives salvas e publicar no feed."}
                 </p>
-                <div className="student-live-save-preview">
-                  {saveSheet.videoUrl ? (
-                    <video
-                      ref={savePreviewRef}
-                      src={saveSheet.videoUrl}
-                      playsInline
-                      controls
-                      preload="metadata"
-                      onLoadedMetadata={(event) => {
-                        const duration = Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 1;
-                        setSaveDurationSec(Math.max(duration, 0.1));
-                        event.currentTarget.currentTime = Math.min(0.05, duration);
-                      }}
-                      onSeeked={() => void captureCoverFromPreview()}
-                    />
-                  ) : saveSheet.coverPreview ? (
-                    <img src={saveSheet.coverPreview} alt="" />
-                  ) : (
-                    <div className="student-live-save-fallback">Prévia indisponível nesta live</div>
-                  )}
-                  {saveSheet.coverPreview ? <img className="student-live-save-cover-thumb" src={saveSheet.coverPreview} alt="Capa" /> : null}
-                </div>
                 {saveSheet.videoUrl ? (
-                  <label className="student-live-save-scrub">
-                    <span>Escolher capa · {formatLiveElapsed(Math.floor(saveDurationSec))} de vídeo</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1000}
-                      value={saveCoverAt}
-                      onChange={(event) => {
-                        const next = Number(event.target.value);
-                        setSaveCoverAt(next);
-                        const video = savePreviewRef.current;
-                        if (video && Number.isFinite(video.duration) && video.duration > 0) {
-                          video.currentTime = (next / 1000) * video.duration;
-                        }
-                      }}
-                    />
-                  </label>
-                ) : null}
+                  <VideoCoverPicker
+                    videoSrc={saveSheet.videoUrl}
+                    localSrc={saveSheet.videoUrl.startsWith("blob:") ? saveSheet.videoUrl : null}
+                    coverPreview={saveSheet.coverPreview}
+                    onCoverChange={(previewUrl) => {
+                      setSaveSheet((current) => {
+                        if (!current) return current;
+                        if (current.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(current.coverPreview);
+                        return { ...current, coverPreview: previewUrl };
+                      });
+                    }}
+                    label="Escolher capa da live"
+                  />
+                ) : (
+                  <div className="student-live-save-preview">
+                    {saveSheet.coverPreview ? (
+                      <>
+                        <img src={saveSheet.coverPreview} alt="" />
+                        <img className="student-live-save-cover-thumb" src={saveSheet.coverPreview} alt="Capa" />
+                      </>
+                    ) : (
+                      <div className="student-live-save-fallback">Prévia indisponível nesta live</div>
+                    )}
+                  </div>
+                )}
                 <div className="student-live-save-actions">
                   <button type="button" className="student-ghost-chip" onClick={cancelSaveSheet} disabled={savingLive}>
                     {saveSheet.afterEnd ? "Não salvar" : "Cancelar"}

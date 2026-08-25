@@ -309,7 +309,19 @@ export interface SocialStoryItem {
   caption?: string | null;
   mood: string;
   createdAt: string;
+  expiresAt?: string;
   seen: boolean;
+}
+
+export interface SocialStoryGalleryItem {
+  id: string;
+  storyId?: string | null;
+  mediaUrl: string;
+  mediaType: string;
+  coverUrl?: string | null;
+  caption?: string | null;
+  mood: string;
+  savedAt: string;
 }
 
 export interface SocialStoryRail {

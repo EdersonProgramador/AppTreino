@@ -81,11 +81,23 @@ Novos uploads passam automaticamente pelo R2 quando todas as variáveis estão c
 
 Thumbnails (`GET /media?path=...`) continuam na API; a origem é lida do R2 quando o arquivo não está no disco local.
 
-## CORS (se necessário)
+## CORS (obrigatório para capa de vídeo)
 
-Se o front carregar mídia direto do r2.dev, configure CORS no bucket:
+O seletor de capa captura frames via `<canvas>`. Vídeos servidos do R2/CDN precisam de CORS habilitado.
 
-- Allowed origins: `https://app-treino-api.vercel.app`, `https://edersonprogramador.com`
-- Methods: `GET`, `HEAD`
+No bucket R2 → **Settings** → **CORS policy**:
 
-Com domínio customizado na Cloudflare, CORS raramente é problema para `<img>` e `<video>`.
+```json
+[
+  {
+    "AllowedOrigins": ["https://edersonprogramador.com", "https://www.edersonprogramador.com", "http://localhost:5174"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "MaxAgeSeconds": 86400
+  }
+]
+```
+
+A API também envia `Access-Control-Allow-Origin: *` em `/uploads/*` (imagens e vídeos locais).
+
+Com domínio customizado na Cloudflare, configure CORS no bucket mesmo usando CDN — `<video crossOrigin="anonymous">` exige isso para gerar capas.

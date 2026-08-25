@@ -250,18 +250,102 @@ export async function registerPublicRoutes(app: FastifyInstance) {
   <meta name="twitter:image" content="${escapeHtml(image)}"/>
   <link rel="canonical" href="${escapeHtml(sharePage)}"/>
   <style>
-    body{margin:0;font-family:Manrope,system-ui,sans-serif;background:#0b0d12;color:#f5f5f5;min-height:100dvh;display:grid;place-items:center;padding:20px}
-    .card{width:min(420px,100%);background:#141821;border:1px solid #2a3140;border-radius:20px;overflow:hidden}
-    .media{aspect-ratio:4/5;background:#000;display:grid;place-items:center}
-    .media img,.media video{width:100%;height:100%;object-fit:cover;display:block}
+    *,*::before,*::after{box-sizing:border-box}
+    html{-webkit-text-size-adjust:100%}
+    body{
+      margin:0;
+      font-family:Manrope,system-ui,sans-serif;
+      background:#0b0d12;
+      color:#f5f5f5;
+      min-height:100dvh;
+      min-height:100svh;
+      height:100dvh;
+      height:100svh;
+      display:grid;
+      grid-template-rows:1fr;
+      padding:
+        max(0px, env(safe-area-inset-top, 0px))
+        max(0px, env(safe-area-inset-right, 0px))
+        max(0px, env(safe-area-inset-bottom, 0px))
+        max(0px, env(safe-area-inset-left, 0px));
+      overflow:hidden;
+    }
+    .card{
+      width:min(420px,100%);
+      height:100%;
+      max-height:100%;
+      margin:0 auto;
+      background:#141821;
+      border:1px solid #2a3140;
+      border-radius:20px;
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+    }
+    .media{
+      flex:1 1 auto;
+      min-height:min(42dvh,320px);
+      max-height:min(62dvh,calc(100dvh - 240px));
+      background:#000;
+      display:grid;
+      place-items:center;
+      overflow:hidden;
+    }
+    .media img,.media video{
+      width:100%;
+      height:100%;
+      object-fit:contain;
+      display:block;
+      background:#000;
+    }
     .fallback{padding:40px;opacity:.7}
-    .body{padding:16px;display:grid;gap:10px}
+    .body{
+      flex:0 0 auto;
+      padding:14px 16px;
+      display:grid;
+      gap:10px;
+    }
     strong{font-size:15px}
-    p{margin:0;font-size:14px;line-height:1.4;color:#d7dbe3}
-    .actions{display:grid;gap:8px;margin-top:8px}
+    p{
+      margin:0;
+      font-size:14px;
+      line-height:1.4;
+      color:#d7dbe3;
+      overflow-wrap:anywhere;
+      max-height:28dvh;
+      overflow-y:auto;
+      -webkit-overflow-scrolling:touch;
+    }
+    .actions{display:grid;gap:8px;margin-top:4px}
     a{display:block;text-align:center;text-decoration:none;border-radius:12px;padding:12px 14px;font-weight:700}
     .primary{background:#df663c;color:#fff}
     .ghost{background:transparent;color:#f5f5f5;border:1px solid #2a3140}
+    @media (max-width:719px){
+      body{padding:0}
+      .card{
+        width:100%;
+        border-radius:16px 16px 0 0;
+        border-left:0;
+        border-right:0;
+        border-bottom:0;
+      }
+      .media{
+        min-height:min(38dvh,280px);
+        max-height:min(58dvh,calc(100dvh - 220px));
+      }
+      .body{
+        padding:
+          12px 14px
+          calc(12px + env(safe-area-inset-bottom, 0px));
+      }
+    }
+    @media (max-width:719px) and (max-height:640px){
+      .media{
+        min-height:min(32dvh,200px);
+        max-height:min(46dvh,calc(100dvh - 190px));
+      }
+      .actions a{padding:10px 12px;font-size:14px}
+    }
   </style>
 </head>
 <body>
