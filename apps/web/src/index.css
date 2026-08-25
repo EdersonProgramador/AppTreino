@@ -21208,6 +21208,7 @@ html.is-native-app.keyboard-open .login-shell {
   display: grid;
   gap: 8px;
   min-width: 0;
+  overflow: visible;
 }
 
 .student-feed-stories header {
@@ -21234,9 +21235,9 @@ html.is-native-app.keyboard-open .login-shell {
   display: flex;
   gap: 12px;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
   max-width: 100%;
-  padding: 4px 2px 2px;
+  padding: 8px 4px 2px;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
@@ -21258,6 +21259,8 @@ html.is-native-app.keyboard-open .login-shell {
   cursor: pointer;
   color: var(--app-text);
   padding: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .student-feed-story-rail img,
@@ -21282,6 +21285,7 @@ html.is-native-app.keyboard-open .login-shell {
 
 .student-feed-story-rail button.is-live {
   position: relative;
+  z-index: 2;
 }
 
 .student-feed-story-rail button.is-live img,
@@ -21320,7 +21324,7 @@ html.is-native-app.keyboard-open .login-shell {
 .student-feed-modal {
   position: fixed;
   inset: 0;
-  z-index: 130;
+  z-index: 220;
   display: grid;
   place-items: center;
   padding:
@@ -21349,17 +21353,28 @@ html.is-native-app.keyboard-open .login-shell {
   box-sizing: border-box;
 }
 
-.student-feed-modal-card > .student-activity-hint {
+.student-feed-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.student-feed-modal-body > .student-activity-hint {
   margin: 0;
   flex: 0 0 auto;
 }
 
-.student-feed-modal-card > .student-feed-modal-actions {
+.student-feed-modal-card > .student-feed-modal-actions,
+.student-feed-modal-card > .student-feed-modal-footer,
+.student-feed-modal-card > header {
   flex: 0 0 auto;
 }
 
 .student-feed-modal-footer {
-  flex: 0 0 auto;
   display: grid;
   gap: 8px;
 }
@@ -21367,12 +21382,12 @@ html.is-native-app.keyboard-open .login-shell {
 .student-feed-modal-card .student-feed-preview,
 .student-feed-modal-card .student-feed-preview-story {
   position: relative;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   width: min(100%, 280px);
   max-height: min(42dvh, 320px);
   aspect-ratio: 4 / 5;
   margin: 0 auto;
-  min-height: 0;
+  min-height: 120px;
   overflow: hidden;
   border-radius: 16px;
   background: #0b0d12;
@@ -21386,11 +21401,10 @@ html.is-native-app.keyboard-open .login-shell {
 }
 
 .student-feed-modal-card.has-media .student-feed-preview-story {
-  width: min(100%, 320px);
+  width: 100%;
   max-width: 100%;
   max-height: min(48dvh, 380px);
   aspect-ratio: 4 / 5;
-  flex: 0 1 auto;
   min-height: 160px;
 }
 
@@ -21404,7 +21418,6 @@ html.is-native-app.keyboard-open .login-shell {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  flex: 0 0 auto;
 }
 
 .student-feed-modal-card header button {
@@ -21416,9 +21429,16 @@ html.is-native-app.keyboard-open .login-shell {
 }
 
 .student-feed-modal-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+
+.student-feed-modal-actions .student-ghost-chip {
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
+  box-sizing: border-box;
 }
 
 .student-feed-modal-card input[type="text"],
@@ -21439,7 +21459,7 @@ html.is-native-app.keyboard-open .login-shell {
   width: 100%;
 }
 
-/* Full-bleed / sheet only on phones — never on short desktop windows. */
+/* Sheet on phones — actions/footer always pinned below preview. */
 @media (max-width: 640px) {
   .student-feed-modal {
     padding: 0;
@@ -21474,31 +21494,22 @@ html.is-native-app.keyboard-open .login-shell {
       max(12px, calc(10px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))));
   }
 
-  .student-feed-modal-actions {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
+  .student-feed-modal-card.has-media .student-feed-modal-body {
+    flex: 1 1 0;
   }
 
-  .student-feed-modal-actions::-webkit-scrollbar {
-    display: none;
-  }
-
-  .student-feed-modal-card.has-media .student-feed-modal-actions .student-ghost-chip {
-    padding: 6px 10px;
-    font-size: 12px;
-    flex: 0 0 auto;
-  }
-
-  .student-feed-modal-card.has-media .student-feed-preview,
   .student-feed-modal-card.has-media .student-feed-preview-story {
     width: 100%;
     max-width: 100%;
     max-height: none;
     min-height: 0;
-    flex: 1 1 0;
+    flex: 1 1 auto;
     aspect-ratio: auto;
+  }
+
+  .student-feed-modal-actions .student-ghost-chip {
+    padding: 8px 6px;
+    font-size: 12px;
   }
 
   .student-feed-modal-footer input {

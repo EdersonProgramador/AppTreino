@@ -649,24 +649,26 @@ export function FeedScreen() {
                 <Ionicons name="close" size={22} color={st.muted} />
               </Pressable>
             </View>
-            {!storyMedia ? <Text style={styles.meta}>Foto ou vídeo curto. Some em 24 horas.</Text> : null}
-            <View style={styles.row}>
-              <Pressable style={styles.chip} onPress={() => void pickMedia(true)}>
+            <View style={styles.modalBody}>
+              {!storyMedia ? <Text style={styles.meta}>Foto ou vídeo curto. Some em 24 horas.</Text> : null}
+              {storyMedia?.localUri ? (
+                <Image source={{ uri: storyMedia.localUri }} style={styles.storyPreview} resizeMode="contain" />
+              ) : null}
+            </View>
+            <View style={styles.storyActions}>
+              <Pressable style={styles.storyActionChip} onPress={() => void pickMedia(true)}>
                 <Ionicons name="images-outline" size={16} color={st.text} />
                 <Text style={styles.chipText}>Galeria</Text>
               </Pressable>
-              <Pressable style={styles.chip} onPress={() => void captureMedia("photo", true)}>
+              <Pressable style={styles.storyActionChip} onPress={() => void captureMedia("photo", true)}>
                 <Ionicons name="camera-outline" size={16} color={st.text} />
                 <Text style={styles.chipText}>Câmera</Text>
               </Pressable>
-              <Pressable style={styles.chip} onPress={() => void captureMedia("video", true)}>
+              <Pressable style={styles.storyActionChip} onPress={() => void captureMedia("video", true)}>
                 <Ionicons name="videocam-outline" size={16} color={st.text} />
                 <Text style={styles.chipText}>Vídeo</Text>
               </Pressable>
             </View>
-            {storyMedia?.localUri ? (
-              <Image source={{ uri: storyMedia.localUri }} style={styles.storyPreview} resizeMode="contain" />
-            ) : null}
             <TextInput
               value={storyCaption}
               onChangeText={setStoryCaption}
@@ -856,10 +858,35 @@ function createStyles(st: StudentTokens) {
       maxHeight: "100%",
       paddingTop: 48
     },
+    modalBody: {
+      flexGrow: 1,
+      flexShrink: 1,
+      minHeight: 0,
+      gap: 8
+    },
+    storyActions: {
+      flexDirection: "row",
+      gap: 8
+    },
+    storyActionChip: {
+      flex: 1,
+      minWidth: 0,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 4,
+      borderWidth: 1,
+      borderColor: st.line,
+      backgroundColor: st.fill,
+      borderRadius: 999,
+      paddingVertical: 8,
+      paddingHorizontal: 6
+    },
     storyPreview: {
       width: "100%",
-      flex: 1,
-      minHeight: 220,
+      flexGrow: 1,
+      flexShrink: 1,
+      minHeight: 180,
       borderRadius: 16,
       backgroundColor: "#0b0d12"
     },
