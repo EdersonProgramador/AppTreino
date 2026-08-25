@@ -21183,6 +21183,9 @@ html.is-native-app.keyboard-open .login-shell {
     max(12px, calc(12px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))));
   background: rgba(8, 10, 14, 0.58);
   box-sizing: border-box;
+  /* Prefer dynamic viewport units on mobile browsers (URL bar show/hide). */
+  height: 100vh;
+  height: 100dvh;
 }
 
 .student-feed-modal-card {
@@ -21200,6 +21203,7 @@ html.is-native-app.keyboard-open .login-shell {
   flex-direction: column;
   gap: 10px;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+  box-sizing: border-box;
 }
 
 .student-feed-modal-card > .student-activity-hint {
@@ -21207,13 +21211,18 @@ html.is-native-app.keyboard-open .login-shell {
   flex: 0 0 auto;
 }
 
-.student-feed-modal-card > .student-feed-modal-actions,
-.student-feed-modal-card > input,
-.student-feed-modal-card > .student-green-button {
+.student-feed-modal-card > .student-feed-modal-actions {
   flex: 0 0 auto;
 }
 
-.student-feed-modal-card .student-feed-preview {
+.student-feed-modal-footer {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 8px;
+}
+
+.student-feed-modal-card .student-feed-preview,
+.student-feed-modal-card .student-feed-preview-story {
   flex: 1 1 auto;
   width: min(100%, 280px);
   max-height: min(38dvh, 300px);
@@ -21222,10 +21231,26 @@ html.is-native-app.keyboard-open .login-shell {
   min-height: 0;
 }
 
-.student-feed-modal-card .student-feed-preview::before {
+.student-feed-modal-card .student-feed-preview::before,
+.student-feed-modal-card .student-feed-preview-story::before {
   content: none;
   display: none;
   padding: 0;
+}
+
+.student-feed-modal-card.has-media .student-feed-preview-story {
+  width: 100%;
+  max-width: 100%;
+  max-height: none;
+  aspect-ratio: auto;
+  flex: 1 1 auto;
+  min-height: 120px;
+  background: #0b0d12;
+}
+
+.student-feed-modal-card.has-media .student-feed-preview-story img,
+.student-feed-modal-card.has-media .student-feed-preview-story video {
+  object-fit: contain;
 }
 
 .student-feed-modal-card header {
@@ -21246,13 +21271,21 @@ html.is-native-app.keyboard-open .login-shell {
 
 .student-feed-modal-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.student-feed-modal-actions::-webkit-scrollbar {
+  display: none;
 }
 
 .student-feed-modal-card input[type="text"],
 .student-feed-modal-card input:not([type]),
-.student-feed-modal-card > input {
+.student-feed-modal-card > input,
+.student-feed-modal-footer input {
   width: 100%;
   border: 1px solid var(--app-border);
   background: var(--app-fill);
@@ -21260,18 +21293,56 @@ html.is-native-app.keyboard-open .login-shell {
   border-radius: 12px;
   padding: 10px 12px;
   font: inherit;
+  box-sizing: border-box;
 }
 
-@media (max-height: 700px) {
-  .student-feed-modal-card {
-    padding: 12px;
-    gap: 8px;
-    border-radius: 18px;
+.student-feed-modal-footer .student-green-button {
+  width: 100%;
+}
+
+@media (max-width: 640px), (max-height: 760px) {
+  .student-feed-modal {
+    padding: 0;
+    place-items: stretch stretch;
   }
 
-  .student-feed-modal-card .student-feed-preview {
-    width: min(100%, 220px);
-    max-height: min(32dvh, 240px);
+  .student-feed-modal-card {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+    border: 0;
+    padding:
+      max(10px, var(--safe-top, env(safe-area-inset-top, 0px)))
+      12px
+      max(12px, calc(10px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))));
+    gap: 8px;
+  }
+
+  .student-feed-modal-card.has-media .student-feed-modal-actions .student-ghost-chip {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .student-feed-modal-card.has-media .student-feed-preview-story {
+    min-height: 0;
+    flex: 1 1 0;
+  }
+
+  .student-feed-modal-footer input {
+    padding: 9px 11px;
+  }
+}
+
+@media (max-height: 620px) {
+  .student-feed-modal-card header strong {
+    font-size: 15px;
+  }
+
+  .student-feed-modal-card:not(.has-media) .student-feed-preview {
+    width: min(100%, 200px);
+    max-height: min(28dvh, 200px);
   }
 }
 

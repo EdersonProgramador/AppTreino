@@ -935,7 +935,7 @@ export function StudentFeedSection({
           }}
         >
           <div
-            className="student-feed-modal-card"
+            className={`student-feed-modal-card${storyMedia ? " has-media" : ""}`}
             role="dialog"
             aria-label="Novo momento"
             onClick={(event) => event.stopPropagation()}
@@ -954,7 +954,9 @@ export function StudentFeedSection({
                 <X size={18} />
               </button>
             </header>
-            <p className="student-activity-hint">Foto ou vídeo curto. Some em 24 horas.</p>
+            {!storyMedia ? (
+              <p className="student-activity-hint">Foto ou vídeo curto. Some em 24 horas.</p>
+            ) : null}
             <input
               ref={storyFileRef}
               type="file"
@@ -985,29 +987,31 @@ export function StudentFeedSection({
                 <Video size={16} /> Vídeo
               </button>
             </div>
-            {storyMedia && (
-              <div className="student-feed-preview">
+            {storyMedia ? (
+              <div className="student-feed-preview student-feed-preview-story">
                 {storyMedia.type === "VIDEO" ? (
-                  <video src={mediaUrl(storyMedia.url)} controls />
+                  <video src={mediaUrl(storyMedia.url)} controls playsInline preload="metadata" />
                 ) : (
                   <img src={mediaUrl(storyMedia.url)} alt="" />
                 )}
               </div>
-            )}
-            <input
-              value={storyCaption}
-              onChange={(event) => setStoryCaption(event.target.value)}
-              placeholder="Legenda (opcional)"
-              maxLength={120}
-            />
-            <button
-              type="button"
-              className="student-green-button"
-              disabled={busy || !storyMedia}
-              onClick={(event) => void publishStory(event as unknown as FormEvent)}
-            >
-              Publicar momento
-            </button>
+            ) : null}
+            <div className="student-feed-modal-footer">
+              <input
+                value={storyCaption}
+                onChange={(event) => setStoryCaption(event.target.value)}
+                placeholder="Legenda (opcional)"
+                maxLength={120}
+              />
+              <button
+                type="button"
+                className="student-green-button"
+                disabled={busy || !storyMedia}
+                onClick={(event) => void publishStory(event as unknown as FormEvent)}
+              >
+                {busy ? "Publicando…" : "Publicar momento"}
+              </button>
+            </div>
           </div>
         </div>
       )}
