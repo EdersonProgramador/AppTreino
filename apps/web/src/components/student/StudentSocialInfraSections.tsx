@@ -100,6 +100,17 @@ function pickRecorderMime() {
   return types.find((type) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type)) || "";
 }
 
+function formatLiveElapsed(totalSeconds: number) {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = safe % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
 function frameFromVideo(video: HTMLVideoElement, mirror = false): Promise<Blob | null> {
   if (!video.videoWidth || !video.videoHeight) return Promise.resolve(null);
   const canvas = document.createElement("canvas");
@@ -396,6 +407,8 @@ export function StudentLiveSection({
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "countdown" | "live" | "joining">("idle");
   const [countdown, setCountdown] = useState(3);
+  const [endCountdown, setEndCountdown] = useState<number | null>(null);
+  const endingLiveRef = useRef(false);
   const [facing, setFacing] = useState<"user" | "environment">("user");
   const [micOn, setMicOn] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -431,20 +444,31 @@ export function StudentLiveSection({
   const savePreviewRef = useRef<HTMLVideoElement>(null);
   const [savingLive, setSavingLive] = useState(false);
   const [replayLive, setReplayLive] = useState<LiveRow | null>(null);
+  const [liveElapsedSec, setLiveElapsedSec] = useState(0);
+  const liveStartedAtRef = useRef<number | null>(null);
 
   function stopRecorder() {
     const recorder = recorderRef.current;
     if (!recorder) return Promise.resolve(null as Blob | null);
     return new Promise<Blob | null>((resolve) => {
+      let settled = false;
+      const finish = (blob: Blob | null) => {
+        if (settled) return;
+        settled = true;
+        resolve(blob);
+      };
+      const timer = window.setTimeout(() => {
+        recorderRef.current = null;
+        const chunks = recordedChunksRef.current.slice();
+        recordedChunksRef.current = [];
+        finish(chunks.length ? new Blob(chunks, { type: chunks[0]?.type || "video/webm" }) : null);
+      }, 2500);
       recorder.onstop = () => {
+        window.clearTimeout(timer);
         const chunks = recordedChunksRef.current.slice();
         recordedChunksRef.current = [];
         recorderRef.current = null;
-        if (!chunks.length) {
-          resolve(null);
-          return;
-        }
-        resolve(new Blob(chunks, { type: chunks[0]?.type || "video/webm" }));
+        finish(chunks.length ? new Blob(chunks, { type: chunks[0]?.type || "video/webm" }) : null);
       };
       try {
         if (recorder.state === "recording") {
@@ -455,9 +479,13 @@ export function StudentLiveSection({
           }
         }
         if (recorder.state !== "inactive") recorder.stop();
-        else resolve(null);
+        else {
+          window.clearTimeout(timer);
+          finish(null);
+        }
       } catch {
-        resolve(null);
+        window.clearTimeout(timer);
+        finish(null);
       }
     });
   }
@@ -528,6 +556,24 @@ export function StudentLiveSection({
       socket.off("live:ended");
     };
   }, [token]);
+
+  useEffect(() => {
+    if (status !== "live") {
+      liveStartedAtRef.current = null;
+      setLiveElapsedSec(0);
+      return;
+    }
+    if (liveStartedAtRef.current == null) {
+      liveStartedAtRef.current = Date.now();
+    }
+    const tick = () => {
+      const started = liveStartedAtRef.current ?? Date.now();
+      setLiveElapsedSec(Math.floor((Date.now() - started) / 1000));
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [status, activeId]);
 
   useEffect(() => {
     if (!initialLiveId) return;
@@ -810,30 +856,38 @@ export function StudentLiveSection({
   async function openSaveConfirm(liveId: string, afterEnd: boolean) {
     const videoEl = isMine ? localVideoRef.current : remoteVideoRef.current;
     const mirror = isMine && facing === "user";
-    let videoBlob: Blob | null = null;
-    if (isMine) {
-      videoBlob = await stopRecorder();
-      if (streamRef.current && !afterEnd && status === "live") {
-        startRecorder(streamRef.current);
-      }
-    }
     let coverPreview: string | null = null;
     if (videoEl) {
       const frame = await frameFromVideo(videoEl, mirror);
       if (frame) coverPreview = URL.createObjectURL(frame);
     }
     const known = [...lives, ...savedLives].find((row) => row.id === liveId);
-    const blobUrl = videoBlob ? URL.createObjectURL(videoBlob) : null;
     setSaveCoverAt(0);
     setSaveDurationSec(1);
     setSaveSheet({
       liveId,
       title: title.trim() || known?.title || "Live",
-      videoBlob,
-      videoUrl: blobUrl || (known?.videoUrl ? mediaUrl(known.videoUrl) : null),
+      videoBlob: null,
+      videoUrl: known?.videoUrl ? mediaUrl(known.videoUrl) : null,
       coverPreview: coverPreview || (known?.coverUrl ? mediaUrl(known.coverUrl) : null),
       mirror,
       afterEnd
+    });
+
+    if (!isMine) return;
+    const videoBlob = await stopRecorder();
+    if (streamRef.current && !afterEnd && status === "live") {
+      startRecorder(streamRef.current);
+    }
+    if (!videoBlob) return;
+    const blobUrl = URL.createObjectURL(videoBlob);
+    setSaveSheet((current) => {
+      if (!current || current.liveId !== liveId) {
+        URL.revokeObjectURL(blobUrl);
+        return current;
+      }
+      if (current.videoUrl?.startsWith("blob:")) URL.revokeObjectURL(current.videoUrl);
+      return { ...current, videoBlob, videoUrl: blobUrl };
     });
   }
 
@@ -850,35 +904,35 @@ export function StudentLiveSection({
     if (!saveSheet) return;
     setSavingLive(true);
     setError(null);
+    const sheet = saveSheet;
     try {
       let videoUrl: string | undefined;
       let coverUrl: string | undefined;
-      if (saveSheet.videoBlob && isMine) {
-        const ext = saveSheet.videoBlob.type.includes("mp4") ? "mp4" : "webm";
-        videoUrl = await uploadLiveFile(new File([saveSheet.videoBlob], `live-${saveSheet.liveId}.${ext}`, { type: saveSheet.videoBlob.type || "video/webm" }));
+      if (sheet.videoBlob && (sheet.afterEnd || isMine)) {
+        const ext = sheet.videoBlob.type.includes("mp4") ? "mp4" : "webm";
+        videoUrl = await uploadLiveFile(new File([sheet.videoBlob], `live-${sheet.liveId}.${ext}`, { type: sheet.videoBlob.type || "video/webm" }));
       }
-      if (saveSheet.coverPreview) {
-        const coverBlob = await fetch(saveSheet.coverPreview).then((res) => res.blob());
-        coverUrl = await uploadLiveFile(new File([coverBlob], `live-cover-${saveSheet.liveId}.jpg`, { type: "image/jpeg" }));
+      if (sheet.coverPreview) {
+        const coverBlob = await fetch(sheet.coverPreview).then((res) => res.blob());
+        coverUrl = await uploadLiveFile(new File([coverBlob], `live-cover-${sheet.liveId}.jpg`, { type: "image/jpeg" }));
       }
-      if (isMine && (videoUrl || coverUrl)) {
-        await apiPut(`/student/social/live/${saveSheet.liveId}/media`, { videoUrl, coverUrl }, token);
+      if (videoUrl || coverUrl) {
+        try {
+          await apiPut(`/student/social/live/${sheet.liveId}/media`, { videoUrl, coverUrl }, token);
+        } catch {
+          // Host-only route; viewers just save bookmark with cover.
+        }
       }
-      if (saveSheet.afterEnd && isMine) {
-        await apiPost(`/student/social/live/${saveSheet.liveId}/end`, { videoUrl, coverUrl }, token);
-        getSocialSocket(token).emit("live:end", saveSheet.liveId);
+      if (sheet.afterEnd) {
+        // Live already ended in endLive(); keep save/publish side effects.
+        await apiPost(`/student/social/live/${sheet.liveId}/save`, { coverUrl }, token);
       } else {
-        await apiPost(`/student/social/live/${saveSheet.liveId}/save`, { coverUrl }, token);
+        await apiPost(`/student/social/live/${sheet.liveId}/save`, { coverUrl }, token);
       }
       setSavedByMe(true);
-      if (saveSheet.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(saveSheet.coverPreview);
-      if (saveSheet.videoUrl?.startsWith("blob:")) URL.revokeObjectURL(saveSheet.videoUrl);
+      if (sheet.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(sheet.coverPreview);
+      if (sheet.videoUrl?.startsWith("blob:")) URL.revokeObjectURL(sheet.videoUrl);
       setSaveSheet(null);
-      if (saveSheet.afterEnd) {
-        stopMedia();
-        setActiveId(null);
-        setStatus("idle");
-      }
       await load();
     } catch (err) {
       setError(readErrorMessage(err, "Não foi possível salvar a live com vídeo/capa."));
@@ -891,24 +945,7 @@ export function StudentLiveSection({
     if (!saveSheet) return;
     if (saveSheet.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(saveSheet.coverPreview);
     if (saveSheet.videoUrl?.startsWith("blob:")) URL.revokeObjectURL(saveSheet.videoUrl);
-    const afterEnd = saveSheet.afterEnd;
-    const liveId = saveSheet.liveId;
     setSaveSheet(null);
-    if (afterEnd) {
-      void (async () => {
-        try {
-          await apiPost(`/student/social/live/${liveId}/end`, {}, token);
-          getSocialSocket(token).emit("live:end", liveId);
-        } catch {
-          // still leave studio
-        } finally {
-          stopMedia();
-          setActiveId(null);
-          setStatus("idle");
-          await load();
-        }
-      })();
-    }
   }
 
   async function deleteSavedLive(liveId: string) {
@@ -932,9 +969,75 @@ export function StudentLiveSection({
     await openSaveConfirm(liveId, false);
   }
 
+  async function finishEndLive() {
+    if (!activeId || !isMine) return;
+    const liveId = activeId;
+    const videoEl = localVideoRef.current;
+    const mirror = facing === "user";
+    setBusy(true);
+    setError(null);
+
+    let coverPreview: string | null = null;
+    if (videoEl) {
+      try {
+        const frame = await frameFromVideo(videoEl, mirror);
+        if (frame) coverPreview = URL.createObjectURL(frame);
+      } catch {
+        // cover is optional
+      }
+    }
+    const videoBlobPromise = stopRecorder();
+
+    try {
+      await apiPost(`/student/social/live/${liveId}/end`, {}, token);
+      getSocialSocket(token).emit("live:end", liveId);
+    } catch (err) {
+      endingLiveRef.current = false;
+      setBusy(false);
+      setEndCountdown(null);
+      setError(readErrorMessage(err, "Não foi possível encerrar a live."));
+      if (coverPreview?.startsWith("blob:")) URL.revokeObjectURL(coverPreview);
+      if (streamRef.current && status === "live") startRecorder(streamRef.current);
+      return;
+    }
+
+    stopMedia();
+    setActiveId(null);
+    setStatus("idle");
+    setEndCountdown(null);
+    setBusy(false);
+    endingLiveRef.current = false;
+    void load();
+
+    const videoBlob = await videoBlobPromise;
+    const blobUrl = videoBlob ? URL.createObjectURL(videoBlob) : null;
+    setSaveCoverAt(0);
+    setSaveDurationSec(1);
+    setSaveSheet({
+      liveId,
+      title: title.trim() || "Live",
+      videoBlob,
+      videoUrl: blobUrl,
+      coverPreview,
+      mirror,
+      afterEnd: true
+    });
+  }
+
   async function endLive() {
-    if (!activeId) return;
-    await openSaveConfirm(activeId, true);
+    if (!activeId || !isMine || busy || savingLive || endCountdown != null || endingLiveRef.current) return;
+    endingLiveRef.current = true;
+    setError(null);
+    setFiltersOpen(false);
+    setEditingTitle(false);
+    for (let n = 3; n >= 1; n -= 1) {
+      if (!endingLiveRef.current) return;
+      setEndCountdown(n);
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    }
+    if (!endingLiveRef.current) return;
+    setEndCountdown(0);
+    await finishEndLive();
   }
 
   async function saveTitleEdit() {
@@ -958,6 +1061,8 @@ export function StudentLiveSection({
   }
 
   function leaveLive() {
+    endingLiveRef.current = false;
+    setEndCountdown(null);
     stopMedia();
     setActiveId(null);
     setStatus("idle");
@@ -1047,10 +1152,65 @@ export function StudentLiveSection({
               <p>Entrando no ar…</p>
             </div>
           ) : null}
+          {endCountdown != null ? (
+            <div className="student-live-countdown is-ending" aria-live="assertive">
+              <span>{endCountdown || "!"}</span>
+              <p>{endCountdown ? "Encerrando…" : "Encerrada"}</p>
+            </div>
+          ) : null}
         </div>
 
         <header className="student-live-chrome-top">
-          <span className="student-live-badge">{status === "countdown" ? "PREPARANDO" : "AO VIVO"}</span>
+          <div className="student-live-chrome-top-row">
+            <div className="student-live-badge-stack">
+              <span className="student-live-badge">{status === "countdown" ? "PREPARANDO" : "AO VIVO"}</span>
+              {status === "live" ? (
+                <span className="student-live-timer" aria-live="polite" aria-label={`Tempo ao vivo ${formatLiveElapsed(liveElapsedSec)}`}>
+                  <em />
+                  {formatLiveElapsed(liveElapsedSec)}
+                </span>
+              ) : null}
+            </div>
+            <div className="student-live-header-actions">
+              {status === "live" && activeId ? (
+                <button
+                  type="button"
+                  className="student-live-icon-btn"
+                  onClick={() => void toggleSaveLive(activeId, savedByMe)}
+                  aria-label={savedByMe ? "Remover live salva" : "Salvar live"}
+                >
+                  {savedByMe ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
+                </button>
+              ) : null}
+              {isMine && status === "live" && !editingTitle ? (
+                <button
+                  type="button"
+                  className="student-live-icon-btn"
+                  onClick={() => {
+                    setTitleDraft(title);
+                    setEditingTitle(true);
+                  }}
+                  aria-label="Editar título"
+                >
+                  <Pencil size={16} />
+                </button>
+              ) : null}
+              {isMine && status === "live" ? (
+                <button
+                  type="button"
+                  className="student-live-end"
+                  disabled={endCountdown != null || busy}
+                  onClick={() => void endLive()}
+                >
+                  {endCountdown != null ? `Encerrando ${endCountdown}` : "Encerrar"}
+                </button>
+              ) : (
+                <button type="button" className="student-live-icon-btn" onClick={leaveLive} aria-label="Sair">
+                  <X size={18} />
+                </button>
+              )}
+            </div>
+          </div>
           {editingTitle && isMine ? (
             <div className="student-live-title-edit">
               <input
@@ -1067,42 +1227,8 @@ export function StudentLiveSection({
               </button>
             </div>
           ) : (
-            <strong>{title.trim() || "Live"}</strong>
+            <strong className="student-live-chrome-title">{title.trim() || "Live"}</strong>
           )}
-          <div className="student-live-header-actions">
-            {status === "live" && activeId ? (
-              <button
-                type="button"
-                className="student-live-icon-btn"
-                onClick={() => void toggleSaveLive(activeId, savedByMe)}
-                aria-label={savedByMe ? "Remover live salva" : "Salvar live"}
-              >
-                {savedByMe ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
-              </button>
-            ) : null}
-            {isMine && status === "live" && !editingTitle ? (
-              <button
-                type="button"
-                className="student-live-icon-btn"
-                onClick={() => {
-                  setTitleDraft(title);
-                  setEditingTitle(true);
-                }}
-                aria-label="Editar título"
-              >
-                <Pencil size={18} />
-              </button>
-            ) : null}
-            {isMine && status === "live" ? (
-              <button type="button" className="student-live-end" onClick={() => void endLive()}>
-                Encerrar
-              </button>
-            ) : (
-              <button type="button" className="student-live-icon-btn" onClick={leaveLive} aria-label="Sair">
-                <X size={18} />
-              </button>
-            )}
-          </div>
         </header>
 
         {error ? (
@@ -1297,13 +1423,15 @@ export function StudentLiveSection({
             <div className="student-live-save-sheet" role="dialog" aria-label="Confirmar salvar live">
               <div className="student-live-save-card">
                 <header>
-                  <strong>{saveSheet.afterEnd ? "Encerrar e salvar" : "Salvar live"}</strong>
+                  <strong>{saveSheet.afterEnd ? "Salvar replay" : "Salvar live"}</strong>
                   <button type="button" onClick={cancelSaveSheet} aria-label="Fechar" disabled={savingLive}>
                     <X size={18} />
                   </button>
                 </header>
                 <p className="student-activity-hint">
-                  Confirme para guardar em Lives salvas e publicar no feed. Arraste o vídeo para escolher a capa.
+                  {saveSheet.afterEnd
+                    ? "A live já foi encerrada. Escolha a capa e confirme para guardar nas Lives salvas."
+                    : "Confirme para guardar em Lives salvas e publicar no feed. Arraste o vídeo para escolher a capa."}
                 </p>
                 <div className="student-live-save-preview">
                   {saveSheet.videoUrl ? (
@@ -1347,10 +1475,10 @@ export function StudentLiveSection({
                 ) : null}
                 <div className="student-live-save-actions">
                   <button type="button" className="student-ghost-chip" onClick={cancelSaveSheet} disabled={savingLive}>
-                    {saveSheet.afterEnd ? "Encerrar sem salvar" : "Cancelar"}
+                    {saveSheet.afterEnd ? "Agora não" : "Cancelar"}
                   </button>
                   <button type="button" className="student-green-button" onClick={() => void confirmSaveLive()} disabled={savingLive}>
-                    {savingLive ? "Salvando…" : saveSheet.afterEnd ? "Salvar e publicar" : "Confirmar e publicar"}
+                    {savingLive ? "Salvando…" : saveSheet.afterEnd ? "Salvar replay" : "Confirmar e publicar"}
                   </button>
                 </div>
               </div>

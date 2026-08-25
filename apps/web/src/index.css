@@ -20829,6 +20829,50 @@ html.is-native-app.keyboard-open .login-shell {
   padding: 3px 8px;
 }
 
+.student-live-badge-stack {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.student-live-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(8px);
+}
+
+.student-live-timer em {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #e11d48;
+  box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.7);
+  animation: student-live-timer-pulse 1.2s ease-out infinite;
+  font-style: normal;
+}
+
+@keyframes student-live-timer-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(225, 29, 72, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(225, 29, 72, 0);
+  }
+}
+
 .student-live-studio {
   position: relative;
   min-height: min(100dvh, 820px);
@@ -20889,20 +20933,28 @@ html.is-native-app.keyboard-open .login-shell {
 
 .student-live-chrome-top {
   top: 0;
+  display: grid;
+  gap: 8px;
+  padding: calc(10px + var(--safe-top, env(safe-area-inset-top, 0px))) 12px 16px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.7) 0%, transparent 100%);
+}
+
+.student-live-chrome-top-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  padding: calc(12px + var(--safe-top, env(safe-area-inset-top, 0px))) 14px 18px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.62) 0%, transparent 100%);
+  min-width: 0;
 }
 
 .student-live-chrome-bottom {
   bottom: 0;
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 10px;
-  padding: 18px 14px calc(16px + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
-  background: linear-gradient(0deg, rgba(0, 0, 0, 0.72) 0%, transparent 100%);
+  padding: 14px 12px calc(14px + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.78) 0%, transparent 100%);
 }
 
 .student-live-chrome-top > *,
@@ -20917,9 +20969,22 @@ html.is-native-app.keyboard-open .login-shell {
 .student-live-header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-left: auto;
+  gap: 6px;
+  margin-left: 0;
   flex-shrink: 0;
+}
+
+.student-live-chrome-title {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  padding-right: 4px;
 }
 
 .student-live-studio-error {
@@ -20931,8 +20996,8 @@ html.is-native-app.keyboard-open .login-shell {
 }
 
 .student-live-icon-btn {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border: 0;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.16);
@@ -20940,6 +21005,7 @@ html.is-native-app.keyboard-open .login-shell {
   display: grid;
   place-items: center;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .student-live-title-edit {
@@ -21260,8 +21326,9 @@ html.is-native-app.keyboard-open .login-shell {
   }
 }
 
-.student-live-chrome-top strong {
-  flex: 1;
+.student-live-chrome-top strong,
+.student-live-chrome-title {
+  flex: none;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -21272,10 +21339,14 @@ html.is-native-app.keyboard-open .login-shell {
 .student-live-end {
   border: 0;
   border-radius: 999px;
-  padding: 8px 12px;
+  padding: 8px 14px;
   background: #e11d48;
   color: #fff;
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
 }
 
@@ -21288,6 +21359,20 @@ html.is-native-app.keyboard-open .login-shell {
   text-align: center;
   pointer-events: none;
   background: rgba(0, 0, 0, 0.28);
+}
+
+.student-live-countdown.is-ending {
+  background: rgba(80, 0, 16, 0.42);
+}
+
+.student-live-countdown.is-ending span {
+  border-color: rgba(255, 120, 140, 0.75);
+  background: rgba(225, 29, 72, 0.35);
+}
+
+.student-live-end:disabled {
+  opacity: 0.72;
+  cursor: wait;
 }
 
 .student-live-countdown span {
