@@ -50,36 +50,57 @@ async function blockedIds(userId: string) {
   return set;
 }
 
-/** Publica (ou reutiliza) um card de live no feed do autor. */
+/** Publica (ou atualiza) um card de live no feed do autor. */
 async function publishLiveFeedPost(params: {
   authorId: string;
   liveId: string;
   title: string;
   hostName: string;
   isHost: boolean;
+  videoUrl?: string | null;
+  coverUrl?: string | null;
 }) {
   const existing = await prisma.socialPost.findFirst({
     where: {
       authorId: params.authorId,
-      mediaType: "LIVE",
-      mediaUrl: params.liveId,
+      OR: [
+        { mediaType: "LIVE", mediaUrl: params.liveId },
+        { mediaType: "VIDEO", body: { contains: params.liveId } }
+      ],
       hidden: false
     },
     select: { id: true }
   });
-  if (existing) return existing;
 
+  const hasVideo = Boolean(params.videoUrl);
   const body = params.isHost
-    ? `Ao vivo agora: ${params.title}`
+    ? `Ao vivo: ${params.title}`
     : `Live salva · ${params.hostName}: ${params.title}`;
+
+  const data = hasVideo
+    ? {
+        kind: "VIDEO" as const,
+        body: `${body}\n[[LIVE:${params.liveId}]]`,
+        mediaUrl: params.videoUrl!,
+        mediaType: "VIDEO",
+        mediaItems: [{ url: params.videoUrl!, type: "VIDEO" as const }]
+      }
+    : {
+        kind: "TEXT" as const,
+        body,
+        mediaUrl: params.coverUrl || params.liveId,
+        mediaType: params.coverUrl ? "IMAGE" : "LIVE",
+        mediaItems: params.coverUrl ? [{ url: params.coverUrl, type: "IMAGE" as const }] : undefined
+      };
+
+  if (existing) {
+    return prisma.socialPost.update({ where: { id: existing.id }, data });
+  }
 
   return prisma.socialPost.create({
     data: {
       authorId: params.authorId,
-      kind: "TEXT",
-      body,
-      mediaUrl: params.liveId,
-      mediaType: "LIVE"
+      ...data
     }
   });
 }
@@ -88,9 +109,11 @@ async function hideLiveFeedPostsForUser(userId: string, liveId: string) {
   await prisma.socialPost.updateMany({
     where: {
       authorId: userId,
-      mediaType: "LIVE",
-      mediaUrl: liveId,
-      hidden: false
+      hidden: false,
+      OR: [
+        { mediaType: "LIVE", mediaUrl: liveId },
+        { body: { contains: `[[LIVE:${liveId}]]` } }
+      ]
     },
     data: { hidden: true }
   });
@@ -374,6 +397,8 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
           startedAt: row.live.startedAt.toISOString(),
           endedAt: row.live.endedAt?.toISOString() ?? null,
           viewerPeak: row.live.viewerPeak,
+          videoUrl: row.live.videoUrl,
+          coverUrl: row.coverUrl || row.live.coverUrl || null,
           host: authorCard(row.live.host),
           isMine: row.live.hostId === user.id,
           savedByMe: true,
@@ -495,6 +520,8 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
         host: authorCard(row.host),
         isMine: row.hostId === user.id,
         savedByMe: (row.saves?.length ?? 0) > 0,
+        videoUrl: row.videoUrl,
+        coverUrl: row.coverUrl,
         messages: row.messages.reverse().map((item) => ({
           id: item.id,
           content: item.content,
@@ -534,16 +561,65 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
     };
   });
 
+  app.put("/student/social/live/:id/media", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const body = z
+      .object({
+        videoUrl: z.string().min(1).max(2000).optional(),
+        coverUrl: z.string().min(1).max(2000).optional()
+      })
+      .parse(request.body);
+    if (!body.videoUrl && !body.coverUrl) throw httpError(400, "Informe vídeo ou capa.");
+    const live = await prisma.socialLiveSession.findUnique({
+      where: { id },
+      select: { id: true, hostId: true, title: true, videoUrl: true, coverUrl: true, host: { select: { name: true } } }
+    });
+    if (!live) throw httpError(404, "Live não encontrada.");
+    if (live.hostId !== user.id) throw httpError(403, "Só o anfitrião envia o replay da live.");
+    const updated = await prisma.socialLiveSession.update({
+      where: { id },
+      data: {
+        ...(body.videoUrl ? { videoUrl: body.videoUrl } : {}),
+        ...(body.coverUrl ? { coverUrl: body.coverUrl } : {})
+      }
+    });
+    await publishLiveFeedPost({
+      authorId: user.id,
+      liveId: updated.id,
+      title: updated.title,
+      hostName: live.host.name,
+      isHost: true,
+      videoUrl: updated.videoUrl,
+      coverUrl: updated.coverUrl
+    });
+    return {
+      live: {
+        id: updated.id,
+        videoUrl: updated.videoUrl,
+        coverUrl: updated.coverUrl
+      }
+    };
+  });
+
   app.post("/student/social/live/:id/save", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);
     const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const body = z
+      .object({
+        coverUrl: z.string().min(1).max(2000).optional().nullable()
+      })
+      .parse(request.body ?? {});
     const live = await prisma.socialLiveSession.findUnique({
       where: { id },
       select: {
         id: true,
         title: true,
         hostId: true,
+        videoUrl: true,
+        coverUrl: true,
         host: { select: { name: true } }
       }
     });
@@ -551,20 +627,22 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
     try {
       await prisma.socialLiveSave.upsert({
         where: { liveId_userId: { liveId: id, userId: user.id } },
-        create: { liveId: id, userId: user.id },
-        update: {}
+        create: { liveId: id, userId: user.id, coverUrl: body.coverUrl ?? null },
+        update: { ...(body.coverUrl !== undefined ? { coverUrl: body.coverUrl } : {}) }
       });
       await publishLiveFeedPost({
         authorId: user.id,
         liveId: live.id,
         title: live.title,
         hostName: live.host.name,
-        isHost: live.hostId === user.id
+        isHost: live.hostId === user.id,
+        videoUrl: live.videoUrl,
+        coverUrl: body.coverUrl || live.coverUrl
       });
     } catch {
       throw httpError(503, "Salvar live indisponível no momento. Tente de novo em instantes.");
     }
-    return { saved: true, published: true };
+    return { saved: true, published: true, videoUrl: live.videoUrl, coverUrl: body.coverUrl || live.coverUrl };
   });
 
   app.delete("/student/social/live/:id/save", async (request) => {
@@ -584,32 +662,45 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
     requireDatabase();
     const user = await requireAuth(app, request);
     const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const body = z
+      .object({
+        videoUrl: z.string().min(1).max(2000).optional(),
+        coverUrl: z.string().min(1).max(2000).optional()
+      })
+      .parse(request.body ?? {});
     const live = await prisma.socialLiveSession.findFirst({
       where: { id, hostId: user.id, status: "live" },
-      select: { id: true, title: true, host: { select: { name: true } } }
+      select: { id: true, title: true, videoUrl: true, coverUrl: true, host: { select: { name: true } } }
     });
     if (!live) throw httpError(404, "Live não encontrada.");
-    await prisma.socialLiveSession.updateMany({
-      where: { id, hostId: user.id, status: "live" },
-      data: { status: "ended", endedAt: new Date() }
+    const updated = await prisma.socialLiveSession.update({
+      where: { id },
+      data: {
+        status: "ended",
+        endedAt: new Date(),
+        ...(body.videoUrl ? { videoUrl: body.videoUrl } : {}),
+        ...(body.coverUrl ? { coverUrl: body.coverUrl } : {})
+      }
     });
     try {
       await prisma.socialLiveSave.upsert({
         where: { liveId_userId: { liveId: id, userId: user.id } },
-        create: { liveId: id, userId: user.id },
-        update: {}
+        create: { liveId: id, userId: user.id, coverUrl: body.coverUrl ?? updated.coverUrl },
+        update: { ...(body.coverUrl ? { coverUrl: body.coverUrl } : {}) }
       });
       await publishLiveFeedPost({
         authorId: user.id,
-        liveId: live.id,
-        title: live.title,
+        liveId: updated.id,
+        title: updated.title,
         hostName: live.host.name,
-        isHost: true
+        isHost: true,
+        videoUrl: updated.videoUrl,
+        coverUrl: updated.coverUrl
       });
     } catch {
       // Ending must succeed even if save/publish fails.
     }
-    return { ok: true };
+    return { ok: true, videoUrl: updated.videoUrl, coverUrl: updated.coverUrl };
   });
 
   app.get("/student/social/conversations", async (request) => {

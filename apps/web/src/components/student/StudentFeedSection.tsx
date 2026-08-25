@@ -44,7 +44,8 @@ type CameraMode = "photo" | "video" | null;
 const MAX_MEDIA = 10;
 
 function renderPostBody(content: string) {
-  const parts = content.split(/(#[\p{L}0-9_]{2,40}|@[A-Za-z0-9._-]{2,40})/gu);
+  const cleaned = content.replace(/\n?\[\[LIVE:[^\]]+\]\]/g, "").trim();
+  const parts = cleaned.split(/(#[\p{L}0-9_]{2,40}|@[A-Za-z0-9._-]{2,40})/gu);
   return parts.map((part, index) => {
     if (part.startsWith("#") || part.startsWith("@")) {
       return (
@@ -55,6 +56,17 @@ function renderPostBody(content: string) {
     }
     return <span key={index}>{part}</span>;
   });
+}
+
+function liveIdFromPost(post: { mediaType?: string | null; mediaUrl?: string | null; body?: string | null }) {
+  const tagged = post.body?.match(/\[\[LIVE:([^\]]+)\]\]/);
+  if (tagged?.[1]) return tagged[1];
+  if (post.mediaType === "LIVE" && post.mediaUrl) return post.mediaUrl;
+  // Legacy broken posts stored the live cuid as an image URL.
+  if (post.mediaUrl && !/[./]/.test(post.mediaUrl.replace(/^\//, "")) && post.mediaType !== "VIDEO") {
+    return post.mediaUrl.replace(/^\//, "");
+  }
+  return null;
 }
 
 function ActivityMiniMap({ post }: { post: SocialPostRow }) {
@@ -787,9 +799,11 @@ export function StudentFeedSection({
           </article>
         )}
         {posts.map((post) => {
+          const liveId = liveIdFromPost(post);
+          const isLiveCard = Boolean(liveId) && (post.mediaType === "LIVE" || (liveId && post.mediaUrl?.replace(/^\//, "") === liveId));
           const items = (post.mediaItems?.length
             ? post.mediaItems
-            : post.mediaUrl && post.mediaType !== "LIVE"
+            : post.mediaUrl && !isLiveCard
               ? [{ url: post.mediaUrl, type: post.mediaType === "VIDEO" ? "VIDEO" : "IMAGE" }]
               : []) as MediaItem[];
           return (
@@ -873,20 +887,21 @@ export function StudentFeedSection({
                   )}
                 </div>
               </header>
-              {post.body && post.mediaType !== "LIVE" && <p>{renderPostBody(post.body)}</p>}
+              {post.body && !isLiveCard && <p>{renderPostBody(post.body)}</p>}
               {post.kind === "ACTIVITY" && <ActivityMiniMap post={post} />}
-              {post.mediaType === "LIVE" && post.mediaUrl ? (
+              {isLiveCard && liveId ? (
                 <button
                   type="button"
                   className="student-feed-live-card"
                   onClick={() => {
-                    if (onOpenLive) onOpenLive(post.mediaUrl!);
+                    if (onOpenLive) onOpenLive(liveId);
                     else onNavigate?.("live");
                   }}
                 >
                   <span className="student-live-badge">AO VIVO</span>
                   <strong>
-                    {post.body?.replace(/^Ao vivo agora:\s*/i, "").replace(/^Live salva · [^:]+:\s*/i, "") || "Entrar na live"}
+                    {post.body?.replace(/^Ao vivo agora:\s*/i, "").replace(/^Ao vivo:\s*/i, "").replace(/^Live salva · [^:]+:\s*/i, "").replace(/\n?\[\[LIVE:[^\]]+\]\]/g, "").trim() ||
+                      "Entrar na live"}
                   </strong>
                   <small>Toque para assistir · também fica em Lives salvas</small>
                 </button>

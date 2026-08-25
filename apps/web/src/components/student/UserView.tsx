@@ -2408,17 +2408,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         </div>
 
         <div className="student-header-actions">
-          {(studentSection === "reels" || studentSection === "live") && (
-            <button
-              type="button"
-              className="student-icon-button"
-              aria-label="Voltar ao Feed"
-              onClick={() => goToSection("feed")}
-            >
-              <ChevronLeft size={22} strokeWidth={2.2} />
-            </button>
-          )}
-          {(studentSection === "feed" || studentSection === "home") && (
+          {isFeedFamilySection && (
             <>
               <button
                 type="button"
@@ -2426,7 +2416,12 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 aria-label="Criar"
                 onClick={() => {
                   uiSounds.popupOpen();
-                  useFeedChromeStore.getState().toggleCreate();
+                  if (studentSection === "reels" || studentSection === "live") {
+                    goToSection("feed");
+                    useFeedChromeStore.getState().requestCreate();
+                    return;
+                  }
+                  useFeedChromeStore.getState().requestCreate();
                 }}
               >
                 <SquarePlus size={22} strokeWidth={2} />
@@ -2437,6 +2432,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 aria-label="Pesquisar no Feed"
                 onClick={() => {
                   uiSounds.popupOpen();
+                  if (studentSection === "reels" || studentSection === "live") {
+                    goToSection("feed");
+                    useFeedChromeStore.getState().requestSearch();
+                    return;
+                  }
                   useFeedChromeStore.getState().requestSearch();
                 }}
               >

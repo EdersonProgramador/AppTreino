@@ -1323,6 +1323,10 @@ model SocialLiveSession {
   title      String
   mood       String?
   status     String              @default("live")
+  /// Replay gravado pelo anfitrião (WebM/MP4 upload).
+  videoUrl   String?             @map("video_url")
+  /// Capa padrão do replay (frame escolhido).
+  coverUrl   String?             @map("cover_url")
   startedAt  DateTime            @default(now()) @map("started_at")
   endedAt    DateTime?           @map("ended_at")
   viewerPeak Int                 @default(0) @map("viewer_peak")
@@ -1353,6 +1357,8 @@ model SocialLiveSave {
   live      SocialLiveSession @relation(fields: [liveId], references: [id], onDelete: Cascade)
   userId    String            @map("user_id")
   user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Capa escolhida por quem salvou (frame do replay).
+  coverUrl  String?           @map("cover_url")
   createdAt DateTime          @default(now()) @map("created_at")
 
   @@unique([liveId, userId])

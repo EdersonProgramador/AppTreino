@@ -49,6 +49,8 @@ type LiveRow = {
   savedByMe?: boolean;
   startedAt?: string;
   endedAt?: string | null;
+  videoUrl?: string | null;
+  coverUrl?: string | null;
 };
 
 type ConversationRow = {
@@ -92,6 +94,26 @@ const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" }
 ];
+
+function pickRecorderMime() {
+  const types = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
+  return types.find((type) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type)) || "";
+}
+
+function frameFromVideo(video: HTMLVideoElement, mirror = false): Promise<Blob | null> {
+  if (!video.videoWidth || !video.videoHeight) return Promise.resolve(null);
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return Promise.resolve(null);
+  if (mirror) {
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+  }
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.9));
+}
 
 export function StudentReelsSection({
   token,
@@ -393,12 +415,82 @@ export function StudentLiveSection({
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const liveIdRef = useRef<string | null>(null);
   const studioRef = useRef<HTMLElement | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const [saveSheet, setSaveSheet] = useState<{
+    liveId: string;
+    title: string;
+    videoBlob: Blob | null;
+    videoUrl: string | null;
+    coverPreview: string | null;
+    mirror: boolean;
+    afterEnd: boolean;
+  } | null>(null);
+  const [saveCoverAt, setSaveCoverAt] = useState(0);
+  const [saveDurationSec, setSaveDurationSec] = useState(1);
+  const savePreviewRef = useRef<HTMLVideoElement>(null);
+  const [savingLive, setSavingLive] = useState(false);
+  const [replayLive, setReplayLive] = useState<LiveRow | null>(null);
+
+  function stopRecorder() {
+    const recorder = recorderRef.current;
+    if (!recorder) return Promise.resolve(null as Blob | null);
+    return new Promise<Blob | null>((resolve) => {
+      recorder.onstop = () => {
+        const chunks = recordedChunksRef.current.slice();
+        recordedChunksRef.current = [];
+        recorderRef.current = null;
+        if (!chunks.length) {
+          resolve(null);
+          return;
+        }
+        resolve(new Blob(chunks, { type: chunks[0]?.type || "video/webm" }));
+      };
+      try {
+        if (recorder.state === "recording") {
+          try {
+            recorder.requestData();
+          } catch {
+            // ignore
+          }
+        }
+        if (recorder.state !== "inactive") recorder.stop();
+        else resolve(null);
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+
+  function startRecorder(stream: MediaStream) {
+    if (typeof MediaRecorder === "undefined") return;
+    try {
+      recordedChunksRef.current = [];
+      const mimeType = pickRecorderMime();
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordedChunksRef.current.push(event.data);
+      };
+      recorder.start(1000);
+      recorderRef.current = recorder;
+    } catch {
+      recorderRef.current = null;
+    }
+  }
 
   function stopMedia() {
+    void stopRecorder();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     pcRef.current?.close();
     pcRef.current = null;
+  }
+
+  async function uploadLiveFile(file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    const uploaded = await apiUpload<UploadResponse>("/student/social/uploads", form, token);
+    return uploaded.file.url;
   }
 
   async function load() {
@@ -551,7 +643,10 @@ export function StudentLiveSection({
     const next = facing === "user" ? "environment" : "user";
     setFacing(next);
     try {
+      const wasRecording = Boolean(recorderRef.current);
+      if (wasRecording) await stopRecorder();
       await bindPreview(next);
+      if (wasRecording && streamRef.current && status === "live") startRecorder(streamRef.current);
     } catch (err) {
       setError(readErrorMessage(err, "Não foi possível virar a câmera."));
     }
@@ -592,9 +687,10 @@ export function StudentLiveSection({
       liveIdRef.current = liveId;
       setActiveId(liveId);
       setIsMine(true);
-      setSavedByMe(false);
+      setSavedByMe(true);
       setStatus("live");
       setMessages([]);
+      startRecorder(stream);
       const socket = getSocialSocket(token);
       socket.emit("live:join", liveId);
       socket.off("live:peer-joined");
@@ -711,6 +807,110 @@ export function StudentLiveSection({
     }
   }
 
+  async function openSaveConfirm(liveId: string, afterEnd: boolean) {
+    const videoEl = isMine ? localVideoRef.current : remoteVideoRef.current;
+    const mirror = isMine && facing === "user";
+    let videoBlob: Blob | null = null;
+    if (isMine) {
+      videoBlob = await stopRecorder();
+      if (streamRef.current && !afterEnd && status === "live") {
+        startRecorder(streamRef.current);
+      }
+    }
+    let coverPreview: string | null = null;
+    if (videoEl) {
+      const frame = await frameFromVideo(videoEl, mirror);
+      if (frame) coverPreview = URL.createObjectURL(frame);
+    }
+    const known = [...lives, ...savedLives].find((row) => row.id === liveId);
+    const blobUrl = videoBlob ? URL.createObjectURL(videoBlob) : null;
+    setSaveCoverAt(0);
+    setSaveDurationSec(1);
+    setSaveSheet({
+      liveId,
+      title: title.trim() || known?.title || "Live",
+      videoBlob,
+      videoUrl: blobUrl || (known?.videoUrl ? mediaUrl(known.videoUrl) : null),
+      coverPreview: coverPreview || (known?.coverUrl ? mediaUrl(known.coverUrl) : null),
+      mirror,
+      afterEnd
+    });
+  }
+
+  async function captureCoverFromPreview() {
+    const video = savePreviewRef.current;
+    if (!video || !saveSheet) return;
+    const frame = await frameFromVideo(video, Boolean(saveSheet.videoBlob && saveSheet.mirror));
+    if (!frame) return;
+    if (saveSheet.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(saveSheet.coverPreview);
+    setSaveSheet({ ...saveSheet, coverPreview: URL.createObjectURL(frame) });
+  }
+
+  async function confirmSaveLive() {
+    if (!saveSheet) return;
+    setSavingLive(true);
+    setError(null);
+    try {
+      let videoUrl: string | undefined;
+      let coverUrl: string | undefined;
+      if (saveSheet.videoBlob && isMine) {
+        const ext = saveSheet.videoBlob.type.includes("mp4") ? "mp4" : "webm";
+        videoUrl = await uploadLiveFile(new File([saveSheet.videoBlob], `live-${saveSheet.liveId}.${ext}`, { type: saveSheet.videoBlob.type || "video/webm" }));
+      }
+      if (saveSheet.coverPreview) {
+        const coverBlob = await fetch(saveSheet.coverPreview).then((res) => res.blob());
+        coverUrl = await uploadLiveFile(new File([coverBlob], `live-cover-${saveSheet.liveId}.jpg`, { type: "image/jpeg" }));
+      }
+      if (isMine && (videoUrl || coverUrl)) {
+        await apiPut(`/student/social/live/${saveSheet.liveId}/media`, { videoUrl, coverUrl }, token);
+      }
+      if (saveSheet.afterEnd && isMine) {
+        await apiPost(`/student/social/live/${saveSheet.liveId}/end`, { videoUrl, coverUrl }, token);
+        getSocialSocket(token).emit("live:end", saveSheet.liveId);
+      } else {
+        await apiPost(`/student/social/live/${saveSheet.liveId}/save`, { coverUrl }, token);
+      }
+      setSavedByMe(true);
+      if (saveSheet.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(saveSheet.coverPreview);
+      if (saveSheet.videoUrl?.startsWith("blob:")) URL.revokeObjectURL(saveSheet.videoUrl);
+      setSaveSheet(null);
+      if (saveSheet.afterEnd) {
+        stopMedia();
+        setActiveId(null);
+        setStatus("idle");
+      }
+      await load();
+    } catch (err) {
+      setError(readErrorMessage(err, "Não foi possível salvar a live com vídeo/capa."));
+    } finally {
+      setSavingLive(false);
+    }
+  }
+
+  function cancelSaveSheet() {
+    if (!saveSheet) return;
+    if (saveSheet.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(saveSheet.coverPreview);
+    if (saveSheet.videoUrl?.startsWith("blob:")) URL.revokeObjectURL(saveSheet.videoUrl);
+    const afterEnd = saveSheet.afterEnd;
+    const liveId = saveSheet.liveId;
+    setSaveSheet(null);
+    if (afterEnd) {
+      void (async () => {
+        try {
+          await apiPost(`/student/social/live/${liveId}/end`, {}, token);
+          getSocialSocket(token).emit("live:end", liveId);
+        } catch {
+          // still leave studio
+        } finally {
+          stopMedia();
+          setActiveId(null);
+          setStatus("idle");
+          await load();
+        }
+      })();
+    }
+  }
+
   async function deleteSavedLive(liveId: string) {
     setError(null);
     try {
@@ -725,18 +925,16 @@ export function StudentLiveSection({
 
   async function toggleSaveLive(liveId: string, currentlySaved: boolean) {
     setError(null);
-    try {
-      if (currentlySaved) {
-        await deleteSavedLive(liveId);
-      } else {
-        await apiPost(`/student/social/live/${liveId}/save`, {}, token);
-        setSavedByMe(true);
-        setLives((current) => current.map((row) => (row.id === liveId ? { ...row, savedByMe: true } : row)));
-        await load();
-      }
-    } catch (err) {
-      setError(readErrorMessage(err, currentlySaved ? "Não foi possível remover a live salva." : "Não foi possível salvar a live."));
+    if (currentlySaved) {
+      await deleteSavedLive(liveId);
+      return;
     }
+    await openSaveConfirm(liveId, false);
+  }
+
+  async function endLive() {
+    if (!activeId) return;
+    await openSaveConfirm(activeId, true);
   }
 
   async function saveTitleEdit() {
@@ -756,21 +954,6 @@ export function StudentLiveSection({
       setError(readErrorMessage(err, "Não foi possível editar o título."));
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function endLive() {
-    if (!activeId) return;
-    try {
-      await apiPost(`/student/social/live/${activeId}/end`, {}, token);
-      getSocialSocket(token).emit("live:end", activeId);
-    } catch (err) {
-      setError(readErrorMessage(err, "Não foi possível encerrar a live."));
-    } finally {
-      stopMedia();
-      setActiveId(null);
-      setStatus("idle");
-      await load();
     }
   }
 
@@ -1064,17 +1247,19 @@ export function StudentLiveSection({
               <button
                 type="button"
                 className="student-live-saved-main"
-                disabled={busy || live.status !== "live"}
+                disabled={busy || (live.status !== "live" && !live.videoUrl)}
                 onClick={() => {
                   if (live.status === "live") void joinLive(live.id);
+                  else if (live.videoUrl) setReplayLive(live);
                 }}
               >
-                <span className="student-live-saved-avatar" aria-hidden>
-                  {live.host.avatarUrl ? (
-                    <img src={mediaUrl(live.host.avatarUrl)} alt="" />
+                <span className="student-live-saved-cover" aria-hidden>
+                  {live.coverUrl || live.host.avatarUrl ? (
+                    <img src={mediaUrl(live.coverUrl || live.host.avatarUrl || "")} alt="" />
                   ) : (
-                    live.host.name.slice(0, 1)
+                    <span>{live.host.name.slice(0, 1)}</span>
                   )}
+                  {live.videoUrl ? <em className="student-live-saved-play">▶</em> : null}
                 </span>
                 {live.status === "live" ? (
                   <span className="student-live-badge is-compact">LIVE</span>
@@ -1096,6 +1281,97 @@ export function StudentLiveSection({
           ))
         )}
       </div>
+
+      {saveSheet
+        ? createPortal(
+            <div className="student-live-save-sheet" role="dialog" aria-label="Confirmar salvar live">
+              <div className="student-live-save-card">
+                <header>
+                  <strong>{saveSheet.afterEnd ? "Encerrar e salvar" : "Salvar live"}</strong>
+                  <button type="button" onClick={cancelSaveSheet} aria-label="Fechar" disabled={savingLive}>
+                    <X size={18} />
+                  </button>
+                </header>
+                <p className="student-activity-hint">
+                  Confirme para guardar em Lives salvas e publicar no feed. Arraste o vídeo para escolher a capa.
+                </p>
+                <div className="student-live-save-preview">
+                  {saveSheet.videoUrl ? (
+                    <video
+                      ref={savePreviewRef}
+                      src={saveSheet.videoUrl}
+                      playsInline
+                      controls
+                      onLoadedMetadata={(event) => {
+                        const duration = Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 1;
+                        setSaveDurationSec(Math.max(duration, 0.1));
+                        event.currentTarget.currentTime = Math.min(0.1, duration);
+                      }}
+                      onSeeked={() => void captureCoverFromPreview()}
+                    />
+                  ) : saveSheet.coverPreview ? (
+                    <img src={saveSheet.coverPreview} alt="" />
+                  ) : (
+                    <div className="student-live-save-fallback">Prévia indisponível nesta live</div>
+                  )}
+                  {saveSheet.coverPreview ? <img className="student-live-save-cover-thumb" src={saveSheet.coverPreview} alt="Capa" /> : null}
+                </div>
+                {saveSheet.videoUrl ? (
+                  <label className="student-live-save-scrub">
+                    <span>Frame da capa</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={Math.max(1, Math.floor(saveDurationSec * 10))}
+                      value={saveCoverAt}
+                      onChange={(event) => {
+                        const next = Number(event.target.value);
+                        setSaveCoverAt(next);
+                        const video = savePreviewRef.current;
+                        if (video && Number.isFinite(video.duration)) {
+                          video.currentTime = (next / 10);
+                        }
+                      }}
+                    />
+                  </label>
+                ) : null}
+                <div className="student-live-save-actions">
+                  <button type="button" className="student-ghost-chip" onClick={cancelSaveSheet} disabled={savingLive}>
+                    {saveSheet.afterEnd ? "Encerrar sem salvar" : "Cancelar"}
+                  </button>
+                  <button type="button" className="student-green-button" onClick={() => void confirmSaveLive()} disabled={savingLive}>
+                    {savingLive ? "Salvando…" : saveSheet.afterEnd ? "Salvar e publicar" : "Confirmar e publicar"}
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
+
+      {replayLive
+        ? createPortal(
+            <div className="student-live-save-sheet" role="dialog" aria-label="Replay da live">
+              <div className="student-live-save-card">
+                <header>
+                  <strong>{replayLive.title}</strong>
+                  <button type="button" onClick={() => setReplayLive(null)} aria-label="Fechar">
+                    <X size={18} />
+                  </button>
+                </header>
+                <div className="student-live-save-preview is-replay">
+                  {replayLive.videoUrl ? (
+                    <video src={mediaUrl(replayLive.videoUrl)} controls playsInline autoPlay poster={replayLive.coverUrl ? mediaUrl(replayLive.coverUrl) : undefined} />
+                  ) : replayLive.coverUrl ? (
+                    <img src={mediaUrl(replayLive.coverUrl)} alt="" />
+                  ) : null}
+                </div>
+                <small className="student-activity-hint">{replayLive.host.name}</small>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
     </section>
   );
 }
