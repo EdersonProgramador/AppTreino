@@ -110,6 +110,149 @@ export function drawCameraFrame(
   }
 }
 
+function loadImageElement(url: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Falha ao carregar a imagem."));
+    img.src = url;
+  });
+}
+
+function canvasToJpegFile(canvas: HTMLCanvasElement, baseName: string) {
+  return new Promise<File>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error("Falha ao exportar a imagem."));
+          return;
+        }
+        resolve(new File([blob], `${baseName}.jpg`, { type: "image/jpeg" }));
+      },
+      "image/jpeg",
+      0.92
+    );
+  });
+}
+
+/** Aplica o filtro CSS selecionado em arquivo da galeria / câmera nativa. */
+export async function applyFilterToMediaFile(file: File, filterCss: string): Promise<File> {
+  if (!filterCss || filterCss === "none") return file;
+  if (file.type.startsWith("image/") || (!file.type && /\.(jpe?g|png|webp|heic|gif)$/i.test(file.name))) {
+    return applyFilterToImageFile(file, filterCss);
+  }
+  if (file.type.startsWith("video/")) {
+    return applyFilterToVideoFile(file, filterCss);
+  }
+  return file;
+}
+
+async function applyFilterToImageFile(file: File, filterCss: string): Promise<File> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await loadImageElement(url);
+    const maxSide = 2560;
+    let width = img.naturalWidth || img.width;
+    let height = img.naturalHeight || img.height;
+    if (!width || !height) throw new Error("Imagem inválida.");
+    if (Math.max(width, height) > maxSide) {
+      const scale = maxSide / Math.max(width, height);
+      width = Math.max(1, Math.round(width * scale));
+      height = Math.max(1, Math.round(height * scale));
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas indisponível.");
+    ctx.filter = filterCss;
+    ctx.drawImage(img, 0, 0, width, height);
+    const base = file.name.replace(/\.[^.]+$/, "") || `gallery-${Date.now()}`;
+    return await canvasToJpegFile(canvas, `${base}-filtro`);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function applyFilterToVideoFile(file: File, filterCss: string): Promise<File> {
+  const mimeType = recorderMime();
+  if (typeof MediaRecorder === "undefined") return file;
+
+  const url = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  video.src = url;
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      video.onloadeddata = () => resolve();
+      video.onerror = () => reject(new Error("Falha ao carregar o vídeo."));
+    });
+    if (!video.videoWidth || !video.videoHeight) return file;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+
+    let raf = 0;
+    const draw = () => {
+      ctx.filter = filterCss;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      if (!video.paused && !video.ended) raf = requestAnimationFrame(draw);
+    };
+
+    const canvasStream = canvas.captureStream(30);
+    const sourceStream =
+      typeof (video as HTMLVideoElement & { captureStream?: () => MediaStream }).captureStream === "function"
+        ? (video as HTMLVideoElement & { captureStream: () => MediaStream }).captureStream()
+        : null;
+    sourceStream?.getAudioTracks().forEach((track) => canvasStream.addTrack(track));
+
+    const chunks: Blob[] = [];
+    const recorder = mimeType ? new MediaRecorder(canvasStream, { mimeType }) : new MediaRecorder(canvasStream);
+
+    const recorded = new Promise<File>((resolve, reject) => {
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunks.push(event.data);
+      };
+      recorder.onerror = () => reject(new Error("Falha ao regravar o vídeo."));
+      recorder.onstop = () => {
+        if (raf) cancelAnimationFrame(raf);
+        const type = recorder.mimeType || mimeType || "video/webm";
+        const blob = new Blob(chunks, { type });
+        if (!blob.size) {
+          reject(new Error("Vídeo filtrado vazio."));
+          return;
+        }
+        const ext = type.includes("mp4") ? "mp4" : "webm";
+        const base = file.name.replace(/\.[^.]+$/, "") || `gallery-${Date.now()}`;
+        resolve(new File([blob], `${base}-filtro.${ext}`, { type }));
+      };
+    });
+
+    recorder.start(250);
+    await video.play();
+    draw();
+    await new Promise<void>((resolve) => {
+      video.onended = () => resolve();
+    });
+    if (raf) cancelAnimationFrame(raf);
+    if (recorder.state !== "inactive") recorder.stop();
+    sourceStream?.getTracks().forEach((track) => track.stop());
+    canvasStream.getTracks().forEach((track) => track.stop());
+    return await recorded;
+  } finally {
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    URL.revokeObjectURL(url);
+  }
+}
+
 function recorderMime() {
   const types = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
   return types.find((type) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type)) || "";
@@ -160,6 +303,7 @@ export function StudentCameraCapture({
   const [hint, setHint] = useState<string | null>(null);
   const [filterId, setFilterId] = useState<CameraFilterId>("none");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [applyingFilter, setApplyingFilter] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const [zoom, setZoom] = useState(1);
@@ -346,6 +490,25 @@ export function StudentCameraCapture({
   function onStageDoubleClick() {
     // Instagram-like: double tap resets zoom.
     setCameraZoom(zoomCaps.min);
+  }
+
+  async function handleNativeFile(file: File) {
+    if (filterCss === "none") {
+      onCapture(file);
+      return;
+    }
+    setApplyingFilter(true);
+    setHint("Aplicando filtro…");
+    try {
+      const filtered = await applyFilterToMediaFile(file, filterCss);
+      setHint(null);
+      onCapture(filtered);
+    } catch {
+      setHint("Não foi possível aplicar o filtro neste arquivo. Enviando original.");
+      onCapture(file);
+    } finally {
+      setApplyingFilter(false);
+    }
   }
 
   async function toggleTorch() {
@@ -609,7 +772,13 @@ export function StudentCameraCapture({
         ) : null}
 
         <div className="student-camera-shutter-row">
-          <button type="button" className="student-camera-side-btn" onClick={() => nativeRef.current?.click()} aria-label="Galeria">
+          <button
+            type="button"
+            className="student-camera-side-btn"
+            onClick={() => nativeRef.current?.click()}
+            disabled={recording || applyingFilter}
+            aria-label="Galeria"
+          >
             <ImageIcon size={20} />
           </button>
           <button
@@ -620,7 +789,7 @@ export function StudentCameraCapture({
               else if (recording) stopRecording();
               else startRecording();
             }}
-            disabled={!ready && !fallback}
+            disabled={(!ready && !fallback) || applyingFilter}
             aria-label={captureMode === "photo" ? "Tirar foto" : recording ? "Parar gravação" : "Gravar vídeo"}
           >
             {captureMode === "photo" ? <Camera size={26} /> : recording ? <span className="student-camera-stop" /> : <Video size={26} />}
@@ -632,13 +801,13 @@ export function StudentCameraCapture({
       <input
         ref={nativeRef}
         type="file"
-        accept={captureMode === "video" ? "video/*" : "image/*"}
+        accept={captureMode === "video" ? "video/*" : "image/*,image/jpeg,image/png,image/webp"}
         capture={facing === "user" ? "user" : "environment"}
         hidden
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
-          if (file) onCapture(file);
+          if (file) void handleNativeFile(file);
         }}
       />
     </div>,
