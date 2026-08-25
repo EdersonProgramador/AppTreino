@@ -2,6 +2,7 @@ import {
   Camera,
   Clapperboard,
   Flag,
+  Heart,
   ImagePlus,
   MessageCircle,
   MoreHorizontal,
@@ -29,6 +30,7 @@ import { brand } from "../../lib/brand";
 import { shareSocialPost } from "../../lib/share-social-post";
 import type {
   SocialAuthor,
+  SocialComment,
   SocialPostRow,
   SocialStoryRail,
   UploadResponse
@@ -40,8 +42,25 @@ type MediaItem = { url: string; type: "IMAGE" | "VIDEO" };
 type SocialNav = "reels" | "live" | "messages" | "chat" | "requests" | "profile";
 type CreatePanel = "post" | "story" | "note" | null;
 type CameraMode = "photo" | "video" | null;
+type ReplyTarget = { id: string; name: string } | null;
 
 const MAX_MEDIA = 10;
+const COMMENT_EMOJIS = ["😂", "😮", "😍", "😢", "👏", "🔥", "🎉", "❤️"];
+
+function formatCompactRelative(iso: string) {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const sec = Math.max(0, Math.floor(diffMs / 1000));
+  if (sec < 60) return `${Math.max(1, sec)}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}min`;
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `${weeks}sem`;
+  return new Date(iso).toLocaleDateString("pt-BR", { day: "numeric", month: "short" });
+}
 
 function renderPostBody(content: string) {
   const cleaned = content.replace(/\n?\[\[LIVE:[^\]]+\]\]/g, "").trim();
@@ -234,12 +253,18 @@ export function StudentFeedSection({
   const [busy, setBusy] = useState(false);
   const [loadingFeed, setLoadingFeed] = useState(() => !cached?.posts.length);
   const [error, setError] = useState<string | null>(null);
-  const [commentDraft, setCommentDraft] = useState<Record<string, string>>({});
-  const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
+  const [commentsPostId, setCommentsPostId] = useState<string | null>(null);
+  const [sheetComments, setSheetComments] = useState<SocialComment[]>([]);
+  const [sheetDraft, setSheetDraft] = useState("");
+  const [replyTo, setReplyTo] = useState<ReplyTarget>(null);
+  const [sheetLoading, setSheetLoading] = useState(false);
+  const [sheetBusy, setSheetBusy] = useState(false);
+  const [sheetViewport, setSheetViewport] = useState({ height: 0, offsetTop: 0, keyboard: 0 });
   const [menuPostId, setMenuPostId] = useState<string | null>(null);
   const [reportPostId, setReportPostId] = useState<string | null>(null);
   const [reportReason, setReportReason] = useState("");
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [createMenuPos, setCreateMenuPos] = useState<{ top: number; right: number } | null>(null);
   const [createPanel, setCreatePanel] = useState<CreatePanel>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [cameraMode, setCameraMode] = useState<CameraMode>(null);
@@ -249,6 +274,7 @@ export function StudentFeedSection({
   const fileRef = useRef<HTMLInputElement>(null);
   const storyFileRef = useRef<HTMLInputElement>(null);
   const createMenuRef = useRef<HTMLDivElement>(null);
+  const commentInputRef = useRef<HTMLInputElement>(null);
 
   async function loadStories() {
     const data = await apiGet<{ rails: SocialStoryRail[] }>("/student/social/stories", token);
@@ -421,26 +447,94 @@ export function StudentFeedSection({
     }
   }
 
-  async function sendComment(postId: string) {
-    const text = commentDraft[postId]?.trim();
-    if (!text) return;
-    const result = await apiPost<{ comment: SocialPostRow["comments"][number] }>(
-      `/student/social/posts/${postId}/comments`,
-      { body: text },
-      token
-    );
-    setCommentDraft((current) => ({ ...current, [postId]: "" }));
-    setPosts((current) =>
-      current.map((post) =>
-        post.id === postId
-          ? {
-              ...post,
-              comments: [...post.comments, result.comment],
-              commentsCount: (post.commentsCount ?? post.comments.length) + 1
-            }
-          : post
-      )
-    );
+  function closeCommentsSheet() {
+    setCommentsPostId(null);
+    setSheetComments([]);
+    setSheetDraft("");
+    setReplyTo(null);
+    setSheetLoading(false);
+    setSheetBusy(false);
+  }
+
+  async function openCommentsSheet(postId: string) {
+    setCreateMenuOpen(false);
+    setSearchOpen(false);
+    setCommentsPostId(postId);
+    setSheetDraft("");
+    setReplyTo(null);
+    setSheetLoading(true);
+    try {
+      const data = await apiGet<{ comments: SocialComment[] }>(`/student/social/posts/${postId}/comments`, token);
+      setSheetComments(data.comments);
+    } catch {
+      const fallback = posts.find((post) => post.id === postId)?.comments ?? [];
+      setSheetComments(fallback);
+    } finally {
+      setSheetLoading(false);
+    }
+  }
+
+  async function sendSheetComment() {
+    if (!commentsPostId) return;
+    const text = sheetDraft.trim();
+    if (!text || sheetBusy) return;
+    setSheetBusy(true);
+    try {
+      const result = await apiPost<{ comment: SocialComment }>(
+        `/student/social/posts/${commentsPostId}/comments`,
+        { body: text, parentId: replyTo?.id ?? null },
+        token
+      );
+      const comment = result.comment;
+      setSheetDraft("");
+      setReplyTo(null);
+      setSheetComments((current) => {
+        if (comment.parentId) {
+          return current.map((row) =>
+            row.id === comment.parentId
+              ? {
+                  ...row,
+                  replies: [...(row.replies ?? []), comment],
+                  repliesCount: (row.repliesCount ?? row.replies?.length ?? 0) + 1
+                }
+              : row
+          );
+        }
+        return [...current, { ...comment, replies: comment.replies ?? [] }];
+      });
+      setPosts((current) =>
+        current.map((post) =>
+          post.id === commentsPostId
+            ? {
+                ...post,
+                commentsCount: (post.commentsCount ?? post.comments.length) + 1,
+                comments: comment.parentId
+                  ? post.comments
+                  : [...post.comments.slice(-1), comment].slice(-2)
+              }
+            : post
+        )
+      );
+    } finally {
+      setSheetBusy(false);
+    }
+  }
+
+  async function toggleCommentLike(commentId: string) {
+    const result = await apiPost<{ liked: boolean }>(`/student/social/comments/${commentId}/like`, {}, token);
+    function patch(list: SocialComment[]): SocialComment[] {
+      return list.map((comment) => {
+        if (comment.id === commentId) {
+          const likesCount = Math.max(0, (comment.likesCount ?? 0) + (result.liked ? 1 : -1));
+          return { ...comment, likedByMe: result.liked, likesCount };
+        }
+        if (comment.replies?.length) {
+          return { ...comment, replies: patch(comment.replies) };
+        }
+        return comment;
+      });
+    }
+    setSheetComments((current) => patch(current));
   }
 
   async function toggleFollow(userId: string) {
@@ -543,15 +637,81 @@ export function StudentFeedSection({
   }, []);
 
   useEffect(() => {
-    if (!createMenuOpen) return;
-    function onDocClick(event: MouseEvent) {
-      if (createMenuRef.current && !createMenuRef.current.contains(event.target as Node)) {
-        setCreateMenuOpen(false);
-      }
+    if (!createMenuOpen) {
+      setCreateMenuPos(null);
+      return;
     }
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    function placeMenu() {
+      const btn = document.querySelector<HTMLElement>('.student-app-header button[aria-label="Criar"]');
+      if (!btn) {
+        setCreateMenuPos({ top: 72, right: 12 });
+        return;
+      }
+      const rect = btn.getBoundingClientRect();
+      const vv = window.visualViewport;
+      const viewportWidth = vv?.width ?? window.innerWidth;
+      const top = Math.round(rect.bottom + 8);
+      const right = Math.round(Math.max(8, viewportWidth - rect.right + (vv?.offsetLeft ?? 0)));
+      const maxTop = Math.round((vv?.height ?? window.innerHeight) - 12);
+      setCreateMenuPos({
+        top: Math.min(top, Math.max(8, maxTop - 48)),
+        right
+      });
+    }
+    placeMenu();
+    window.addEventListener("resize", placeMenu);
+    window.visualViewport?.addEventListener("resize", placeMenu);
+    window.visualViewport?.addEventListener("scroll", placeMenu);
+    return () => {
+      window.removeEventListener("resize", placeMenu);
+      window.visualViewport?.removeEventListener("resize", placeMenu);
+      window.visualViewport?.removeEventListener("scroll", placeMenu);
+    };
   }, [createMenuOpen]);
+
+  useEffect(() => {
+    if (!createMenuOpen) return;
+    function onDocPointerDown(event: MouseEvent | TouchEvent) {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (createMenuRef.current?.contains(target)) return;
+      const createBtn = document.querySelector('.student-app-header button[aria-label="Criar"]');
+      if (createBtn?.contains(target)) return;
+      setCreateMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onDocPointerDown);
+    document.addEventListener("touchstart", onDocPointerDown, { passive: true });
+    return () => {
+      document.removeEventListener("mousedown", onDocPointerDown);
+      document.removeEventListener("touchstart", onDocPointerDown);
+    };
+  }, [createMenuOpen]);
+
+  useEffect(() => {
+    if (!commentsPostId) {
+      setSheetViewport({ height: 0, offsetTop: 0, keyboard: 0 });
+      return;
+    }
+    function syncViewport() {
+      const vv = window.visualViewport;
+      const height = Math.round(vv?.height ?? window.innerHeight);
+      const offsetTop = Math.round(vv?.offsetTop ?? 0);
+      const keyboard = Math.max(0, Math.round(window.innerHeight - height - offsetTop));
+      setSheetViewport({ height, offsetTop, keyboard });
+    }
+    syncViewport();
+    window.addEventListener("resize", syncViewport);
+    window.visualViewport?.addEventListener("resize", syncViewport);
+    window.visualViewport?.addEventListener("scroll", syncViewport);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("resize", syncViewport);
+      window.visualViewport?.removeEventListener("resize", syncViewport);
+      window.visualViewport?.removeEventListener("scroll", syncViewport);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [commentsPostId]);
 
   function openCreate(panel: CreatePanel) {
     setCreateMenuOpen(false);
@@ -568,41 +728,7 @@ export function StudentFeedSection({
 
   return (
     <section className="student-feed">
-      <div className={`student-feed-chrome${createMenuOpen || searchOpen ? " is-open" : ""}`} ref={createMenuRef}>
-        {createMenuOpen && (
-          <div className="student-feed-create-menu is-header-anchored" role="menu">
-            <button type="button" role="menuitem" onClick={() => openCreate("post")}>
-              <PenSquare size={20} strokeWidth={1.6} /> Publicar
-            </button>
-            <button type="button" role="menuitem" onClick={() => openCreate("story")}>
-              <Plus size={20} strokeWidth={1.6} className="student-feed-create-dashed" /> Momento
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setCreateMenuOpen(false);
-                onNavigate?.("reels");
-              }}
-            >
-              <Clapperboard size={20} strokeWidth={1.6} /> Clipes
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setCreateMenuOpen(false);
-                onNavigate?.("live");
-              }}
-            >
-              <Radio size={20} strokeWidth={1.6} /> Ao vivo
-            </button>
-            <button type="button" role="menuitem" onClick={() => openCreate("note")}>
-              <StickyNote size={20} strokeWidth={1.6} /> Nota
-            </button>
-          </div>
-        )}
-
+      <div className={`student-feed-chrome${searchOpen ? " is-open" : ""}`}>
         {searchOpen && (
           <label className="student-feed-search is-header-anchored">
             <Search size={16} className="student-feed-search-icon" aria-hidden />
@@ -621,6 +747,52 @@ export function StudentFeedSection({
           </label>
         )}
       </div>
+
+      {createMenuOpen
+        ? createPortal(
+            <div
+              ref={createMenuRef}
+              className="student-feed-create-menu is-header-anchored is-overlay"
+              role="menu"
+              style={
+                createMenuPos
+                  ? { top: createMenuPos.top, right: createMenuPos.right }
+                  : { top: 72, right: 12 }
+              }
+            >
+              <button type="button" role="menuitem" onClick={() => openCreate("post")}>
+                <PenSquare size={20} strokeWidth={1.6} /> Publicar
+              </button>
+              <button type="button" role="menuitem" onClick={() => openCreate("story")}>
+                <Plus size={20} strokeWidth={1.6} className="student-feed-create-dashed" /> Momento
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setCreateMenuOpen(false);
+                  onNavigate?.("reels");
+                }}
+              >
+                <Clapperboard size={20} strokeWidth={1.6} /> Clipes
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setCreateMenuOpen(false);
+                  onNavigate?.("live");
+                }}
+              >
+                <Radio size={20} strokeWidth={1.6} /> Ao vivo
+              </button>
+              <button type="button" role="menuitem" onClick={() => openCreate("note")}>
+                <StickyNote size={20} strokeWidth={1.6} /> Nota
+              </button>
+            </div>,
+            document.body
+          )
+        : null}
 
       <div className="student-feed-stories">
         <header>
@@ -912,35 +1084,28 @@ export function StudentFeedSection({
                 <button type="button" className={post.likedByMe ? "is-on" : ""} onClick={() => void toggleLike(post.id)} aria-label="Curtir">
                   <ThumbsUp size={18} fill={post.likedByMe ? "currentColor" : "none"} /> {post.likesCount}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setOpenComments((current) => ({ ...current, [post.id]: !current[post.id] }))}
-                  aria-label="Comentar"
-                >
+                <button type="button" onClick={() => void openCommentsSheet(post.id)} aria-label="Comentar">
                   <MessageCircle size={18} /> {post.commentsCount ?? post.comments.length}
                 </button>
                 <button type="button" onClick={() => void sharePost(post)} aria-label="Compartilhar">
                   <Share2 size={18} />
                 </button>
               </footer>
-              {(openComments[post.id] ? post.comments : post.comments.slice(-3)).map((comment) => (
-                <p className="student-feed-comment" key={comment.id}>
+              {post.comments.slice(0, 2).map((comment) => (
+                <button
+                  type="button"
+                  className="student-feed-comment"
+                  key={comment.id}
+                  onClick={() => void openCommentsSheet(post.id)}
+                >
                   <strong>{comment.author.name.split(" ")[0]}</strong> {comment.body}
-                </p>
-              ))}
-              <div className="student-feed-comment-box">
-                <input
-                  value={commentDraft[post.id] ?? ""}
-                  onChange={(event) => setCommentDraft((current) => ({ ...current, [post.id]: event.target.value }))}
-                  placeholder="Comentar"
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") void sendComment(post.id);
-                  }}
-                />
-                <button type="button" onClick={() => void sendComment(post.id)} aria-label="Enviar comentário">
-                  <Send size={16} />
                 </button>
-              </div>
+              ))}
+              {(post.commentsCount ?? post.comments.length) > 2 ? (
+                <button type="button" className="student-feed-comments-more" onClick={() => void openCommentsSheet(post.id)}>
+                  Ver todos os {(post.commentsCount ?? post.comments.length)} comentários
+                </button>
+              ) : null}
             </article>
           );
         })}
@@ -1088,6 +1253,188 @@ export function StudentFeedSection({
           </button>
         </div>
       )}
+
+      {commentsPostId
+        ? createPortal(
+            <div
+              className="student-comments-sheet"
+              role="presentation"
+              style={
+                sheetViewport.height
+                  ? {
+                      top: sheetViewport.offsetTop,
+                      height: sheetViewport.height,
+                      ["--comments-keyboard" as string]: `${sheetViewport.keyboard}px`
+                    }
+                  : undefined
+              }
+              onClick={closeCommentsSheet}
+            >
+              <div
+                className="student-comments-card"
+                role="dialog"
+                aria-label="Comentários"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <header className="student-comments-header">
+                  <span className="student-comments-handle" aria-hidden />
+                  <strong>Comentários</strong>
+                  <button type="button" onClick={closeCommentsSheet} aria-label="Fechar">
+                    <X size={18} />
+                  </button>
+                </header>
+
+                <div className="student-comments-list">
+                  {sheetLoading ? (
+                    <p className="student-comments-empty">Carregando...</p>
+                  ) : sheetComments.length === 0 ? (
+                    <p className="student-comments-empty">Nenhum comentário ainda.</p>
+                  ) : (
+                    sheetComments.map((comment) => (
+                      <div className="student-comments-thread" key={comment.id}>
+                        <article className="student-comments-item">
+                          <div className="student-comments-avatar" aria-hidden>
+                            {comment.author.avatarUrl ? (
+                              <img src={mediaUrl(comment.author.avatarUrl)} alt="" />
+                            ) : (
+                              <span>{comment.author.name.slice(0, 1)}</span>
+                            )}
+                          </div>
+                          <div className="student-comments-body">
+                            <p>
+                              <strong>{comment.author.name.split(" ")[0]}</strong> {comment.body}
+                            </p>
+                            <div className="student-comments-meta">
+                              <time dateTime={comment.createdAt}>{formatCompactRelative(comment.createdAt)}</time>
+                              {(comment.likesCount ?? 0) > 0 ? (
+                                <span>
+                                  {comment.likesCount} curtida{(comment.likesCount ?? 0) === 1 ? "" : "s"}
+                                </span>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReplyTo({ id: comment.id, name: comment.author.name.split(" ")[0] });
+                                  commentInputRef.current?.focus();
+                                }}
+                              >
+                                Responder
+                              </button>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className={`student-comments-like${comment.likedByMe ? " is-on" : ""}`}
+                            aria-label="Curtir comentário"
+                            onClick={() => void toggleCommentLike(comment.id)}
+                          >
+                            <Heart size={14} fill={comment.likedByMe ? "currentColor" : "none"} />
+                          </button>
+                        </article>
+
+                        {(comment.replies ?? []).map((reply) => (
+                          <article className="student-comments-item is-reply" key={reply.id}>
+                            <div className="student-comments-avatar" aria-hidden>
+                              {reply.author.avatarUrl ? (
+                                <img src={mediaUrl(reply.author.avatarUrl)} alt="" />
+                              ) : (
+                                <span>{reply.author.name.slice(0, 1)}</span>
+                              )}
+                            </div>
+                            <div className="student-comments-body">
+                              <p>
+                                <strong>{reply.author.name.split(" ")[0]}</strong> {reply.body}
+                              </p>
+                              <div className="student-comments-meta">
+                                <time dateTime={reply.createdAt}>{formatCompactRelative(reply.createdAt)}</time>
+                                {(reply.likesCount ?? 0) > 0 ? (
+                                  <span>
+                                    {reply.likesCount} curtida{(reply.likesCount ?? 0) === 1 ? "" : "s"}
+                                  </span>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setReplyTo({ id: comment.id, name: reply.author.name.split(" ")[0] });
+                                    commentInputRef.current?.focus();
+                                  }}
+                                >
+                                  Responder
+                                </button>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              className={`student-comments-like${reply.likedByMe ? " is-on" : ""}`}
+                              aria-label="Curtir comentário"
+                              onClick={() => void toggleCommentLike(reply.id)}
+                            >
+                              <Heart size={14} fill={reply.likedByMe ? "currentColor" : "none"} />
+                            </button>
+                          </article>
+                        ))}
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div
+                  className="student-comments-composer"
+                  style={
+                    sheetViewport.keyboard > 0
+                      ? { paddingBottom: 10 }
+                      : undefined
+                  }
+                >
+                  <div className="student-comments-emojis" role="list">
+                    {COMMENT_EMOJIS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        role="listitem"
+                        onClick={() => {
+                          setSheetDraft((current) => `${current}${emoji}`);
+                          commentInputRef.current?.focus();
+                        }}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                  {replyTo ? (
+                    <div className="student-comments-replying">
+                      <span>Respondendo a {replyTo.name}</span>
+                      <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancelar resposta">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : null}
+                  <div className="student-comments-input-row">
+                    <input
+                      ref={commentInputRef}
+                      value={sheetDraft}
+                      onChange={(event) => setSheetDraft(event.target.value)}
+                      placeholder={replyTo ? `Responder a ${replyTo.name}...` : "Adicione um comentário..."}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") void sendSheetComment();
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="student-comments-send"
+                      disabled={sheetBusy || !sheetDraft.trim()}
+                      onClick={() => void sendSheetComment()}
+                      aria-label="Enviar comentário"
+                    >
+                      <Send size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
 
       {viewer && viewerRail && viewerItem
         ? createPortal(

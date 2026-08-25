@@ -279,6 +279,40 @@ function mediaItemsFromPost(post: {
   return [];
 }
 
+function serializeComment(
+  comment: {
+    id: string;
+    body: string;
+    parentId?: string | null;
+    createdAt: Date;
+    user: { id: string; name: string; profile?: { avatarUrl?: string | null } | null };
+    likes?: Array<{ userId: string }>;
+    _count?: { likes?: number; replies?: number };
+    replies?: Array<{
+      id: string;
+      body: string;
+      parentId?: string | null;
+      createdAt: Date;
+      user: { id: string; name: string; profile?: { avatarUrl?: string | null } | null };
+      likes?: Array<{ userId: string }>;
+      _count?: { likes?: number };
+    }>;
+  },
+  viewerId: string
+) {
+  return {
+    id: comment.id,
+    body: comment.body,
+    parentId: comment.parentId ?? null,
+    createdAt: comment.createdAt.toISOString(),
+    author: authorCard(comment.user),
+    likesCount: comment._count?.likes ?? comment.likes?.length ?? 0,
+    likedByMe: Boolean(comment.likes?.some((like) => like.userId === viewerId)),
+    repliesCount: comment._count?.replies ?? comment.replies?.length ?? 0,
+    replies: (comment.replies ?? []).map((reply) => serializeComment(reply, viewerId))
+  };
+}
+
 async function serializePost(
   post: {
     id: string;
@@ -295,8 +329,11 @@ async function serializePost(
     comments: Array<{
       id: string;
       body: string;
+      parentId?: string | null;
       createdAt: Date;
       user: { id: string; name: string; profile?: { avatarUrl?: string | null } | null };
+      likes?: Array<{ userId: string }>;
+      _count?: { likes?: number; replies?: number };
     }>;
     activity: Parameters<typeof serializeActivity>[0] | null;
     _count?: { likes?: number; dislikes?: number; comments?: number };
@@ -320,12 +357,7 @@ async function serializePost(
     dislikesCount: post._count?.dislikes ?? dislikes.length,
     dislikedByMe: dislikes.some((dislike) => dislike.userId === viewerId),
     commentsCount: post._count?.comments ?? post.comments.length,
-    comments: post.comments.map((comment) => ({
-      id: comment.id,
-      body: comment.body,
-      createdAt: comment.createdAt.toISOString(),
-      author: authorCard(comment.user)
-    })),
+    comments: post.comments.map((comment) => serializeComment(comment, viewerId)),
     activity: post.activity ? serializeActivity(post.activity, options) : null,
     isMine: post.author.id === viewerId
   };
@@ -336,8 +368,13 @@ const postInclude = {
   likes: { select: { userId: true } },
   dislikes: { select: { userId: true } },
   comments: {
+    where: { parentId: null },
     orderBy: { createdAt: "asc" as const },
-    include: { user: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } } }
+    include: {
+      user: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } },
+      likes: { select: { userId: true } },
+      _count: { select: { likes: true, replies: true } }
+    }
   },
   activity: true
 };
@@ -348,9 +385,14 @@ function feedPostInclude(viewerId: string) {
     likes: { where: { userId: viewerId }, select: { userId: true }, take: 1 },
     dislikes: { where: { userId: viewerId }, select: { userId: true }, take: 1 },
     comments: {
+      where: { parentId: null },
       orderBy: { createdAt: "desc" as const },
-      take: 5,
-      include: { user: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } } }
+      take: 2,
+      include: {
+        user: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } },
+        likes: { where: { userId: viewerId }, select: { userId: true }, take: 1 },
+        _count: { select: { likes: true, replies: true } }
+      }
     },
     _count: { select: { likes: true, dislikes: true, comments: true } },
     activity: {
@@ -641,31 +683,88 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     return { disliked: true, liked: false };
   });
 
+  app.get("/student/social/posts/:id/comments", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const post = await prisma.socialPost.findUnique({ where: { id }, select: { id: true, hidden: true } });
+    if (!post || post.hidden) throw httpError(404, "Publicação não encontrada.");
+    const comments = await prisma.socialComment.findMany({
+      where: { postId: id, parentId: null },
+      orderBy: { createdAt: "asc" },
+      include: {
+        user: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } },
+        likes: { where: { userId: user.id }, select: { userId: true }, take: 1 },
+        _count: { select: { likes: true, replies: true } },
+        replies: {
+          orderBy: { createdAt: "asc" },
+          include: {
+            user: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } },
+            likes: { where: { userId: user.id }, select: { userId: true }, take: 1 },
+            _count: { select: { likes: true } }
+          }
+        }
+      }
+    });
+    return { comments: comments.map((comment) => serializeComment(comment, user.id)) };
+  });
+
   app.post("/student/social/posts/:id/comments", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);
     const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
-    const { body } = z.object({ body: z.string().min(1).max(500) }).parse(request.body);
+    const { body, parentId } = z
+      .object({ body: z.string().min(1).max(500), parentId: z.string().min(1).optional().nullable() })
+      .parse(request.body);
     const post = await prisma.socialPost.findUnique({
       where: { id },
       include: { author: { select: { id: true } } }
     });
     if (!post || post.hidden) throw httpError(404, "Publicação não encontrada.");
+    let resolvedParentId: string | null = null;
+    if (parentId) {
+      const parent = await prisma.socialComment.findFirst({
+        where: { id: parentId, postId: id },
+        select: { id: true, parentId: true, userId: true }
+      });
+      if (!parent) throw httpError(404, "Comentário não encontrado.");
+      resolvedParentId = parent.parentId ?? parent.id;
+      if (parent.userId !== user.id) {
+        await notify(parent.userId, user.name, "SOCIAL_COMMENT", "Nova resposta", "respondeu ao seu comentário.", post.id);
+      }
+    }
     const comment = await prisma.socialComment.create({
-      data: { userId: user.id, postId: id, body: body.trim() },
-      include: { user: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } } }
+      data: { userId: user.id, postId: id, parentId: resolvedParentId, body: body.trim() },
+      include: {
+        user: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } },
+        likes: { where: { userId: user.id }, select: { userId: true }, take: 1 },
+        _count: { select: { likes: true, replies: true } }
+      }
     });
-    if (post.authorId !== user.id) {
+    if (!resolvedParentId && post.authorId !== user.id) {
       await notify(post.authorId, user.name, "SOCIAL_COMMENT", "Novo comentário", "comentou na sua publicação.", post.id);
     }
-    return {
-      comment: {
-        id: comment.id,
-        body: comment.body,
-        createdAt: comment.createdAt.toISOString(),
-        author: authorCard(comment.user)
-      }
-    };
+    return { comment: serializeComment(comment, user.id) };
+  });
+
+  app.post("/student/social/comments/:id/like", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const comment = await prisma.socialComment.findUnique({ where: { id }, select: { id: true, userId: true, postId: true } });
+    if (!comment) throw httpError(404, "Comentário não encontrado.");
+    const existing = await prisma.socialCommentLike.findUnique({
+      where: { userId_commentId: { userId: user.id, commentId: id } }
+    });
+    if (existing) {
+      await prisma.socialCommentLike.delete({ where: { id: existing.id } });
+      return { liked: false };
+    }
+    await prisma.socialCommentLike.create({ data: { userId: user.id, commentId: id } });
+    if (comment.userId !== user.id) {
+      await notify(comment.userId, user.name, "SOCIAL_LIKE", "Curtida no comentário", "curtiu seu comentário.", comment.postId);
+    }
+    return { liked: true };
   });
 
   app.get("/student/social/stories", async (request) => {

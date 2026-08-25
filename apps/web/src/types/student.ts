@@ -216,8 +216,13 @@ export interface SocialAuthor {
 export interface SocialComment {
   id: string;
   body: string;
+  parentId?: string | null;
   createdAt: string;
   author: SocialAuthor;
+  likesCount?: number;
+  likedByMe?: boolean;
+  repliesCount?: number;
+  replies?: SocialComment[];
 }
 
 export interface OutdoorActivityRow {
