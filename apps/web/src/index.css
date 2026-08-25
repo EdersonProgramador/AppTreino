@@ -21340,7 +21340,9 @@ html.is-native-app.keyboard-open .login-shell {
   max-height: calc(
     100dvh - 24px - var(--safe-top, env(safe-area-inset-top, 0px)) - var(--safe-bottom, env(safe-area-inset-bottom, 0px))
   );
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   background: var(--app-panel);
   color: var(--app-text);
   border: 1px solid var(--app-border);
@@ -21459,28 +21461,39 @@ html.is-native-app.keyboard-open .login-shell {
   width: 100%;
 }
 
-/* Sheet on phones — actions/footer always pinned below preview. */
+/* Sheet on phones — full viewport overlay (portal to body), no clip by app scroll. */
 @media (max-width: 640px) {
   .student-feed-modal {
     padding: 0;
     place-items: end stretch;
-    height: 100vh;
+    width: 100%;
+    height: 100%;
     height: 100dvh;
+    height: 100svh;
+    max-height: 100dvh;
   }
 
   .student-feed-modal-card {
     width: 100%;
     max-width: 100%;
     height: auto;
-    max-height: min(92dvh, 100%);
+    max-height: min(90svh, 90dvh);
     border-radius: 22px 22px 0 0;
     border: 0;
     border-top: 1px solid var(--app-border);
     padding:
-      12px
-      12px
-      max(12px, calc(10px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))));
-    gap: 8px;
+      14px
+      max(12px, var(--safe-left, env(safe-area-inset-left, 0px)))
+      max(16px, calc(14px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))));
+    gap: 10px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .student-feed-modal-card:not(.has-media) {
+    /* Keep empty sheet compact but never clip footer/actions. */
+    max-height: min(88svh, 88dvh);
   }
 
   .student-feed-modal-card.has-media {
@@ -21488,14 +21501,16 @@ html.is-native-app.keyboard-open .login-shell {
     max-height: 100%;
     border-radius: 0;
     border-top: 0;
+    overflow: hidden;
     padding:
-      max(10px, var(--safe-top, env(safe-area-inset-top, 0px)))
-      12px
-      max(12px, calc(10px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))));
+      max(12px, var(--safe-top, env(safe-area-inset-top, 0px)))
+      max(12px, var(--safe-left, env(safe-area-inset-left, 0px)))
+      max(14px, calc(12px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))));
   }
 
   .student-feed-modal-card.has-media .student-feed-modal-body {
     flex: 1 1 0;
+    min-height: 0;
   }
 
   .student-feed-modal-card.has-media .student-feed-preview-story {
@@ -21507,13 +21522,63 @@ html.is-native-app.keyboard-open .login-shell {
     aspect-ratio: auto;
   }
 
+  .student-feed-modal-actions {
+    gap: 6px;
+  }
+
   .student-feed-modal-actions .student-ghost-chip {
-    padding: 8px 6px;
+    padding: 10px 4px;
     font-size: 12px;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
+  .student-feed-modal-actions .student-ghost-chip svg {
+    flex-shrink: 0;
+    width: 15px;
+    height: 15px;
+  }
+
+  .student-feed-modal-footer {
+    gap: 10px;
+    padding-bottom: 2px;
   }
 
   .student-feed-modal-footer input {
-    padding: 9px 11px;
+    padding: 11px 12px;
+    font-size: 16px; /* avoid iOS zoom */
+  }
+
+  .student-feed-modal-footer .student-green-button {
+    min-height: 46px;
+  }
+}
+
+@media (max-width: 380px) {
+  .student-feed-modal-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .student-feed-modal-actions .student-ghost-chip {
+    justify-content: flex-start;
+    padding: 10px 12px;
+  }
+}
+
+@media (max-width: 640px) and (max-height: 560px) {
+  .student-feed-modal-card:not(.has-media) {
+    max-height: min(94svh, 94dvh);
+    gap: 8px;
+    padding-top: 10px;
+  }
+
+  .student-feed-modal-body > .student-activity-hint {
+    font-size: 12px;
+  }
+
+  .student-feed-modal-actions .student-ghost-chip {
+    padding: 8px 4px;
+    font-size: 11px;
   }
 }
 

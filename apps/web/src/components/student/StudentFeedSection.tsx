@@ -19,6 +19,7 @@ import {
   X
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { apiDelete, apiGet, apiPost, apiUpload } from "../../api";
 import { mediaUrl } from "../../lib/urls";
 import { formatClock, formatKm, formatPace } from "../../lib/activity-geo";
@@ -924,99 +925,101 @@ export function StudentFeedSection({
         </button>
       )}
 
-      {createPanel === "story" && (
-        <div
-          className="student-feed-modal"
-          role="presentation"
-          onClick={() => {
-            setCreatePanel(null);
-            setStoryMedia(null);
-            setStoryCaption("");
-          }}
-        >
+      {createPanel === "story" &&
+        createPortal(
           <div
-            className={`student-feed-modal-card${storyMedia ? " has-media" : ""}`}
-            role="dialog"
-            aria-label="Novo momento"
-            onClick={(event) => event.stopPropagation()}
+            className="student-feed-modal"
+            role="presentation"
+            onClick={() => {
+              setCreatePanel(null);
+              setStoryMedia(null);
+              setStoryCaption("");
+            }}
           >
-            <header>
-              <strong>Novo momento</strong>
-              <button
-                type="button"
-                onClick={() => {
-                  setCreatePanel(null);
-                  setStoryMedia(null);
-                  setStoryCaption("");
-                }}
-                aria-label="Fechar"
-              >
-                <X size={18} />
-              </button>
-            </header>
-            <div className="student-feed-modal-body">
-              {!storyMedia ? (
-                <p className="student-activity-hint">Foto ou vídeo curto. Some em 24 horas.</p>
-              ) : null}
-              {storyMedia ? (
-                <div className="student-feed-preview student-feed-preview-story">
-                  {storyMedia.type === "VIDEO" ? (
-                    <video src={mediaUrl(storyMedia.url)} controls playsInline preload="metadata" />
-                  ) : (
-                    <img src={mediaUrl(storyMedia.url)} alt="" />
-                  )}
-                </div>
-              ) : null}
-            </div>
-            <input
-              ref={storyFileRef}
-              type="file"
-              accept="image/*,video/*"
-              hidden
-              onChange={async (event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (!file) return;
-                setBusy(true);
-                try {
-                  setStoryMedia(await uploadFile(file));
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : "Falha no envio da mídia.");
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            />
-            <div className="student-feed-modal-actions">
-              <button type="button" className="student-ghost-chip" onClick={() => storyFileRef.current?.click()} disabled={busy}>
-                <ImagePlus size={16} /> Galeria
-              </button>
-              <button type="button" className="student-ghost-chip" onClick={() => setCameraMode("photo")} disabled={busy}>
-                <Camera size={16} /> Câmera
-              </button>
-              <button type="button" className="student-ghost-chip" onClick={() => setCameraMode("video")} disabled={busy}>
-                <Video size={16} /> Vídeo
-              </button>
-            </div>
-            <div className="student-feed-modal-footer">
+            <div
+              className={`student-feed-modal-card${storyMedia ? " has-media" : ""}`}
+              role="dialog"
+              aria-label="Novo momento"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <header>
+                <strong>Novo momento</strong>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreatePanel(null);
+                    setStoryMedia(null);
+                    setStoryCaption("");
+                  }}
+                  aria-label="Fechar"
+                >
+                  <X size={18} />
+                </button>
+              </header>
+              <div className="student-feed-modal-body">
+                {!storyMedia ? (
+                  <p className="student-activity-hint">Foto ou vídeo curto. Some em 24 horas.</p>
+                ) : null}
+                {storyMedia ? (
+                  <div className="student-feed-preview student-feed-preview-story">
+                    {storyMedia.type === "VIDEO" ? (
+                      <video src={mediaUrl(storyMedia.url)} controls playsInline preload="metadata" />
+                    ) : (
+                      <img src={mediaUrl(storyMedia.url)} alt="" />
+                    )}
+                  </div>
+                ) : null}
+              </div>
               <input
-                value={storyCaption}
-                onChange={(event) => setStoryCaption(event.target.value)}
-                placeholder="Legenda (opcional)"
-                maxLength={120}
+                ref={storyFileRef}
+                type="file"
+                accept="image/*,video/*"
+                hidden
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (!file) return;
+                  setBusy(true);
+                  try {
+                    setStoryMedia(await uploadFile(file));
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "Falha no envio da mídia.");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
               />
-              <button
-                type="button"
-                className="student-green-button"
-                disabled={busy || !storyMedia}
-                onClick={(event) => void publishStory(event as unknown as FormEvent)}
-              >
-                {busy ? "Publicando…" : "Publicar momento"}
-              </button>
+              <div className="student-feed-modal-actions">
+                <button type="button" className="student-ghost-chip" onClick={() => storyFileRef.current?.click()} disabled={busy}>
+                  <ImagePlus size={16} /> Galeria
+                </button>
+                <button type="button" className="student-ghost-chip" onClick={() => setCameraMode("photo")} disabled={busy}>
+                  <Camera size={16} /> Câmera
+                </button>
+                <button type="button" className="student-ghost-chip" onClick={() => setCameraMode("video")} disabled={busy}>
+                  <Video size={16} /> Vídeo
+                </button>
+              </div>
+              <div className="student-feed-modal-footer">
+                <input
+                  value={storyCaption}
+                  onChange={(event) => setStoryCaption(event.target.value)}
+                  placeholder="Legenda (opcional)"
+                  maxLength={120}
+                />
+                <button
+                  type="button"
+                  className="student-green-button"
+                  disabled={busy || !storyMedia}
+                  onClick={(event) => void publishStory(event as unknown as FormEvent)}
+                >
+                  {busy ? "Publicando…" : "Publicar momento"}
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {createPanel === "note" && (
         <div className="student-activity-sheet" role="dialog" aria-label="Nova nota">
@@ -1054,55 +1057,58 @@ export function StudentFeedSection({
         </div>
       )}
 
-      {viewer && viewerRail && viewerItem && (
-        <div
-          className="student-feed-story-viewer"
-          onClick={() => setViewer(null)}
-          role="dialog"
-          aria-label="Momento"
-        >
-          <div className="student-feed-story-viewer-card" onClick={(event) => event.stopPropagation()}>
-            <header>
-              <strong>{viewerRail.isMine ? "Você" : viewerRail.username}</strong>
-              <button type="button" onClick={() => setViewer(null)} aria-label="Fechar">
-                <X size={18} />
-              </button>
-            </header>
-            {viewerItem.mediaType === "VIDEO" ? (
-              <video src={mediaUrl(viewerItem.mediaUrl)} controls autoPlay playsInline />
-            ) : (
-              <img src={mediaUrl(viewerItem.mediaUrl)} alt="" />
-            )}
-            {viewerItem.caption && <p>{viewerItem.caption}</p>}
-            <div className="student-feed-carousel-nav">
-              <button
-                type="button"
-                disabled={viewer.item <= 0}
-                onClick={() => setViewer((current) => (current ? { ...current, item: current.item - 1 } : current))}
-              >
-                ‹
-              </button>
-              <span>
-                {viewer.item + 1}/{viewerRail.items.length}
-              </span>
-              <button
-                type="button"
-                disabled={viewer.item >= viewerRail.items.length - 1}
-                onClick={() => {
-                  const next = viewer.item + 1;
-                  const nextItem = viewerRail.items[next];
-                  if (nextItem && !nextItem.seen) {
-                    void apiPost(`/student/social/stories/${nextItem.id}/view`, {}, token);
-                  }
-                  setViewer((current) => (current ? { ...current, item: next } : current));
-                }}
-              >
-                ›
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {viewer && viewerRail && viewerItem
+        ? createPortal(
+            <div
+              className="student-feed-story-viewer"
+              onClick={() => setViewer(null)}
+              role="dialog"
+              aria-label="Momento"
+            >
+              <div className="student-feed-story-viewer-card" onClick={(event) => event.stopPropagation()}>
+                <header>
+                  <strong>{viewerRail.isMine ? "Você" : viewerRail.username}</strong>
+                  <button type="button" onClick={() => setViewer(null)} aria-label="Fechar">
+                    <X size={18} />
+                  </button>
+                </header>
+                {viewerItem.mediaType === "VIDEO" ? (
+                  <video src={mediaUrl(viewerItem.mediaUrl)} controls autoPlay playsInline />
+                ) : (
+                  <img src={mediaUrl(viewerItem.mediaUrl)} alt="" />
+                )}
+                {viewerItem.caption && <p>{viewerItem.caption}</p>}
+                <div className="student-feed-carousel-nav">
+                  <button
+                    type="button"
+                    disabled={viewer.item <= 0}
+                    onClick={() => setViewer((current) => (current ? { ...current, item: current.item - 1 } : current))}
+                  >
+                    ‹
+                  </button>
+                  <span>
+                    {viewer.item + 1}/{viewerRail.items.length}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={viewer.item >= viewerRail.items.length - 1}
+                    onClick={() => {
+                      const next = viewer.item + 1;
+                      const nextItem = viewerRail.items[next];
+                      if (nextItem && !nextItem.seen) {
+                        void apiPost(`/student/social/stories/${nextItem.id}/view`, {}, token);
+                      }
+                      setViewer((current) => (current ? { ...current, item: next } : current));
+                    }}
+                  >
+                    ›
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
     </section>
   );
 }
