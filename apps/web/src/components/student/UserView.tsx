@@ -291,7 +291,12 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   }, [token, accessReady, studentSection]);
 
   useEffect(() => {
-    if (studentSection !== "feed" && studentSection !== "home") {
+    if (
+      studentSection !== "feed" &&
+      studentSection !== "home" &&
+      studentSection !== "reels" &&
+      studentSection !== "live"
+    ) {
       setSocialMenuOpen(false);
     }
   }, [studentSection]);
@@ -2368,12 +2373,18 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     CLOSED: "Encerrado"
   };
 
+  const isFeedFamilySection =
+    studentSection === "feed" ||
+    studentSection === "home" ||
+    studentSection === "reels" ||
+    studentSection === "live";
+
   return (
     <main
       className={`student-app-shell${hideStudentChrome ? " workout-immersive" : ""}${
         musicQueueLength && !musicMiniHidden ? " has-music-dock" : ""
       }${studentSection === "play" ? " is-play" : ""}${studentSection === "activity" ? " is-activity" : ""}${
-        studentSection === "feed" || studentSection === "home" ? " is-feed" : ""
+        isFeedFamilySection ? " is-feed" : ""
       }`}
     >
       {adminPreviewBanner}
@@ -2397,6 +2408,16 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         </div>
 
         <div className="student-header-actions">
+          {(studentSection === "reels" || studentSection === "live") && (
+            <button
+              type="button"
+              className="student-icon-button"
+              aria-label="Voltar ao Feed"
+              onClick={() => goToSection("feed")}
+            >
+              <ChevronLeft size={22} strokeWidth={2.2} />
+            </button>
+          )}
           {(studentSection === "feed" || studentSection === "home") && (
             <>
               <button
@@ -2423,7 +2444,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               </button>
             </>
           )}
-          {studentSection !== "feed" && studentSection !== "home" && (
+          {!isFeedFamilySection && (
           <button className="student-streak-button" aria-label={`Ofensiva de ${currentStreak} dias`} onClick={() => {
             uiSounds.popupOpen();
             setStreakCalendarOpen(true);
@@ -2459,7 +2480,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               </button>
             </div>
           )}
-          {studentSection !== "feed" && studentSection !== "home" && (
+          {!isFeedFamilySection && (
           <div className="student-notification-wrap">
             <button className="student-icon-button" aria-label="Notificações" onClick={() => setNotificationsOpen((open) => {
               if (open) uiSounds.popupClose();
@@ -5008,7 +5029,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       )}
       {!hideStudentChrome && (
       <nav className="student-bottom-nav" aria-label={brand.navAria}>
-        <button className={studentSection === "feed" || studentSection === "home" ? "active" : ""} onClick={() => goToSection("feed")}><Home size={22} />Feed</button>
+        <button className={isFeedFamilySection ? "active" : ""} onClick={() => goToSection("feed")}><Home size={22} />Feed</button>
         <button className={studentSection === "activity" ? "active" : ""} onClick={() => openCorrida()}><CorridaNavIcon size={22} />Corrida</button>
         <button className={studentSection === "training" || studentSection === "player" || studentSection === "history" ? "active" : ""} onClick={() => openTrainingCatalog()}><Dumbbell size={22} />Treino</button>
         <button className={studentSection === "club" ? "active" : ""} onClick={() => goToSection("club")}><Trophy size={22} />Desafios</button>

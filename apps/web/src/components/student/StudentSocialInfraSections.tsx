@@ -711,14 +711,23 @@ export function StudentLiveSection({
     }
   }
 
+  async function deleteSavedLive(liveId: string) {
+    setError(null);
+    try {
+      await apiDelete(`/student/social/live/${liveId}/save`, token);
+      setSavedByMe((current) => (activeId === liveId ? false : current));
+      setLives((current) => current.map((row) => (row.id === liveId ? { ...row, savedByMe: false } : row)));
+      setSavedLives((current) => current.filter((row) => row.id !== liveId));
+    } catch (err) {
+      setError(readErrorMessage(err, "Não foi possível excluir a live salva."));
+    }
+  }
+
   async function toggleSaveLive(liveId: string, currentlySaved: boolean) {
     setError(null);
     try {
       if (currentlySaved) {
-        await apiDelete(`/student/social/live/${liveId}/save`, token);
-        setSavedByMe(false);
-        setLives((current) => current.map((row) => (row.id === liveId ? { ...row, savedByMe: false } : row)));
-        setSavedLives((current) => current.filter((row) => row.id !== liveId));
+        await deleteSavedLive(liveId);
       } else {
         await apiPost(`/student/social/live/${liveId}/save`, {}, token);
         setSavedByMe(true);
@@ -1039,7 +1048,7 @@ export function StudentLiveSection({
         <h3>Lives salvas</h3>
         {!loadingList ? <span>{savedLives.length}</span> : null}
       </div>
-      <div className="student-live-list">
+      <div className="student-live-saved-grid">
         {loadingList ? (
           <p className="student-activity-hint student-live-loading">
             <Loader2 size={14} className="is-spinning" /> Carregando salvas…
@@ -1051,33 +1060,39 @@ export function StudentLiveSection({
           </div>
         ) : (
           savedLives.map((live) => (
-            <div key={`saved-${live.id}`} className="student-live-row-wrap">
+            <article key={`saved-${live.id}`} className={`student-live-saved-tile${live.status === "live" ? " is-live" : ""}`}>
               <button
                 type="button"
-                className="student-live-row"
+                className="student-live-saved-main"
                 disabled={busy || live.status !== "live"}
                 onClick={() => {
                   if (live.status === "live") void joinLive(live.id);
                 }}
               >
-                <div>
-                  <strong>{live.title}</strong>
-                  <small>
-                    {live.host.name}
-                    {live.status === "live" ? " · no ar — toque para assistir" : " · encerrada"}
-                  </small>
-                </div>
-                {live.status === "live" ? <span className="student-live-badge is-compact">LIVE</span> : <span className="student-live-ended-chip">Salva</span>}
+                <span className="student-live-saved-avatar" aria-hidden>
+                  {live.host.avatarUrl ? (
+                    <img src={mediaUrl(live.host.avatarUrl)} alt="" />
+                  ) : (
+                    live.host.name.slice(0, 1)
+                  )}
+                </span>
+                {live.status === "live" ? (
+                  <span className="student-live-badge is-compact">LIVE</span>
+                ) : (
+                  <span className="student-live-ended-chip">Salva</span>
+                )}
+                <strong>{live.title}</strong>
+                <small>{live.host.name}</small>
               </button>
               <button
                 type="button"
-                className="student-live-save-btn is-on"
-                aria-label="Remover live salva"
-                onClick={() => void toggleSaveLive(live.id, true)}
+                className="student-live-saved-delete"
+                aria-label={`Excluir live salva ${live.title}`}
+                onClick={() => void deleteSavedLive(live.id)}
               >
-                <Trash2 size={16} />
+                <Trash2 size={14} />
               </button>
-            </div>
+            </article>
           ))
         )}
       </div>

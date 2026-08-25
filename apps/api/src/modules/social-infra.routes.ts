@@ -50,6 +50,52 @@ async function blockedIds(userId: string) {
   return set;
 }
 
+/** Publica (ou reutiliza) um card de live no feed do autor. */
+async function publishLiveFeedPost(params: {
+  authorId: string;
+  liveId: string;
+  title: string;
+  hostName: string;
+  isHost: boolean;
+}) {
+  const existing = await prisma.socialPost.findFirst({
+    where: {
+      authorId: params.authorId,
+      mediaType: "LIVE",
+      mediaUrl: params.liveId,
+      hidden: false
+    },
+    select: { id: true }
+  });
+  if (existing) return existing;
+
+  const body = params.isHost
+    ? `Ao vivo agora: ${params.title}`
+    : `Live salva · ${params.hostName}: ${params.title}`;
+
+  return prisma.socialPost.create({
+    data: {
+      authorId: params.authorId,
+      kind: "TEXT",
+      body,
+      mediaUrl: params.liveId,
+      mediaType: "LIVE"
+    }
+  });
+}
+
+async function hideLiveFeedPostsForUser(userId: string, liveId: string) {
+  await prisma.socialPost.updateMany({
+    where: {
+      authorId: userId,
+      mediaType: "LIVE",
+      mediaUrl: liveId,
+      hidden: false
+    },
+    data: { hidden: true }
+  });
+}
+
 export async function registerSocialInfraRoutes(app: FastifyInstance) {
   app.get("/student/social/reels", async (request) => {
     requireDatabase();
@@ -357,6 +403,23 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
     });
 
     try {
+      await prisma.socialLiveSave.upsert({
+        where: { liveId_userId: { liveId: live.id, userId: user.id } },
+        create: { liveId: live.id, userId: user.id },
+        update: {}
+      });
+      await publishLiveFeedPost({
+        authorId: user.id,
+        liveId: live.id,
+        title: live.title,
+        hostName: user.name,
+        isHost: true
+      });
+    } catch {
+      // Save/feed publish must not block going on air.
+    }
+
+    try {
       const followers = await prisma.socialFollow.findMany({
         where: { followingId: user.id },
         select: { followerId: true }
@@ -475,7 +538,15 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
     requireDatabase();
     const user = await requireAuth(app, request);
     const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
-    const live = await prisma.socialLiveSession.findUnique({ where: { id }, select: { id: true } });
+    const live = await prisma.socialLiveSession.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        title: true,
+        hostId: true,
+        host: { select: { name: true } }
+      }
+    });
     if (!live) throw httpError(404, "Live não encontrada.");
     try {
       await prisma.socialLiveSave.upsert({
@@ -483,10 +554,17 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
         create: { liveId: id, userId: user.id },
         update: {}
       });
+      await publishLiveFeedPost({
+        authorId: user.id,
+        liveId: live.id,
+        title: live.title,
+        hostName: live.host.name,
+        isHost: live.hostId === user.id
+      });
     } catch {
       throw httpError(503, "Salvar live indisponível no momento. Tente de novo em instantes.");
     }
-    return { saved: true };
+    return { saved: true, published: true };
   });
 
   app.delete("/student/social/live/:id/save", async (request) => {
@@ -494,6 +572,11 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
     const user = await requireAuth(app, request);
     const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
     await prisma.socialLiveSave.deleteMany({ where: { liveId: id, userId: user.id } });
+    try {
+      await hideLiveFeedPostsForUser(user.id, id);
+    } catch {
+      // Removing the save is enough if feed cleanup fails.
+    }
     return { saved: false };
   });
 
@@ -501,11 +584,31 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
     requireDatabase();
     const user = await requireAuth(app, request);
     const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
-    const updated = await prisma.socialLiveSession.updateMany({
+    const live = await prisma.socialLiveSession.findFirst({
+      where: { id, hostId: user.id, status: "live" },
+      select: { id: true, title: true, host: { select: { name: true } } }
+    });
+    if (!live) throw httpError(404, "Live não encontrada.");
+    await prisma.socialLiveSession.updateMany({
       where: { id, hostId: user.id, status: "live" },
       data: { status: "ended", endedAt: new Date() }
     });
-    if (!updated.count) throw httpError(404, "Live não encontrada.");
+    try {
+      await prisma.socialLiveSave.upsert({
+        where: { liveId_userId: { liveId: id, userId: user.id } },
+        create: { liveId: id, userId: user.id },
+        update: {}
+      });
+      await publishLiveFeedPost({
+        authorId: user.id,
+        liveId: live.id,
+        title: live.title,
+        hostName: live.host.name,
+        isHost: true
+      });
+    } catch {
+      // Ending must succeed even if save/publish fails.
+    }
     return { ok: true };
   });
 

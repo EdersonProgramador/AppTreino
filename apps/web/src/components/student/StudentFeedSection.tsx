@@ -789,7 +789,7 @@ export function StudentFeedSection({
         {posts.map((post) => {
           const items = (post.mediaItems?.length
             ? post.mediaItems
-            : post.mediaUrl
+            : post.mediaUrl && post.mediaType !== "LIVE"
               ? [{ url: post.mediaUrl, type: post.mediaType === "VIDEO" ? "VIDEO" : "IMAGE" }]
               : []) as MediaItem[];
           return (
@@ -873,9 +873,26 @@ export function StudentFeedSection({
                   )}
                 </div>
               </header>
-              {post.body && <p>{renderPostBody(post.body)}</p>}
+              {post.body && post.mediaType !== "LIVE" && <p>{renderPostBody(post.body)}</p>}
               {post.kind === "ACTIVITY" && <ActivityMiniMap post={post} />}
-              <MediaCarousel items={items} />
+              {post.mediaType === "LIVE" && post.mediaUrl ? (
+                <button
+                  type="button"
+                  className="student-feed-live-card"
+                  onClick={() => {
+                    if (onOpenLive) onOpenLive(post.mediaUrl!);
+                    else onNavigate?.("live");
+                  }}
+                >
+                  <span className="student-live-badge">AO VIVO</span>
+                  <strong>
+                    {post.body?.replace(/^Ao vivo agora:\s*/i, "").replace(/^Live salva · [^:]+:\s*/i, "") || "Entrar na live"}
+                  </strong>
+                  <small>Toque para assistir · também fica em Lives salvas</small>
+                </button>
+              ) : (
+                <MediaCarousel items={items} />
+              )}
               <footer>
                 <button type="button" className={post.likedByMe ? "is-on" : ""} onClick={() => void toggleLike(post.id)} aria-label="Curtir">
                   <ThumbsUp size={18} fill={post.likedByMe ? "currentColor" : "none"} /> {post.likesCount}
