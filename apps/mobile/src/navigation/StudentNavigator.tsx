@@ -64,10 +64,18 @@ function FeedStackScreen() {
   return (
     <FeedStack.Navigator screenOptions={stackOptions(st.bg)}>
       <FeedStack.Screen name="Feed" component={FeedScreen} />
-      <FeedStack.Screen name="Reels" component={ReelsScreen} />
-      <FeedStack.Screen name="Live" component={LiveScreen} />
-      <FeedStack.Screen name="LiveRoom" component={LiveRoomScreen} options={{ presentation: "fullScreenModal" }} />
-      <FeedStack.Screen name="Messages" component={MessagesScreen} />
+      <FeedStack.Screen
+        name="Reels"
+        component={ReelsScreen}
+        options={{ animation: "slide_from_bottom", contentStyle: { backgroundColor: "#000" } }}
+      />
+      <FeedStack.Screen name="Live" component={LiveScreen} options={{ animation: "slide_from_right" }} />
+      <FeedStack.Screen
+        name="LiveRoom"
+        component={LiveRoomScreen}
+        options={{ presentation: "fullScreenModal", animation: "fade" }}
+      />
+      <FeedStack.Screen name="Messages" component={MessagesScreen} options={{ animation: "slide_from_right" }} />
       <FeedStack.Screen name="DirectMessage" component={DirectMessageScreen} />
       <FeedStack.Screen name="Chat" component={ChatScreen} />
       <FeedStack.Screen name="Requests" component={RequestsScreen} />

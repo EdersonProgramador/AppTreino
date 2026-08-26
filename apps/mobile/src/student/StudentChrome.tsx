@@ -20,11 +20,23 @@ import { mediaUrl } from "../lib/media";
 import type { MenuStackParamList, StudentTabParamList } from "../navigation/types";
 import { formatDateTime } from "../theme";
 import { useStudent } from "./StudentContext";
-import { feedChrome, requestFeedSearch } from "./feedChrome";
+import { feedChrome, requestFeedCreate, requestFeedSearch } from "./feedChrome";
 import { RunnerIcon } from "./RunnerIcon";
 import { moduleOn, studentCodeFromName, useSt, type StudentTokens } from "./theme";
 import { navigateStudentTarget } from "./navigate";
 import { uiSounds } from "./uiSounds";
+
+function feedStackScreenName(state: {
+  index: number;
+  routes: Array<{ name: string; state?: { index: number; routes: Array<{ name: string }> } }>;
+} | undefined): string | null {
+  if (!state) return null;
+  const tab = state.routes[state.index];
+  if (!tab || tab.name !== "FeedTab") return null;
+  const stack = tab.state;
+  if (!stack?.routes?.length) return "Feed";
+  return stack.routes[stack.index]?.name ?? "Feed";
+}
 
 const MONTHS = [
   "janeiro",
@@ -88,6 +100,21 @@ export function StudentChrome({ play = false }: { play?: boolean }) {
     const route = state?.routes[state.index];
     return route?.name === "FeedTab";
   });
+  const feedScreen = useNavigationState((state) => feedStackScreenName(state as Parameters<typeof feedStackScreenName>[0]));
+  const onFeedRoot = onFeedTab && (feedScreen === "Feed" || !feedScreen);
+
+  function goFeedThen(open: "create" | "search") {
+    setNotesOpen(false);
+    setSocialMenuOpen(false);
+    if (onFeedRoot) {
+      if (open === "create") feedChrome()?.toggleCreate();
+      else requestFeedSearch();
+      return;
+    }
+    navigation.navigate("FeedTab", { screen: "Feed" });
+    if (open === "create") requestFeedCreate();
+    else requestFeedSearch();
+  }
 
   const monthPrefix = `${month.year}-${String(month.month).padStart(2, "0")}-`;
   const daysInMonth = new Date(month.year, month.month, 0).getDate();
@@ -145,7 +172,7 @@ export function StudentChrome({ play = false }: { play?: boolean }) {
                 <Pressable
                   onPress={() => {
                     uiSounds.popupOpen();
-                    feedChrome()?.toggleCreate();
+                    goFeedThen("create");
                   }}
                   style={styles.iconBtn}
                   accessibilityLabel="Criar"
@@ -155,7 +182,7 @@ export function StudentChrome({ play = false }: { play?: boolean }) {
                 <Pressable
                   onPress={() => {
                     uiSounds.popupOpen();
-                    requestFeedSearch();
+                    goFeedThen("search");
                   }}
                   style={styles.iconBtn}
                   accessibilityLabel="Pesquisar no Feed"

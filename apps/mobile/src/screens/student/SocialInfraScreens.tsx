@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Dimensions,
   FlatList,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
   type ViewToken
 } from "react-native";
@@ -15,10 +15,11 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { io, type Socket } from "socket.io-client";
 import * as ImagePicker from "expo-image-picker";
 import { ResizeMode, Video } from "expo-av";
-import { apiGet, apiPost, apiUploadFile } from "../../auth/api";
+import { apiDelete, apiGet, apiPost, apiUploadFile } from "../../auth/api";
 import { API_URL } from "../../config";
 import { mediaUrl } from "../../lib/media";
 import { EmptyState, GreenButton, StudentPage } from "../../student/layout";
+import { useHideTabBar } from "../../student/useHideTabBar";
 import { useStudent } from "../../student/StudentContext";
 import { useSt, type StudentTokens } from "../../student/theme";
 import type { SocialAuthor } from "../../types";
@@ -42,57 +43,87 @@ type ReelRow = {
   author: SocialAuthor;
   likesCount: number;
   likedByMe: boolean;
+  isMine?: boolean;
 };
-
-const REEL_HEIGHT = Dimensions.get("window").height;
 
 function ReelSlide({
   reel,
   active,
-  onLike
+  height,
+  onLike,
+  onDelete
 }: {
   reel: ReelRow;
   active: boolean;
+  height: number;
   onLike: () => void;
+  onDelete?: () => void;
 }) {
   const videoRef = useRef<Video>(null);
+  const [muted, setMuted] = useState(true);
+  const [paused, setPaused] = useState(false);
   const uri = mediaUrl(reel.videoUrl);
+  const poster = reel.coverUrl ? mediaUrl(reel.coverUrl) : undefined;
 
   useEffect(() => {
     if (!videoRef.current) return;
-    if (active) void videoRef.current.playAsync().catch(() => undefined);
+    if (active && !paused) void videoRef.current.playAsync().catch(() => undefined);
     else void videoRef.current.pauseAsync().catch(() => undefined);
+  }, [active, paused]);
+
+  useEffect(() => {
+    if (!active) {
+      setPaused(false);
+      setMuted(true);
+    }
   }, [active]);
 
   return (
-    <View style={reelStyles.slide}>
+    <View style={[reelStyles.slide, { height }]}>
       {uri ? (
-        <Video
-          ref={videoRef}
-          source={{ uri }}
+        <Pressable
           style={StyleSheet.absoluteFill}
-          resizeMode={ResizeMode.COVER}
-          shouldPlay={active}
-          isLooping
-          isMuted={false}
-        />
+          onPress={() => setPaused((value) => !value)}
+        >
+          <Video
+            ref={videoRef}
+            source={{ uri }}
+            posterSource={poster ? { uri: poster } : undefined}
+            style={StyleSheet.absoluteFill}
+            resizeMode={ResizeMode.COVER}
+            shouldPlay={active && !paused}
+            isLooping
+            isMuted={muted}
+          />
+        </Pressable>
       ) : (
         <View style={[StyleSheet.absoluteFill, reelStyles.fallback]} />
       )}
       <View style={reelStyles.overlay}>
         <Text style={reelStyles.author}>{reel.author.name}</Text>
         {reel.caption ? <Text style={reelStyles.caption}>{reel.caption}</Text> : null}
+        <Text style={reelStyles.hint}>{paused ? "Tocar para continuar" : "Tocar para pausar"}</Text>
       </View>
-      <Pressable style={reelStyles.likeBtn} onPress={onLike}>
-        <Ionicons name={reel.likedByMe ? "heart" : "heart-outline"} size={30} color={reel.likedByMe ? "#df663c" : "#fff"} />
-        <Text style={reelStyles.likeCount}>{reel.likesCount}</Text>
-      </Pressable>
+      <View style={reelStyles.actions}>
+        <Pressable style={reelStyles.actionBtn} onPress={onLike}>
+          <Ionicons name={reel.likedByMe ? "heart" : "heart-outline"} size={30} color={reel.likedByMe ? "#df663c" : "#fff"} />
+          <Text style={reelStyles.likeCount}>{reel.likesCount}</Text>
+        </Pressable>
+        <Pressable style={reelStyles.actionBtn} onPress={() => setMuted((value) => !value)}>
+          <Ionicons name={muted ? "volume-mute" : "volume-high"} size={26} color="#fff" />
+        </Pressable>
+        {onDelete ? (
+          <Pressable style={reelStyles.actionBtn} onPress={onDelete}>
+            <Ionicons name="trash-outline" size={24} color="#fff" />
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
 
 const reelStyles = StyleSheet.create({
-  slide: { height: REEL_HEIGHT, width: "100%", backgroundColor: "#000" },
+  slide: { width: "100%", backgroundColor: "#000" },
   fallback: { backgroundColor: "#111" },
   overlay: {
     position: "absolute",
@@ -103,7 +134,9 @@ const reelStyles = StyleSheet.create({
   },
   author: { color: "#fff", fontWeight: "800", fontSize: 16 },
   caption: { color: "rgba(255,255,255,0.9)", fontSize: 14, lineHeight: 20 },
-  likeBtn: { position: "absolute", right: 16, bottom: 120, alignItems: "center", gap: 4 },
+  hint: { color: "rgba(255,255,255,0.55)", fontSize: 12, fontWeight: "600" },
+  actions: { position: "absolute", right: 12, bottom: 100, alignItems: "center", gap: 18 },
+  actionBtn: { alignItems: "center", gap: 4 },
   likeCount: { color: "#fff", fontWeight: "800" }
 });
 
@@ -112,9 +145,13 @@ export function ReelsScreen() {
   const { st } = useSt();
   const styles = useMemo(() => createStyles(st), [st]);
   const navigation = useNavigation<Nav>();
+  const { height: windowHeight } = useWindowDimensions();
+  const [pageHeight, setPageHeight] = useState(windowHeight);
   const [reels, setReels] = useState<ReelRow[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  useHideTabBar(true);
+  const slideHeight = pageHeight || windowHeight;
 
   const load = useCallback(async () => {
     const data = await apiGet<{ reels: ReelRow[] }>("/student/social/reels", session.token);
@@ -134,7 +171,10 @@ export function ReelsScreen() {
   }).current;
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#000" }}>
+    <View
+      style={{ flex: 1, backgroundColor: "#000" }}
+      onLayout={(event) => setPageHeight(event.nativeEvent.layout.height)}
+    >
       <View style={styles.reelsTop}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={10}>
           <Ionicons name="chevron-back" size={24} color="#fff" />
@@ -143,7 +183,11 @@ export function ReelsScreen() {
         <Pressable
           disabled={busy}
           onPress={async () => {
-            const pick = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["videos"], quality: 0.8, videoMaxDuration: 60 });
+            const pick = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ["videos"],
+              quality: 0.8,
+              videoMaxDuration: 60
+            });
             if (pick.canceled || !pick.assets[0]) return;
             setBusy(true);
             try {
@@ -153,7 +197,11 @@ export function ReelsScreen() {
                 session.token,
                 "reel.mp4"
               );
-              await apiPost("/student/social/reels", { videoUrl: uploaded.file.url, caption: "" }, session.token);
+              await apiPost(
+                "/student/social/reels",
+                { videoUrl: uploaded.file.url, caption: "" },
+                session.token
+              );
               await load();
             } finally {
               setBusy(false);
@@ -166,7 +214,7 @@ export function ReelsScreen() {
 
       {reels.length === 0 ? (
         <View style={styles.reelsEmpty}>
-          <EmptyState icon="film-outline" title="Sem clipes" text="Publique um vídeo vertical." />
+          <EmptyState icon="film-outline" title="Sem clipes" text="Publique um vídeo vertical. Ele também aparece no Feed." />
         </View>
       ) : (
         <FlatList
@@ -175,19 +223,24 @@ export function ReelsScreen() {
           pagingEnabled
           showsVerticalScrollIndicator={false}
           decelerationRate="fast"
-          snapToInterval={REEL_HEIGHT}
+          snapToInterval={slideHeight}
           snapToAlignment="start"
           disableIntervalMomentum
-          getItemLayout={(_, index) => ({ length: REEL_HEIGHT, offset: REEL_HEIGHT * index, index })}
+          getItemLayout={(_, index) => ({ length: slideHeight, offset: slideHeight * index, index })}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={{ itemVisiblePercentThreshold: 70 }}
           renderItem={({ item }) => (
             <ReelSlide
               reel={item}
               active={item.id === activeId}
+              height={slideHeight}
               onLike={() => {
                 void (async () => {
-                  const result = await apiPost<{ liked: boolean }>(`/student/social/reels/${item.id}/like`, {}, session.token);
+                  const result = await apiPost<{ liked: boolean }>(
+                    `/student/social/reels/${item.id}/like`,
+                    {},
+                    session.token
+                  );
                   setReels((current) =>
                     current.map((row) =>
                       row.id === item.id
@@ -201,6 +254,16 @@ export function ReelsScreen() {
                   );
                 })();
               }}
+              onDelete={
+                item.isMine !== false
+                  ? () => {
+                      void (async () => {
+                        await apiDelete(`/student/social/reels/${item.id}`, session.token);
+                        setReels((current) => current.filter((row) => row.id !== item.id));
+                      })();
+                    }
+                  : undefined
+              }
             />
           )}
         />
@@ -215,16 +278,24 @@ export function LiveScreen() {
   const styles = useMemo(() => createStyles(st), [st]);
   const navigation = useNavigation<Nav>();
   const [lives, setLives] = useState<Array<{ id: string; title: string; host: SocialAuthor; isMine: boolean }>>([]);
+  const [saved, setSaved] = useState<
+    Array<{ id: string; title: string; videoUrl?: string | null; coverUrl?: string | null; host: SocialAuthor }>
+  >([]);
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [replayUrl, setReplayUrl] = useState<string | null>(null);
 
   async function loadLives() {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiGet<{ lives: typeof lives }>("/student/social/live", session.token);
-      setLives(data.lives);
+      const [liveRes, savedRes] = await Promise.all([
+        apiGet<{ lives: typeof lives }>("/student/social/live", session.token),
+        apiGet<{ lives: typeof saved }>("/student/social/live/saved", session.token).catch(() => ({ lives: [] as typeof saved }))
+      ]);
+      setLives(liveRes.lives);
+      setSaved(savedRes.lives);
     } catch (err) {
       setLives([]);
       setError(err instanceof Error ? err.message : "Não foi possível listar lives.");
@@ -275,7 +346,13 @@ export function LiveScreen() {
           <Pressable
             key={live.id}
             style={styles.card}
-            onPress={() => navigation.navigate("LiveRoom", { mode: live.isMine ? "host" : "viewer", liveId: live.id, title: live.title })}
+            onPress={() =>
+              navigation.navigate("LiveRoom", {
+                mode: live.isMine ? "host" : "viewer",
+                liveId: live.id,
+                title: live.title
+              })
+            }
           >
             <Text style={styles.name}>{live.title}</Text>
             <Text style={styles.meta}>
@@ -285,6 +362,56 @@ export function LiveScreen() {
           </Pressable>
         ))
       )}
+
+      <Text style={[styles.title, { marginTop: 18, fontSize: 18 }]}>Lives salvas</Text>
+      {saved.length === 0 ? (
+        <Text style={styles.meta}>Nenhuma live salva ainda.</Text>
+      ) : (
+        saved.map((live) => {
+          const stillLive = lives.some((row) => row.id === live.id);
+          const video = live.videoUrl ? mediaUrl(live.videoUrl) : undefined;
+          return (
+            <Pressable
+              key={`saved-${live.id}`}
+              style={styles.card}
+              onPress={() => {
+                if (stillLive) {
+                  navigation.navigate("LiveRoom", {
+                    mode: "viewer",
+                    liveId: live.id,
+                    title: live.title
+                  });
+                  return;
+                }
+                if (video) setReplayUrl(video);
+              }}
+            >
+              <Text style={styles.name}>{live.title}</Text>
+              <Text style={styles.meta}>
+                {live.host.name} · {stillLive ? "ainda no ar" : video ? "replay" : "sem vídeo"}
+              </Text>
+            </Pressable>
+          );
+        })
+      )}
+
+      {replayUrl ? (
+        <View style={styles.replayBox}>
+          <View style={styles.replayHead}>
+            <Text style={styles.name}>Replay</Text>
+            <Pressable onPress={() => setReplayUrl(null)} hitSlop={8}>
+              <Ionicons name="close" size={20} color={st.muted} />
+            </Pressable>
+          </View>
+          <Video
+            source={{ uri: replayUrl }}
+            style={styles.replayVideo}
+            resizeMode={ResizeMode.CONTAIN}
+            useNativeControls
+            shouldPlay
+          />
+        </View>
+      ) : null}
     </StudentPage>
   );
 }
@@ -495,6 +622,24 @@ function createStyles(st: StudentTokens) {
       justifyContent: "space-between"
     },
     reelsTitle: { color: "#fff", fontWeight: "800", fontSize: 18 },
-    reelsEmpty: { flex: 1, justifyContent: "center", padding: 24, backgroundColor: st.bg }
+    reelsEmpty: { flex: 1, justifyContent: "center", padding: 24, backgroundColor: st.bg },
+    replayBox: {
+      marginTop: 12,
+      marginBottom: 20,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: st.line,
+      backgroundColor: "#000",
+      overflow: "hidden"
+    },
+    replayHead: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      backgroundColor: st.card
+    },
+    replayVideo: { width: "100%", aspectRatio: 9 / 16, maxHeight: 420, backgroundColor: "#000" }
   });
 }

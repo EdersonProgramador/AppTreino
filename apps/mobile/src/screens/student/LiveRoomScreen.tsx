@@ -6,6 +6,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { WebView } from "react-native-webview";
 import { API_URL, WEB_URL } from "../../config";
 import { useStudent } from "../../student/StudentContext";
+import { useHideTabBar } from "../../student/useHideTabBar";
 import type { FeedStackParamList } from "../../navigation/types";
 
 type Nav = NativeStackNavigationProp<FeedStackParamList>;
@@ -16,6 +17,7 @@ export function LiveRoomScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   const { mode, liveId, title } = route.params;
+  useHideTabBar(true);
 
   const uri = useMemo(() => {
     const qs = new URLSearchParams({

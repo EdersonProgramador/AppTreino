@@ -145,7 +145,16 @@ export function StoryViewerModal({
   useEffect(() => {
     clearTimer();
     stopProgress();
-    if (!visible || !item || archiveMode) return;
+    if (!visible || !item) return;
+
+    if (archiveMode) {
+      if (isVideo && !paused) {
+        void videoRef.current?.playAsync().catch(() => undefined);
+      } else if (isVideo && paused) {
+        void videoRef.current?.pauseAsync().catch(() => undefined);
+      }
+      return;
+    }
 
     if (paused) {
       void videoRef.current?.pauseAsync().catch(() => undefined);
@@ -195,7 +204,8 @@ export function StoryViewerModal({
   }
 
   function onPlaybackStatus(status: AVPlaybackStatus) {
-    if (!status.isLoaded || archiveMode || !isVideo) return;
+    if (!status.isLoaded || !isVideo) return;
+    if (archiveMode) return;
     if (typeof status.durationMillis === "number" && status.durationMillis > 0) {
       const ms = Math.min(Math.max(status.durationMillis, 100), STORY_VIDEO_MAX_MS);
       if (Math.abs(ms - slideDurationMs) > 250) setSlideDurationMs(ms);
@@ -265,9 +275,10 @@ export function StoryViewerModal({
               posterSource={poster ? { uri: poster } : undefined}
               style={styles.media}
               resizeMode={ResizeMode.CONTAIN}
-              shouldPlay={!paused && !archiveMode}
+              shouldPlay={!paused}
               isLooping={archiveMode}
-              isMuted
+              isMuted={!archiveMode}
+              useNativeControls={archiveMode}
               onPlaybackStatusUpdate={onPlaybackStatus}
             />
           ) : uri ? (

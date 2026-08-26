@@ -456,7 +456,7 @@ export type SocialPostRow = {
   body?: string | null;
   mediaUrl?: string | null;
   mediaType?: string | null;
-  mediaItems?: Array<{ url: string; type: string }>;
+  mediaItems?: Array<{ url: string; type: string; coverUrl?: string | null }>;
   createdAt: string;
   author: SocialAuthor;
   likesCount: number;

@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as ImagePicker from "expo-image-picker";
+import { ResizeMode, Video } from "expo-av";
 import { apiDelete, apiGet, apiPost, apiUploadFile } from "../../auth/api";
 import { mediaUrl } from "../../lib/media";
 import { EmptyState, GreenButton, StudentPage } from "../../student/layout";
@@ -30,12 +31,67 @@ import type { SocialAuthor, SocialPostRow, SocialStoryGalleryItem, SocialStoryRa
 import { galleryItemsToRail, StoryViewerModal } from "./StoryViewerModal";
 
 type FeedMode = "for-you" | "following";
-type MediaItem = { url: string; type: "IMAGE" | "VIDEO"; localUri?: string };
+type MediaItem = { url: string; type: "IMAGE" | "VIDEO"; coverUrl?: string | null; localUri?: string };
 type CreatePanel = "post" | "story" | "note" | null;
 type FeedNav = NativeStackNavigationProp<FeedStackParamList>;
+type ActiveLiveRail = {
+  id: string;
+  title: string;
+  host: { id: string; name: string; avatarUrl?: string | null };
+  isMine: boolean;
+};
 
 const MAX_MEDIA = 10;
 const CAROUSEL_WIDTH = Dimensions.get("window").width - 32 - 28;
+
+function liveIdFromPost(post: { mediaType?: string | null; mediaUrl?: string | null; body?: string | null }) {
+  const tagged = post.body?.match(/\[\[LIVE:([^\]]+)\]\]/);
+  if (tagged?.[1]) return tagged[1];
+  if (post.mediaType === "LIVE" && post.mediaUrl) return post.mediaUrl;
+  if (post.mediaUrl && !/[./]/.test(post.mediaUrl.replace(/^\//, "")) && post.mediaType !== "VIDEO") {
+    return post.mediaUrl.replace(/^\//, "");
+  }
+  return null;
+}
+
+function PostMediaSlide({
+  item,
+  styles,
+  active
+}: {
+  item: MediaItem;
+  styles: ReturnType<typeof createStyles>;
+  active: boolean;
+}) {
+  const uri = mediaUrl(item.url);
+  const poster = item.coverUrl ? mediaUrl(item.coverUrl) : undefined;
+
+  if (item.type === "VIDEO") {
+    if (!uri) {
+      return (
+        <View style={[styles.media, styles.mediaVideo]}>
+          <Ionicons name="play-circle" size={42} color="#fff" />
+          <Text style={styles.mediaVideoLabel}>Vídeo indisponível</Text>
+        </View>
+      );
+    }
+    return (
+      <Video
+        key={uri}
+        source={{ uri }}
+        posterSource={poster ? { uri: poster } : undefined}
+        style={styles.media}
+        resizeMode={ResizeMode.COVER}
+        useNativeControls
+        shouldPlay={false}
+        isLooping={false}
+        isMuted={!active}
+      />
+    );
+  }
+
+  return uri ? <Image source={{ uri }} style={styles.media} resizeMode="cover" /> : <View style={styles.media} />;
+}
 
 function PostMediaCarousel({
   items,
@@ -47,15 +103,7 @@ function PostMediaCarousel({
   const [index, setIndex] = useState(0);
   if (!items.length) return null;
   if (items.length === 1) {
-    const item = items[0];
-    return item.type === "VIDEO" ? (
-      <View style={[styles.media, styles.mediaVideo]}>
-        <Ionicons name="play-circle" size={42} color="#fff" />
-        <Text style={styles.mediaVideoLabel}>Vídeo</Text>
-      </View>
-    ) : (
-      <Image source={{ uri: mediaUrl(item.url) }} style={styles.media} resizeMode="cover" />
-    );
+    return <PostMediaSlide item={items[0]} styles={styles} active />;
   }
 
   return (
@@ -71,14 +119,7 @@ function PostMediaCarousel({
       >
         {items.map((item, itemIndex) => (
           <View key={`${item.url}-${itemIndex}`} style={{ width: CAROUSEL_WIDTH }}>
-            {item.type === "VIDEO" ? (
-              <View style={[styles.media, styles.mediaVideo]}>
-                <Ionicons name="play-circle" size={42} color="#fff" />
-                <Text style={styles.mediaVideoLabel}>Vídeo</Text>
-              </View>
-            ) : (
-              <Image source={{ uri: mediaUrl(item.url) }} style={styles.media} resizeMode="cover" />
-            )}
+            <PostMediaSlide item={item} styles={styles} active={itemIndex === index} />
           </View>
         ))}
       </ScrollView>
@@ -124,10 +165,20 @@ export function FeedScreen() {
   const [galleryViewerIndex, setGalleryViewerIndex] = useState<number | null>(null);
   const [reportPostId, setReportPostId] = useState<string | null>(null);
   const [reportReason, setReportReason] = useState("");
+  const [activeLives, setActiveLives] = useState<ActiveLiveRail[]>([]);
 
   const loadStories = useCallback(async () => {
     const data = await apiGet<{ rails: SocialStoryRail[] }>("/student/social/stories", session.token);
     setRails(data.rails);
+  }, [session.token]);
+
+  const loadActiveLives = useCallback(async () => {
+    try {
+      const data = await apiGet<{ lives: ActiveLiveRail[] }>("/student/social/live", session.token);
+      setActiveLives(data.lives);
+    } catch {
+      setActiveLives([]);
+    }
   }, [session.token]);
 
   const loadGallery = useCallback(async () => {
@@ -176,22 +227,38 @@ export function FeedScreen() {
   );
 
   useEffect(() => {
-    void Promise.all([load(), loadStories()]);
-  }, [load, loadStories]);
+    void Promise.all([load(), loadStories(), loadActiveLives()]);
+  }, [load, loadStories, loadActiveLives]);
 
   useEffect(() => {
+    const openCreate = () => {
+      setSearchOpen(false);
+      setCreateMenuOpen(true);
+    };
+    const openSearch = () => {
+      setCreateMenuOpen(false);
+      setSearchOpen(true);
+    };
     bindFeedChrome({
       toggleCreate: () => {
         setSearchOpen(false);
         setCreateMenuOpen((open) => !open);
       },
+      openCreate,
       toggleSearch: () => {
         setCreateMenuOpen(false);
         setSearchOpen((open) => !open);
-      }
+      },
+      openSearch
     });
     return () => bindFeedChrome(null);
   }, []);
+
+  const liveHostIds = useMemo(() => new Set(activeLives.map((live) => live.host.id)), [activeLives]);
+  const storyRailsVisible = useMemo(
+    () => rails.filter((rail) => !liveHostIds.has(rail.userId) || rail.isMine),
+    [liveHostIds, rails]
+  );
 
   async function pickMedia(forStory = false) {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -364,12 +431,25 @@ export function FeedScreen() {
   const suggestions = people.filter((person) => !person.following).slice(0, 8);
 
   return (
-    <StudentPage refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void Promise.all([load(), loadStories()])} tintColor={st.gold} />}>
+    <StudentPage
+      refreshControl={
+        <RefreshControl
+          refreshing={loading}
+          onRefresh={() => void Promise.all([load(), loadStories(), loadActiveLives()])}
+          tintColor={st.gold}
+        />
+      }
+    >
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <View style={styles.toolbar}>
-        {createMenuOpen ? (
-          <View style={styles.createMenu}>
+      <Modal
+        visible={createMenuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCreateMenuOpen(false)}
+      >
+        <Pressable style={styles.createMenuBackdrop} onPress={() => setCreateMenuOpen(false)}>
+          <Pressable style={styles.createMenu} onPress={() => undefined}>
             <Pressable
               style={styles.createItem}
               onPress={() => {
@@ -420,9 +500,9 @@ export function FeedScreen() {
               <Ionicons name="document-text-outline" size={20} color={st.text} />
               <Text style={styles.createLabel}>Nota</Text>
             </Pressable>
-          </View>
-        ) : null}
-      </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {searchOpen ? (
         <TextInput
@@ -462,18 +542,45 @@ export function FeedScreen() {
               Seu momento
             </Text>
           </Pressable>
-          {rails.map((rail, index) => (
-            <Pressable key={rail.userId} style={styles.storyAdd} onPress={() => setViewer({ rail: index, item: 0 })}>
-              {rail.image_url ? (
-                <Image source={{ uri: mediaUrl(rail.image_url) }} style={[styles.storyCircle, (rail.unseen || rail.isMine) && styles.storyHot]} />
+          {activeLives.map((live) => (
+            <Pressable
+              key={`live-${live.id}`}
+              style={styles.storyAdd}
+              onPress={() =>
+                navigation.navigate("LiveRoom", {
+                  mode: live.isMine ? "host" : "viewer",
+                  liveId: live.id,
+                  title: live.title
+                })
+              }
+            >
+              {live.host.avatarUrl ? (
+                <Image source={{ uri: mediaUrl(live.host.avatarUrl) }} style={[styles.storyCircle, styles.storyLive]} />
               ) : (
-                <View style={[styles.storyCircle, (rail.unseen || rail.isMine) && styles.storyHot]} />
+                <View style={[styles.storyCircle, styles.storyLive, styles.storyAddCircle]}>
+                  <Ionicons name="radio" size={22} color="#fff" />
+                </View>
               )}
               <Text style={styles.storyName} numberOfLines={1}>
-                {rail.isMine ? "Você" : rail.username.split(" ")[0]}
+                {live.isMine ? "Você · live" : live.host.name.split(" ")[0]}
               </Text>
             </Pressable>
           ))}
+          {storyRailsVisible.map((rail) => {
+            const index = rails.findIndex((row) => row.userId === rail.userId);
+            return (
+              <Pressable key={rail.userId} style={styles.storyAdd} onPress={() => setViewer({ rail: Math.max(0, index), item: 0 })}>
+                {rail.image_url ? (
+                  <Image source={{ uri: mediaUrl(rail.image_url) }} style={[styles.storyCircle, (rail.unseen || rail.isMine) && styles.storyHot]} />
+                ) : (
+                  <View style={[styles.storyCircle, (rail.unseen || rail.isMine) && styles.storyHot]} />
+                )}
+                <Text style={styles.storyName} numberOfLines={1}>
+                  {rail.isMine ? "Você" : rail.username.split(" ")[0]}
+                </Text>
+              </Pressable>
+            );
+          })}
         </ScrollView>
       </View>
 
@@ -567,6 +674,22 @@ export function FeedScreen() {
         <EmptyState icon="newspaper-outline" title={brand.feedEmptyTitle} text={brand.feedEmptyText} />
       ) : (
         posts.map((post) => {
+          const liveId = liveIdFromPost(post);
+          const isLiveCard =
+            Boolean(liveId) &&
+            (post.mediaType === "LIVE" || (liveId != null && post.mediaUrl?.replace(/^\//, "") === liveId));
+          const mediaItemsForPost = (
+            post.mediaItems?.length
+              ? post.mediaItems
+              : post.mediaUrl && !isLiveCard
+                ? [{ url: post.mediaUrl, type: post.mediaType === "VIDEO" ? "VIDEO" : "IMAGE", coverUrl: null }]
+                : []
+          ).map((item) => ({
+            url: item.url,
+            type: (item.type === "VIDEO" ? "VIDEO" : "IMAGE") as "IMAGE" | "VIDEO",
+            coverUrl: "coverUrl" in item ? item.coverUrl : null
+          }));
+
           return (
             <View key={post.id} style={styles.card}>
               <View style={styles.head}>
@@ -590,7 +713,7 @@ export function FeedScreen() {
                   </Pressable>
                 )}
               </View>
-              {post.body ? <Text style={styles.body}>{post.body}</Text> : null}
+              {post.body && !isLiveCard ? <Text style={styles.body}>{post.body}</Text> : null}
               {post.activity ? (
                 <View style={styles.stats}>
                   <Text style={styles.stat}>{formatKm(post.activity.distanceMeters)} km</Text>
@@ -598,16 +721,38 @@ export function FeedScreen() {
                   <Text style={styles.stat}>{formatPace(post.activity.avgPaceSecPerKm)} /km</Text>
                 </View>
               ) : null}
-              <PostMediaCarousel
-                items={(
-                  post.mediaItems?.length
-                    ? post.mediaItems
-                    : post.mediaUrl
-                      ? [{ url: post.mediaUrl, type: post.mediaType === "VIDEO" ? "VIDEO" : "IMAGE" }]
-                      : []
-                ).map((item) => ({ url: item.url, type: item.type === "VIDEO" ? "VIDEO" : "IMAGE" }))}
-                styles={styles}
-              />
+              {isLiveCard && liveId ? (
+                <Pressable
+                  style={styles.liveCard}
+                  onPress={() =>
+                    navigation.navigate("LiveRoom", {
+                      mode: post.isMine ? "host" : "viewer",
+                      liveId,
+                      title:
+                        post.body
+                          ?.replace(/^Ao vivo agora:\s*/i, "")
+                          .replace(/^Ao vivo:\s*/i, "")
+                          .replace(/\n?\[\[LIVE:[^\]]+\]\]/g, "")
+                          .trim() || "Ao vivo"
+                    })
+                  }
+                >
+                  <Ionicons name="radio" size={22} color="#fff" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.liveCardTitle}>AO VIVO</Text>
+                    <Text style={styles.liveCardBody} numberOfLines={2}>
+                      {post.body
+                        ?.replace(/^Ao vivo agora:\s*/i, "")
+                        .replace(/^Ao vivo:\s*/i, "")
+                        .replace(/\n?\[\[LIVE:[^\]]+\]\]/g, "")
+                        .trim() || "Entrar na transmissão"}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#fff" />
+                </Pressable>
+              ) : (
+                <PostMediaCarousel items={mediaItemsForPost} styles={styles} />
+              )}
               <View style={styles.row}>
                 <Pressable onPress={() => void toggleLike(post.id)} style={styles.chip}>
                   <Ionicons name={post.likedByMe ? "heart" : "heart-outline"} size={18} color={post.likedByMe ? st.coral : st.text} />
@@ -681,7 +826,19 @@ export function FeedScreen() {
             <View style={styles.modalBody}>
               {!storyMedia ? <Text style={styles.meta}>Foto ou vídeo curto. Some em 24 horas.</Text> : null}
               {storyMedia?.localUri ? (
-                <Image source={{ uri: storyMedia.localUri }} style={styles.storyPreview} resizeMode="contain" />
+                storyMedia.type === "VIDEO" ? (
+                  <Video
+                    source={{ uri: storyMedia.localUri }}
+                    style={styles.storyPreview}
+                    resizeMode={ResizeMode.CONTAIN}
+                    shouldPlay
+                    isLooping
+                    isMuted
+                    useNativeControls
+                  />
+                ) : (
+                  <Image source={{ uri: storyMedia.localUri }} style={styles.storyPreview} resizeMode="contain" />
+                )
               ) : null}
             </View>
             <View style={styles.storyActions}>
@@ -800,10 +957,15 @@ function createStyles(st: StudentTokens) {
     toolbar: { paddingHorizontal: 12, paddingTop: 0, alignItems: "flex-end", zIndex: 5, minHeight: 0 },
     toolbarActions: { flexDirection: "row", alignItems: "center", gap: 2 },
     iconBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+    createMenuBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(8,9,11,0.28)",
+      alignItems: "flex-end",
+      paddingTop: 56,
+      paddingHorizontal: 12
+    },
     createMenu: {
-      alignSelf: "flex-end",
-      marginRight: 8,
-      minWidth: 180,
+      minWidth: 196,
       padding: 8,
       borderRadius: 16,
       backgroundColor: st.card,
@@ -811,9 +973,9 @@ function createStyles(st: StudentTokens) {
       borderColor: st.line,
       gap: 2,
       shadowColor: "#000",
-      shadowOpacity: 0.12,
+      shadowOpacity: 0.16,
       shadowRadius: 16,
-      elevation: 6
+      elevation: 8
     },
     createItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12 },
     createLabel: { color: st.text, fontSize: 15, fontWeight: "600" },
@@ -895,6 +1057,17 @@ function createStyles(st: StudentTokens) {
       backgroundColor: st.fill
     },
     storyHot: { borderWidth: 2, borderColor: "#df663c" },
+    storyLive: { borderWidth: 2, borderColor: "#df663c", backgroundColor: "#5a1d12" },
+    liveCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      padding: 14,
+      borderRadius: 14,
+      backgroundColor: "#df663c"
+    },
+    liveCardTitle: { color: "#fff", fontWeight: "900", fontSize: 12, letterSpacing: 0.6 },
+    liveCardBody: { color: "#fff", fontWeight: "700", marginTop: 2 },
     storyName: { color: st.text, fontSize: 11, fontWeight: "700", maxWidth: 76, textAlign: "center", lineHeight: 14 },
     plus: { fontSize: 24, color: st.coral, fontWeight: "800" },
     backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)" },
