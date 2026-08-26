@@ -25,6 +25,7 @@ import {
   LAP_RADIUS_M,
   updateLapCrossing
 } from "../../lib/activity-geo";
+import { WebGpsPipeline, fixFromGeolocation } from "../../lib/gps-filter";
 import type { OutdoorActivityRow, OutdoorSport, SocialPostRow, UploadResponse } from "../../types";
 import { RunnerIcon } from "../shared/RunnerIcon";
 
@@ -60,9 +61,11 @@ const LAYER_ITEMS: Array<{ id: LayerKey; group: string; label: string }> = [
   { id: "aspect", group: "Terreno", label: "Aspecto" }
 ];
 
-type GpsPoint = { lat: number; lng: number; t: number; ele?: number | null };
+type GpsPoint = { lat: number; lng: number; t: number; ele?: number | null; accuracy?: number | null };
 type LapMarker = { lat: number; lng: number; radiusMeters?: number };
 type LapRecord = { index: number; lat: number; lng: number; t: number; distanceMeters: number };
+
+const MAP_TILE_KEY = (import.meta as { env?: Record<string, string> }).env?.VITE_MAPTILER_KEY ?? "";
 
 function durationSeconds(hours: string, minutes: string) {
   const h = Number(hours);
@@ -89,8 +92,12 @@ export function StudentActivitySection({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const watchRef = useRef<number | null>(null);
   const bufferRef = useRef<GpsPoint[]>([]);
+  const pipelineRef = useRef(new WebGpsPipeline());
+  const followMapRef = useRef(true);
+  const sportRef = useRef(sport);
   const lapAwayRef = useRef(false);
   const lapMarkerRef = useRef<LapMarker | null>(null);
+  sportRef.current = sport;
   const [sport, setSport] = useState<OutdoorSport>(preferredSport);
   const [mapType, setMapType] = useState<MapType>("standard");
   const [activityMap, setActivityMap] = useState<ActivityMap>("personal");
@@ -162,11 +169,13 @@ export function StudentActivitySection({
       if (event.source !== iframeRef.current?.contentWindow) return;
       const type = event.data?.type;
       if (type === "ready") {
+        if (MAP_TILE_KEY) postToMap({ type: "setConfig", maptilerKey: MAP_TILE_KEY });
         postToMap({ type: "setMapType", mapType });
         postToMap({ type: "setActivityMap", mode: activityMap });
         postToMap({ type: "setLayers", layers });
         postToMap({ type: "set3d", on: is3d });
-        if (points.length) postToMap({ type: "setTrack", points });
+        postToMap({ type: "setFollow", on: followMapRef.current });
+        if (points.length) postToMap({ type: "setTrack", points, fit: !running });
         if (lapCounterOn && lapMarker) postToMap({ type: "setLapMarker", marker: lapMarker });
         if (laps.length) postToMap({ type: "setLaps", laps });
         postToMap({ type: "setPickMode", on: pickingLapStart });
@@ -174,7 +183,11 @@ export function StudentActivitySection({
       }
       if (type === "open-layers") setLayersOpen(true);
       if (type === "toggle-3d") setIs3d(Boolean(event.data.on));
-      if (type === "locate-request") locate(true);
+      if (type === "user-pan") followMapRef.current = false;
+      if (type === "locate-request") {
+        followMapRef.current = true;
+        locate(true);
+      }
       if (type === "map-pick" && event.data.kind === "lap-start") {
         const marker = {
           lat: Number(event.data.lat),
@@ -199,7 +212,20 @@ export function StudentActivitySection({
         if (!data.activity) return;
         setActivity(data.activity);
         setSport(data.activity.sport);
-        setPoints(data.activity.polyline.map((p) => ({ lat: p.lat, lng: p.lng, t: p.t ?? Date.now(), ele: p.ele })));
+        const recovered = data.activity.polyline.map((p) => ({
+          lat: p.lat,
+          lng: p.lng,
+          t: p.t ?? Date.now(),
+          ele: p.ele,
+          accuracy: p.accuracy ?? null
+        }));
+        setPoints(recovered);
+        if (recovered.length) {
+          const last = recovered[recovered.length - 1];
+          pipelineRef.current.warmStart(last.lat, last.lng, last.t);
+        } else {
+          pipelineRef.current.reset();
+        }
         const goals = data.activity.goals;
         if (goals?.distanceKm) setTargetKm(String(goals.distanceKm));
         if (goals?.durationSeconds) {
@@ -213,9 +239,12 @@ export function StudentActivitySection({
           lapAwayRef.current = false;
         }
         if (goals?.laps) setLaps(goals.laps);
+        if (data.activity.status === "LIVE") {
+          startWatch(data.activity.id);
+        }
       })
       .catch(() => undefined);
-  }, [token]);
+  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     postToMap({ type: "setMapType", mapType });
@@ -239,8 +268,8 @@ export function StudentActivitySection({
     postToMap({ type: "set3d", on: is3d });
   }, [is3d]);
   useEffect(() => {
-    postToMap({ type: "setTrack", points });
-  }, [points]);
+    postToMap({ type: "setTrack", points, fit: !running && !paused });
+  }, [points, running, paused]);
   useEffect(() => {
     postToMap({ type: "setLapMarker", marker: lapCounterOn ? lapMarker : null });
   }, [lapMarker, lapCounterOn]);
@@ -266,15 +295,18 @@ export function StudentActivitySection({
       setError("GPS indisponível neste dispositivo.");
       return;
     }
+    if (follow) {
+      followMapRef.current = true;
+      postToMap({ type: "setFollow", on: true });
+    }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        postToMap({ type: "setLive", lat, lng });
-        postToMap({ type: "setView", lat, lng, zoom: follow ? 17 : 16 });
+        const fix = fixFromGeolocation(pos);
+        postToMap({ type: "setLive", lat: fix.lat, lng: fix.lng, follow: followMapRef.current });
+        if (follow) postToMap({ type: "setView", lat: fix.lat, lng: fix.lng, zoom: 17 });
       },
       () => setError("Permita a localização para iniciar o GPS."),
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   }
 
@@ -295,18 +327,31 @@ export function StudentActivitySection({
   function startWatch(id: string) {
     stopWatch();
     if (!navigator.geolocation) return;
+    followMapRef.current = true;
+    postToMap({ type: "setFollow", on: true });
     watchRef.current = navigator.geolocation.watchPosition(
       (pos) => {
+        const raw = fixFromGeolocation(pos);
+        const result = pipelineRef.current.process(sportRef.current, raw);
+        if (!result.accepted) return;
+
         const point: GpsPoint = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          t: pos.timestamp || Date.now(),
-          ele: Number.isFinite(pos.coords.altitude) ? pos.coords.altitude : null
+          lat: result.point.lat,
+          lng: result.point.lng,
+          t: result.point.t,
+          ele: result.point.ele,
+          accuracy: result.point.accuracy
         };
         bufferRef.current.push(point);
         setPoints((current) => {
           const next = [...current, point];
-          postToMap({ type: "setLive", lat: point.lat, lng: point.lng });
+          postToMap({
+            type: "setLive",
+            lat: point.lat,
+            lng: point.lng,
+            follow: followMapRef.current
+          });
+          postToMap({ type: "setTrack", points: next, fit: false });
           if (lapMarkerRef.current) {
             const crossing = updateLapCrossing(lapMarkerRef.current, point, { away: lapAwayRef.current, count: 0 });
             lapAwayRef.current = crossing.away;
@@ -322,7 +367,9 @@ export function StudentActivitySection({
                 };
                 const nextLaps = [...currentLaps, record];
                 postToMap({ type: "setLaps", laps: nextLaps });
-                  void apiPost(`/student/activities/${id}/goals`, {
+                void apiPost(
+                  `/student/activities/${id}/goals`,
+                  {
                     goals: {
                       distanceKm: Number.isFinite(parsedKm) && parsedKm > 0 ? parsedKm : undefined,
                       durationSeconds: targetDuration,
@@ -331,7 +378,9 @@ export function StudentActivitySection({
                       lapMarker: lapMarkerRef.current,
                       laps: nextLaps
                     }
-                  }, token);
+                  },
+                  token
+                );
                 return nextLaps;
               });
             }
@@ -341,7 +390,7 @@ export function StudentActivitySection({
         if (bufferRef.current.length >= 8) void flushPoints(id);
       },
       () => setError("Não foi possível acompanhar o GPS."),
-      { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
   }
 
@@ -354,6 +403,12 @@ export function StudentActivitySection({
       if (paused && activity) {
         const data = await apiPost<{ activity: OutdoorActivityRow }>(`/student/activities/${activity.id}/resume`, {}, token);
         setActivity(data.activity);
+        if (points.length) {
+          const last = points[points.length - 1];
+          pipelineRef.current.warmStart(last.lat, last.lng, last.t);
+        } else {
+          pipelineRef.current.reset();
+        }
         startWatch(data.activity.id);
         return;
       }
@@ -372,6 +427,7 @@ export function StudentActivitySection({
         token
       );
       setActivity(data.activity);
+      pipelineRef.current.reset();
       startWatch(data.activity.id);
       locate(true);
     } catch (err) {
@@ -425,6 +481,7 @@ export function StudentActivitySection({
       setElapsed(0);
       setLaps([]);
       lapAwayRef.current = false;
+      pipelineRef.current.reset();
       setPickingLapStart(false);
       setCaption("");
       setPhotoUrl(null);
@@ -471,7 +528,8 @@ export function StudentActivitySection({
       setLaps([]);
       lapAwayRef.current = false;
       bufferRef.current = [];
-      postToMap({ type: "setTrack", points: [] });
+      pipelineRef.current.reset();
+      postToMap({ type: "setTrack", points: [], fit: false });
       postToMap({ type: "setLaps", laps: [] });
     }
     setSport(next);
