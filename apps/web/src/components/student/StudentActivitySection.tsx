@@ -65,7 +65,10 @@ type GpsPoint = { lat: number; lng: number; t: number; ele?: number | null; accu
 type LapMarker = { lat: number; lng: number; radiusMeters?: number };
 type LapRecord = { index: number; lat: number; lng: number; t: number; distanceMeters: number };
 
-const MAP_TILE_KEY = (import.meta as { env?: Record<string, string> }).env?.VITE_MAPTILER_KEY ?? "";
+const MAP_TILE_KEY = import.meta.env.VITE_MAPTILER_KEY || "";
+const ACTIVITY_MAP_SRC = MAP_TILE_KEY
+  ? `/activity-map.html?key=${encodeURIComponent(MAP_TILE_KEY)}`
+  : "/activity-map.html";
 
 function durationSeconds(hours: string, minutes: string) {
   const h = Number(hours);
@@ -212,13 +215,15 @@ export function StudentActivitySection({
         if (!data.activity) return;
         setActivity(data.activity);
         setSport(data.activity.sport);
-        const recovered = data.activity.polyline.map((p) => ({
-          lat: p.lat,
-          lng: p.lng,
-          t: p.t ?? Date.now(),
-          ele: p.ele,
-          accuracy: p.accuracy ?? null
-        }));
+        const recovered = Array.isArray(data.activity.polyline)
+          ? data.activity.polyline.map((p) => ({
+              lat: p.lat,
+              lng: p.lng,
+              t: p.t ?? Date.now(),
+              ele: p.ele,
+              accuracy: (p as { accuracy?: number | null }).accuracy ?? null
+            }))
+          : [];
         setPoints(recovered);
         if (recovered.length) {
           const last = recovered[recovered.length - 1];
@@ -557,7 +562,7 @@ export function StudentActivitySection({
       </div>
 
       <div className="student-activity-map">
-        <iframe ref={iframeRef} title="Mapa da atividade" src="/activity-map.html" />
+        <iframe ref={iframeRef} title="Mapa da atividade" src={ACTIVITY_MAP_SRC} />
         {pickingLapStart && (
           <div className="student-activity-pick-banner">
             <Flag size={16} />

@@ -126,7 +126,15 @@ function ActivityMiniMap({ post }: { post: SocialPostRow }) {
   return (
     <div className="student-feed-map">
       <div className="student-feed-map-frame">
-        <iframe ref={iframeRef} title="Percurso" src="/activity-map.html" />
+        <iframe
+          ref={iframeRef}
+          title="Percurso"
+          src={
+            import.meta.env.VITE_MAPTILER_KEY
+              ? `/activity-map.html?key=${encodeURIComponent(String(import.meta.env.VITE_MAPTILER_KEY))}`
+              : "/activity-map.html"
+          }
+        />
       </div>
       <div className="student-feed-activity-stats">
         <span>
