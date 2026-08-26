@@ -4,10 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
     <title>Mapa de atividade</title>
-    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
     <style>
       html, body, #map { margin: 0; height: 100%; width: 100%; background: #0b1a12; }
-      .maplibregl-ctrl-attrib { font-size: 10px; }
       .fab-stack {
         position: absolute;
         right: 12px;
@@ -93,23 +91,27 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
       </button>
     </div>
-    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script>
       const params = new URLSearchParams(location.search);
-      const OPENFREE = {
-        standard: "https://tiles.openfreemap.org/styles/liberty",
-        winter: "https://tiles.openfreemap.org/styles/positron",
-        night: "https://tiles.openfreemap.org/styles/dark"
-      };
-      const RASTER = {
-        osm: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-        satellite: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-        labels: ["https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"],
-        bike: ["https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png"],
-        topo: ["https://a.tile.opentopomap.org/{z}/{x}/{y}.png"],
-        hill: ["https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"]
-      };
-      const TERRARIUM = ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"];
+      const API_KEY = params.get("key") || "";
+      const MAP_ID = params.get("mapId") || "";
+
+      const NIGHT_STYLES = [
+        { elementType: "geometry", stylers: [{ color: "#1d2c4d" }] },
+        { elementType: "labels.text.fill", stylers: [{ color: "#8ec3b9" }] },
+        { elementType: "labels.text.stroke", stylers: [{ color: "#1a3646" }] },
+        { featureType: "road", elementType: "geometry", stylers: [{ color: "#304a7d" }] },
+        { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
+        { featureType: "poi", stylers: [{ visibility: "off" }] },
+        { featureType: "transit", stylers: [{ visibility: "off" }] }
+      ];
+
+      const WINTER_STYLES = [
+        { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
+        { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+        { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9c9c9" }] },
+        { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#e5e5e5" }] }
+      ];
 
       const state = {
         mapType: "standard",
@@ -118,9 +120,6 @@
         is3d: false,
         follow: true,
         pickMode: false,
-        maptilerKey: params.get("key") || "",
-        useVector: true,
-        styleToken: "",
         track: [],
         heatTracks: [],
         heatCells: [],
@@ -130,8 +129,16 @@
         userInteracting: false
       };
 
-      let overlayReady = false;
-      let styleLoading = false;
+      let map = null;
+      let trackLine = null;
+      let trackGlow = null;
+      let liveMarker = null;
+      let lapCircle = null;
+      let lapStartMarker = null;
+      let heatLines = [];
+      let heatCircles = [];
+      let lapMarkers = [];
+      let readyEmitted = false;
 
       function showError(msg) {
         const el = document.getElementById("mapError");
@@ -151,484 +158,258 @@
         } catch (e) {}
       }
 
-      function emptyLine() {
-        return { type: "Feature", geometry: { type: "LineString", coordinates: [] }, properties: {} };
-      }
-      function emptyMulti() {
-        return { type: "FeatureCollection", features: [] };
-      }
-      function emptyPoint() {
-        return { type: "Feature", geometry: { type: "Point", coordinates: [0, 0] }, properties: { hidden: true } };
+      function toLatLng(p) {
+        return { lat: Number(p.lat), lng: Number(p.lng) };
       }
 
-      function isSatelliteMode() {
-        return state.mapType === "satellite" || state.mapType === "hybrid";
+      function resolveMapTypeId() {
+        if (state.mapType === "satellite") return google.maps.MapTypeId.SATELLITE;
+        if (state.mapType === "hybrid") return google.maps.MapTypeId.HYBRID;
+        return google.maps.MapTypeId.ROADMAP;
       }
 
-      function maptilerStyleUrl(kind) {
-        if (!state.maptilerKey) return null;
-        const key = encodeURIComponent(state.maptilerKey);
-        const map =
-          kind === "satellite" ? "satellite" :
-          kind === "hybrid" ? "hybrid" :
-          kind === "winter" ? "winter" :
-          kind === "night" ? "dataviz-dark" :
-          "streets-v2";
-        return "https://api.maptiler.com/maps/" + map + "/style.json?key=" + key;
-      }
-
-      function currentStyleToken() {
-        const night = state.activityMap === "night";
-        const winter = state.mapType === "winter" || night;
-        const mode = isSatelliteMode()
-          ? state.mapType
-          : night
-            ? "night"
-            : winter
-              ? "winter"
-              : "standard";
-        return [state.useVector ? "v" : "r", mode, state.maptilerKey ? "mt" : "of"].join(":");
-      }
-
-      function resolveStyle() {
-        const night = state.activityMap === "night";
-        const winter = state.mapType === "winter" || night;
-
-        if (!state.useVector) return buildRasterStyle();
-
-        if (isSatelliteMode()) {
-          const mt = maptilerStyleUrl(state.mapType);
-          if (mt) return mt;
-          return buildRasterStyle();
-        }
-
-        const kind = night ? "night" : winter ? "winter" : "standard";
-        const mt = maptilerStyleUrl(kind);
-        if (mt) return mt;
-        return OPENFREE[kind] || OPENFREE.standard;
-      }
-
-      function buildRasterStyle() {
-        const night = state.activityMap === "night";
-        const winter = state.mapType === "winter" || night;
-        const sat = isSatelliteMode();
-        const sources = {};
-        const layers = [];
-        const add = (id, tiles, opacity) => {
-          sources[id] = { type: "raster", tiles, tileSize: 256, attribution: "© OSM © Esri" };
-          layers.push({ id, type: "raster", source: id, paint: { "raster-opacity": opacity == null ? 1 : opacity } });
-        };
-        if (sat) add("sat", RASTER.satellite, 1);
-        else if (winter || night) {
-          sources.dark = {
-            type: "raster",
-            tiles: ["https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png"],
-            tileSize: 256,
-            attribution: "© Carto"
-          };
-          layers.push({ id: "dark", type: "raster", source: "dark" });
-        } else add("osm", RASTER.osm, 1);
-        if (state.mapType === "hybrid" || state.layers.pois) add("labels", RASTER.labels, 0.95);
-        return {
-          version: 8,
-          sources,
-          layers,
-          glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf"
-        };
-      }
-
-      const map = new maplibregl.Map({
-        container: "map",
-        style: resolveStyle(),
-        center: [-46.63, -23.55],
-        zoom: 14,
-        pitch: 0,
-        maxPitch: 85,
-        attributionControl: true
-      });
-      state.styleToken = currentStyleToken();
-
-      map.on("error", (e) => {
-        const msg = (e && e.error && e.error.message) || "";
-        if (/Failed to fetch|AJAXError|style/i.test(msg) && state.useVector) {
-          state.useVector = false;
-          showError("Falha ao carregar mapa vetorial. Usando modo compatível.");
-          refreshBaseStyle(true);
-          return;
-        }
-        if (msg) showError(msg.slice(0, 160));
-      });
-
-      function ensureSource(id, data) {
-        if (map.getSource(id)) return map.getSource(id);
-        map.addSource(id, { type: "geojson", data: data || emptyMulti() });
-        return map.getSource(id);
-      }
-
-      function ensureRasterOverlay(id, tiles, opacity) {
-        if (!map.getSource(id)) {
-          map.addSource(id, { type: "raster", tiles, tileSize: 256, attribution: "© OSM © Esri" });
-        }
-        if (!map.getLayer(id)) {
-          map.addLayer({
-            id,
-            type: "raster",
-            source: id,
-            paint: { "raster-opacity": opacity == null ? 0.6 : opacity }
-          });
-        } else {
-          map.setPaintProperty(id, "raster-opacity", opacity == null ? 0.6 : opacity);
-        }
-      }
-
-      function removeLayerSafe(id) {
-        if (map.getLayer(id)) map.removeLayer(id);
-      }
-      function removeSourceSafe(id) {
-        if (map.getSource(id)) map.removeSource(id);
-      }
-
-      function findBeforeId() {
-        const layers = (map.getStyle() && map.getStyle().layers) || [];
-        const label = layers.find((l) => /label|place|poi|housenumber|road.*name/i.test(l.id));
-        return label ? label.id : undefined;
-      }
-
-      function addOverlayLayers() {
-        try {
-          ensureSource("track", emptyLine());
-          ensureSource("heat", emptyMulti());
-          ensureSource("heatCells", emptyMulti());
-          ensureSource("live", emptyPoint());
-          ensureSource("lapZone", emptyMulti());
-          ensureSource("laps", emptyMulti());
-
-          const night = state.activityMap === "night";
-          const before = findBeforeId();
-          const add = (layer) => {
-            if (map.getLayer(layer.id)) return;
-            if (before) map.addLayer(layer, before);
-            else map.addLayer(layer);
-          };
-
-          add({
-            id: "heat",
-            type: "line",
-            source: "heat",
-            paint: { "line-color": night ? "#7ee0ff" : "#3d9bff", "line-width": 3, "line-opacity": 0.45 }
-          });
-          add({
-            id: "heat-cells",
-            type: "circle",
-            source: "heatCells",
-            paint: {
-              "circle-radius": ["interpolate", ["linear"], ["get", "weight"], 0, 8, 5000, 18, 20000, 28],
-              "circle-color": night ? "#7ee0ff" : "#ff7a3d",
-              "circle-opacity": 0.28,
-              "circle-blur": 0.55
-            }
-          });
-          add({
-            id: "track-glow",
-            type: "line",
-            source: "track",
-            paint: { "line-color": "#7ee0ff", "line-width": 10, "line-opacity": 0.28 }
-          });
-          add({
-            id: "track",
-            type: "line",
-            source: "track",
-            paint: { "line-color": "#2f7dff", "line-width": 4, "line-opacity": 0.95 }
-          });
-          add({
-            id: "lap-zone",
-            type: "fill",
-            source: "lapZone",
-            paint: { "fill-color": "#df663c", "fill-opacity": 0.18 },
-            filter: ["==", ["geometry-type"], "Polygon"]
-          });
-          add({
-            id: "lap-zone-line",
-            type: "line",
-            source: "lapZone",
-            paint: { "line-color": "#df663c", "line-width": 2, "line-opacity": 0.9 },
-            filter: ["==", ["geometry-type"], "Polygon"]
-          });
-          add({
-            id: "lap-start",
-            type: "circle",
-            source: "lapZone",
-            paint: {
-              "circle-radius": 9,
-              "circle-color": "#df663c",
-              "circle-stroke-width": 3,
-              "circle-stroke-color": "#fff"
-            },
-            filter: ["==", ["geometry-type"], "Point"]
-          });
-          add({
-            id: "laps",
-            type: "circle",
-            source: "laps",
-            paint: {
-              "circle-radius": 7,
-              "circle-color": "#f2b461",
-              "circle-stroke-width": 2,
-              "circle-stroke-color": "#fff"
-            }
-          });
-          add({
-            id: "live",
-            type: "circle",
-            source: "live",
-            paint: {
-              "circle-radius": 8,
-              "circle-color": "#2f7dff",
-              "circle-stroke-width": 4,
-              "circle-stroke-color": "#fff"
-            },
-            filter: ["!=", ["get", "hidden"], true]
-          });
-
-          applyRasterLayers();
-          apply3dWorld();
-          restoreOverlayData();
-          overlayReady = true;
-          updateLayerBadge();
-          if (state.useVector) showError("");
-        } catch (err) {
-          showError("Não foi possível montar camadas do mapa.");
-        }
-      }
-
-      function applyRasterLayers() {
-        ["bike", "topo", "hill"].forEach((id) => {
-          removeLayerSafe(id);
-          removeSourceSafe(id);
-        });
-        if (state.layers.bikeLanes) ensureRasterOverlay("bike", RASTER.bike, 0.72);
-        if (state.layers.slope || state.layers.avalanche) {
-          ensureRasterOverlay("topo", RASTER.topo, state.layers.avalanche ? 0.7 : 0.55);
-        }
-        if (state.layers.aspect) ensureRasterOverlay("hill", RASTER.hill, 0.5);
-      }
-
-      function terrainSourceSpec() {
-        if (state.maptilerKey) {
-          return {
-            type: "raster-dem",
-            url: "https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=" + encodeURIComponent(state.maptilerKey),
-            tileSize: 256
-          };
-        }
-        return {
-          type: "raster-dem",
-          tiles: TERRARIUM,
-          encoding: "terrarium",
-          tileSize: 256,
-          maxzoom: 15,
-          attribution: "© Mapzen / AWS Terrain"
-        };
-      }
-
-      function findBuildingSource() {
-        const style = map.getStyle();
-        if (!style || !style.sources) return null;
-        for (const [id, src] of Object.entries(style.sources)) {
-          if (src.type !== "vector") continue;
-          const probe = (style.layers || []).find(
-            (l) => l.source === id && (l["source-layer"] === "building" || /building/i.test(String(l.id)))
-          );
-          if (probe) return { source: id, sourceLayer: probe["source-layer"] || "building" };
-          if (/openmaptiles|protomaps|omv|maptiler/i.test(id)) return { source: id, sourceLayer: "building" };
-        }
+      function resolveStyles() {
+        // Cloud mapId + styles conflict; skip styles when mapId is set.
+        if (MAP_ID) return null;
+        if (state.activityMap === "night") return NIGHT_STYLES;
+        if (state.mapType === "winter") return WINTER_STYLES;
         return null;
       }
 
-      function apply3dWorld() {
-        removeLayerSafe("3d-buildings");
-        try {
-          if (map.getTerrain()) map.setTerrain(null);
-        } catch (e) {}
-        removeSourceSafe("terrain-dem");
+      function applyCamera3d() {
+        if (!map) return;
         document.getElementById("btn3d").classList.toggle("active", state.is3d);
-
-        if (!state.is3d) {
-          map.easeTo({ pitch: 0, bearing: 0, duration: 450 });
-          return;
-        }
-
-        if (state.useVector && !isSatelliteMode()) {
-          try {
-            map.addSource("terrain-dem", terrainSourceSpec());
-            map.setTerrain({ source: "terrain-dem", exaggeration: 1.15 });
-          } catch (e) {}
-
-          const building = findBuildingSource();
-          if (building) {
-            try {
-              map.addLayer({
-                id: "3d-buildings",
-                source: building.source,
-                "source-layer": building.sourceLayer,
-                type: "fill-extrusion",
-                minzoom: 14,
-                filter: ["!=", ["get", "hide_3d"], true],
-                paint: {
-                  "fill-extrusion-color": state.activityMap === "night" ? "#3a4558" : "#c8c4bc",
-                  "fill-extrusion-height": [
-                    "interpolate", ["linear"], ["zoom"],
-                    14, 0,
-                    14.5, ["coalesce", ["get", "render_height"], ["get", "height"], 8]
-                  ],
-                  "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], ["get", "min_height"], 0],
-                  "fill-extrusion-opacity": 0.82
-                }
-              });
-            } catch (e) {}
-          }
-        }
-
-        map.easeTo({ pitch: 60, bearing: -18, duration: 500 });
+        map.setTilt(state.is3d ? 67.5 : 0);
+        map.setHeading(state.is3d ? -18 : 0);
       }
 
-      function restoreOverlayData() {
-        if (state.track.length) setTrack(state.track, false);
-        setHeat(state.heatTracks, state.heatCells);
-        if (state.live) setLive(state.live.lat, state.live.lng, false);
-        setLapMarker(state.lapMarker);
-        setLaps(state.laps);
+      function applyBaseAppearance() {
+        if (!map) return;
+        map.setMapTypeId(resolveMapTypeId());
+        const styles = resolveStyles();
+        map.setOptions({ styles: styles || [] });
+        applyCamera3d();
+        applyRasterOverlays();
+        updateLayerBadge();
       }
 
-      function whenStyleReady(cb) {
-        const run = () => {
-          if (!map.isStyleLoaded()) {
-            map.once("idle", run);
-            return;
-          }
-          cb();
-        };
-        run();
-      }
-
-      function refreshBaseStyle(force) {
-        const token = currentStyleToken();
-        if (!force && token === state.styleToken && overlayReady) return;
-        state.styleToken = token;
-        styleLoading = true;
-        overlayReady = false;
-        const center = map.getCenter();
-        const zoom = map.getZoom();
-        const bearing = map.getBearing();
-        const pitch = map.getPitch();
-        map.setStyle(resolveStyle());
-        map.once("styledata", () => {
-          map.jumpTo({ center, zoom, bearing, pitch });
-          whenStyleReady(() => {
-            addOverlayLayers();
-            styleLoading = false;
-          });
+      function makeImageMapType(name, urlTemplate, opacity) {
+        return new google.maps.ImageMapType({
+          getTileUrl(coord, zoom) {
+            const n = Math.pow(2, zoom);
+            if (coord.y < 0 || coord.y >= n) return null;
+            const x = ((coord.x % n) + n) % n;
+            return urlTemplate
+              .replace("{z}", String(zoom))
+              .replace("{x}", String(x))
+              .replace("{y}", String(coord.y));
+          },
+          tileSize: new google.maps.Size(256, 256),
+          name,
+          opacity: opacity == null ? 0.65 : opacity,
+          maxZoom: 18
         });
+      }
+
+      function applyRasterOverlays() {
+        if (!map) return;
+        while (map.overlayMapTypes.getLength()) map.overlayMapTypes.pop();
+        if (state.layers.bikeLanes) {
+          map.overlayMapTypes.push(
+            makeImageMapType("bike", "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png", 0.7)
+          );
+        }
+        if (state.layers.slope || state.layers.avalanche) {
+          map.overlayMapTypes.push(
+            makeImageMapType("topo", "https://a.tile.opentopomap.org/{z}/{x}/{y}.png", state.layers.avalanche ? 0.7 : 0.55)
+          );
+        }
+        if (state.layers.aspect) {
+          map.overlayMapTypes.push(
+            makeImageMapType(
+              "hill",
+              "https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
+              0.5
+            )
+          );
+        }
+      }
+
+      function clearHeat() {
+        heatLines.forEach((line) => line.setMap(null));
+        heatCircles.forEach((c) => c.setMap(null));
+        heatLines = [];
+        heatCircles = [];
+      }
+
+      function clearLapMarkers() {
+        lapMarkers.forEach((m) => m.setMap(null));
+        lapMarkers = [];
       }
 
       function setTrack(points, fit) {
         state.track = points || [];
-        const coords = state.track.map((p) => [p.lng, p.lat]);
-        const src = map.getSource("track");
-        if (src) src.setData({ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} });
-        if (fit && coords.length > 1) {
-          const bounds = coords.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
-          map.fitBounds(bounds, { padding: 48, maxZoom: 16, duration: 400, pitch: state.is3d ? 60 : map.getPitch() });
+        const path = state.track.map(toLatLng).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+        if (!trackGlow) {
+          trackGlow = new google.maps.Polyline({
+            map,
+            path: [],
+            strokeColor: "#7ee0ff",
+            strokeOpacity: 0.28,
+            strokeWeight: 12,
+            zIndex: 2
+          });
+        }
+        if (!trackLine) {
+          trackLine = new google.maps.Polyline({
+            map,
+            path: [],
+            strokeColor: "#2f7dff",
+            strokeOpacity: 0.95,
+            strokeWeight: 5,
+            zIndex: 3
+          });
+        }
+        trackGlow.setPath(path);
+        trackLine.setPath(path);
+        if (fit && path.length > 1) {
+          const bounds = new google.maps.LatLngBounds();
+          path.forEach((p) => bounds.extend(p));
+          map.fitBounds(bounds, 48);
+          if (state.is3d) {
+            google.maps.event.addListenerOnce(map, "idle", () => applyCamera3d());
+          }
         }
       }
 
       function setHeat(tracks, cells) {
         state.heatTracks = tracks || [];
         state.heatCells = cells || [];
-        const src = map.getSource("heat");
-        if (src) {
-          src.setData({
-            type: "FeatureCollection",
-            features: state.heatTracks
-              .filter((t) => t && t.length > 1)
-              .map((t) => ({
-                type: "Feature",
-                geometry: { type: "LineString", coordinates: t.map((p) => [p.lng, p.lat]) },
-                properties: {}
-              }))
+        clearHeat();
+        const night = state.activityMap === "night";
+        state.heatTracks
+          .filter((t) => t && t.length > 1)
+          .forEach((t) => {
+            heatLines.push(
+              new google.maps.Polyline({
+                map,
+                path: t.map(toLatLng),
+                strokeColor: night ? "#7ee0ff" : "#3d9bff",
+                strokeOpacity: 0.45,
+                strokeWeight: 3,
+                zIndex: 1
+              })
+            );
           });
-        }
-        const cellSrc = map.getSource("heatCells");
-        if (cellSrc) {
-          cellSrc.setData({
-            type: "FeatureCollection",
-            features: state.heatCells
-              .filter((c) => c && Number.isFinite(c.lat) && Number.isFinite(c.lng))
-              .map((c) => ({
-                type: "Feature",
-                geometry: { type: "Point", coordinates: [c.lng, c.lat] },
-                properties: { weight: Number(c.weight) || 1, activities: Number(c.activities) || 1 }
-              }))
+        state.heatCells
+          .filter((c) => c && Number.isFinite(c.lat) && Number.isFinite(c.lng))
+          .forEach((c) => {
+            const weight = Number(c.weight) || 1;
+            const radius = Math.min(90, 18 + Math.log10(Math.max(weight, 1)) * 12);
+            heatCircles.push(
+              new google.maps.Circle({
+                map,
+                center: { lat: c.lat, lng: c.lng },
+                radius,
+                fillColor: night ? "#7ee0ff" : "#ff7a3d",
+                fillOpacity: 0.22,
+                strokeWeight: 0,
+                zIndex: 1
+              })
+            );
           });
-        }
       }
 
       function setLive(lat, lng, follow) {
         state.live = { lat, lng };
-        const src = map.getSource("live");
-        if (src) {
-          src.setData({
-            type: "Feature",
-            geometry: { type: "Point", coordinates: [lng, lat] },
-            properties: {}
+        const pos = { lat, lng };
+        if (!liveMarker) {
+          liveMarker = new google.maps.Marker({
+            map,
+            position: pos,
+            zIndex: 10,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 8,
+              fillColor: "#2f7dff",
+              fillOpacity: 1,
+              strokeColor: "#ffffff",
+              strokeWeight: 3
+            }
           });
+        } else {
+          liveMarker.setPosition(pos);
         }
         const shouldFollow = follow !== false && state.follow && !state.userInteracting;
         if (shouldFollow) {
-          map.easeTo({ center: [lng, lat], duration: 280, pitch: state.is3d ? 60 : map.getPitch() });
+          map.panTo(pos);
+          if (state.is3d) applyCamera3d();
         }
-      }
-
-      function circlePolygon(lng, lat, radiusM) {
-        const coords = [];
-        const steps = 64;
-        for (let i = 0; i <= steps; i += 1) {
-          const angle = (i / steps) * Math.PI * 2;
-          const dx = (radiusM * Math.cos(angle)) / (111320 * Math.cos((lat * Math.PI) / 180));
-          const dy = (radiusM * Math.sin(angle)) / 110540;
-          coords.push([lng + dx, lat + dy]);
-        }
-        return { type: "Polygon", coordinates: [coords] };
       }
 
       function setLapMarker(marker) {
         state.lapMarker = marker || null;
-        const src = map.getSource("lapZone");
-        if (!src) return;
-        if (!marker || !marker.lat || !marker.lng) {
-          src.setData({ type: "FeatureCollection", features: [] });
-          return;
+        if (lapCircle) {
+          lapCircle.setMap(null);
+          lapCircle = null;
         }
-        src.setData({
-          type: "FeatureCollection",
-          features: [
-            { type: "Feature", geometry: circlePolygon(marker.lng, marker.lat, marker.radiusMeters || 22), properties: {} },
-            { type: "Feature", geometry: { type: "Point", coordinates: [marker.lng, marker.lat] }, properties: {} }
-          ]
+        if (lapStartMarker) {
+          lapStartMarker.setMap(null);
+          lapStartMarker = null;
+        }
+        if (!marker || !Number.isFinite(marker.lat) || !Number.isFinite(marker.lng)) return;
+        const center = { lat: marker.lat, lng: marker.lng };
+        lapCircle = new google.maps.Circle({
+          map,
+          center,
+          radius: marker.radiusMeters || 22,
+          fillColor: "#df663c",
+          fillOpacity: 0.18,
+          strokeColor: "#df663c",
+          strokeOpacity: 0.9,
+          strokeWeight: 2,
+          zIndex: 4
+        });
+        lapStartMarker = new google.maps.Marker({
+          map,
+          position: center,
+          zIndex: 5,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 9,
+            fillColor: "#df663c",
+            fillOpacity: 1,
+            strokeColor: "#ffffff",
+            strokeWeight: 3
+          }
         });
       }
 
       function setLaps(laps) {
         state.laps = laps || [];
-        const src = map.getSource("laps");
-        if (!src) return;
-        src.setData({
-          type: "FeatureCollection",
-          features: state.laps.map((lap, index) => ({
-            type: "Feature",
-            geometry: { type: "Point", coordinates: [lap.lng, lap.lat] },
-            properties: { n: index + 1 }
-          }))
+        clearLapMarkers();
+        state.laps.forEach((lap, index) => {
+          lapMarkers.push(
+            new google.maps.Marker({
+              map,
+              position: { lat: lap.lat, lng: lap.lng },
+              label: {
+                text: String(index + 1),
+                color: "#1a1208",
+                fontWeight: "700",
+                fontSize: "11px"
+              },
+              icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 10,
+                fillColor: "#f2b461",
+                fillOpacity: 1,
+                strokeColor: "#ffffff",
+                strokeWeight: 2
+              },
+              zIndex: 6
+            })
+          );
         });
       }
 
@@ -636,7 +417,6 @@
         state.pickMode = Boolean(on);
         document.getElementById("map").classList.toggle("is-picking", state.pickMode);
         document.getElementById("pickBanner").classList.toggle("is-on", state.pickMode);
-        map.getCanvas().style.cursor = state.pickMode ? "crosshair" : "";
       }
 
       function extraLayerCount() {
@@ -651,22 +431,22 @@
         badge.classList.toggle("is-on", n > 0);
       }
 
+      function restoreOverlays() {
+        if (state.track.length) setTrack(state.track, false);
+        setHeat(state.heatTracks, state.heatCells);
+        if (state.live) setLive(state.live.lat, state.live.lng, false);
+        setLapMarker(state.lapMarker);
+        setLaps(state.laps);
+      }
+
       window.applyMapCommand = function applyMapCommand(raw) {
         const msg = typeof raw === "string" ? JSON.parse(raw) : raw;
-        if (!msg || !msg.type) return;
-        if (msg.type === "setConfig") {
-          const next = String(msg.maptilerKey || "");
-          if (next !== state.maptilerKey) {
-            state.maptilerKey = next;
-            state.useVector = true;
-            refreshBaseStyle(true);
-          }
-          return;
-        }
+        if (!msg || !msg.type || !map) return;
         if (msg.type === "init" || msg.type === "setView") {
           if (msg.lat && msg.lng) {
             state.userInteracting = false;
-            map.jumpTo({ center: [msg.lng, msg.lat], zoom: msg.zoom || 15, pitch: state.is3d ? 60 : map.getPitch() });
+            map.setCenter({ lat: msg.lat, lng: msg.lng });
+            if (msg.zoom) map.setZoom(msg.zoom);
           }
         }
         if (msg.type === "setFollow") {
@@ -678,23 +458,20 @@
         if (msg.type === "setLive" && msg.lat && msg.lng) setLive(msg.lat, msg.lng, msg.follow);
         if (msg.type === "setMapType") {
           state.mapType = msg.mapType || "standard";
-          refreshBaseStyle(false);
+          applyBaseAppearance();
         }
         if (msg.type === "setActivityMap") {
           state.activityMap = msg.mode || "personal";
-          refreshBaseStyle(false);
+          applyBaseAppearance();
         }
         if (msg.type === "setLayers") {
           state.layers = Object.assign(state.layers, msg.layers || {});
+          applyRasterOverlays();
           updateLayerBadge();
-          if (overlayReady && !styleLoading) {
-            if (!state.useVector || isSatelliteMode()) refreshBaseStyle(true);
-            else applyRasterLayers();
-          }
         }
         if (msg.type === "set3d") {
           state.is3d = Boolean(msg.on);
-          if (overlayReady) apply3dWorld();
+          applyCamera3d();
         }
         if (msg.type === "showControls") {
           document.getElementById("fabs").style.display = msg.on === false ? "none" : "grid";
@@ -718,7 +495,7 @@
       document.getElementById("layersBtn").onclick = () => emit({ type: "open-layers" });
       document.getElementById("btn3d").onclick = () => {
         state.is3d = !state.is3d;
-        apply3dWorld();
+        applyCamera3d();
         emit({ type: "toggle-3d", on: state.is3d });
       };
       document.getElementById("locateBtn").onclick = () => {
@@ -727,21 +504,72 @@
         emit({ type: "locate-request" });
       };
 
-      map.on("dragstart", () => {
-        state.userInteracting = true;
-        emit({ type: "user-pan" });
-      });
-      map.on("click", (event) => {
-        if (!state.pickMode) return;
-        const { lng, lat } = event.lngLat;
-        emit({ type: "map-pick", kind: "lap-start", lat, lng });
-        setPickMode(false);
-      });
+      function initMap() {
+        const options = {
+          center: { lat: -23.55, lng: -46.63 },
+          zoom: 15,
+          disableDefaultUI: true,
+          clickableIcons: false,
+          gestureHandling: "greedy",
+          keyboardShortcuts: false,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+          zoomControl: false,
+          tilt: 0,
+          heading: 0,
+          mapTypeId: google.maps.MapTypeId.ROADMAP
+        };
+        if (MAP_ID) options.mapId = MAP_ID;
 
-      map.on("load", () => {
-        addOverlayLayers();
-        emit({ type: "ready" });
-      });
+        map = new google.maps.Map(document.getElementById("map"), options);
+        applyBaseAppearance();
+
+        map.addListener("dragstart", () => {
+          state.userInteracting = true;
+          emit({ type: "user-pan" });
+        });
+        map.addListener("click", (event) => {
+          if (!state.pickMode || !event.latLng) return;
+          const lat = event.latLng.lat();
+          const lng = event.latLng.lng();
+          emit({ type: "map-pick", kind: "lap-start", lat, lng });
+          setPickMode(false);
+        });
+
+        restoreOverlays();
+        if (!readyEmitted) {
+          readyEmitted = true;
+          emit({ type: "ready" });
+        }
+        showError("");
+      }
+
+      window.__onGoogleMapsReady = function __onGoogleMapsReady() {
+        try {
+          initMap();
+        } catch (err) {
+          showError(err && err.message ? err.message : "Falha ao iniciar Google Maps.");
+        }
+      };
+
+      window.gm_authFailure = function gm_authFailure() {
+        showError("Chave do Google Maps inválida ou API não habilitada. Configure VITE_GOOGLE_MAPS_API_KEY.");
+      };
+
+      if (!API_KEY) {
+        showError("Configure VITE_GOOGLE_MAPS_API_KEY na Vercel (Maps JavaScript API).");
+      } else {
+        const script = document.createElement("script");
+        script.async = true;
+        script.defer = true;
+        script.src =
+          "https://maps.googleapis.com/maps/api/js?key=" +
+          encodeURIComponent(API_KEY) +
+          "&v=weekly&callback=__onGoogleMapsReady";
+        script.onerror = () => showError("Não foi possível carregar o Google Maps.");
+        document.head.appendChild(script);
+      }
     </script>
   </body>
 </html>

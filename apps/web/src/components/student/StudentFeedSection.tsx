@@ -97,6 +97,16 @@ function liveIdFromPost(post: { mediaType?: string | null; mediaUrl?: string | n
   return null;
 }
 
+function activityMapSrc() {
+  const qs = new URLSearchParams();
+  const key = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  const mapId = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID;
+  if (key) qs.set("key", String(key));
+  if (mapId) qs.set("mapId", String(mapId));
+  const query = qs.toString();
+  return query ? `/activity-map.html?${query}` : "/activity-map.html";
+}
+
 function ActivityMiniMap({ post }: { post: SocialPostRow }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const activity = post.activity;
@@ -104,7 +114,7 @@ function ActivityMiniMap({ post }: { post: SocialPostRow }) {
     const iframe = iframeRef.current;
     if (!iframe || !activity) return;
     const send = () => {
-      iframe.contentWindow?.postMessage({ type: "setTrack", points: activity.polyline }, "*");
+      iframe.contentWindow?.postMessage({ type: "setTrack", points: activity.polyline, fit: true }, "*");
       iframe.contentWindow?.postMessage({ type: "set3d", on: activity.is3d }, "*");
       iframe.contentWindow?.postMessage({ type: "showControls", on: false }, "*");
       if (activity.mapType) {
@@ -126,15 +136,7 @@ function ActivityMiniMap({ post }: { post: SocialPostRow }) {
   return (
     <div className="student-feed-map">
       <div className="student-feed-map-frame">
-        <iframe
-          ref={iframeRef}
-          title="Percurso"
-          src={
-            import.meta.env.VITE_MAPTILER_KEY
-              ? `/activity-map.html?key=${encodeURIComponent(String(import.meta.env.VITE_MAPTILER_KEY))}`
-              : "/activity-map.html"
-          }
-        />
+        <iframe ref={iframeRef} title="Percurso" src={activityMapSrc()} />
       </div>
       <div className="student-feed-activity-stats">
         <span>
