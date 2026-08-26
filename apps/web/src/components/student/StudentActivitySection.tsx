@@ -65,15 +65,10 @@ type GpsPoint = { lat: number; lng: number; t: number; ele?: number | null; accu
 type LapMarker = { lat: number; lng: number; radiusMeters?: number };
 type LapRecord = { index: number; lat: number; lng: number; t: number; distanceMeters: number };
 
-const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
-const GOOGLE_MAPS_MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || "";
-const ACTIVITY_MAP_SRC = (() => {
-  const qs = new URLSearchParams();
-  if (GOOGLE_MAPS_KEY) qs.set("key", GOOGLE_MAPS_KEY);
-  if (GOOGLE_MAPS_MAP_ID) qs.set("mapId", GOOGLE_MAPS_MAP_ID);
-  const query = qs.toString();
-  return query ? `/activity-map.html?${query}` : "/activity-map.html";
-})();
+const MAP_TILE_KEY = import.meta.env.VITE_MAPTILER_KEY || "";
+const ACTIVITY_MAP_SRC = MAP_TILE_KEY
+  ? `/activity-map.html?key=${encodeURIComponent(MAP_TILE_KEY)}`
+  : "/activity-map.html";
 
 function durationSeconds(hours: string, minutes: string) {
   const h = Number(hours);
@@ -177,6 +172,7 @@ export function StudentActivitySection({
       if (event.source !== iframeRef.current?.contentWindow) return;
       const type = event.data?.type;
       if (type === "ready") {
+        if (MAP_TILE_KEY) postToMap({ type: "setConfig", maptilerKey: MAP_TILE_KEY });
         postToMap({ type: "setMapType", mapType });
         postToMap({ type: "setActivityMap", mode: activityMap });
         postToMap({ type: "setLayers", layers });
