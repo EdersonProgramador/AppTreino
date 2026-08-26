@@ -11,6 +11,7 @@ import { isImageUploadExtension, optimizeUploadedImage } from "../media-optimize
 import { saveValidatedUpload, uploadsDir } from "../upload-security.js";
 import type { UploadGroup } from "../upload-security.js";
 import { persistUploadedFile } from "../upload-persist.js";
+import { ensureUploadedVideoIsMp4 } from "../video-transcode.js";
 import { autoCloseStaleTickets, FINALIZE_PROMPT, ticketInclude } from "./ticket.utils.js";
 import { buildPaginationMeta, parsePagination } from "./pagination.js";
 import { calculateBodyFatEstimate, physicalAssessmentFormSchema } from "./physical-assessment.utils.js";
@@ -1219,6 +1220,38 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       mimeType = optimized.mimeType;
       relativePath = optimized.relativePath;
       absolutePath = optimized.absolutePath;
+    } else if (
+      group === "lessons" &&
+      ["mp4", "m4v", "mov", "webm", "ogv", "mkv", "avi"].includes(extension)
+    ) {
+      try {
+        const video = await ensureUploadedVideoIsMp4({
+          rawPath: targetPath,
+          extension,
+          group,
+          baseFilename
+        });
+        storedFilename = video.filename;
+        mimeType = video.mimeType;
+        relativePath = video.relativePath;
+        absolutePath = video.absolutePath;
+      } catch (err) {
+        const fallback = (err as { fallback?: {
+          filename: string;
+          relativePath: string;
+          absolutePath: string;
+          mimeType: string;
+        } }).fallback;
+        if (fallback) {
+          request.log.warn({ err }, "admin video transcode failed; keeping original format");
+          storedFilename = fallback.filename;
+          mimeType = fallback.mimeType;
+          relativePath = fallback.relativePath;
+          absolutePath = fallback.absolutePath;
+        } else {
+          throw err;
+        }
+      }
     } else {
       const { rename } = await import("node:fs/promises");
       await rename(targetPath, absolutePath);

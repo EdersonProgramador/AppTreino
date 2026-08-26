@@ -254,7 +254,14 @@ async function applyFilterToVideoFile(file: File, filterCss: string): Promise<Fi
 }
 
 function recorderMime() {
-  const types = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
+  // Prefer MP4 (Safari/iOS). Chrome desktop often only supports webm — API converts to MP4 on upload.
+  const types = [
+    "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+    "video/mp4",
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm"
+  ];
   return types.find((type) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type)) || "";
 }
 

@@ -176,11 +176,17 @@ export function StudentActivitySection({
     iframeRef.current?.contentWindow?.postMessage(msg, "*");
   }
 
+  function pushMapsConfig() {
+    if (!GOOGLE_MAPS_KEY) return;
+    postToMap({ type: "setMapsConfig", key: GOOGLE_MAPS_KEY, mapId: GOOGLE_MAPS_MAP_ID || "" });
+  }
+
   useEffect(() => {
     const onMsg = (event: MessageEvent) => {
       if (event.source !== iframeRef.current?.contentWindow) return;
       const type = event.data?.type;
       if (type === "ready") {
+        pushMapsConfig();
         postToMap({ type: "setMapType", mapType });
         postToMap({ type: "setActivityMap", mode: activityMap });
         postToMap({ type: "setLayers", layers });
@@ -580,7 +586,12 @@ export function StudentActivitySection({
       ) : null}
 
       <div className="student-activity-map">
-        <iframe ref={iframeRef} title="Mapa da atividade" src={ACTIVITY_MAP_SRC} />
+        <iframe
+          ref={iframeRef}
+          title="Mapa da atividade"
+          src={ACTIVITY_MAP_SRC}
+          onLoad={() => pushMapsConfig()}
+        />
         {pickingLapStart && (
           <div className="student-activity-pick-banner">
             <Flag size={16} />

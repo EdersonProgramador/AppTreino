@@ -14,14 +14,14 @@ import {
   View
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useIsFocused } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import * as ImagePicker from "expo-image-picker";
-import { ResizeMode, Video } from "expo-av";
-import { apiDelete, apiGet, apiPost, apiUploadFile } from "../../auth/api";
+import { apiDelete, apiGet, apiPost } from "../../auth/api";
+import { AppVideo } from "../../components/AppVideo";
 import { mediaUrl } from "../../lib/media";
+import { captureFeedMedia, pickFeedMedia } from "../../lib/nativeMediaPick";
 import { EmptyState, GreenButton, StudentPage } from "../../student/layout";
-import { bindFeedChrome } from "../../student/feedChrome";
+import { bindFeedChrome, setFeedCreateMenuOpen, setFeedSearchOpen } from "../../student/feedChrome";
 import { brand } from "../../student/brand";
 import { formatClock, formatKm, formatPace } from "../../student/activity-geo";
 import { useStudent } from "../../student/StudentContext";
@@ -64,7 +64,6 @@ function PostMediaSlide({
   active: boolean;
 }) {
   const uri = mediaUrl(item.url);
-  const poster = item.coverUrl ? mediaUrl(item.coverUrl) : undefined;
 
   if (item.type === "VIDEO") {
     if (!uri) {
@@ -76,16 +75,15 @@ function PostMediaSlide({
       );
     }
     return (
-      <Video
+      <AppVideo
         key={uri}
-        source={{ uri }}
-        posterSource={poster ? { uri: poster } : undefined}
+        uri={uri}
         style={styles.media}
-        resizeMode={ResizeMode.COVER}
-        useNativeControls
-        shouldPlay={false}
-        isLooping={false}
-        isMuted={!active}
+        contentFit="cover"
+        nativeControls
+        playing={active}
+        muted
+        loop={false}
       />
     );
   }
@@ -138,6 +136,7 @@ function PostMediaCarousel({
 export function FeedScreen() {
   const { session } = useStudent();
   const navigation = useNavigation<FeedNav>();
+  const isFocused = useIsFocused();
   const { st } = useSt();
   const styles = useMemo(() => createStyles(st), [st]);
   const [posts, setPosts] = useState<SocialPostRow[]>([]);
@@ -154,7 +153,6 @@ export function FeedScreen() {
   const [error, setError] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
-  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [createPanel, setCreatePanel] = useState<CreatePanel>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [storyCaption, setStoryCaption] = useState("");
@@ -165,7 +163,22 @@ export function FeedScreen() {
   const [galleryViewerIndex, setGalleryViewerIndex] = useState<number | null>(null);
   const [reportPostId, setReportPostId] = useState<string | null>(null);
   const [reportReason, setReportReason] = useState("");
+  const [menuPostId, setMenuPostId] = useState<string | null>(null);
   const [activeLives, setActiveLives] = useState<ActiveLiveRail[]>([]);
+
+  function openPeerProfile(userId: string, isMine = false) {
+    setMenuPostId(null);
+    if (isMine) {
+      navigation.getParent()?.navigate("MenuTab", { screen: "Profile" });
+      return;
+    }
+    navigation.navigate("PeerProfile", { userId });
+  }
+
+  function openDm(userId: string, name: string) {
+    setMenuPostId(null);
+    navigation.navigate("DirectMessage", { userId, name });
+  }
 
   const loadStories = useCallback(async () => {
     const data = await apiGet<{ rails: SocialStoryRail[] }>("/student/social/stories", session.token);
@@ -231,28 +244,41 @@ export function FeedScreen() {
   }, [load, loadStories, loadActiveLives]);
 
   useEffect(() => {
-    const openCreate = () => {
-      setSearchOpen(false);
-      setCreateMenuOpen(true);
-    };
-    const openSearch = () => {
-      setCreateMenuOpen(false);
-      setSearchOpen(true);
-    };
     bindFeedChrome({
-      toggleCreate: () => {
+      openSearch: () => {
+        setFeedCreateMenuOpen(false);
+        setSearchOpen(true);
+        setFeedSearchOpen(true);
+      },
+      closeSearch: () => {
         setSearchOpen(false);
-        setCreateMenuOpen((open) => !open);
+        setFeedSearchOpen(false);
       },
-      openCreate,
       toggleSearch: () => {
-        setCreateMenuOpen(false);
-        setSearchOpen((open) => !open);
+        setFeedCreateMenuOpen(false);
+        setSearchOpen((open) => {
+          const next = !open;
+          setFeedSearchOpen(next);
+          return next;
+        });
       },
-      openSearch
+      openPanel: (panel) => {
+        setSearchOpen(false);
+        setFeedSearchOpen(false);
+        setCreatePanel(panel);
+      },
+      goReels: () => navigation.navigate("Reels"),
+      goLive: () => navigation.navigate("Live")
     });
     return () => bindFeedChrome(null);
-  }, []);
+  }, [navigation]);
+
+  useEffect(() => {
+    if (isFocused) return;
+    setSearchOpen(false);
+    setFeedSearchOpen(false);
+    setFeedCreateMenuOpen(false);
+  }, [isFocused]);
 
   const liveHostIds = useMemo(() => new Set(activeLives.map((live) => live.host.id)), [activeLives]);
   const storyRailsVisible = useMemo(
@@ -261,56 +287,44 @@ export function FeedScreen() {
   );
 
   async function pickMedia(forStory = false) {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images", "videos"],
-      quality: 0.8,
-      allowsMultipleSelection: !forStory,
-      selectionLimit: forStory ? 1 : MAX_MEDIA - mediaItems.length
-    });
-    if (result.canceled || !result.assets.length) return;
-    const uploaded: MediaItem[] = [];
-    for (const asset of result.assets.slice(0, forStory ? 1 : MAX_MEDIA - mediaItems.length)) {
-      const isVideo = asset.type === "video" || Boolean(asset.duration);
-      const filename = isVideo ? "feed.mp4" : "feed.jpg";
-      const file = await apiUploadFile<{ file: { url: string } }>(
-        "/student/social/uploads",
-        asset.uri,
-        session.token,
-        filename
-      );
-      uploaded.push({ url: file.file.url, type: isVideo ? "VIDEO" : "IMAGE", localUri: asset.uri });
+    try {
+      setError(null);
+      const remaining = forStory ? 1 : MAX_MEDIA - mediaItems.length;
+      if (!forStory && remaining <= 0) {
+        setError(`Limite de ${MAX_MEDIA} arquivos no carrossel.`);
+        return;
+      }
+      const uploaded = await pickFeedMedia({
+        token: session.token,
+        forStory,
+        remainingSlots: remaining
+      });
+      if (!uploaded.length) return;
+      if (forStory) setStoryMedia(uploaded[0] ?? null);
+      else setMediaItems((current) => [...current, ...uploaded].slice(0, MAX_MEDIA));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao abrir a galeria.");
     }
-    if (forStory) setStoryMedia(uploaded[0] ?? null);
-    else setMediaItems((current) => [...current, ...uploaded].slice(0, MAX_MEDIA));
   }
 
   async function captureMedia(kind: "photo" | "video", forStory = false) {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      setError("Permita o acesso à câmera para capturar.");
-      return;
+    try {
+      setError(null);
+      if (!forStory && mediaItems.length >= MAX_MEDIA) {
+        setError(`Limite de ${MAX_MEDIA} arquivos no carrossel.`);
+        return;
+      }
+      const item = await captureFeedMedia({
+        token: session.token,
+        kind,
+        forStory
+      });
+      if (!item) return;
+      if (forStory) setStoryMedia(item);
+      else setMediaItems((current) => [...current, item].slice(0, MAX_MEDIA));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao abrir a câmera.");
     }
-    if (!forStory && mediaItems.length >= MAX_MEDIA) {
-      setError(`Limite de ${MAX_MEDIA} arquivos no carrossel.`);
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: kind === "video" ? ["videos"] : ["images"],
-      quality: 0.85,
-      videoMaxDuration: 60
-    });
-    if (result.canceled || !result.assets.length) return;
-    const asset = result.assets[0];
-    const isVideo = kind === "video" || asset.type === "video";
-    const file = await apiUploadFile<{ file: { url: string } }>(
-      "/student/social/uploads",
-      asset.uri,
-      session.token,
-      isVideo ? "camera.mp4" : "camera.jpg"
-    );
-    const item: MediaItem = { url: file.file.url, type: isVideo ? "VIDEO" : "IMAGE", localUri: asset.uri };
-    if (forStory) setStoryMedia(item);
-    else setMediaItems((current) => [...current, item].slice(0, MAX_MEDIA));
   }
 
   async function publish() {
@@ -432,6 +446,7 @@ export function FeedScreen() {
 
   return (
     <StudentPage
+      chrome={isFocused}
       refreshControl={
         <RefreshControl
           refreshing={loading}
@@ -442,78 +457,31 @@ export function FeedScreen() {
     >
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Modal
-        visible={createMenuOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCreateMenuOpen(false)}
-      >
-        <Pressable style={styles.createMenuBackdrop} onPress={() => setCreateMenuOpen(false)}>
-          <Pressable style={styles.createMenu} onPress={() => undefined}>
-            <Pressable
-              style={styles.createItem}
-              onPress={() => {
-                setCreateMenuOpen(false);
-                setCreatePanel("post");
-              }}
-            >
-              <Ionicons name="create-outline" size={20} color={st.text} />
-              <Text style={styles.createLabel}>Publicar</Text>
-            </Pressable>
-            <Pressable
-              style={styles.createItem}
-              onPress={() => {
-                setCreateMenuOpen(false);
-                setCreatePanel("story");
-              }}
-            >
-              <Ionicons name="add-circle-outline" size={20} color={st.text} />
-              <Text style={styles.createLabel}>Momento</Text>
-            </Pressable>
-            <Pressable
-              style={styles.createItem}
-              onPress={() => {
-                setCreateMenuOpen(false);
-                navigation.navigate("Reels");
-              }}
-            >
-              <Ionicons name="film-outline" size={20} color={st.text} />
-              <Text style={styles.createLabel}>Clipes</Text>
-            </Pressable>
-            <Pressable
-              style={styles.createItem}
-              onPress={() => {
-                setCreateMenuOpen(false);
-                navigation.navigate("Live");
-              }}
-            >
-              <Ionicons name="radio-outline" size={20} color={st.text} />
-              <Text style={styles.createLabel}>Ao vivo</Text>
-            </Pressable>
-            <Pressable
-              style={styles.createItem}
-              onPress={() => {
-                setCreateMenuOpen(false);
-                setCreatePanel("note");
-              }}
-            >
-              <Ionicons name="document-text-outline" size={20} color={st.text} />
-              <Text style={styles.createLabel}>Nota</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
       {searchOpen ? (
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          onSubmitEditing={() => void load(mode, 0, false, query)}
-          placeholder="Buscar publicações ou pessoas"
-          placeholderTextColor={st.faint}
-          style={[styles.input, { marginHorizontal: 16 }]}
-          autoFocus
-        />
+        <View style={styles.searchRow}>
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            onSubmitEditing={() => void load(mode, 0, false, query)}
+            placeholder="Buscar publicações ou pessoas"
+            placeholderTextColor={st.faint}
+            style={[styles.input, styles.searchInput]}
+            autoFocus
+          />
+          <Pressable
+            onPress={() => {
+              setSearchOpen(false);
+              setFeedSearchOpen(false);
+              setQuery("");
+              void load(mode, 0, false, "");
+            }}
+            style={styles.searchClose}
+            accessibilityLabel="Fechar pesquisa"
+            hitSlop={8}
+          >
+            <Ionicons name="close" size={20} color={st.muted} />
+          </Pressable>
+        </View>
       ) : null}
 
       <View style={styles.stories}>
@@ -655,7 +623,7 @@ export function FeedScreen() {
       {suggestions.length > 0 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.people}>
           {suggestions.map((person) => (
-            <Pressable key={person.id} style={styles.person} onPress={() => void toggleFollow(person.id)}>
+            <Pressable key={person.id} style={styles.person} onPress={() => openPeerProfile(person.id)}>
               {person.avatarUrl ? (
                 <Image source={{ uri: mediaUrl(person.avatarUrl) }} style={styles.avatar} />
               ) : (
@@ -664,7 +632,14 @@ export function FeedScreen() {
               <Text style={styles.personName} numberOfLines={1}>
                 {person.name.split(" ")[0]}
               </Text>
-              <Text style={styles.follow}>{brand.followAthletes}</Text>
+              <Pressable
+                onPress={(event) => {
+                  event.stopPropagation?.();
+                  void toggleFollow(person.id);
+                }}
+              >
+                <Text style={styles.follow}>{brand.followAthletes}</Text>
+              </Pressable>
             </Pressable>
           ))}
         </ScrollView>
@@ -693,25 +668,75 @@ export function FeedScreen() {
           return (
             <View key={post.id} style={styles.card}>
               <View style={styles.head}>
-                {post.author.avatarUrl ? (
-                  <Image source={{ uri: mediaUrl(post.author.avatarUrl) }} style={styles.avatar} />
-                ) : (
-                  <View style={styles.avatar} />
-                )}
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{post.author.name}</Text>
-                  <Text style={styles.meta}>{new Date(post.createdAt).toLocaleString("pt-BR")}</Text>
-                </View>
+                <Pressable
+                  style={styles.headAuthor}
+                  onPress={() => {
+                    if (!post.isMine) openPeerProfile(post.author.id);
+                  }}
+                >
+                  {post.author.avatarUrl ? (
+                    <Image source={{ uri: mediaUrl(post.author.avatarUrl) }} style={styles.avatar} />
+                  ) : (
+                    <View style={styles.avatar} />
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.name}>{post.author.name}</Text>
+                    <Text style={styles.meta}>{new Date(post.createdAt).toLocaleString("pt-BR")}</Text>
+                  </View>
+                </Pressable>
                 {post.activity ? <Text style={styles.badge}>{post.activity.sportLabel}</Text> : null}
-                {post.isMine ? (
-                  <Pressable onPress={() => void deletePost(post.id)}>
-                    <Ionicons name="trash-outline" size={18} color={st.muted} />
+                <View style={styles.postMenuWrap}>
+                  <Pressable
+                    onPress={() => setMenuPostId(menuPostId === post.id ? null : post.id)}
+                    hitSlop={8}
+                    accessibilityLabel="Opções"
+                  >
+                    <Ionicons name="ellipsis-horizontal" size={18} color={st.muted} />
                   </Pressable>
-                ) : (
-                  <Pressable onPress={() => setReportPostId(post.id)}>
-                    <Ionicons name="flag-outline" size={18} color={st.muted} />
-                  </Pressable>
-                )}
+                  {menuPostId === post.id ? (
+                    <View style={styles.postMenuPop}>
+                      {post.isMine ? (
+                        <Pressable
+                          style={styles.postMenuItem}
+                          onPress={() => {
+                            setMenuPostId(null);
+                            void deletePost(post.id);
+                          }}
+                        >
+                          <Ionicons name="trash-outline" size={14} color={st.text} />
+                          <Text style={styles.postMenuText}>Apagar</Text>
+                        </Pressable>
+                      ) : (
+                        <>
+                          <Pressable
+                            style={styles.postMenuItem}
+                            onPress={() => openPeerProfile(post.author.id)}
+                          >
+                            <Ionicons name="person-outline" size={14} color={st.text} />
+                            <Text style={styles.postMenuText}>Ver perfil</Text>
+                          </Pressable>
+                          <Pressable
+                            style={styles.postMenuItem}
+                            onPress={() => openDm(post.author.id, post.author.name)}
+                          >
+                            <Ionicons name="chatbubble-outline" size={14} color={st.text} />
+                            <Text style={styles.postMenuText}>Mensagem</Text>
+                          </Pressable>
+                          <Pressable
+                            style={styles.postMenuItem}
+                            onPress={() => {
+                              setMenuPostId(null);
+                              setReportPostId(post.id);
+                            }}
+                          >
+                            <Ionicons name="flag-outline" size={14} color={st.text} />
+                            <Text style={styles.postMenuText}>Denunciar</Text>
+                          </Pressable>
+                        </>
+                      )}
+                    </View>
+                  ) : null}
+                </View>
               </View>
               {post.body && !isLiveCard ? <Text style={styles.body}>{post.body}</Text> : null}
               {post.activity ? (
@@ -827,14 +852,14 @@ export function FeedScreen() {
               {!storyMedia ? <Text style={styles.meta}>Foto ou vídeo curto. Some em 24 horas.</Text> : null}
               {storyMedia?.localUri ? (
                 storyMedia.type === "VIDEO" ? (
-                  <Video
-                    source={{ uri: storyMedia.localUri }}
+                  <AppVideo
+                    uri={storyMedia.localUri}
                     style={styles.storyPreview}
-                    resizeMode={ResizeMode.CONTAIN}
-                    shouldPlay
-                    isLooping
-                    isMuted
-                    useNativeControls
+                    contentFit="contain"
+                    playing
+                    loop
+                    muted
+                    nativeControls
                   />
                 ) : (
                   <Image source={{ uri: storyMedia.localUri }} style={styles.storyPreview} resizeMode="contain" />
@@ -957,30 +982,24 @@ function createStyles(st: StudentTokens) {
     toolbar: { paddingHorizontal: 12, paddingTop: 0, alignItems: "flex-end", zIndex: 5, minHeight: 0 },
     toolbarActions: { flexDirection: "row", alignItems: "center", gap: 2 },
     iconBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-    createMenuBackdrop: {
-      flex: 1,
-      backgroundColor: "rgba(8,9,11,0.28)",
-      alignItems: "flex-end",
-      paddingTop: 56,
-      paddingHorizontal: 12
-    },
-    createMenu: {
-      minWidth: 196,
-      padding: 8,
-      borderRadius: 16,
-      backgroundColor: st.card,
-      borderWidth: 1,
-      borderColor: st.line,
-      gap: 2,
-      shadowColor: "#000",
-      shadowOpacity: 0.16,
-      shadowRadius: 16,
-      elevation: 8
-    },
-    createItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12 },
-    createLabel: { color: st.text, fontSize: 15, fontWeight: "600" },
     composer: { margin: 16, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: st.line, backgroundColor: st.card, gap: 10 },
     composerHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    searchRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginHorizontal: 16,
+      marginBottom: 4
+    },
+    searchInput: { flex: 1, marginHorizontal: 0 },
+    searchClose: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: st.fill
+    },
     input: { color: st.text, borderWidth: 1, borderColor: st.line, borderRadius: 12, padding: 10, backgroundColor: st.inputBg },
     row: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
     chip: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: st.line, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: st.fill },
@@ -1006,10 +1025,35 @@ function createStyles(st: StudentTokens) {
     follow: { color: st.goldUi, fontSize: 11, fontWeight: "800" },
     card: { marginHorizontal: 16, marginBottom: 12, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: st.line, backgroundColor: st.card, gap: 8 },
     head: { flexDirection: "row", alignItems: "center", gap: 10 },
+    headAuthor: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10, minWidth: 0 },
     avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: st.avatarBg },
     name: { color: st.text, fontWeight: "800" },
     meta: { color: st.muted, fontSize: 12 },
     badge: { color: st.coral, fontWeight: "800", fontSize: 12 },
+    postMenuWrap: { position: "relative", zIndex: 4 },
+    postMenuPop: {
+      position: "absolute",
+      top: 28,
+      right: 0,
+      minWidth: 160,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: st.line,
+      backgroundColor: st.card,
+      paddingVertical: 6,
+      shadowColor: "#000",
+      shadowOpacity: 0.14,
+      shadowRadius: 12,
+      elevation: 6
+    },
+    postMenuItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10
+    },
+    postMenuText: { color: st.text, fontWeight: "700", fontSize: 13 },
     body: { color: st.text, lineHeight: 20 },
     stats: { flexDirection: "row", justifyContent: "space-between" },
     stat: { color: st.text, fontWeight: "800" },

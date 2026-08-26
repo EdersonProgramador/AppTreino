@@ -14,6 +14,14 @@ wireStudentSyncBus();
 wireEventBusBroadcast();
 useUiPrefsStore.getState().hydrate();
 
+/** Exposed for same-origin activity-map.html iframe (query string may be stripped by cache). */
+if (typeof window !== "undefined") {
+  (window as Window & { __GOOGLE_MAPS_KEY__?: string; __GOOGLE_MAPS_MAP_ID__?: string }).__GOOGLE_MAPS_KEY__ =
+    (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) || "";
+  (window as Window & { __GOOGLE_MAPS_MAP_ID__?: string }).__GOOGLE_MAPS_MAP_ID__ =
+    (import.meta.env.VITE_GOOGLE_MAPS_MAP_ID as string | undefined) || "";
+}
+
 if (typeof navigator !== "undefined") {
   const nativeApp =
     /AppTreinoMobile/i.test(navigator.userAgent) ||

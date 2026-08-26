@@ -13,6 +13,7 @@ import {
   RequestsScreen
 } from "../screens/student/SocialInfraScreens";
 import { LiveRoomScreen } from "../screens/student/LiveRoomScreen";
+import { PeerProfileScreen } from "../screens/student/PeerProfileScreen";
 import { ClubScreen } from "../screens/student/ClubScreen";
 import { ActivityScreen } from "../screens/student/ActivityScreen";
 import { MembershipScreen, PaymentsScreen, ProfileScreen, ProfileSettingsScreen, PurchasesScreen } from "../screens/student/AccountScreens";
@@ -70,11 +71,8 @@ function FeedStackScreen() {
         options={{ animation: "slide_from_bottom", contentStyle: { backgroundColor: "#000" } }}
       />
       <FeedStack.Screen name="Live" component={LiveScreen} options={{ animation: "slide_from_right" }} />
-      <FeedStack.Screen
-        name="LiveRoom"
-        component={LiveRoomScreen}
-        options={{ presentation: "fullScreenModal", animation: "fade" }}
-      />
+      <FeedStack.Screen name="LiveRoom" component={LiveRoomScreen} options={{ presentation: "fullScreenModal", animation: "fade" }} />
+      <FeedStack.Screen name="PeerProfile" component={PeerProfileScreen} options={{ animation: "slide_from_right" }} />
       <FeedStack.Screen name="Messages" component={MessagesScreen} options={{ animation: "slide_from_right" }} />
       <FeedStack.Screen name="DirectMessage" component={DirectMessageScreen} />
       <FeedStack.Screen name="Chat" component={ChatScreen} />

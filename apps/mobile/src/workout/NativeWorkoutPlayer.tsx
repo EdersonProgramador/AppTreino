@@ -17,8 +17,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { Audio, ResizeMode, Video } from "expo-av";
+import { Audio } from "expo-av";
 import { WebView } from "react-native-webview";
+import { AppVideo } from "../components/AppVideo";
 import { MediaImage } from "../lib/MediaImage";
 import type { WorkoutExercise, WorkoutStructureType } from "../types";
 import { NativeShareFlow } from "./NativeShareFlow";
@@ -120,14 +121,14 @@ function MediaBlock({
   }
   if (url && isVideoMedia(url) && !isImageMedia(url) && !isYouTubeUrl(url)) {
     return (
-      <Video
-        source={{ uri: url }}
+      <AppVideo
+        uri={url}
         style={[styles.mediaFrame, { height }]}
-        resizeMode={expanded ? ResizeMode.COVER : ResizeMode.CONTAIN}
-        shouldPlay={lesson}
-        isLooping={lesson || !expanded}
-        isMuted={!expanded}
-        useNativeControls={expanded}
+        contentFit={expanded ? "cover" : "contain"}
+        playing={lesson}
+        loop={lesson || !expanded}
+        muted={!expanded}
+        nativeControls={expanded}
       />
     );
   }

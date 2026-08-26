@@ -45,10 +45,28 @@ function encodeSpaces(href: string) {
   return href.includes(" ") ? encodeURI(href) : href;
 }
 
+function needsMp4Bridge(path: string) {
+  return /\.(webm|ogv|ogg|mov|mkv|avi)(\?|#|$)/i.test(path);
+}
+
+function playableApiVideoUrl(relativePath: string, api: string) {
+  const cleaned = relativePath.replace(/^\/+/, "").split(/[?#]/)[0];
+  return `${originOf(api)}/media/video?path=${encodeURIComponent(cleaned)}`;
+}
+
+function resolveUploadMedia(relativePath: string, mediaBase: string, api: string) {
+  const cleaned = relativePath.replace(/^\/+/, "");
+  if (needsMp4Bridge(cleaned)) {
+    return encodeSpaces(playableApiVideoUrl(cleaned, api));
+  }
+  return encodeSpaces(`${originOf(mediaBase)}/${cleaned}`);
+}
+
 /**
  * Resolve mídia cadastrada para o app nativo.
  * Uploads da API (`/uploads/...`) batem na API; `/assets/...` no front web.
  * Localhost/LAN gravado no banco é reescrito para o host atual do Expo.
+ * Vídeos webm/mov passam por `/media/video` (conversão MP4).
  */
 export function mediaUrl(path?: string | null): string | undefined {
   if (!path) return undefined;
@@ -69,16 +87,19 @@ export function mediaUrl(path?: string | null): string | undefined {
       const url = new URL(raw);
       if (isUploadPath(url.pathname)) {
         const relative = url.pathname.replace(/^\/uploads\//i, "").replace(/^\/+/, "");
-        return encodeSpaces(`${originOf(media)}/${relative}${url.search}`);
+        return resolveUploadMedia(`${relative}${url.search}`, media, api);
       }
       const cdnPath = url.pathname.replace(/^\/+/, "");
       if (/^(images|lessons|materials|audio)\//i.test(cdnPath)) {
-        return encodeSpaces(`${originOf(media)}/${cdnPath}${url.search}`);
+        return resolveUploadMedia(`${cdnPath}${url.search}`, media, api);
       }
       if (isWebAssetPath(url.pathname)) {
         return encodeSpaces(withOrigin(`${url.pathname}${url.search}`, web));
       }
       if (isKnownCdnHost(url.hostname) || (!isLoopback(url.hostname) && !isLanHost(url.hostname))) {
+        if (needsMp4Bridge(url.pathname) && /^(images|lessons|materials)\//i.test(cdnPath)) {
+          return resolveUploadMedia(cdnPath, media, api);
+        }
         return encodeSpaces(url.href);
       }
       if (url.port === "5173" || url.port === "5174" || isWebAssetPath(url.pathname)) {
@@ -92,18 +113,22 @@ export function mediaUrl(path?: string | null): string | undefined {
 
   const cleaned = raw.replace(/^\/+/, "");
   if (/^(images|lessons|materials|audio)\//i.test(cleaned)) {
-    return encodeSpaces(`${originOf(media)}/${cleaned}`);
+    return resolveUploadMedia(cleaned, media, api);
   }
-  if (/^uploads\//i.test(cleaned) || /^media(\?|\/|$)/i.test(cleaned)) {
-    if (/^uploads\//i.test(cleaned)) {
-      return encodeSpaces(`${originOf(media)}/${cleaned.slice("uploads/".length)}`);
-    }
+  if (/^uploads\//i.test(cleaned)) {
+    return resolveUploadMedia(cleaned.slice("uploads/".length), media, api);
+  }
+  if (/^media(\?|\/|$)/i.test(cleaned)) {
     return encodeSpaces(`${api}/${cleaned}`);
   }
   if (/^assets\//i.test(cleaned)) {
     return encodeSpaces(`${web}/${cleaned}`);
   }
   if (raw.startsWith("/")) {
+    if (isUploadPath(raw)) {
+      const relative = raw.replace(/^\/uploads\//i, "").replace(/^\/+/, "");
+      return resolveUploadMedia(relative, media, api);
+    }
     return encodeSpaces(isWebAssetPath(raw) ? `${web}${raw}` : `${api}${raw}`);
   }
   return encodeSpaces(`${api}/${cleaned}`);

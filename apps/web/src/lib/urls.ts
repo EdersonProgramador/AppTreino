@@ -49,6 +49,16 @@ function uploadPublicUrl(relativePath: string) {
   return `/uploads/${cleaned}`;
 }
 
+/** Legacy webm/mov/etc → API converts to H.264 MP4 (iOS + Android + web). */
+function playableUploadUrl(relativePath: string) {
+  const cleaned = relativePath.replace(/^\/+/, "").split(/[?#]/)[0];
+  if (/\.(webm|ogv|ogg|mov|mkv|avi)$/i.test(cleaned)) {
+    const api = getApiBaseUrl().replace(/\/+$/, "");
+    return `${api}/media/video?path=${encodeURIComponent(cleaned)}`;
+  }
+  return uploadPublicUrl(cleaned);
+}
+
 /**
  * Resolve URL de mídia cadastrada.
  * - http(s) externos (GIF/vídeo/imagem): intactos
@@ -64,14 +74,14 @@ export const mediaUrl = (path?: string | null) => {
   if (/^https?:\/\//i.test(raw)) {
     const relative = uploadRelativePath(raw);
     if (relative) {
-      return uploadPublicUrl(relative);
+      return playableUploadUrl(relative);
     }
     return raw;
   }
 
   const relative = uploadRelativePath(raw);
   if (relative) {
-    return uploadPublicUrl(relative);
+    return playableUploadUrl(relative);
   }
 
   const trimmed = raw.replace(/^\/+/, "");

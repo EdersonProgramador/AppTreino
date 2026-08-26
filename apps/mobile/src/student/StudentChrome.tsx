@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Image,
   Modal,
@@ -20,22 +20,60 @@ import { mediaUrl } from "../lib/media";
 import type { MenuStackParamList, StudentTabParamList } from "../navigation/types";
 import { formatDateTime } from "../theme";
 import { useStudent } from "./StudentContext";
-import { feedChrome, requestFeedCreate, requestFeedSearch } from "./feedChrome";
+import {
+  feedChrome,
+  getFeedCreateMenuOpen,
+  getFeedSearchOpen,
+  closeFeedSearch,
+  openFeedSearch,
+  requestFeedCreate,
+  requestFeedPanel,
+  requestFeedSearch,
+  setFeedCreateMenuOpen,
+  subscribeFeedCreateMenu,
+  subscribeFeedSearch,
+  toggleFeedCreateMenu
+} from "./feedChrome";
 import { RunnerIcon } from "./RunnerIcon";
 import { moduleOn, studentCodeFromName, useSt, type StudentTokens } from "./theme";
 import { navigateStudentTarget } from "./navigate";
 import { uiSounds } from "./uiSounds";
 
-function feedStackScreenName(state: {
-  index: number;
-  routes: Array<{ name: string; state?: { index: number; routes: Array<{ name: string }> } }>;
-} | undefined): string | null {
-  if (!state) return null;
-  const tab = state.routes[state.index];
-  if (!tab || tab.name !== "FeedTab") return null;
-  const stack = tab.state;
-  if (!stack?.routes?.length) return "Feed";
-  return stack.routes[stack.index]?.name ?? "Feed";
+const FEED_FAMILY_SCREENS = new Set(["Feed", "Reels", "Live"]);
+
+/** StudentChrome mounts inside a stack screen — useNavigationState is that stack, not the tabs. */
+function resolveFeedChromeFlags(navigation: { getParent?: () => unknown; getState?: () => { index: number; type?: string; routes: Array<{ name: string; state?: { index: number; routes: Array<{ name: string }> } }> } }) {
+  let nav: { getParent?: () => unknown; getState?: () => { index: number; type?: string; routes: Array<{ name: string; state?: { index: number; routes: Array<{ name: string }> } }> } } | null =
+    navigation;
+  while (nav) {
+    const state = nav.getState?.();
+    if (state?.type === "tab") {
+      const tab = state.routes[state.index];
+      if (tab?.name === "FeedTab") {
+        const stack = tab.state;
+        const screen = stack?.routes?.[stack.index ?? 0]?.name ?? "Feed";
+        return {
+          onFeedTab: true,
+          feedScreen: screen,
+          onFeedRoot: screen === "Feed" || !screen,
+          onFeedFamily: FEED_FAMILY_SCREENS.has(screen) || !screen
+        };
+      }
+      return { onFeedTab: false, feedScreen: null as string | null, onFeedRoot: false, onFeedFamily: false };
+    }
+    nav = (nav.getParent?.() as typeof nav) ?? null;
+  }
+
+  // Fallback: Chrome is already inside Feed stack (or similar).
+  const local = navigation.getState?.();
+  const screen = local?.routes?.[local.index]?.name ?? null;
+  const onFeedFamily = screen != null && FEED_FAMILY_SCREENS.has(screen);
+  return {
+    onFeedTab: onFeedFamily,
+    feedScreen: screen,
+    onFeedRoot: screen === "Feed",
+    onFeedFamily
+  };
 }
 
 const MONTHS = [
@@ -86,34 +124,77 @@ export function StudentChrome({ play = false }: { play?: boolean }) {
   const { profile, cart, notifications, publicConfig, streak, session, refresh, requestQr, logout } = useStudent();
   const [notesOpen, setNotesOpen] = useState(false);
   const [socialMenuOpen, setSocialMenuOpen] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(getFeedCreateMenuOpen);
+  const [searchOpen, setSearchOpen] = useState(getFeedSearchOpen);
   const [streakOpen, setStreakOpen] = useState(false);
   const [month, setMonth] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
   });
 
+  useEffect(() => subscribeFeedCreateMenu(setCreateMenuOpen), []);
+  useEffect(() => subscribeFeedSearch(setSearchOpen), []);
+
   const code = studentCodeFromName(profile?.name);
   const unread = notifications.filter((item) => !item.readAt).length;
   const showCart = moduleOn(publicConfig, "module_products") && (cart?.itemCount ?? 0) > 0;
   const streakDates = useStudent().streakDates;
-  const onFeedTab = useNavigationState((state) => {
-    const route = state?.routes[state.index];
-    return route?.name === "FeedTab";
+  // StudentChrome lives inside a stack screen; tab route is on a parent navigator.
+  const feedFlagsKey = useNavigationState((state) => {
+    void state;
+    const flags = resolveFeedChromeFlags(navigation);
+    return `${flags.onFeedFamily ? "1" : "0"}:${flags.onFeedRoot ? "1" : "0"}`;
   });
-  const feedScreen = useNavigationState((state) => feedStackScreenName(state as Parameters<typeof feedStackScreenName>[0]));
-  const onFeedRoot = onFeedTab && (feedScreen === "Feed" || !feedScreen);
+  const onFeedFamily = feedFlagsKey.startsWith("1:");
+  const onFeedRoot = feedFlagsKey.endsWith(":1");
 
-  function goFeedThen(open: "create" | "search") {
+  useEffect(() => {
+    if (onFeedFamily) return;
+    closeFeedSearch();
+    setFeedCreateMenuOpen(false);
+  }, [onFeedFamily]);
+
+  function openCreateMenu() {
     setNotesOpen(false);
     setSocialMenuOpen(false);
+    closeFeedSearch();
+    // Web: from Clipes/Live, volta ao Feed e abre o menu Criar.
+    if (!onFeedRoot) {
+      navigation.navigate("FeedTab", { screen: "Feed" });
+      requestFeedCreate();
+      return;
+    }
+    toggleFeedCreateMenu();
+  }
+
+  function openSearchFromHeader() {
+    setFeedCreateMenuOpen(false);
     if (onFeedRoot) {
-      if (open === "create") feedChrome()?.toggleCreate();
-      else requestFeedSearch();
+      requestFeedSearch();
+      return;
+    }
+    // From Clipes/Live: go Feed and open search (not toggle).
+    navigation.navigate("FeedTab", { screen: "Feed" });
+    openFeedSearch();
+  }
+
+  function runCreateAction(kind: "post" | "story" | "note" | "reels" | "live") {
+    setFeedCreateMenuOpen(false);
+    uiSounds.itemSelect();
+    if (kind === "reels") {
+      navigation.navigate("FeedTab", { screen: "Reels" });
+      return;
+    }
+    if (kind === "live") {
+      navigation.navigate("FeedTab", { screen: "Live" });
+      return;
+    }
+    if (onFeedRoot) {
+      feedChrome()?.openPanel(kind);
       return;
     }
     navigation.navigate("FeedTab", { screen: "Feed" });
-    if (open === "create") requestFeedCreate();
-    else requestFeedSearch();
+    requestFeedPanel(kind);
   }
 
   const monthPrefix = `${month.year}-${String(month.month).padStart(2, "0")}-`;
@@ -167,44 +248,47 @@ export function StudentChrome({ play = false }: { play?: boolean }) {
             </Text>
           </Pressable>
           <View style={styles.actions}>
-            {onFeedTab ? (
+            {onFeedFamily ? (
               <>
                 <Pressable
                   onPress={() => {
                     uiSounds.popupOpen();
-                    goFeedThen("create");
+                    openCreateMenu();
                   }}
                   style={styles.iconBtn}
                   accessibilityLabel="Criar"
                 >
-                  <Ionicons name="add-circle-outline" size={22} color="#fff" />
+                  <View style={styles.squarePlus}>
+                    <Ionicons name="add" size={16} color="#fff" />
+                  </View>
                 </Pressable>
                 <Pressable
                   onPress={() => {
                     uiSounds.popupOpen();
-                    goFeedThen("search");
+                    openSearchFromHeader();
                   }}
                   style={styles.iconBtn}
-                  accessibilityLabel="Pesquisar no Feed"
+                  accessibilityLabel={searchOpen ? "Fechar pesquisa" : "Pesquisar no Feed"}
                 >
-                  <Ionicons name="search-outline" size={20} color="#fff" />
+                  <Ionicons name={searchOpen ? "close" : "search-outline"} size={20} color="#fff" />
                 </Pressable>
               </>
-            ) : null}
-            <Pressable
-              onPress={() => {
-                uiSounds.popupOpen();
-                setStreakOpen(true);
-              }}
-              style={styles.streak}
-              accessibilityLabel={`Ofensiva de ${streak} dias`}
-            >
-              <Ionicons name="flame" size={16} color={st.gold} />
-              <Text style={styles.streakLabel}>Ofensiva</Text>
-              <LinearGradient colors={["#f2b461", "#df663c"]} style={styles.streakCount}>
-                <Text style={styles.streakCountText}>{streak}</Text>
-              </LinearGradient>
-            </Pressable>
+            ) : (
+              <Pressable
+                onPress={() => {
+                  uiSounds.popupOpen();
+                  setStreakOpen(true);
+                }}
+                style={styles.streak}
+                accessibilityLabel={`Ofensiva de ${streak} dias`}
+              >
+                <Ionicons name="flame" size={16} color={st.gold} />
+                <Text style={styles.streakLabel}>Ofensiva</Text>
+                <LinearGradient colors={["#f2b461", "#df663c"]} style={styles.streakCount}>
+                  <Text style={styles.streakCountText}>{streak}</Text>
+                </LinearGradient>
+              </Pressable>
+            )}
             {showCart ? (
               <Pressable
                 onPress={() => {
@@ -220,40 +304,42 @@ export function StudentChrome({ play = false }: { play?: boolean }) {
                 </View>
               </Pressable>
             ) : null}
-            <Pressable
-              onPress={() =>
-                setNotesOpen((open) => {
-                  if (open) uiSounds.popupClose();
-                  else {
-                    uiSounds.popupOpen();
-                    uiSounds.popupNotify();
-                    void apiPost("/user/notifications/read", { all: true }, session.token).then(() => refresh());
-                  }
-                  return !open;
-                })
-              }
-              style={styles.iconBtn}
-              accessibilityLabel="Notificações"
-            >
-              <Ionicons name="notifications-outline" size={20} color="#fff" />
-              {unread > 0 ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{unread > 99 ? "99+" : unread}</Text>
-                </View>
-              ) : null}
-            </Pressable>
+            {!onFeedFamily ? (
+              <Pressable
+                onPress={() =>
+                  setNotesOpen((open) => {
+                    if (open) uiSounds.popupClose();
+                    else {
+                      uiSounds.popupOpen();
+                      uiSounds.popupNotify();
+                      void apiPost("/user/notifications/read", { all: true }, session.token).then(() => refresh());
+                    }
+                    return !open;
+                  })
+                }
+                style={styles.iconBtn}
+                accessibilityLabel="Notificações"
+              >
+                <Ionicons name="notifications-outline" size={20} color="#fff" />
+                {unread > 0 ? (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{unread > 99 ? "99+" : unread}</Text>
+                  </View>
+                ) : null}
+              </Pressable>
+            ) : null}
             <Pressable
               onPress={() => {
-                if (onFeedTab) {
-                  setNotesOpen(false);
-                  uiSounds.popupOpen();
-                  setSocialMenuOpen(true);
-                  return;
-                }
-                navigation.navigate("MenuTab", { screen: "Profile" });
+                setNotesOpen(false);
+                setFeedCreateMenuOpen(false);
+                setSocialMenuOpen((open) => {
+                  if (open) uiSounds.popupClose();
+                  else uiSounds.popupOpen();
+                  return !open;
+                });
               }}
               style={styles.avatar}
-              accessibilityLabel={onFeedTab ? "Menu social" : "Abrir perfil"}
+              accessibilityLabel="Menu social"
             >
               {profile?.avatarUrl ? (
                 <Image source={{ uri: mediaUrl(profile.avatarUrl) }} style={styles.avatarImg} />
@@ -264,6 +350,35 @@ export function StudentChrome({ play = false }: { play?: boolean }) {
           </View>
         </View>
       </LinearGradient>
+
+      <Modal
+        visible={createMenuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFeedCreateMenuOpen(false)}
+      >
+        <Pressable style={styles.createMenuBg} onPress={() => setFeedCreateMenuOpen(false)}>
+          <Pressable
+            style={[styles.createMenu, { marginTop: insets.top + 58 }]}
+            onPress={() => undefined}
+          >
+            {(
+              [
+                { label: "Publicar", icon: "create-outline" as const, action: () => runCreateAction("post") },
+                { label: "Momento", icon: "add-outline" as const, action: () => runCreateAction("story") },
+                { label: "Clipes", icon: "film-outline" as const, action: () => runCreateAction("reels") },
+                { label: "Ao vivo", icon: "radio-outline" as const, action: () => runCreateAction("live") },
+                { label: "Nota", icon: "document-text-outline" as const, action: () => runCreateAction("note") }
+              ] as const
+            ).map((item) => (
+              <Pressable key={item.label} style={styles.createMenuItem} onPress={item.action}>
+                <Ionicons name={item.icon} size={18} color={st.text} />
+                <Text style={styles.createMenuText}>{item.label}</Text>
+              </Pressable>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={socialMenuOpen}
@@ -293,7 +408,6 @@ export function StudentChrome({ play = false }: { play?: boolean }) {
                 { label: "Clipes", icon: "film-outline" as const, action: () => navigation.navigate("FeedTab", { screen: "Reels" }) },
                 { label: "Ao vivo", icon: "radio-outline" as const, action: () => navigation.navigate("FeedTab", { screen: "Live" }) },
                 { label: "Mensagens", icon: "chatbubble-outline" as const, action: () => navigation.navigate("FeedTab", { screen: "Messages" }) },
-                { label: "Chat global", icon: "chatbubbles-outline" as const, action: () => navigation.navigate("FeedTab", { screen: "Chat" }) },
                 { label: "Pedidos", icon: "person-add-outline" as const, action: () => navigation.navigate("FeedTab", { screen: "Requests" }) }
               ] as const
             ).map((item) => (
@@ -529,12 +643,48 @@ function createChromeStyles(st: StudentTokens) {
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.14)"
   },
+  squarePlus: {
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    borderWidth: 1.75,
+    borderColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center"
+  },
   socialMenuBg: {
     flex: 1,
     backgroundColor: "rgba(8,9,11,0.35)",
     alignItems: "flex-end",
     paddingHorizontal: 12
   },
+  createMenuBg: {
+    flex: 1,
+    backgroundColor: "rgba(8,9,11,0.28)",
+    alignItems: "flex-end",
+    paddingHorizontal: 12
+  },
+  createMenu: {
+    minWidth: 196,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: st.line,
+    backgroundColor: st.panelBg,
+    paddingVertical: 8,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    elevation: 8
+  },
+  createMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 44,
+    paddingHorizontal: 14
+  },
+  createMenuText: { color: st.text, fontSize: 15, fontWeight: "600" },
   socialMenu: {
     width: 240,
     maxHeight: "70%",

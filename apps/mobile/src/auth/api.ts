@@ -63,24 +63,32 @@ export function apiDelete<T>(path: string, token?: string | null) {
   return request<T>(path, { method: "DELETE" }, token);
 }
 
+function guessUploadMime(filename: string, mimeType?: string | null) {
+  const declared = (mimeType ?? "").split(";")[0]?.trim().toLowerCase();
+  if (declared) return declared;
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".gif")) return "image/gif";
+  if (lower.endsWith(".mp4") || lower.endsWith(".m4v")) return "video/mp4";
+  if (lower.endsWith(".mov")) return "video/quicktime";
+  if (lower.endsWith(".webm")) return "video/webm";
+  return "image/jpeg";
+}
+
 export async function apiUploadFile<T>(
   path: string,
   uri: string,
   token: string,
-  filename = "upload.jpg"
+  filename = "upload.jpg",
+  mimeType?: string | null
 ): Promise<T> {
   const form = new FormData();
-          form.append("file", {
-            uri,
-            name: filename,
-            type: filename.toLowerCase().endsWith(".png")
-              ? "image/png"
-              : filename.toLowerCase().endsWith(".mp4")
-                ? "video/mp4"
-                : filename.toLowerCase().endsWith(".mov")
-                  ? "video/quicktime"
-                  : "image/jpeg"
-          } as unknown as Blob);
+  form.append("file", {
+    uri,
+    name: filename,
+    type: guessUploadMime(filename, mimeType)
+  } as unknown as Blob);
 
   const response = await fetch(`${API_URL}${path}`, {
     method: "POST",

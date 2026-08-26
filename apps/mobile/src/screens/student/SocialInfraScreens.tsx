@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
+  Image,
+  Modal,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
@@ -10,18 +13,20 @@ import {
   type ViewToken
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
+import { useIsFocused, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { io, type Socket } from "socket.io-client";
 import * as ImagePicker from "expo-image-picker";
-import { ResizeMode, Video } from "expo-av";
-import { apiDelete, apiGet, apiPost, apiUploadFile } from "../../auth/api";
+import { apiDelete, apiGet, apiPost } from "../../auth/api";
+import { AppVideo } from "../../components/AppVideo";
 import { API_URL } from "../../config";
 import { mediaUrl } from "../../lib/media";
+import { ensureLibraryAccess } from "../../lib/nativeMediaPick";
+import { uploadPickerAsset } from "../../lib/uploadMedia";
 import { EmptyState, GreenButton, StudentPage } from "../../student/layout";
-import { useHideTabBar } from "../../student/useHideTabBar";
 import { useStudent } from "../../student/StudentContext";
 import { useSt, type StudentTokens } from "../../student/theme";
+import { uiSounds } from "../../student/uiSounds";
 import type { SocialAuthor } from "../../types";
 import type { FeedStackParamList } from "../../navigation/types";
 
@@ -51,25 +56,19 @@ function ReelSlide({
   active,
   height,
   onLike,
-  onDelete
+  onDelete,
+  onOpenAuthor
 }: {
   reel: ReelRow;
   active: boolean;
   height: number;
   onLike: () => void;
   onDelete?: () => void;
+  onOpenAuthor: () => void;
 }) {
-  const videoRef = useRef<Video>(null);
   const [muted, setMuted] = useState(true);
   const [paused, setPaused] = useState(false);
   const uri = mediaUrl(reel.videoUrl);
-  const poster = reel.coverUrl ? mediaUrl(reel.coverUrl) : undefined;
-
-  useEffect(() => {
-    if (!videoRef.current) return;
-    if (active && !paused) void videoRef.current.playAsync().catch(() => undefined);
-    else void videoRef.current.pauseAsync().catch(() => undefined);
-  }, [active, paused]);
 
   useEffect(() => {
     if (!active) {
@@ -81,26 +80,23 @@ function ReelSlide({
   return (
     <View style={[reelStyles.slide, { height }]}>
       {uri ? (
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={() => setPaused((value) => !value)}
-        >
-          <Video
-            ref={videoRef}
-            source={{ uri }}
-            posterSource={poster ? { uri: poster } : undefined}
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => setPaused((value) => !value)}>
+          <AppVideo
+            uri={uri}
             style={StyleSheet.absoluteFill}
-            resizeMode={ResizeMode.COVER}
-            shouldPlay={active && !paused}
-            isLooping
-            isMuted={muted}
+            contentFit="cover"
+            playing={active && !paused}
+            loop
+            muted={muted}
           />
         </Pressable>
       ) : (
         <View style={[StyleSheet.absoluteFill, reelStyles.fallback]} />
       )}
       <View style={reelStyles.overlay}>
-        <Text style={reelStyles.author}>{reel.author.name}</Text>
+        <Pressable onPress={onOpenAuthor}>
+          <Text style={reelStyles.author}>{reel.author.name}</Text>
+        </Pressable>
         {reel.caption ? <Text style={reelStyles.caption}>{reel.caption}</Text> : null}
         <Text style={reelStyles.hint}>{paused ? "Tocar para continuar" : "Tocar para pausar"}</Text>
       </View>
@@ -146,12 +142,11 @@ export function ReelsScreen() {
   const styles = useMemo(() => createStyles(st), [st]);
   const navigation = useNavigation<Nav>();
   const { height: windowHeight } = useWindowDimensions();
-  const [pageHeight, setPageHeight] = useState(windowHeight);
+  const [pageHeight, setPageHeight] = useState(Math.max(320, windowHeight - 180));
   const [reels, setReels] = useState<ReelRow[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  useHideTabBar(true);
-  const slideHeight = pageHeight || windowHeight;
+  const slideHeight = pageHeight;
 
   const load = useCallback(async () => {
     const data = await apiGet<{ reels: ReelRow[] }>("/student/social/reels", session.token);
@@ -171,31 +166,33 @@ export function ReelsScreen() {
   }).current;
 
   return (
-    <View
-      style={{ flex: 1, backgroundColor: "#000" }}
-      onLayout={(event) => setPageHeight(event.nativeEvent.layout.height)}
-    >
-      <View style={styles.reelsTop}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={10}>
-          <Ionicons name="chevron-back" size={24} color="#fff" />
+    <StudentPage scroll={false}>
+      <View style={styles.reelsHead}>
+        <Pressable onPress={() => navigation.navigate("Feed")} hitSlop={10} style={styles.reelsBack}>
+          <Ionicons name="chevron-back" size={22} color={st.text} />
+          <Text style={styles.reelsBackText}>Feed</Text>
         </Pressable>
-        <Text style={styles.reelsTitle}>Clipes</Text>
+        <Text style={styles.reelsHeadTitle}>Clipes</Text>
         <Pressable
           disabled={busy}
           onPress={async () => {
-            const pick = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ["videos"],
-              quality: 0.8,
-              videoMaxDuration: 60
-            });
-            if (pick.canceled || !pick.assets[0]) return;
-            setBusy(true);
             try {
-              const uploaded = await apiUploadFile<{ file: { url: string } }>(
+              const ok = await ensureLibraryAccess();
+              if (!ok) return;
+              const pick = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ["videos"],
+                quality: 0.8,
+                videoMaxDuration: 60,
+                videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
+                videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium
+              });
+              if (pick.canceled || !pick.assets[0]) return;
+              setBusy(true);
+              const { uploaded } = await uploadPickerAsset<{ file: { url: string } }>(
                 "/student/social/uploads",
-                pick.assets[0].uri,
+                pick.assets[0],
                 session.token,
-                "reel.mp4"
+                "reel"
               );
               await apiPost(
                 "/student/social/reels",
@@ -203,96 +200,122 @@ export function ReelsScreen() {
                 session.token
               );
               await load();
+            } catch (err) {
+              console.warn("reel upload failed", err);
             } finally {
               setBusy(false);
             }
           }}
+          hitSlop={10}
         >
-          <Ionicons name="add-circle-outline" size={26} color="#fff" />
+          <Ionicons name="add-circle-outline" size={24} color={st.text} />
         </Pressable>
       </View>
 
-      {reels.length === 0 ? (
-        <View style={styles.reelsEmpty}>
-          <EmptyState icon="film-outline" title="Sem clipes" text="Publique um vídeo vertical. Ele também aparece no Feed." />
-        </View>
-      ) : (
-        <FlatList
-          data={reels}
-          keyExtractor={(item) => item.id}
-          pagingEnabled
-          showsVerticalScrollIndicator={false}
-          decelerationRate="fast"
-          snapToInterval={slideHeight}
-          snapToAlignment="start"
-          disableIntervalMomentum
-          getItemLayout={(_, index) => ({ length: slideHeight, offset: slideHeight * index, index })}
-          onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={{ itemVisiblePercentThreshold: 70 }}
-          renderItem={({ item }) => (
-            <ReelSlide
-              reel={item}
-              active={item.id === activeId}
-              height={slideHeight}
-              onLike={() => {
-                void (async () => {
-                  const result = await apiPost<{ liked: boolean }>(
-                    `/student/social/reels/${item.id}/like`,
-                    {},
-                    session.token
-                  );
-                  setReels((current) =>
-                    current.map((row) =>
-                      row.id === item.id
-                        ? {
-                            ...row,
-                            likedByMe: result.liked,
-                            likesCount: Math.max(0, row.likesCount + (result.liked ? 1 : -1))
-                          }
-                        : row
-                    )
-                  );
-                })();
-              }}
-              onDelete={
-                item.isMine !== false
-                  ? () => {
-                      void (async () => {
-                        await apiDelete(`/student/social/reels/${item.id}`, session.token);
-                        setReels((current) => current.filter((row) => row.id !== item.id));
-                      })();
-                    }
-                  : undefined
-              }
+      <View
+        style={{ flex: 1, backgroundColor: "#000" }}
+        onLayout={(event) => setPageHeight(event.nativeEvent.layout.height)}
+      >
+        {reels.length === 0 ? (
+          <View style={styles.reelsEmpty}>
+            <EmptyState
+              icon="film-outline"
+              title="Sem clipes"
+              text="Publique um vídeo vertical. Ele também aparece no Feed."
             />
-          )}
-        />
-      )}
-    </View>
+          </View>
+        ) : (
+          <FlatList
+            data={reels}
+            keyExtractor={(item) => item.id}
+            pagingEnabled
+            showsVerticalScrollIndicator={false}
+            decelerationRate="fast"
+            snapToInterval={slideHeight}
+            snapToAlignment="start"
+            disableIntervalMomentum
+            getItemLayout={(_, index) => ({ length: slideHeight, offset: slideHeight * index, index })}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={{ itemVisiblePercentThreshold: 70 }}
+            renderItem={({ item }) => (
+              <ReelSlide
+                reel={item}
+                active={item.id === activeId}
+                height={slideHeight}
+                onOpenAuthor={() => navigation.navigate("PeerProfile", { userId: item.author.id })}
+                onLike={() => {
+                  void (async () => {
+                    const result = await apiPost<{ liked: boolean }>(
+                      `/student/social/reels/${item.id}/like`,
+                      {},
+                      session.token
+                    );
+                    setReels((current) =>
+                      current.map((row) =>
+                        row.id === item.id
+                          ? {
+                              ...row,
+                              likedByMe: result.liked,
+                              likesCount: Math.max(0, row.likesCount + (result.liked ? 1 : -1))
+                            }
+                          : row
+                      )
+                    );
+                  })();
+                }}
+                onDelete={
+                  item.isMine !== false
+                    ? () => {
+                        void (async () => {
+                          await apiDelete(`/student/social/reels/${item.id}`, session.token);
+                          setReels((current) => current.filter((row) => row.id !== item.id));
+                        })();
+                      }
+                    : undefined
+                }
+              />
+            )}
+          />
+        )}
+      </View>
+    </StudentPage>
   );
 }
 
 export function LiveScreen() {
   const { session } = useStudent();
   const { st } = useSt();
-  const styles = useMemo(() => createStyles(st), [st]);
+  const styles = useMemo(() => createLiveStyles(st), [st]);
   const navigation = useNavigation<Nav>();
-  const [lives, setLives] = useState<Array<{ id: string; title: string; host: SocialAuthor; isMine: boolean }>>([]);
+  const isFocused = useIsFocused();
+  const [lives, setLives] = useState<
+    Array<{ id: string; title: string; host: SocialAuthor; isMine: boolean; savedByMe?: boolean }>
+  >([]);
   const [saved, setSaved] = useState<
-    Array<{ id: string; title: string; videoUrl?: string | null; coverUrl?: string | null; host: SocialAuthor }>
+    Array<{
+      id: string;
+      title: string;
+      status?: string;
+      videoUrl?: string | null;
+      coverUrl?: string | null;
+      host: SocialAuthor;
+    }>
   >([]);
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [replayUrl, setReplayUrl] = useState<string | null>(null);
+  const [replay, setReplay] = useState<{ title: string; uri: string } | null>(null);
 
-  async function loadLives() {
+  const loadLives = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const [liveRes, savedRes] = await Promise.all([
         apiGet<{ lives: typeof lives }>("/student/social/live", session.token),
-        apiGet<{ lives: typeof saved }>("/student/social/live/saved", session.token).catch(() => ({ lives: [] as typeof saved }))
+        apiGet<{ lives: typeof saved }>("/student/social/live/saved", session.token).catch(() => ({
+          lives: [] as typeof saved
+        }))
       ]);
       setLives(liveRes.lives);
       setSaved(savedRes.lives);
@@ -302,116 +325,252 @@ export function LiveScreen() {
     } finally {
       setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    void loadLives();
   }, [session.token]);
 
+  useEffect(() => {
+    if (!isFocused) return;
+    void loadLives();
+  }, [isFocused, loadLives]);
+
+  async function toggleSave(liveId: string, currentlySaved: boolean) {
+    try {
+      setBusy(true);
+      if (currentlySaved) {
+        await apiDelete(`/student/social/live/${liveId}/save`, session.token);
+      } else {
+        await apiPost(`/student/social/live/${liveId}/save`, {}, session.token);
+      }
+      uiSounds.success();
+      await loadLives();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível salvar a live.");
+      uiSounds.error();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startLive() {
+    if (title.trim().length < 2) {
+      setError("Digite um título com pelo menos 2 caracteres.");
+      return;
+    }
+    setError(null);
+    uiSounds.itemSelect();
+    navigation.navigate("LiveRoom", { mode: "host", title: title.trim() });
+  }
+
   return (
-    <StudentPage>
-      <Pressable onPress={() => navigation.goBack()}>
-        <Text style={styles.back}>← Feed</Text>
-      </Pressable>
-      <Text style={styles.title}>Ao vivo</Text>
-      {error ? <Text style={styles.meta}>{error}</Text> : null}
-      <TextInput
-        value={title}
-        onChangeText={setTitle}
-        placeholder="Ex.: Treino de hoje"
-        style={styles.input}
-        placeholderTextColor={st.faint}
-      />
-      <GreenButton
-        label="Entrar no ar"
-        onPress={() => {
-          if (title.trim().length < 2) {
-            setError("Digite um título com pelo menos 2 caracteres.");
-            return;
-          }
-          setError(null);
-          navigation.navigate("LiveRoom", { mode: "host", title: title.trim() });
-        }}
-      />
-      <Pressable style={[styles.chip, { marginBottom: 12 }]} onPress={() => void loadLives()}>
-        <Ionicons name="refresh" size={14} color={st.text} />
-        <Text style={styles.chipText}>Atualizar</Text>
-      </Pressable>
+    <StudentPage
+      refreshControl={
+        <RefreshControl refreshing={loading} onRefresh={() => void loadLives()} tintColor={st.gold} />
+      }
+    >
+      <View style={styles.liveHead}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.liveTitle}>Ao vivo</Text>
+          <Text style={styles.liveSub}>Transmita em tela cheia ou assista quem está no ar.</Text>
+        </View>
+        <Pressable
+          style={styles.refreshBtn}
+          onPress={() => void loadLives()}
+          disabled={loading || busy}
+          accessibilityLabel="Atualizar lives"
+        >
+          <Ionicons name="refresh" size={18} color={st.text} />
+        </Pressable>
+      </View>
+
+      {error ? (
+        <Pressable style={styles.errorBox} onPress={() => setError(null)}>
+          <Text style={styles.errorText}>{error}</Text>
+        </Pressable>
+      ) : null}
+
+      <View style={styles.startCard}>
+        <Text style={styles.startLabel}>Começar transmissão</Text>
+        <TextInput
+          value={title}
+          onChangeText={setTitle}
+          placeholder="Ex.: Treino de hoje"
+          placeholderTextColor={st.faint}
+          style={styles.input}
+          maxLength={80}
+          editable={!busy}
+        />
+        <GreenButton
+          label="Entrar no ar"
+          icon="radio-outline"
+          onPress={startLive}
+          disabled={busy || title.trim().length < 2}
+        />
+        <Text style={styles.startHint}>
+          Vamos pedir câmera e microfone. Há 3 segundos de contagem antes de ir ao ar.
+        </Text>
+      </View>
+
+      <View style={styles.sectionHead}>
+        <Text style={styles.sectionTitle}>No ar agora</Text>
+        {!loading ? <Text style={styles.sectionCount}>{lives.length}</Text> : null}
+      </View>
+
       {loading ? (
         <Text style={styles.meta}>Carregando lives…</Text>
       ) : lives.length === 0 ? (
-        <Text style={styles.meta}>Ninguém no ar agora. Comece a sua transmissão acima.</Text>
+        <View style={styles.emptyBox}>
+          <Ionicons name="radio-outline" size={28} color={st.muted} />
+          <Text style={styles.emptyTitle}>Ninguém no ar</Text>
+          <Text style={styles.meta}>Quando alguém entrar ao vivo, aparece aqui. Você também pode começar a sua.</Text>
+        </View>
       ) : (
         lives.map((live) => (
-          <Pressable
-            key={live.id}
-            style={styles.card}
-            onPress={() =>
-              navigation.navigate("LiveRoom", {
-                mode: live.isMine ? "host" : "viewer",
-                liveId: live.id,
-                title: live.title
-              })
-            }
-          >
-            <Text style={styles.name}>{live.title}</Text>
-            <Text style={styles.meta}>
-              {live.host.name}
-              {live.isMine ? " · você" : ""} · tocar para {live.isMine ? "voltar" : "assistir"}
-            </Text>
-          </Pressable>
+          <View key={live.id} style={styles.liveRow}>
+            <Pressable
+              style={styles.liveRowMain}
+              disabled={busy}
+              onPress={() => {
+                uiSounds.itemSelect();
+                navigation.navigate("LiveRoom", {
+                  mode: live.isMine ? "host" : "viewer",
+                  liveId: live.id,
+                  title: live.title
+                });
+              }}
+            >
+              {live.host.avatarUrl ? (
+                <Image source={{ uri: mediaUrl(live.host.avatarUrl) }} style={styles.liveAvatar} />
+              ) : (
+                <View style={[styles.liveAvatar, styles.liveAvatarFallback]}>
+                  <Text style={styles.liveAvatarLetter}>{live.host.name.slice(0, 1)}</Text>
+                </View>
+              )}
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {live.title}
+                </Text>
+                <Text style={styles.meta} numberOfLines={1}>
+                  {live.host.name}
+                  {live.isMine ? " · você" : ""}
+                </Text>
+              </View>
+              <View style={styles.liveBadge}>
+                <Text style={styles.liveBadgeText}>LIVE</Text>
+              </View>
+            </Pressable>
+            <Pressable
+              style={[styles.saveBtn, live.savedByMe && styles.saveBtnOn]}
+              disabled={busy}
+              onPress={() => void toggleSave(live.id, Boolean(live.savedByMe))}
+              accessibilityLabel={live.savedByMe ? "Remover live salva" : "Salvar live"}
+            >
+              <Ionicons
+                name={live.savedByMe ? "bookmark" : "bookmark-outline"}
+                size={18}
+                color={live.savedByMe ? st.coral : st.text}
+              />
+            </Pressable>
+          </View>
         ))
       )}
 
-      <Text style={[styles.title, { marginTop: 18, fontSize: 18 }]}>Lives salvas</Text>
-      {saved.length === 0 ? (
-        <Text style={styles.meta}>Nenhuma live salva ainda.</Text>
+      <View style={[styles.sectionHead, { marginTop: 18 }]}>
+        <Text style={styles.sectionTitle}>Lives salvas</Text>
+        {!loading ? <Text style={styles.sectionCount}>{saved.length}</Text> : null}
+      </View>
+
+      {loading ? (
+        <Text style={styles.meta}>Carregando salvas…</Text>
+      ) : saved.length === 0 ? (
+        <View style={[styles.emptyBox, styles.emptyCompact]}>
+          <Ionicons name="bookmark-outline" size={22} color={st.muted} />
+          <Text style={styles.meta}>Salve lives para achar depois. Toque no marcador ao lado de uma transmissão.</Text>
+        </View>
       ) : (
-        saved.map((live) => {
-          const stillLive = lives.some((row) => row.id === live.id);
-          const video = live.videoUrl ? mediaUrl(live.videoUrl) : undefined;
-          return (
-            <Pressable
-              key={`saved-${live.id}`}
-              style={styles.card}
-              onPress={() => {
-                if (stillLive) {
-                  navigation.navigate("LiveRoom", {
-                    mode: "viewer",
-                    liveId: live.id,
-                    title: live.title
-                  });
-                  return;
-                }
-                if (video) setReplayUrl(video);
-              }}
-            >
-              <Text style={styles.name}>{live.title}</Text>
-              <Text style={styles.meta}>
-                {live.host.name} · {stillLive ? "ainda no ar" : video ? "replay" : "sem vídeo"}
-              </Text>
-            </Pressable>
-          );
-        })
+        <View style={styles.savedGrid}>
+          {saved.map((live) => {
+            const stillLive = live.status === "live" || lives.some((row) => row.id === live.id);
+            const video = live.videoUrl ? mediaUrl(live.videoUrl) : undefined;
+            const cover = mediaUrl(live.coverUrl || live.host.avatarUrl);
+            return (
+              <View key={`saved-${live.id}`} style={styles.savedTile}>
+                <Pressable
+                  style={styles.savedMain}
+                  disabled={busy || (!stillLive && !video)}
+                  onPress={() => {
+                    if (stillLive) {
+                      uiSounds.itemSelect();
+                      navigation.navigate("LiveRoom", {
+                        mode: "viewer",
+                        liveId: live.id,
+                        title: live.title
+                      });
+                      return;
+                    }
+                    if (video) setReplay({ title: live.title, uri: video });
+                  }}
+                >
+                  <View style={styles.savedCover}>
+                    {cover ? (
+                      <Image source={{ uri: cover }} style={StyleSheet.absoluteFillObject} />
+                    ) : (
+                      <Text style={styles.liveAvatarLetter}>{live.host.name.slice(0, 1)}</Text>
+                    )}
+                    {video && !stillLive ? (
+                      <View style={styles.playChip}>
+                        <Ionicons name="play" size={12} color="#fff" />
+                      </View>
+                    ) : null}
+                  </View>
+                  {stillLive ? (
+                    <View style={[styles.liveBadge, styles.liveBadgeSm]}>
+                      <Text style={styles.liveBadgeText}>LIVE</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.savedChip}>Salva</Text>
+                  )}
+                  <Text style={styles.savedTitle} numberOfLines={2}>
+                    {live.title}
+                  </Text>
+                  <Text style={styles.meta} numberOfLines={1}>
+                    {live.host.name}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={styles.savedRemove}
+                  onPress={() => void toggleSave(live.id, true)}
+                  accessibilityLabel="Remover das salvas"
+                >
+                  <Ionicons name="trash-outline" size={16} color={st.muted} />
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
       )}
 
-      {replayUrl ? (
-        <View style={styles.replayBox}>
-          <View style={styles.replayHead}>
-            <Text style={styles.name}>Replay</Text>
-            <Pressable onPress={() => setReplayUrl(null)} hitSlop={8}>
-              <Ionicons name="close" size={20} color={st.muted} />
-            </Pressable>
+      <Modal visible={Boolean(replay)} transparent animationType="fade" onRequestClose={() => setReplay(null)}>
+        <View style={styles.replayModal}>
+          <View style={styles.replayCard}>
+            <View style={styles.replayHead}>
+              <Text style={styles.name} numberOfLines={1}>
+                {replay?.title || "Replay"}
+              </Text>
+              <Pressable onPress={() => setReplay(null)} hitSlop={8}>
+                <Ionicons name="close" size={22} color={st.muted} />
+              </Pressable>
+            </View>
+            {replay ? (
+              <AppVideo
+                uri={replay.uri}
+                style={styles.replayVideo}
+                contentFit="contain"
+                nativeControls
+                playing
+              />
+            ) : null}
           </View>
-          <Video
-            source={{ uri: replayUrl }}
-            style={styles.replayVideo}
-            resizeMode={ResizeMode.CONTAIN}
-            useNativeControls
-            shouldPlay
-          />
         </View>
-      ) : null}
+      </Modal>
     </StudentPage>
   );
 }
@@ -442,8 +601,11 @@ export function MessagesScreen() {
           key={row.id}
           style={styles.card}
           onPress={() => navigation.navigate("DirectMessage", { userId: row.user.id, name: row.user.name })}
+          onLongPress={() => navigation.navigate("PeerProfile", { userId: row.user.id })}
         >
-          <Text style={styles.name}>{row.user.name}</Text>
+          <Pressable onPress={() => navigation.navigate("PeerProfile", { userId: row.user.id })}>
+            <Text style={styles.name}>{row.user.name}</Text>
+          </Pressable>
           <Text style={styles.meta}>{row.lastMessage?.content || "Nova conversa"}</Text>
         </Pressable>
       ))}
@@ -471,7 +633,9 @@ export function DirectMessageScreen() {
       <Pressable onPress={() => navigation.goBack()}>
         <Text style={styles.back}>← Mensagens</Text>
       </Pressable>
-      <Text style={styles.title}>{route.params.name}</Text>
+      <Pressable onPress={() => navigation.navigate("PeerProfile", { userId: route.params.userId })}>
+        <Text style={styles.title}>{route.params.name}</Text>
+      </Pressable>
       {messages.map((msg) => (
         <Text key={msg.id} style={[styles.meta, msg.isMine && { color: st.coral }]}>
           {msg.content}
@@ -600,6 +764,184 @@ export function RequestsScreen() {
   );
 }
 
+function createLiveStyles(st: StudentTokens) {
+  return StyleSheet.create({
+    liveHead: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 12,
+      paddingHorizontal: 16,
+      marginBottom: 14
+    },
+    liveTitle: { color: st.text, fontWeight: "800", fontSize: 22 },
+    liveSub: { color: st.muted, fontSize: 13, marginTop: 4, lineHeight: 18 },
+    refreshBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: st.line,
+      backgroundColor: st.card
+    },
+    errorBox: {
+      marginHorizontal: 16,
+      marginBottom: 12,
+      padding: 12,
+      borderRadius: 12,
+      backgroundColor: "rgba(192,57,43,0.12)"
+    },
+    errorText: { color: "#c0392b", fontWeight: "700", fontSize: 13 },
+    startCard: {
+      marginHorizontal: 16,
+      marginBottom: 18,
+      padding: 14,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: st.line,
+      backgroundColor: st.card,
+      gap: 10
+    },
+    startLabel: { color: st.text, fontWeight: "800", fontSize: 14 },
+    startHint: { color: st.muted, fontSize: 12, lineHeight: 17 },
+    input: {
+      borderWidth: 1,
+      borderColor: st.line,
+      borderRadius: 12,
+      padding: 10,
+      color: st.text,
+      backgroundColor: st.inputBg
+    },
+    sectionHead: {
+      flexDirection: "row",
+      alignItems: "baseline",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      marginBottom: 10
+    },
+    sectionTitle: { color: st.text, fontWeight: "800", fontSize: 16 },
+    sectionCount: { color: st.muted, fontWeight: "700", fontSize: 13 },
+    meta: { color: st.muted, fontSize: 13, lineHeight: 18, paddingHorizontal: 16 },
+    emptyBox: {
+      marginHorizontal: 16,
+      marginBottom: 12,
+      padding: 18,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: st.line,
+      backgroundColor: st.card,
+      alignItems: "center",
+      gap: 8
+    },
+    emptyCompact: { paddingVertical: 14 },
+    emptyTitle: { color: st.text, fontWeight: "800", fontSize: 15 },
+    liveRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginHorizontal: 16,
+      marginBottom: 10
+    },
+    liveRowMain: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      padding: 12,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: st.line,
+      backgroundColor: st.card,
+      minWidth: 0
+    },
+    liveAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: st.fill },
+    liveAvatarFallback: { alignItems: "center", justifyContent: "center" },
+    liveAvatarLetter: { color: st.gold, fontWeight: "800", fontSize: 16 },
+    name: { color: st.text, fontWeight: "800" },
+    liveBadge: {
+      backgroundColor: "#df663c",
+      borderRadius: 999,
+      paddingHorizontal: 8,
+      paddingVertical: 4
+    },
+    liveBadgeSm: { alignSelf: "flex-start", marginTop: 6, marginBottom: 4 },
+    liveBadgeText: { color: "#fff", fontWeight: "900", fontSize: 10, letterSpacing: 0.4 },
+    saveBtn: {
+      width: 42,
+      height: 42,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: st.line,
+      backgroundColor: st.card
+    },
+    saveBtnOn: { borderColor: "rgba(223,102,60,0.45)", backgroundColor: "rgba(223,102,60,0.12)" },
+    savedGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+      paddingHorizontal: 16,
+      paddingBottom: 24
+    },
+    savedTile: {
+      width: "47.5%",
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: st.line,
+      backgroundColor: st.card,
+      overflow: "hidden"
+    },
+    savedMain: { padding: 10, gap: 4 },
+    savedCover: {
+      width: "100%",
+      aspectRatio: 1,
+      borderRadius: 12,
+      backgroundColor: st.fill,
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "hidden"
+    },
+    playChip: {
+      position: "absolute",
+      right: 8,
+      bottom: 8,
+      width: 26,
+      height: 26,
+      borderRadius: 13,
+      backgroundColor: "rgba(0,0,0,0.55)",
+      alignItems: "center",
+      justifyContent: "center"
+    },
+    savedChip: { color: st.goldUi, fontWeight: "800", fontSize: 11, marginTop: 4 },
+    savedTitle: { color: st.text, fontWeight: "800", fontSize: 13 },
+    savedRemove: { alignSelf: "flex-end", padding: 8 },
+    replayModal: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.72)",
+      justifyContent: "center",
+      padding: 16
+    },
+    replayCard: {
+      borderRadius: 18,
+      overflow: "hidden",
+      backgroundColor: st.card,
+      borderWidth: 1,
+      borderColor: st.line
+    },
+    replayHead: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      gap: 10
+    },
+    replayVideo: { width: "100%", aspectRatio: 9 / 16, maxHeight: 520, backgroundColor: "#000" }
+  });
+}
+
 function createStyles(st: StudentTokens) {
   return StyleSheet.create({
     back: { color: st.goldUi, fontWeight: "800", marginBottom: 8 },
@@ -611,6 +953,20 @@ function createStyles(st: StudentTokens) {
     chip: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: st.line, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8, alignSelf: "flex-start" },
     chipText: { color: st.text, fontWeight: "800", fontSize: 12 },
     row: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+    reelsHead: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: st.line,
+      backgroundColor: st.bg
+    },
+    reelsBack: { flexDirection: "row", alignItems: "center", gap: 2, minWidth: 72 },
+    reelsBackText: { color: st.text, fontWeight: "700" },
+    reelsHeadTitle: { color: st.text, fontWeight: "800", fontSize: 17 },
+    reelsEmpty: { flex: 1, justifyContent: "center", padding: 24, backgroundColor: st.bg },
     reelsTop: {
       position: "absolute",
       top: 48,
@@ -622,7 +978,6 @@ function createStyles(st: StudentTokens) {
       justifyContent: "space-between"
     },
     reelsTitle: { color: "#fff", fontWeight: "800", fontSize: 18 },
-    reelsEmpty: { flex: 1, justifyContent: "center", padding: 24, backgroundColor: st.bg },
     replayBox: {
       marginTop: 12,
       marginBottom: 20,

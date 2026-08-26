@@ -51,6 +51,7 @@
         "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "POST_NOTIFICATIONS",
         "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE"
       ]
@@ -79,6 +80,7 @@
           "microphonePermission": "Permitir o microfone ao gravar video do treino."
         }
       ],
+      "expo-video",
       [
         "expo-camera",
         {

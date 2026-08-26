@@ -135,7 +135,7 @@ export function ProfileScreen() {
 
   return (
     <StudentPage>
-      <BackChip label="Menu" onPress={() => navigation.goBack()} />
+      <BackChip label="Voltar" onPress={() => navigation.goBack()} />
       <View style={{ borderRadius: 18, overflow: "hidden", borderWidth: 1, borderColor: st.border, backgroundColor: st.panel }}>
         <View style={{ minHeight: 140, backgroundColor: cover, justifyContent: "flex-end", padding: 12 }}>
           <Pressable

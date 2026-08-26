@@ -10,6 +10,7 @@ import { prisma } from "../prisma.js";
 import type { Prisma } from "@prisma/client";
 import { saveValidatedUpload, uploadsDir } from "../upload-security.js";
 import { persistUploadedFile } from "../upload-persist.js";
+import { ensureUploadedVideoIsMp4 } from "../video-transcode.js";
 import { latLngToCell, cellToLatLng, cellDisk } from "./activity-h3.js";
 import {
   evaluateAntiCheat,
@@ -1212,7 +1213,36 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     let relativePath = `${group}/${storedFilename}`;
     let absolutePath = resolve(targetDir, storedFilename);
 
-    if (!isVideo && isImageUploadExtension(extension)) {
+    if (isVideo) {
+      try {
+        const video = await ensureUploadedVideoIsMp4({
+          rawPath: targetPath,
+          extension,
+          group,
+          baseFilename
+        });
+        storedFilename = video.filename;
+        mimeType = video.mimeType;
+        relativePath = video.relativePath;
+        absolutePath = video.absolutePath;
+      } catch (err) {
+        const fallback = (err as { fallback?: {
+          filename: string;
+          relativePath: string;
+          absolutePath: string;
+          mimeType: string;
+        } }).fallback;
+        if (fallback) {
+          request.log.warn({ err }, "video transcode failed; keeping original format");
+          storedFilename = fallback.filename;
+          mimeType = fallback.mimeType;
+          relativePath = fallback.relativePath;
+          absolutePath = fallback.absolutePath;
+        } else {
+          throw err;
+        }
+      }
+    } else if (isImageUploadExtension(extension)) {
       const optimized = await optimizeUploadedImage({
         absolutePath: targetPath,
         group: "images",

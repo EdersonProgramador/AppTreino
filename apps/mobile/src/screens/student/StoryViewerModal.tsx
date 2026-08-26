@@ -10,8 +10,8 @@ import {
   View
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { ResizeMode, Video, type AVPlaybackStatus } from "expo-av";
 import { apiPost } from "../../auth/api";
+import { AppVideo } from "../../components/AppVideo";
 import { mediaUrl } from "../../lib/media";
 import { STORY_IMAGE_DURATION_MS, STORY_VIDEO_MAX_MS, STORY_VIDEO_MAX_SECONDS } from "../../student/storyConstants";
 import type { SocialStoryGalleryItem, SocialStoryRail } from "../../types";
@@ -56,14 +56,12 @@ export function StoryViewerModal({
   const progress = useRef(new Animated.Value(0)).current;
   const animRef = useRef<Animated.CompositeAnimation | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const videoRef = useRef<Video>(null);
   const goNextRef = useRef<() => void>(() => undefined);
 
   const rail = rails[railIndex];
   const item = rail?.items[itemIndex];
   const isVideo = String(item?.mediaType || "").toUpperCase() === "VIDEO";
   const uri = item ? mediaUrl(item.mediaUrl) : undefined;
-  const poster = item?.coverUrl ? mediaUrl(item.coverUrl) : undefined;
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -145,21 +143,9 @@ export function StoryViewerModal({
   useEffect(() => {
     clearTimer();
     stopProgress();
-    if (!visible || !item) return;
+    if (!visible || !item || archiveMode) return;
 
-    if (archiveMode) {
-      if (isVideo && !paused) {
-        void videoRef.current?.playAsync().catch(() => undefined);
-      } else if (isVideo && paused) {
-        void videoRef.current?.pauseAsync().catch(() => undefined);
-      }
-      return;
-    }
-
-    if (paused) {
-      void videoRef.current?.pauseAsync().catch(() => undefined);
-      return;
-    }
+    if (paused) return;
 
     if (!isVideo) {
       runProgress(STORY_IMAGE_DURATION_MS);
@@ -170,7 +156,6 @@ export function StoryViewerModal({
       };
     }
 
-    void videoRef.current?.playFromPositionAsync(0).catch(() => undefined);
     runProgress(slideDurationMs);
 
     return () => {
@@ -200,20 +185,6 @@ export function StoryViewerModal({
       onSaved?.();
     } finally {
       setSaveBusy(false);
-    }
-  }
-
-  function onPlaybackStatus(status: AVPlaybackStatus) {
-    if (!status.isLoaded || !isVideo) return;
-    if (archiveMode) return;
-    if (typeof status.durationMillis === "number" && status.durationMillis > 0) {
-      const ms = Math.min(Math.max(status.durationMillis, 100), STORY_VIDEO_MAX_MS);
-      if (Math.abs(ms - slideDurationMs) > 250) setSlideDurationMs(ms);
-    }
-    if ((status.positionMillis ?? 0) >= STORY_VIDEO_MAX_MS || status.didJustFinish) {
-      clearTimer();
-      stopProgress();
-      goNextRef.current();
     }
   }
 
@@ -268,18 +239,28 @@ export function StoryViewerModal({
 
         <View style={styles.mediaWrap}>
           {uri && isVideo ? (
-            <Video
-              ref={videoRef}
+            <AppVideo
               key={item?.id}
-              source={{ uri }}
-              posterSource={poster ? { uri: poster } : undefined}
+              uri={uri}
               style={styles.media}
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay={!paused}
-              isLooping={archiveMode}
-              isMuted={!archiveMode}
-              useNativeControls={archiveMode}
-              onPlaybackStatusUpdate={onPlaybackStatus}
+              contentFit="contain"
+              playing={!paused}
+              loop={archiveMode}
+              muted={!archiveMode}
+              nativeControls={archiveMode}
+              restartKey={item?.id}
+              maxSeconds={archiveMode ? undefined : STORY_VIDEO_MAX_SECONDS}
+              onDurationMs={(ms) => {
+                if (archiveMode) return;
+                const next = Math.min(Math.max(ms, 100), STORY_VIDEO_MAX_MS);
+                if (Math.abs(next - slideDurationMs) > 250) setSlideDurationMs(next);
+              }}
+              onEnd={() => {
+                if (archiveMode) return;
+                clearTimer();
+                stopProgress();
+                goNextRef.current();
+              }}
             />
           ) : uri ? (
             <Image key={item?.id} source={{ uri }} style={styles.media} resizeMode="contain" />

@@ -93,8 +93,21 @@
     </div>
     <script>
       const params = new URLSearchParams(location.search);
-      const API_KEY = params.get("key") || "";
-      const MAP_ID = params.get("mapId") || "";
+      function readParentMapsConfig() {
+        try {
+          if (window.parent && window.parent !== window) {
+            return {
+              key: window.parent.__GOOGLE_MAPS_KEY__ || "",
+              mapId: window.parent.__GOOGLE_MAPS_MAP_ID__ || ""
+            };
+          }
+        } catch (e) {}
+        return { key: "", mapId: "" };
+      }
+      const parentMaps = readParentMapsConfig();
+      let API_KEY = params.get("key") || parentMaps.key || "";
+      let MAP_ID = params.get("mapId") || parentMaps.mapId || "";
+      let mapsBooted = false;
 
       const NIGHT_STYLES = [
         { elementType: "geometry", stylers: [{ color: "#1d2c4d" }] },
@@ -441,7 +454,12 @@
 
       window.applyMapCommand = function applyMapCommand(raw) {
         const msg = typeof raw === "string" ? JSON.parse(raw) : raw;
-        if (!msg || !msg.type || !map) return;
+        if (!msg || !msg.type) return;
+        if (msg.type === "setMapsConfig") {
+          bootGoogleMaps(msg.key || API_KEY, msg.mapId != null ? msg.mapId : MAP_ID);
+          return;
+        }
+        if (!map) return;
         if (msg.type === "init" || msg.type === "setView") {
           if (msg.lat && msg.lng) {
             state.userInteracting = false;
@@ -557,9 +575,16 @@
         showError("Chave do Google Maps inválida ou API não habilitada. Configure VITE_GOOGLE_MAPS_API_KEY.");
       };
 
-      if (!API_KEY) {
-        showError("Configure VITE_GOOGLE_MAPS_API_KEY na Vercel (Maps JavaScript API).");
-      } else {
+      function bootGoogleMaps(key, mapId) {
+        if (mapsBooted) return;
+        if (key) API_KEY = String(key);
+        if (mapId != null) MAP_ID = String(mapId || "");
+        if (!API_KEY) {
+          showError("Configure VITE_GOOGLE_MAPS_API_KEY na Vercel (Maps JavaScript API) e faça um novo deploy.");
+          return;
+        }
+        mapsBooted = true;
+        showError("");
         const script = document.createElement("script");
         script.async = true;
         script.defer = true;
@@ -569,6 +594,25 @@
           "&v=weekly&callback=__onGoogleMapsReady";
         script.onerror = () => showError("Não foi possível carregar o Google Maps.");
         document.head.appendChild(script);
+      }
+
+      // Prefer parent SPA env (same-origin), then query string; wait briefly for setMapsConfig.
+      function resolveKeyFromParent() {
+        try {
+          if (window.parent && window.parent !== window) {
+            if (window.parent.__GOOGLE_MAPS_KEY__) API_KEY = window.parent.__GOOGLE_MAPS_KEY__;
+            if (window.parent.__GOOGLE_MAPS_MAP_ID__) MAP_ID = window.parent.__GOOGLE_MAPS_MAP_ID__;
+          }
+        } catch (e) {}
+      }
+      resolveKeyFromParent();
+      if (API_KEY) {
+        bootGoogleMaps(API_KEY, MAP_ID);
+      } else {
+        setTimeout(() => {
+          resolveKeyFromParent();
+          bootGoogleMaps(API_KEY, MAP_ID);
+        }, 120);
       }
     </script>
   </body>
