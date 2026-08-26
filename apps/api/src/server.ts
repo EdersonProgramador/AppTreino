@@ -125,6 +125,17 @@ await app.register(cors, {
 await app.register(rateLimit, {
   max: 300,
   timeWindow: "1 minute",
+  // Video players issue many Range GETs; never count public media against the API budget.
+  allowList: (request) => {
+    const path = String(request.url || "").split("?")[0] || "";
+    return (
+      path.startsWith("/uploads/") ||
+      path === "/media" ||
+      path.startsWith("/media/") ||
+      path === "/health" ||
+      path.startsWith("/public/")
+    );
+  },
   errorResponseBuilder: (_request, context) => ({
     statusCode: 429,
     error: "Too Many Requests",

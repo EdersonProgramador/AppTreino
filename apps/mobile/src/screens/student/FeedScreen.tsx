@@ -18,8 +18,10 @@ import { useNavigation, useIsFocused } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { apiDelete, apiGet, apiPost } from "../../auth/api";
 import { AppVideo } from "../../components/AppVideo";
+import { NativeCameraModal, type NativeCameraCapture } from "../../components/NativeCameraModal";
 import { mediaUrl } from "../../lib/media";
-import { captureFeedMedia, pickFeedMedia } from "../../lib/nativeMediaPick";
+import { pickFeedMedia, uploadCameraCapture } from "../../lib/nativeMediaPick";
+import { shareSocialPost } from "../../lib/shareSocialPost";
 import { EmptyState, GreenButton, StudentPage } from "../../student/layout";
 import { bindFeedChrome, setFeedCreateMenuOpen, setFeedSearchOpen } from "../../student/feedChrome";
 import { brand } from "../../student/brand";
@@ -28,6 +30,7 @@ import { useStudent } from "../../student/StudentContext";
 import { useSt, type StudentTokens } from "../../student/theme";
 import type { FeedStackParamList } from "../../navigation/types";
 import type { SocialAuthor, SocialPostRow, SocialStoryGalleryItem, SocialStoryRail } from "../../types";
+import { FeedCommentsSheet } from "./FeedCommentsSheet";
 import { galleryItemsToRail, StoryViewerModal } from "./StoryViewerModal";
 
 type FeedMode = "for-you" | "following";
@@ -63,7 +66,7 @@ function PostMediaSlide({
   styles: ReturnType<typeof createStyles>;
   active: boolean;
 }) {
-  const uri = mediaUrl(item.url);
+  const uri = item.localUri || mediaUrl(item.url);
 
   if (item.type === "VIDEO") {
     if (!uri) {
@@ -151,7 +154,7 @@ export function FeedScreen() {
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [commentDraft, setCommentDraft] = useState<Record<string, string>>({});
+  const [commentsPostId, setCommentsPostId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [createPanel, setCreatePanel] = useState<CreatePanel>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -165,6 +168,7 @@ export function FeedScreen() {
   const [reportReason, setReportReason] = useState("");
   const [menuPostId, setMenuPostId] = useState<string | null>(null);
   const [activeLives, setActiveLives] = useState<ActiveLiveRail[]>([]);
+  const [cameraSession, setCameraSession] = useState<{ kind: "photo" | "video"; forStory: boolean } | null>(null);
 
   function openPeerProfile(userId: string, isMine = false) {
     setMenuPostId(null);
@@ -307,23 +311,30 @@ export function FeedScreen() {
     }
   }
 
-  async function captureMedia(kind: "photo" | "video", forStory = false) {
+  function openCamera(kind: "photo" | "video", forStory = false) {
+    setError(null);
+    if (!forStory && mediaItems.length >= MAX_MEDIA) {
+      setError(`Limite de ${MAX_MEDIA} arquivos no carrossel.`);
+      return;
+    }
+    setCameraSession({ kind, forStory });
+  }
+
+  async function onCameraCaptured(capture: NativeCameraCapture) {
+    const forStory = Boolean(cameraSession?.forStory);
+    setCameraSession(null);
     try {
-      setError(null);
-      if (!forStory && mediaItems.length >= MAX_MEDIA) {
-        setError(`Limite de ${MAX_MEDIA} arquivos no carrossel.`);
-        return;
-      }
-      const item = await captureFeedMedia({
+      const item = await uploadCameraCapture({
         token: session.token,
-        kind,
-        forStory
+        capture,
+        forStory,
+        fallbackBase: forStory ? "story-cam" : "camera"
       });
       if (!item) return;
       if (forStory) setStoryMedia(item);
       else setMediaItems((current) => [...current, item].slice(0, MAX_MEDIA));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao abrir a câmera.");
+      setError(err instanceof Error ? err.message : "Falha ao enviar a captura.");
     }
   }
 
@@ -371,37 +382,24 @@ export function FeedScreen() {
     );
   }
 
-  async function toggleDislike(id: string) {
-    const result = await apiPost<{ disliked: boolean }>(`/student/social/posts/${id}/dislike`, {}, session.token);
-    setPosts((current) =>
-      current.map((post) => {
-        if (post.id !== id) return post;
-        const wasLiked = post.likedByMe;
-        const wasDisliked = Boolean(post.dislikedByMe);
-        return {
-          ...post,
-          dislikedByMe: result.disliked,
-          likedByMe: false,
-          dislikesCount: Math.max(0, (post.dislikesCount ?? 0) + (result.disliked ? 1 : wasDisliked ? -1 : 0)),
-          likesCount: Math.max(0, post.likesCount - (wasLiked ? 1 : 0))
-        };
-      })
-    );
+  async function sharePost(post: SocialPostRow) {
+    try {
+      await shareSocialPost(post);
+    } catch {
+      // usuário cancelou
+    }
   }
 
-  async function sendComment(id: string) {
-    const text = commentDraft[id]?.trim();
-    if (!text) return;
-    const result = await apiPost<{ comment: SocialPostRow["comments"][number] }>(
-      `/student/social/posts/${id}/comments`,
-      { body: text },
-      session.token
-    );
-    setCommentDraft((current) => ({ ...current, [id]: "" }));
+  function openCommentsSheet(postId: string) {
+    setMenuPostId(null);
+    setCommentsPostId(postId);
+  }
+
+  function bumpCommentsCount(postId: string, delta: number) {
     setPosts((current) =>
       current.map((post) =>
-        post.id === id
-          ? { ...post, comments: [...post.comments, result.comment], commentsCount: (post.commentsCount ?? post.comments.length) + 1 }
+        post.id === postId
+          ? { ...post, commentsCount: Math.max(0, (post.commentsCount ?? post.comments.length) + delta) }
           : post
       )
     );
@@ -594,11 +592,11 @@ export function FeedScreen() {
               <Ionicons name="images-outline" size={16} color={st.text} />
               <Text style={styles.chipText}>Mídia</Text>
             </Pressable>
-            <Pressable style={styles.chip} onPress={() => void captureMedia("photo")} disabled={mediaItems.length >= MAX_MEDIA}>
+            <Pressable style={styles.chip} onPress={() => openCamera("photo")} disabled={mediaItems.length >= MAX_MEDIA}>
               <Ionicons name="camera-outline" size={16} color={st.text} />
               <Text style={styles.chipText}>Câmera</Text>
             </Pressable>
-            <Pressable style={styles.chip} onPress={() => void captureMedia("video")} disabled={mediaItems.length >= MAX_MEDIA}>
+            <Pressable style={styles.chip} onPress={() => openCamera("video")} disabled={mediaItems.length >= MAX_MEDIA}>
               <Ionicons name="videocam-outline" size={16} color={st.text} />
               <Text style={styles.chipText}>Vídeo</Text>
             </Pressable>
@@ -670,9 +668,7 @@ export function FeedScreen() {
               <View style={styles.head}>
                 <Pressable
                   style={styles.headAuthor}
-                  onPress={() => {
-                    if (!post.isMine) openPeerProfile(post.author.id);
-                  }}
+                  onPress={() => openPeerProfile(post.author.id, Boolean(post.isMine))}
                 >
                   {post.author.avatarUrl ? (
                     <Image source={{ uri: mediaUrl(post.author.avatarUrl) }} style={styles.avatar} />
@@ -778,39 +774,21 @@ export function FeedScreen() {
               ) : (
                 <PostMediaCarousel items={mediaItemsForPost} styles={styles} />
               )}
-              <View style={styles.row}>
-                <Pressable onPress={() => void toggleLike(post.id)} style={styles.chip}>
-                  <Ionicons name={post.likedByMe ? "heart" : "heart-outline"} size={18} color={post.likedByMe ? st.coral : st.text} />
-                  <Text style={styles.chipText}>
-                    {post.kind === "ACTIVITY" ? "Kudos " : ""}
-                    {post.likesCount}
-                  </Text>
+              <View style={styles.actionsRow}>
+                <Pressable onPress={() => void toggleLike(post.id)} style={styles.actionBtn} accessibilityLabel="Curtir">
+                  <Ionicons
+                    name={post.likedByMe ? "thumbs-up" : "thumbs-up-outline"}
+                    size={18}
+                    color={post.likedByMe ? "#df663c" : st.muted}
+                  />
+                  <Text style={[styles.actionText, post.likedByMe && styles.actionTextOn]}>{post.likesCount}</Text>
                 </Pressable>
-                {post.kind === "ACTIVITY" ? null : (
-                  <Pressable onPress={() => void toggleDislike(post.id)} style={styles.chip}>
-                    <Ionicons name="thumbs-down-outline" size={18} color={post.dislikedByMe ? st.coral : st.text} />
-                    <Text style={styles.chipText}>{post.dislikesCount ?? 0}</Text>
-                  </Pressable>
-                )}
-                <Ionicons name="chatbubble-outline" size={18} color={st.muted} />
-                <Text style={styles.chipText}>{post.commentsCount ?? post.comments.length}</Text>
-              </View>
-              {post.comments.slice(-2).map((comment) => (
-                <Text key={comment.id} style={styles.comment}>
-                  <Text style={styles.name}>{comment.author.name.split(" ")[0]} </Text>
-                  {comment.body}
-                </Text>
-              ))}
-              <View style={styles.row}>
-                <TextInput
-                  value={commentDraft[post.id] ?? ""}
-                  onChangeText={(value) => setCommentDraft((current) => ({ ...current, [post.id]: value }))}
-                  placeholder="Comentar"
-                  placeholderTextColor={st.faint}
-                  style={[styles.input, { flex: 1 }]}
-                />
-                <Pressable onPress={() => void sendComment(post.id)}>
-                  <Ionicons name="send" size={18} color={st.gold} />
+                <Pressable onPress={() => openCommentsSheet(post.id)} style={styles.actionBtn} accessibilityLabel="Comentar">
+                  <Ionicons name="chatbubble-outline" size={18} color={st.muted} />
+                  <Text style={styles.actionText}>{post.commentsCount ?? post.comments.length}</Text>
+                </Pressable>
+                <Pressable onPress={() => void sharePost(post)} style={styles.actionBtn} accessibilityLabel="Compartilhar">
+                  <Ionicons name="share-social-outline" size={18} color={st.muted} />
                 </Pressable>
               </View>
             </View>
@@ -871,11 +849,11 @@ export function FeedScreen() {
                 <Ionicons name="images-outline" size={16} color={st.text} />
                 <Text style={styles.chipText}>Galeria</Text>
               </Pressable>
-              <Pressable style={styles.storyActionChip} onPress={() => void captureMedia("photo", true)}>
+              <Pressable style={styles.storyActionChip} onPress={() => openCamera("photo", true)}>
                 <Ionicons name="camera-outline" size={16} color={st.text} />
                 <Text style={styles.chipText}>Câmera</Text>
               </Pressable>
-              <Pressable style={styles.storyActionChip} onPress={() => void captureMedia("video", true)}>
+              <Pressable style={styles.storyActionChip} onPress={() => openCamera("video", true)}>
                 <Ionicons name="videocam-outline" size={16} color={st.text} />
                 <Text style={styles.chipText}>Vídeo</Text>
               </Pressable>
@@ -951,6 +929,15 @@ export function FeedScreen() {
         </View>
       </Modal>
 
+      <FeedCommentsSheet
+        visible={Boolean(commentsPostId)}
+        postId={commentsPostId}
+        token={session.token}
+        fallbackComments={posts.find((post) => post.id === commentsPostId)?.comments ?? []}
+        onClose={() => setCommentsPostId(null)}
+        onCountChange={bumpCommentsCount}
+      />
+
       <StoryViewerModal
         visible={Boolean(viewer)}
         rails={rails}
@@ -972,6 +959,14 @@ export function FeedScreen() {
         token={session.token}
         archiveMode
         onClose={() => setGalleryViewerIndex(null)}
+      />
+
+      <NativeCameraModal
+        visible={Boolean(cameraSession)}
+        mode={cameraSession?.kind ?? "photo"}
+        allowModeSwitch
+        onClose={() => setCameraSession(null)}
+        onCaptured={(capture) => void onCameraCaptured(capture)}
       />
     </StudentPage>
   );
@@ -1002,6 +997,21 @@ function createStyles(st: StudentTokens) {
     },
     input: { color: st.text, borderWidth: 1, borderColor: st.line, borderRadius: 12, padding: 10, backgroundColor: st.inputBg },
     row: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+    actionsRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      alignItems: "center",
+      gap: 16,
+      marginTop: 2
+    },
+    actionBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingVertical: 2
+    },
+    actionText: { color: st.muted, fontWeight: "700", fontSize: 13 },
+    actionTextOn: { color: "#df663c" },
     chip: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: st.line, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: st.fill },
     chipOn: { backgroundColor: "#f2b461", borderColor: "transparent" },
     chipText: { color: st.text, fontWeight: "800", fontSize: 12 },

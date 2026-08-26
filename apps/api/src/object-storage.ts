@@ -1,6 +1,6 @@
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { createWriteStream } from "node:fs";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { mkdir, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { env } from "./env.js";
@@ -29,7 +29,10 @@ function getClient() {
       credentials: {
         accessKeyId: env.R2_ACCESS_KEY_ID!,
         secretAccessKey: env.R2_SECRET_ACCESS_KEY!
-      }
+      },
+      // AWS SDK 3.7xx+ defaults flexible checksums that Cloudflare R2 rejects → hung PutObject → Render 502.
+      requestChecksumCalculation: "WHEN_REQUIRED",
+      responseChecksumValidation: "WHEN_REQUIRED"
     });
   }
 
@@ -46,17 +49,23 @@ export function buildObjectPublicUrl(relativePath: string) {
 
 export async function putObjectFromFile(relativePath: string, absolutePath: string, contentType: string) {
   const key = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
-  const body = await readFile(absolutePath);
+  const fileStat = await stat(absolutePath);
+  const body = createReadStream(absolutePath);
 
-  await getClient().send(
-    new PutObjectCommand({
-      Bucket: env.R2_BUCKET_NAME!,
-      Key: key,
-      Body: body,
-      ContentType: contentType || "application/octet-stream",
-      CacheControl: "public, max-age=31536000, immutable"
-    })
-  );
+  try {
+    await getClient().send(
+      new PutObjectCommand({
+        Bucket: env.R2_BUCKET_NAME!,
+        Key: key,
+        Body: body,
+        ContentLength: fileStat.size,
+        ContentType: contentType || "application/octet-stream",
+        CacheControl: "public, max-age=31536000, immutable"
+      })
+    );
+  } finally {
+    body.destroy();
+  }
 }
 
 export async function downloadObjectToTemp(relativePath: string) {

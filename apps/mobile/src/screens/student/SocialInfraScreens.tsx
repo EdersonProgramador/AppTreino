@@ -19,9 +19,10 @@ import { io, type Socket } from "socket.io-client";
 import * as ImagePicker from "expo-image-picker";
 import { apiDelete, apiGet, apiPost } from "../../auth/api";
 import { AppVideo } from "../../components/AppVideo";
+import { NativeCameraModal, type NativeCameraCapture } from "../../components/NativeCameraModal";
 import { API_URL } from "../../config";
 import { mediaUrl } from "../../lib/media";
-import { ensureLibraryAccess } from "../../lib/nativeMediaPick";
+import { ensureLibraryAccess, uploadCameraCapture } from "../../lib/nativeMediaPick";
 import { uploadPickerAsset } from "../../lib/uploadMedia";
 import { EmptyState, GreenButton, StudentPage } from "../../student/layout";
 import { useStudent } from "../../student/StudentContext";
@@ -146,6 +147,8 @@ export function ReelsScreen() {
   const [reels, setReels] = useState<ReelRow[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
   const slideHeight = pageHeight;
 
   const load = useCallback(async () => {
@@ -157,6 +160,68 @@ export function ReelsScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function publishReelFromAsset(asset: {
+    uri: string;
+    fileName?: string | null;
+    mimeType?: string | null;
+    type?: string | null;
+    duration?: number | null;
+  }) {
+    setBusy(true);
+    try {
+      const { uploaded } = await uploadPickerAsset<{ file: { url: string } }>(
+        "/student/social/uploads",
+        asset,
+        session.token,
+        "reel"
+      );
+      await apiPost("/student/social/reels", { videoUrl: uploaded.file.url, caption: "" }, session.token);
+      await load();
+    } catch (err) {
+      console.warn("reel upload failed", err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function pickReelFromGallery() {
+    setComposeOpen(false);
+    try {
+      const ok = await ensureLibraryAccess();
+      if (!ok) return;
+      const pick = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["videos"],
+        quality: 0.8,
+        videoMaxDuration: 60,
+        videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
+        videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium
+      });
+      if (pick.canceled || !pick.assets[0]) return;
+      await publishReelFromAsset(pick.assets[0]);
+    } catch (err) {
+      console.warn("reel gallery failed", err);
+    }
+  }
+
+  async function onReelCameraCaptured(capture: NativeCameraCapture) {
+    setCameraOpen(false);
+    const item = await uploadCameraCapture({
+      token: session.token,
+      capture,
+      fallbackBase: "reel-cam"
+    });
+    if (!item) return;
+    setBusy(true);
+    try {
+      await apiPost("/student/social/reels", { videoUrl: item.url, caption: "" }, session.token);
+      await load();
+    } catch (err) {
+      console.warn("reel camera publish failed", err);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     const first = viewableItems.find((row) => row.isViewable);
@@ -173,44 +238,40 @@ export function ReelsScreen() {
           <Text style={styles.reelsBackText}>Feed</Text>
         </Pressable>
         <Text style={styles.reelsHeadTitle}>Clipes</Text>
-        <Pressable
-          disabled={busy}
-          onPress={async () => {
-            try {
-              const ok = await ensureLibraryAccess();
-              if (!ok) return;
-              const pick = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ["videos"],
-                quality: 0.8,
-                videoMaxDuration: 60,
-                videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
-                videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium
-              });
-              if (pick.canceled || !pick.assets[0]) return;
-              setBusy(true);
-              const { uploaded } = await uploadPickerAsset<{ file: { url: string } }>(
-                "/student/social/uploads",
-                pick.assets[0],
-                session.token,
-                "reel"
-              );
-              await apiPost(
-                "/student/social/reels",
-                { videoUrl: uploaded.file.url, caption: "" },
-                session.token
-              );
-              await load();
-            } catch (err) {
-              console.warn("reel upload failed", err);
-            } finally {
-              setBusy(false);
-            }
-          }}
-          hitSlop={10}
-        >
+        <Pressable disabled={busy} onPress={() => setComposeOpen(true)} hitSlop={10}>
           <Ionicons name="add-circle-outline" size={24} color={st.text} />
         </Pressable>
       </View>
+
+      <Modal visible={composeOpen} transparent animationType="fade" onRequestClose={() => setComposeOpen(false)}>
+        <Pressable style={styles.composeBackdrop} onPress={() => setComposeOpen(false)} />
+        <View style={styles.composeSheet}>
+          <Text style={styles.composeTitle}>Novo clipe</Text>
+          <Pressable
+            style={styles.composeRow}
+            onPress={() => {
+              setComposeOpen(false);
+              setCameraOpen(true);
+            }}
+          >
+            <Ionicons name="videocam-outline" size={20} color={st.text} />
+            <Text style={styles.composeRowText}>Gravar com a câmera</Text>
+          </Pressable>
+          <Pressable style={styles.composeRow} onPress={() => void pickReelFromGallery()}>
+            <Ionicons name="images-outline" size={20} color={st.text} />
+            <Text style={styles.composeRowText}>Escolher da galeria</Text>
+          </Pressable>
+        </View>
+      </Modal>
+
+      <NativeCameraModal
+        visible={cameraOpen}
+        mode="video"
+        allowModeSwitch={false}
+        maxVideoSeconds={60}
+        onClose={() => setCameraOpen(false)}
+        onCaptured={(capture) => void onReelCameraCaptured(capture)}
+      />
 
       <View
         style={{ flex: 1, backgroundColor: "#000" }}
@@ -405,7 +466,7 @@ export function LiveScreen() {
           disabled={busy || title.trim().length < 2}
         />
         <Text style={styles.startHint}>
-          Vamos pedir câmera e microfone. Há 3 segundos de contagem antes de ir ao ar.
+          Pedimos câmera e microfone. Há 3 segundos de contagem antes de ir ao ar.
         </Text>
       </View>
 
@@ -967,6 +1028,28 @@ function createStyles(st: StudentTokens) {
     reelsBackText: { color: st.text, fontWeight: "700" },
     reelsHeadTitle: { color: st.text, fontWeight: "800", fontSize: 17 },
     reelsEmpty: { flex: 1, justifyContent: "center", padding: 24, backgroundColor: st.bg },
+    composeBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.55)" },
+    composeSheet: {
+      position: "absolute",
+      left: 16,
+      right: 16,
+      bottom: 40,
+      borderRadius: 16,
+      backgroundColor: st.card,
+      borderWidth: 1,
+      borderColor: st.line,
+      padding: 16,
+      gap: 8
+    },
+    composeTitle: { color: st.text, fontWeight: "800", fontSize: 16, marginBottom: 4 },
+    composeRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingVertical: 12,
+      paddingHorizontal: 8
+    },
+    composeRowText: { color: st.text, fontWeight: "600", fontSize: 15 },
     reelsTop: {
       position: "absolute",
       top: 48,

@@ -1,7 +1,8 @@
-import { Alert, Linking } from "react-native";
+import { Alert, Linking, Platform } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { Audio } from "expo-av";
+import { Camera } from "expo-camera";
 import { uploadPickerAsset } from "./uploadMedia";
+import type { NativeCameraCapture } from "../components/NativeCameraModal";
 
 export type PickedUpload = {
   url: string;
@@ -10,12 +11,7 @@ export type PickedUpload = {
 };
 
 function openSettingsHint(kind: "camera" | "library" | "mic") {
-  const label =
-    kind === "camera"
-      ? "câmera"
-      : kind === "mic"
-        ? "microfone"
-        : "galeria";
+  const label = kind === "camera" ? "câmera" : kind === "mic" ? "microfone" : "galeria";
   Alert.alert(
     "Permissão necessária",
     `Permita o acesso à ${label} nas configurações do aparelho para continuar.`,
@@ -26,22 +22,40 @@ function openSettingsHint(kind: "camera" | "library" | "mic") {
   );
 }
 
+/** Normalized gallery options — H.264 on iOS, legacy picker on Android Expo Go. */
 const videoOptions: ImagePicker.ImagePickerOptions = {
   videoMaxDuration: 60,
-  // Force H.264 on iOS instead of HEVC passthrough (breaks Android / many players).
   videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
-  videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium
+  videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+  preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible
 };
 
+function androidLegacyOptions(): Partial<ImagePicker.ImagePickerOptions> {
+  return Platform.OS === "android" ? { legacy: true } : {};
+}
+
 export async function ensureCameraAccess(needMic: boolean) {
-  const cam = await ImagePicker.requestCameraPermissionsAsync();
-  if (!cam.granted) {
+  let camGranted = false;
+  try {
+    const cam = await Camera.requestCameraPermissionsAsync();
+    camGranted = cam.granted;
+  } catch {
+    const cam = await ImagePicker.requestCameraPermissionsAsync();
+    camGranted = cam.granted;
+  }
+  if (!camGranted) {
     openSettingsHint("camera");
     return false;
   }
   if (needMic) {
-    const mic = await Audio.requestPermissionsAsync();
-    if (!mic.granted) {
+    let micGranted = false;
+    try {
+      const mic = await Camera.requestMicrophonePermissionsAsync();
+      micGranted = mic.granted;
+    } catch {
+      micGranted = true;
+    }
+    if (!micGranted) {
       openSettingsHint("mic");
       return false;
     }
@@ -67,53 +81,63 @@ export async function pickFeedMedia(params: {
   const ok = await ensureLibraryAccess();
   if (!ok) return [];
   const forStory = Boolean(params.forStory);
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ["images", "videos"],
-    quality: 0.8,
-    allowsMultipleSelection: !forStory,
-    selectionLimit: forStory ? 1 : Math.max(1, params.remainingSlots),
-    ...videoOptions
-  });
+  let result: ImagePicker.ImagePickerResult;
+  try {
+    result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images", "videos"],
+      quality: 0.8,
+      allowsMultipleSelection: !forStory,
+      selectionLimit: forStory ? 1 : Math.max(1, params.remainingSlots),
+      ...videoOptions,
+      ...androidLegacyOptions()
+    });
+  } catch (err) {
+    Alert.alert("Galeria", err instanceof Error ? err.message : "Não foi possível abrir a galeria.");
+    return [];
+  }
   if (result.canceled || !result.assets?.length) return [];
 
   const uploads: PickedUpload[] = [];
   const path = params.uploadPath || "/student/social/uploads";
   for (const asset of result.assets.slice(0, forStory ? 1 : params.remainingSlots)) {
-    const { uploaded, mediaType } = await uploadPickerAsset<{ file: { url: string } }>(
-      path,
-      asset,
-      params.token,
-      forStory ? "story" : "feed"
-    );
-    uploads.push({ url: uploaded.file.url, type: mediaType, localUri: asset.uri });
+    try {
+      const { uploaded, mediaType } = await uploadPickerAsset<{ file: { url: string } }>(
+        path,
+        asset,
+        params.token,
+        forStory ? "story" : "feed"
+      );
+      uploads.push({ url: uploaded.file.url, type: mediaType, localUri: asset.uri });
+    } catch (err) {
+      Alert.alert("Upload", err instanceof Error ? err.message : "Falha ao enviar o arquivo.");
+    }
   }
   return uploads;
 }
 
-export async function captureFeedMedia(params: {
+/** Upload de captura da NativeCameraModal (in-app). */
+export async function uploadCameraCapture(params: {
   token: string;
-  kind: "photo" | "video";
+  capture: NativeCameraCapture;
   forStory?: boolean;
   uploadPath?: string;
+  fallbackBase?: string;
 }): Promise<PickedUpload | null> {
-  const needMic = params.kind === "video";
-  const ok = await ensureCameraAccess(needMic);
-  if (!ok) return null;
-
-  const result = await ImagePicker.launchCameraAsync({
-    mediaTypes: params.kind === "video" ? ["videos"] : ["images"],
-    quality: 0.85,
-    cameraType: ImagePicker.CameraType.back,
-    ...videoOptions
-  });
-  if (result.canceled || !result.assets?.length) return null;
-
-  const asset = result.assets[0];
-  const { uploaded, mediaType } = await uploadPickerAsset<{ file: { url: string } }>(
-    params.uploadPath || "/student/social/uploads",
-    asset,
-    params.token,
-    params.forStory ? "story-cam" : "camera"
-  );
-  return { url: uploaded.file.url, type: mediaType, localUri: asset.uri };
+  try {
+    const { uploaded, mediaType } = await uploadPickerAsset<{ file: { url: string } }>(
+      params.uploadPath || "/student/social/uploads",
+      {
+        uri: params.capture.uri,
+        fileName: params.capture.fileName,
+        mimeType: params.capture.mimeType,
+        type: params.capture.type === "VIDEO" ? "video" : "image"
+      },
+      params.token,
+      params.fallbackBase || (params.forStory ? "story-cam" : "camera")
+    );
+    return { url: uploaded.file.url, type: mediaType, localUri: params.capture.uri };
+  } catch (err) {
+    Alert.alert("Upload", err instanceof Error ? err.message : "Falha ao enviar a captura.");
+    return null;
+  }
 }

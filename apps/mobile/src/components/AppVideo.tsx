@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { Audio, ResizeMode, Video, type AVPlaybackStatus } from "expo-av";
-import { API_URL } from "../config";
+import { useEventListener } from "expo";
+import { useVideoPlayer, VideoView, type VideoContentFit } from "expo-video";
 
 type AppVideoProps = {
   uri: string;
   style?: StyleProp<ViewStyle>;
-  contentFit?: "contain" | "cover" | "fill";
+  contentFit?: VideoContentFit;
   loop?: boolean;
   muted?: boolean;
   playing?: boolean;
@@ -18,65 +18,14 @@ type AppVideoProps = {
 };
 
 function isLikelyUnsupportedOnIos(uri: string) {
+  // Bridge `/media/video` already returns MP4 — only raw .webm URLs fail on iOS.
   if (/\/media\/video(\?|$)/i.test(uri)) return false;
   return Platform.OS === "ios" && /\.webm(\?|#|$)/i.test(uri);
 }
 
-function resizeModeFromFit(fit: AppVideoProps["contentFit"]) {
-  if (fit === "cover") return ResizeMode.COVER;
-  if (fit === "fill") return ResizeMode.STRETCH;
-  return ResizeMode.CONTAIN;
-}
-
-function originOf(url: string) {
-  return url.replace(/\/$/, "");
-}
-
-/** If direct CDN/API mp4 fails (HEVC etc.), retry via API compat bridge. */
-function mediaBridgeUri(uri: string): string | null {
-  if (!uri || /^(file:|content:|data:|blob:)/i.test(uri)) return null;
-  if (/\/media\/video(\?|$)/i.test(uri)) {
-    if (/([?&])force=1(&|$)/i.test(uri)) return null;
-    return uri.includes("?") ? `${uri}&force=1` : `${uri}?force=1`;
-  }
-  try {
-    const api = originOf(API_URL);
-    let pathname = "";
-    if (/^https?:\/\//i.test(uri)) {
-      const url = new URL(uri);
-      pathname = url.pathname.replace(/^\/uploads\//i, "/").replace(/^\/+/, "");
-    } else {
-      pathname = uri.replace(/^\/+/, "").replace(/^uploads\//i, "");
-    }
-    if (!/^(lessons|images|materials)\//i.test(pathname)) return null;
-    if (!/\.(mp4|m4v|mov|webm|mkv|avi)(\?|#|$)/i.test(pathname)) return null;
-    const cleaned = pathname.split(/[?#]/)[0];
-    return `${api}/media/video?path=${encodeURIComponent(cleaned)}&force=1`;
-  } catch {
-    return null;
-  }
-}
-
-let audioModeReady = false;
-async function ensureAudioMode() {
-  if (audioModeReady) return;
-  try {
-    await Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      allowsRecordingIOS: false,
-      staysActiveInBackground: false,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false
-    });
-    audioModeReady = true;
-  } catch {
-    // playback can still work without this
-  }
-}
-
 /**
- * Reliable feed/story/reel player (expo-av).
- * Parent style must give real width/height (or aspectRatio).
+ * Player alinhado com a web: a URL já vem resolvida por `mediaUrl`
+ * (CDN MP4 ou `{API}/media/video?path=` para legados).
  */
 export function AppVideo({
   uri,
@@ -91,52 +40,62 @@ export function AppVideo({
   onEnd,
   onDurationMs
 }: AppVideoProps) {
-  const videoRef = useRef<Video>(null);
   const unsupported = isLikelyUnsupportedOnIos(uri);
-  const [sourceUri, setSourceUri] = useState(uri);
   const [error, setError] = useState<string | null>(unsupported ? "WEBM_IOS" : null);
   const [retryToken, setRetryToken] = useState(0);
-  const triedBridgeRef = useRef(false);
   const endedRef = useRef(false);
   const hardFailTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const resizeMode = useMemo(() => resizeModeFromFit(contentFit), [contentFit]);
+  const player = useVideoPlayer(unsupported ? null : { uri }, (instance) => {
+    instance.loop = loop;
+    instance.muted = muted;
+    instance.audioMixingMode = "auto";
+    if (maxSeconds && maxSeconds > 0) {
+      instance.timeUpdateEventInterval = 0.25;
+    }
+  });
 
   useEffect(() => {
-    void ensureAudioMode();
-  }, []);
-
-  useEffect(() => {
-    triedBridgeRef.current = false;
     endedRef.current = false;
-    setSourceUri(uri);
     setError(unsupported ? "WEBM_IOS" : null);
   }, [uri, unsupported]);
 
   useEffect(() => {
+    if (unsupported) return;
     endedRef.current = false;
-    const player = videoRef.current;
-    if (!player || unsupported || error) return;
-    void player
-      .setStatusAsync({
-        shouldPlay: playing,
-        isLooping: loop,
-        isMuted: muted,
-        progressUpdateIntervalMillis: maxSeconds && maxSeconds > 0 ? 250 : 500
-      })
-      .catch(() => undefined);
-  }, [playing, loop, muted, maxSeconds, sourceUri, unsupported, error, retryToken]);
+    void player.replaceAsync({ uri }).catch(() => {
+      try {
+        player.replace({ uri });
+      } catch {
+        setError("PLAY_ERROR");
+      }
+    });
+  }, [uri, unsupported, player, retryToken]);
+
+  useEffect(() => {
+    player.loop = loop;
+  }, [loop, player]);
+
+  useEffect(() => {
+    player.muted = muted;
+  }, [muted, player]);
+
+  useEffect(() => {
+    if (unsupported || error) return;
+    if (playing) player.play();
+    else player.pause();
+  }, [playing, player, unsupported, error, uri, retryToken]);
 
   useEffect(() => {
     if (restartKey == null || unsupported || error) return;
-    const player = videoRef.current;
-    if (!player) return;
     endedRef.current = false;
-    void player
-      .setPositionAsync(0)
-      .then(() => (playing ? player.playAsync() : undefined))
-      .catch(() => undefined);
-  }, [restartKey, playing, unsupported, error, sourceUri, retryToken]);
+    try {
+      player.currentTime = 0;
+      if (playing) player.play();
+    } catch {
+      // ignore
+    }
+  }, [restartKey, player, playing, unsupported, error, uri, retryToken]);
 
   function clearHardFailTimer() {
     if (hardFailTimer.current) {
@@ -145,74 +104,58 @@ export function AppVideo({
     }
   }
 
-  function failWith(message: string) {
-    if (unsupported) {
-      setError("WEBM_IOS");
-      return;
-    }
-    if (!triedBridgeRef.current) {
-      const bridge = mediaBridgeUri(sourceUri) || mediaBridgeUri(uri);
-      if (bridge && bridge !== sourceUri) {
-        triedBridgeRef.current = true;
-        setError(null);
-        setSourceUri(bridge);
-        setRetryToken((n) => n + 1);
-        return;
-      }
-    }
-    setError(message || "PLAY_ERROR");
+  function retryPlayback() {
+    clearHardFailTimer();
+    setError(null);
+    setRetryToken((n) => n + 1);
   }
 
-  function onStatus(status: AVPlaybackStatus) {
-    if (!status.isLoaded) {
-      // expo-av emits unloaded states while buffering; only hard-fail on real errors.
-      if (status.error) {
-        clearHardFailTimer();
-        hardFailTimer.current = setTimeout(() => failWith(status.error || "PLAY_ERROR"), 400);
-      }
+  useEventListener(player, "playToEnd", () => {
+    if (!endedRef.current) {
+      endedRef.current = true;
+      onEnd?.();
+    }
+  });
+
+  useEventListener(player, "statusChange", ({ status, error: statusError }) => {
+    if (status === "error") {
+      clearHardFailTimer();
+      hardFailTimer.current = setTimeout(() => {
+        setError(statusError?.message || "PLAY_ERROR");
+      }, 400);
       return;
     }
-    clearHardFailTimer();
-    if (error) setError(null);
-    if (status.durationMillis && status.durationMillis > 0) {
-      onDurationMs?.(status.durationMillis);
+    if (status === "readyToPlay") {
+      clearHardFailTimer();
+      setError(null);
+      if (player.duration > 0) onDurationMs?.(Math.round(player.duration * 1000));
+      if (playing) player.play();
     }
-    if (maxSeconds && maxSeconds > 0 && status.positionMillis >= maxSeconds * 1000) {
-      void videoRef.current?.pauseAsync().catch(() => undefined);
+  });
+
+  useEventListener(player, "timeUpdate", ({ currentTime }) => {
+    if (!maxSeconds || maxSeconds <= 0) return;
+    if (currentTime >= maxSeconds) {
+      player.pause();
       if (!endedRef.current) {
         endedRef.current = true;
         onEnd?.();
       }
-      return;
     }
-    if (status.didJustFinish && !status.isLooping) {
-      if (!endedRef.current) {
-        endedRef.current = true;
-        onEnd?.();
-      }
-    }
-  }
+  });
 
   useEffect(() => () => clearHardFailTimer(), []);
 
   if (error) {
     const label =
       error === "WEBM_IOS"
-        ? "Este vídeo (.webm) não roda no iPhone. Abra no app web ou publique em MP4."
+        ? "Este vídeo (.webm) não roda no iPhone. Publique de novo em MP4."
         : "Não foi possível reproduzir o vídeo.";
     return (
       <View style={[styles.wrap, styles.fallback, style]}>
         <Text style={styles.fallbackText}>{label}</Text>
         {error !== "WEBM_IOS" ? (
-          <Pressable
-            style={styles.retryBtn}
-            onPress={() => {
-              triedBridgeRef.current = false;
-              setError(null);
-              setSourceUri(uri);
-              setRetryToken((n) => n + 1);
-            }}
-          >
+          <Pressable style={styles.retryBtn} onPress={retryPlayback}>
             <Text style={styles.retryText}>Tentar de novo</Text>
           </Pressable>
         ) : null}
@@ -222,18 +165,12 @@ export function AppVideo({
 
   return (
     <View style={[styles.wrap, style]}>
-      <Video
-        ref={videoRef}
-        key={`${sourceUri}::${retryToken}`}
+      <VideoView
+        player={player}
         style={StyleSheet.absoluteFillObject}
-        source={{ uri: sourceUri }}
-        resizeMode={resizeMode}
-        shouldPlay={playing}
-        isLooping={loop}
-        isMuted={muted}
-        useNativeControls={nativeControls}
-        onPlaybackStatusUpdate={onStatus}
-        onError={(msg) => failWith(msg || "PLAY_ERROR")}
+        contentFit={contentFit}
+        nativeControls={nativeControls}
+        surfaceType="textureView"
       />
     </View>
   );

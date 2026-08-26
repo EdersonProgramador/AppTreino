@@ -14,10 +14,18 @@ export class NativeApiError extends Error {
 async function readError(response: Response) {
   try {
     const data = (await response.json()) as { message?: string; issues?: Array<{ message: string }> };
-    return data.message ?? data.issues?.[0]?.message ?? `API ${response.status}`;
+    const detail = data.message ?? data.issues?.[0]?.message;
+    if (detail) return detail;
   } catch {
-    return `API ${response.status}`;
+    // ignore
   }
+  if (response.status === 502 || response.status === 503) {
+    return "Servidor de upload indisponível (502/503). Tente de novo em instantes.";
+  }
+  if (response.status === 429) {
+    return "Muitas requisições. Aguarde um minuto e tente de novo.";
+  }
+  return `API ${response.status}`;
 }
 
 let unauthorizedHandler: (() => void) | null = null;

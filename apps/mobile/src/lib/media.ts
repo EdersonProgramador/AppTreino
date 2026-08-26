@@ -1,6 +1,15 @@
 import { API_URL, WEB_URL } from "../config";
 
-const MEDIA_URL = (process.env.EXPO_PUBLIC_MEDIA_URL ?? "").replace(/\/$/, "");
+/**
+ * Mesma regra da web (`apps/web/src/lib/urls.ts` + `getMediaBaseUrl`):
+ * - uploads → CDN (EXPO_PUBLIC_MEDIA_URL / R2)
+ * - containers legados (webm/mov/…) → API `/media/video?path=` (MP4 H.264)
+ * - http externos → intactos
+ */
+
+/** Cloudflare R2 public bucket — espelha o default de produção quando o env falta no Metro. */
+const DEFAULT_MEDIA_URL = "https://pub-7bceff9c425e44b29161a5f8570c5266.r2.dev";
+const MEDIA_URL = (process.env.EXPO_PUBLIC_MEDIA_URL || DEFAULT_MEDIA_URL).replace(/\/$/, "");
 
 function originOf(url: string) {
   return url.replace(/\/$/, "");
@@ -14,10 +23,6 @@ function isLanHost(host: string) {
   return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(host);
 }
 
-function isUploadPath(pathname: string) {
-  return /^\/uploads\//i.test(pathname) || /^\/media(\/|$)/i.test(pathname);
-}
-
 function isWebAssetPath(pathname: string) {
   return /^\/assets\//i.test(pathname);
 }
@@ -28,45 +33,72 @@ function isKnownCdnHost(host: string) {
   );
 }
 
-function withOrigin(pathnameAndSearch: string, base: string) {
-  const path = pathnameAndSearch.startsWith("/") ? pathnameAndSearch : `/${pathnameAndSearch}`;
-  return `${originOf(base)}${path}`;
-}
-
-function rewriteHost(url: URL, base: string) {
-  const target = new URL(base);
-  url.protocol = target.protocol;
-  url.hostname = target.hostname;
-  url.port = target.port;
-  return `${url.origin}${url.pathname}${url.search}${url.hash}`;
-}
-
 function encodeSpaces(href: string) {
   return href.includes(" ") ? encodeURI(href) : href;
 }
 
-function needsMp4Bridge(path: string) {
+function needsVideoBridge(path: string) {
   return /\.(webm|ogv|ogg|mov|mkv|avi)(\?|#|$)/i.test(path);
 }
 
-function playableApiVideoUrl(relativePath: string, api: string) {
-  const cleaned = relativePath.replace(/^\/+/, "").split(/[?#]/)[0];
-  return `${originOf(api)}/media/video?path=${encodeURIComponent(cleaned)}`;
+/** Path relativo de upload (`images|lessons|materials|audio/...`), igual à web. */
+export function uploadRelativePath(path?: string | null): string | null {
+  if (!path) return null;
+  const trimmed = path.trim();
+  if (!trimmed || /^(data:|file:|content:|blob:)/i.test(trimmed)) return null;
+
+  try {
+    if (/^https?:\/\//i.test(trimmed)) {
+      const url = new URL(trimmed);
+      if (/^\/uploads\//i.test(url.pathname)) {
+        return decodeURIComponent(url.pathname.slice("/uploads/".length));
+      }
+      if (/^\/media\/video/i.test(url.pathname)) {
+        const mediaPath = url.searchParams.get("path");
+        return mediaPath ? decodeURIComponent(mediaPath) : null;
+      }
+      const cdnPath = url.pathname.replace(/^\/+/, "");
+      if (/^(images|lessons|materials|audio)\//i.test(cdnPath)) {
+        return decodeURIComponent(cdnPath);
+      }
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  const cleaned = trimmed.replace(/^\/+/, "");
+  if (cleaned.startsWith("uploads/")) return cleaned.slice("uploads/".length);
+  if (/^(images|lessons|materials|audio)\//i.test(cleaned)) return cleaned;
+  if (/^media\/video/i.test(cleaned) || cleaned.startsWith("media?")) {
+    try {
+      const q = new URL(trimmed.startsWith("http") ? trimmed : `https://x/${cleaned}`);
+      const mediaPath = q.searchParams.get("path");
+      return mediaPath ? decodeURIComponent(mediaPath) : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
-function resolveUploadMedia(relativePath: string, mediaBase: string, api: string) {
+function uploadPublicUrl(relativePath: string) {
   const cleaned = relativePath.replace(/^\/+/, "");
-  if (needsMp4Bridge(cleaned)) {
-    return encodeSpaces(playableApiVideoUrl(cleaned, api));
+  return encodeSpaces(`${MEDIA_URL}/${cleaned}`);
+}
+
+/** Legado → bridge da API (igual web). MP4/imagem → CDN. */
+function playableUploadUrl(relativePath: string) {
+  const cleaned = relativePath.replace(/^\/+/, "").split(/[?#]/)[0];
+  if (needsVideoBridge(cleaned)) {
+    const api = originOf(API_URL);
+    return `${api}/media/video?path=${encodeURIComponent(cleaned)}`;
   }
-  return encodeSpaces(`${originOf(mediaBase)}/${cleaned}`);
+  return uploadPublicUrl(cleaned);
 }
 
 /**
- * Resolve mídia cadastrada para o app nativo.
- * Uploads da API (`/uploads/...`) batem na API; `/assets/...` no front web.
- * Localhost/LAN gravado no banco é reescrito para o host atual do Expo.
- * Vídeos webm/mov passam por `/media/video` (conversão MP4).
+ * Resolve mídia cadastrada — contrato alinhado com a web.
  */
 export function mediaUrl(path?: string | null): string | undefined {
   if (!path) return undefined;
@@ -76,60 +108,53 @@ export function mediaUrl(path?: string | null): string | undefined {
 
   const api = originOf(API_URL);
   const web = originOf(WEB_URL);
-  const media = MEDIA_URL || `${api}/uploads`;
   let raw = trimmed.startsWith("//") ? `https:${trimmed}` : trimmed;
   if (/^(www\.)?(youtube\.com|youtu\.be|m\.youtube\.com)\//i.test(raw)) {
     raw = `https://${raw}`;
   }
 
+  const relative = uploadRelativePath(raw);
+  if (relative) {
+    return playableUploadUrl(relative);
+  }
+
   try {
     if (/^https?:\/\//i.test(raw)) {
       const url = new URL(raw);
-      if (isUploadPath(url.pathname)) {
-        const relative = url.pathname.replace(/^\/uploads\//i, "").replace(/^\/+/, "");
-        return resolveUploadMedia(`${relative}${url.search}`, media, api);
-      }
-      const cdnPath = url.pathname.replace(/^\/+/, "");
-      if (/^(images|lessons|materials|audio)\//i.test(cdnPath)) {
-        return resolveUploadMedia(`${cdnPath}${url.search}`, media, api);
-      }
       if (isWebAssetPath(url.pathname)) {
-        return encodeSpaces(withOrigin(`${url.pathname}${url.search}`, web));
+        return encodeSpaces(`${web}${url.pathname}${url.search}`);
       }
+      // Já é URL pública (CDN/externo) — manter (bridge já tratado via uploadRelativePath).
       if (isKnownCdnHost(url.hostname) || (!isLoopback(url.hostname) && !isLanHost(url.hostname))) {
-        if (needsMp4Bridge(url.pathname) && /^(images|lessons|materials)\//i.test(cdnPath)) {
-          return resolveUploadMedia(cdnPath, media, api);
-        }
         return encodeSpaces(url.href);
       }
       if (url.port === "5173" || url.port === "5174" || isWebAssetPath(url.pathname)) {
-        return encodeSpaces(rewriteHost(url, web));
+        const target = new URL(web);
+        url.protocol = target.protocol;
+        url.hostname = target.hostname;
+        url.port = target.port;
+        return encodeSpaces(`${url.origin}${url.pathname}${url.search}${url.hash}`);
       }
-      return encodeSpaces(rewriteHost(url, api));
+      if (/onrender\.com$/i.test(url.hostname) && /^\/uploads\//i.test(url.pathname)) {
+        const rel = url.pathname.replace(/^\/uploads\//i, "");
+        return playableUploadUrl(rel);
+      }
+      return encodeSpaces(url.href);
     }
   } catch {
     // path relativo abaixo
   }
 
   const cleaned = raw.replace(/^\/+/, "");
-  if (/^(images|lessons|materials|audio)\//i.test(cleaned)) {
-    return resolveUploadMedia(cleaned, media, api);
-  }
-  if (/^uploads\//i.test(cleaned)) {
-    return resolveUploadMedia(cleaned.slice("uploads/".length), media, api);
-  }
-  if (/^media(\?|\/|$)/i.test(cleaned)) {
-    return encodeSpaces(`${api}/${cleaned}`);
-  }
   if (/^assets\//i.test(cleaned)) {
     return encodeSpaces(`${web}/${cleaned}`);
   }
   if (raw.startsWith("/")) {
-    if (isUploadPath(raw)) {
-      const relative = raw.replace(/^\/uploads\//i, "").replace(/^\/+/, "");
-      return resolveUploadMedia(relative, media, api);
-    }
     return encodeSpaces(isWebAssetPath(raw) ? `${web}${raw}` : `${api}${raw}`);
   }
-  return encodeSpaces(`${api}/${cleaned}`);
+  return encodeSpaces(`${MEDIA_URL}/${cleaned}`);
+}
+
+export function getMediaBaseUrl() {
+  return MEDIA_URL;
 }

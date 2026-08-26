@@ -5,6 +5,7 @@ export const assetUrl = (path: string) => `${import.meta.env.BASE_URL}${path}`;
 /**
  * Path relativo só para uploads LOCAIS da API (`/uploads/images|lessons|...`).
  * Não confundir com `/wp-content/uploads/` de sites externos.
+ * Contrato alinhado com `apps/mobile/src/lib/media.ts`.
  */
 export function uploadRelativePath(path?: string | null): string | null {
   if (!path) return null;
@@ -17,6 +18,10 @@ export function uploadRelativePath(path?: string | null): string | null {
       const url = new URL(trimmed);
       if (/^\/uploads\//i.test(url.pathname)) {
         return decodeURIComponent(url.pathname.slice("/uploads/".length));
+      }
+      if (/^\/media\/video/i.test(url.pathname)) {
+        const mediaPath = url.searchParams.get("path");
+        return mediaPath ? decodeURIComponent(mediaPath) : null;
       }
       const cdnPath = url.pathname.replace(/^\/+/, "");
       if (/^(images|lessons|materials|audio)\//i.test(cdnPath)) {
@@ -49,7 +54,7 @@ function uploadPublicUrl(relativePath: string) {
   return `/uploads/${cleaned}`;
 }
 
-/** Legacy webm/mov/etc → API converts to H.264 MP4 (iOS + Android + web). */
+/** Legacy webm/mov/etc → API converts to H.264 MP4 (iOS + Android + web). Same as native. */
 function playableUploadUrl(relativePath: string) {
   const cleaned = relativePath.replace(/^\/+/, "").split(/[?#]/)[0];
   if (/\.(webm|ogv|ogg|mov|mkv|avi)$/i.test(cleaned)) {
@@ -60,9 +65,10 @@ function playableUploadUrl(relativePath: string) {
 }
 
 /**
- * Resolve URL de mídia cadastrada.
- * - http(s) externos (GIF/vídeo/imagem): intactos
- * - uploads da API: proxy Vite em dev; URL da API em produção
+ * Resolve URL de mídia cadastrada (web + Expo nativo usam a mesma regra).
+ * - http(s) externos: intactos
+ * - uploads MP4/imagem: CDN (`VITE_MEDIA_URL`) ou `/uploads` em dev
+ * - containers legados: `{API}/media/video?path=`
  * - `/assets/...`: assets do front
  */
 export const mediaUrl = (path?: string | null) => {

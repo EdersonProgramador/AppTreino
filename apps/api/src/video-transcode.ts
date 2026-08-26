@@ -103,8 +103,9 @@ export async function ensureUploadedVideoIsMp4(params: {
   const absolutePath = resolve(uploadsDir, relativePath);
   await mkdir(dirname(absolutePath), { recursive: true });
 
-  // Always remux/transcode to H.264/AAC + faststart so iPhone HEVC/MOV plays on Android/iOS.
-  const forceCompatible = params.forceCompatible !== false;
+  // Remux only when container needs it (mov/webm/…) or caller forces H.264 (HEVC mp4).
+  // Default false so Android H.264 MP4 uploads stay fast and do not 503 on Render.
+  const forceCompatible = params.forceCompatible === true;
 
   if (!forceCompatible && !needsVideoTranscodeToMp4(ext) && (ext === "mp4" || ext === "m4v")) {
     await rename(inputPath, absolutePath);
@@ -134,6 +135,13 @@ export async function ensureUploadedVideoIsMp4(params: {
   return { filename, relativePath, absolutePath, mimeType: "video/mp4", transcoded: true };
 }
 
+const compatJobs = new Map<string, Promise<{
+  relativePath: string;
+  absolutePath: string;
+  mimeType: string;
+  remoteOnly?: boolean;
+} | null>>();
+
 function safeUploadsRelative(relativePath: string) {
   const cleaned = relativePath.replace(/^\/+/, "").replace(/^uploads\//i, "").replace(/\\/g, "/");
   if (!cleaned || cleaned.includes("..")) return null;
@@ -144,6 +152,27 @@ function safeUploadsRelative(relativePath: string) {
  * Resolve a playable MP4 for an existing upload (local or R2). Used by /media/video.
  */
 export async function ensurePlayableMp4(
+  relativePath: string,
+  options?: { forceCompatible?: boolean }
+): Promise<{
+  relativePath: string;
+  absolutePath: string;
+  mimeType: string;
+  remoteOnly?: boolean;
+} | null> {
+  const cleanedKey = safeUploadsRelative(relativePath) || relativePath;
+  const jobKey = `${cleanedKey}::${options?.forceCompatible ? "force" : "soft"}`;
+  const existing = compatJobs.get(jobKey);
+  if (existing) return existing;
+
+  const job = ensurePlayableMp4Unlocked(relativePath, options).finally(() => {
+    compatJobs.delete(jobKey);
+  });
+  compatJobs.set(jobKey, job);
+  return job;
+}
+
+async function ensurePlayableMp4Unlocked(
   relativePath: string,
   options?: { forceCompatible?: boolean }
 ): Promise<{
@@ -218,6 +247,20 @@ export async function ensurePlayableMp4(
       };
     }
     return { relativePath: outRelative, absolutePath: localOut, mimeType: "video/mp4" };
+  } catch {
+    // ffmpeg / disk / R2 write failed — serve original so clients do not get 5xx.
+    if (await pathExists(localOriginal)) {
+      return { relativePath: cleaned, absolutePath: localOriginal, mimeType: "video/mp4" };
+    }
+    if (isObjectStorageEnabled()) {
+      return {
+        relativePath: cleaned,
+        absolutePath: localOriginal,
+        mimeType: "video/mp4",
+        remoteOnly: true
+      };
+    }
+    return null;
   } finally {
     if (tempDownloaded) await removeTempDownload(tempDownloaded);
   }

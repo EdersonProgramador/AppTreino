@@ -3,6 +3,7 @@ import { createReadStream } from "node:fs";
 import { access, constants } from "node:fs/promises";
 import { z } from "zod";
 import { getDerivedImage, mediaCacheControl } from "../media-optimize.js";
+import { downloadObjectToTemp, isObjectStorageEnabled, removeTempDownload } from "../object-storage.js";
 import { buildPublicUploadUrl } from "../upload-security.js";
 import { ensurePlayableMp4 } from "../video-transcode.js";
 
@@ -30,8 +31,8 @@ async function fileReadable(filePath: string) {
  * Thumbs sob demanda para imagens já salvas em /uploads.
  * Ex.: GET /media?path=images/foo.jpg&w=480
  *
- * Vídeos compatíveis (MP4 H.264):
- * Ex.: GET /media/video?path=lessons/foo.webm → stream MP4 (ou URL pública no R2)
+ * Vídeos compatíveis (MP4 H.264) — web e Expo usam a mesma URL:
+ * Ex.: GET /media/video?path=lessons/foo.webm → stream MP4 (sem 302; players nativos quebram em redirect)
  */
 export async function registerMediaRoutes(app: FastifyInstance) {
   app.get("/media", async (request, reply) => {
@@ -61,28 +62,60 @@ export async function registerMediaRoutes(app: FastifyInstance) {
 
   app.get("/media/video", async (request, reply) => {
     const query = videoQuerySchema.parse(request.query);
+    const fallbackPublic = () => {
+      try {
+        const url = buildPublicUploadUrl(query.path.replace(/^\/+/, "").replace(/^uploads\//i, ""));
+        reply.header("Cache-Control", "public, max-age=300");
+        return reply.redirect(url);
+      } catch {
+        return reply.code(404).send({ message: "Vídeo não encontrado." });
+      }
+    };
+
+    let tempStreamPath: string | null = null;
     try {
       const playable = await ensurePlayableMp4(query.path, { forceCompatible: query.force });
       if (!playable) {
-        return reply.code(404).send({ message: "Vídeo não encontrado." });
+        return fallbackPublic();
       }
 
-      const canStream = !playable.remoteOnly && (await fileReadable(playable.absolutePath));
+      let absolutePath = playable.absolutePath;
+      let canStream = !playable.remoteOnly && (await fileReadable(absolutePath));
+
+      // Object storage only: pull to temp and stream (302 breaks expo-video / AVPlayer).
+      if (!canStream && isObjectStorageEnabled()) {
+        try {
+          tempStreamPath = await downloadObjectToTemp(playable.relativePath);
+          absolutePath = tempStreamPath;
+          canStream = await fileReadable(absolutePath);
+        } catch {
+          canStream = false;
+        }
+      }
+
       if (canStream) {
-        // Stream bytes when local — native AV players often fail on 302 redirects.
         reply.header("Content-Type", playable.mimeType || "video/mp4");
         reply.header("Cache-Control", "public, max-age=86400");
         reply.header("Accept-Ranges", "bytes");
         reply.header("X-Content-Type-Options", "nosniff");
-        return reply.send(createReadStream(playable.absolutePath));
+        const stream = createReadStream(absolutePath);
+        if (tempStreamPath) {
+          const cleanup = tempStreamPath;
+          stream.on("close", () => {
+            void removeTempDownload(cleanup);
+          });
+          stream.on("error", () => {
+            void removeTempDownload(cleanup);
+          });
+        }
+        return reply.send(stream);
       }
 
-      const url = buildPublicUploadUrl(playable.relativePath);
-      reply.header("Cache-Control", "public, max-age=86400");
-      return reply.redirect(url);
+      return fallbackPublic();
     } catch (err) {
-      request.log.error({ err, path: query.path }, "media/video transcode failed");
-      return reply.code(500).send({ message: "Não foi possível converter o vídeo para MP4." });
+      if (tempStreamPath) await removeTempDownload(tempStreamPath);
+      request.log.error({ err, path: query.path }, "media/video failed; redirecting to original");
+      return fallbackPublic();
     }
   });
 }

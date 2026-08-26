@@ -152,7 +152,7 @@ export async function optimizeUploadedImage(params: {
         fit: "inside",
         withoutEnlargement: true
       })
-      .webp({ quality, effort: 4 })
+      .webp({ quality, effort: 2 })
       .toFile(tempPath);
 
     await rename(tempPath, finalPath);
@@ -237,7 +237,7 @@ export async function getDerivedImage(params: {
           fit: "inside",
           withoutEnlargement: true
         })
-        .webp({ quality, effort: 4 })
+        .webp({ quality, effort: 2 })
         .toFile(tempPath);
 
       await rename(tempPath, cachePath);

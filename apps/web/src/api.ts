@@ -19,6 +19,9 @@ export function getApiBaseUrl() {
   return configured || "http://localhost:3333";
 }
 
+/** Mesmo CDN default do app nativo — evita web em /uploads no Render e Expo no R2. */
+const DEFAULT_MEDIA_URL = "https://pub-7bceff9c425e44b29161a5f8570c5266.r2.dev";
+
 /** CDN/base para mídia (R2). Em dev, cai no proxy /uploads da API. */
 export function getMediaBaseUrl() {
   if (import.meta.env.DEV) {
@@ -30,8 +33,7 @@ export function getMediaBaseUrl() {
     return configured;
   }
 
-  const api = getApiBaseUrl().replace(/\/+$/, "");
-  return api ? `${api}/uploads` : "";
+  return DEFAULT_MEDIA_URL;
 }
 
 function apiUrl(path: string) {
@@ -62,11 +64,16 @@ export class ApiError extends Error {
 
 async function getErrorMessage(response: Response) {
   try {
-    const data = (await response.json()) as { message?: string; issues?: Array<{ message: string }> };
-    return data.message ?? data.issues?.[0]?.message ?? `API error: ${response.status}`;
+    const data = (await response.json()) as { message?: string; error?: string; issues?: Array<{ message: string }> };
+    const detail = data.message ?? data.error ?? data.issues?.[0]?.message;
+    if (detail) return detail;
   } catch {
-    return `API error: ${response.status}`;
+    // ignore
   }
+  if (response.status === 502 || response.status === 503) {
+    return "Servidor de upload indisponível. Tente de novo em instantes.";
+  }
+  return `API error: ${response.status}`;
 }
 
 function authHeaders(token?: string | null): Record<string, string> {

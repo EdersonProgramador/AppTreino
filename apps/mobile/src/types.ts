@@ -392,8 +392,13 @@ export type SocialAuthor = {
 export type SocialComment = {
   id: string;
   body: string;
+  parentId?: string | null;
   createdAt: string;
   author: SocialAuthor;
+  likesCount?: number;
+  likedByMe?: boolean;
+  repliesCount?: number;
+  replies?: SocialComment[];
 };
 
 export type OutdoorActivityRow = {
