@@ -4,10 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
     <title>Mapa de atividade</title>
-    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
     <style>
       html, body, #map { margin: 0; height: 100%; width: 100%; background: #0b1a12; }
-      .maplibregl-ctrl-attrib { font-size: 10px; }
       .fab-stack {
         position: absolute;
         right: 12px;
@@ -42,10 +40,11 @@
         color: #fff;
         font-size: 10px;
         font-weight: 800;
-        display: grid;
+        display: none;
         place-items: center;
         padding: 0 4px;
       }
+      .badge.is-on { display: grid; }
       #map.is-picking { cursor: crosshair; }
       .pick-banner {
         display: none;
@@ -62,44 +61,95 @@
         box-shadow: 0 10px 24px rgba(0,0,0,.28);
       }
       .pick-banner.is-on { display: block; }
+      .map-error {
+        display: none;
+        position: absolute;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        z-index: 6;
+        background: rgba(120, 24, 24, 0.92);
+        color: #fff;
+        border-radius: 12px;
+        padding: 10px 12px;
+        font: 600 12px/1.4 system-ui, sans-serif;
+      }
+      .map-error.is-on { display: block; }
     </style>
   </head>
   <body>
     <div id="map"></div>
     <div class="pick-banner" id="pickBanner">Toque no mapa para marcar o ponto de partida da volta</div>
+    <div class="map-error" id="mapError"></div>
     <div class="fab-stack" id="fabs">
       <button class="fab" id="layersBtn" type="button" title="Camadas" aria-label="Camadas">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
-        <span class="badge" id="layerBadge">6</span>
+        <span class="badge" id="layerBadge">0</span>
       </button>
       <button class="fab-3d" id="btn3d" type="button" aria-label="Mapa 3D">3D</button>
       <button class="fab" id="locateBtn" type="button" title="Minha localização" aria-label="Centralizar">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
       </button>
     </div>
-    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script>
-      const TILES = {
-        standard: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-        satellite: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-        winter: ["https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png"],
-        night: ["https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png"],
-        labels: ["https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"],
-        bike: ["https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png"],
-        topo: ["https://a.tile.opentopomap.org/{z}/{x}/{y}.png"],
-        hill: ["https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"]
-      };
+      const params = new URLSearchParams(location.search);
+      const API_KEY = params.get("key") || "";
+      const MAP_ID = params.get("mapId") || "";
+
+      const NIGHT_STYLES = [
+        { elementType: "geometry", stylers: [{ color: "#1d2c4d" }] },
+        { elementType: "labels.text.fill", stylers: [{ color: "#8ec3b9" }] },
+        { elementType: "labels.text.stroke", stylers: [{ color: "#1a3646" }] },
+        { featureType: "road", elementType: "geometry", stylers: [{ color: "#304a7d" }] },
+        { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
+        { featureType: "poi", stylers: [{ visibility: "off" }] },
+        { featureType: "transit", stylers: [{ visibility: "off" }] }
+      ];
+
+      const WINTER_STYLES = [
+        { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
+        { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+        { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9c9c9" }] },
+        { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#e5e5e5" }] }
+      ];
 
       const state = {
         mapType: "standard",
         activityMap: "personal",
         layers: { pois: true, bikeLanes: false, avalanche: false, slope: false, aspect: false },
         is3d: false,
-        showControls: true,
+        follow: true,
         pickMode: false,
+        track: [],
+        heatTracks: [],
+        heatCells: [],
+        live: null,
         lapMarker: null,
-        laps: []
+        laps: [],
+        userInteracting: false
       };
+
+      let map = null;
+      let trackLine = null;
+      let trackGlow = null;
+      let liveMarker = null;
+      let lapCircle = null;
+      let lapStartMarker = null;
+      let heatLines = [];
+      let heatCircles = [];
+      let lapMarkers = [];
+      let readyEmitted = false;
+
+      function showError(msg) {
+        const el = document.getElementById("mapError");
+        if (!msg) {
+          el.classList.remove("is-on");
+          el.textContent = "";
+          return;
+        }
+        el.textContent = msg;
+        el.classList.add("is-on");
+      }
 
       function emit(msg) {
         try {
@@ -108,258 +158,258 @@
         } catch (e) {}
       }
 
-      function raster(id, tiles, opacity) {
-        return {
-          id,
-          tiles,
-          opacity: opacity == null ? 1 : opacity
-        };
+      function toLatLng(p) {
+        return { lat: Number(p.lat), lng: Number(p.lng) };
       }
 
-      function buildStyle() {
-        const night = state.activityMap === "night";
-        const winter = state.mapType === "winter" || night;
-        const sat = state.mapType === "satellite" || state.mapType === "hybrid";
-        const sources = {};
-        const layers = [];
-        const add = (id, tiles, opacity) => {
-          sources[id] = { type: "raster", tiles, tileSize: 256, attribution: "© OSM © Esri" };
-          layers.push({ id, type: "raster", source: id, paint: { "raster-opacity": opacity == null ? 1 : opacity } });
-        };
-        if (sat) add("sat", TILES.satellite, 1);
-        else if (winter) add("winter", TILES.winter, 1);
-        else add("osm", TILES.standard, 1);
-        if (state.mapType === "hybrid" || state.layers.pois) add("labels", TILES.labels, 0.95);
-        if (state.layers.bikeLanes) add("bike", TILES.bike, 0.72);
-        if (state.layers.slope || state.layers.avalanche) add("topo", TILES.topo, state.layers.avalanche ? 0.7 : 0.55);
-        if (state.layers.aspect) add("hill", TILES.hill, 0.5);
-        sources.track = { type: "geojson", data: emptyLine() };
-        sources.heat = { type: "geojson", data: emptyMulti() };
-        sources.heatCells = { type: "geojson", data: emptyMulti() };
-        sources.live = { type: "geojson", data: emptyPoint() };
-        sources.lapZone = { type: "geojson", data: emptyMulti() };
-        sources.laps = { type: "geojson", data: emptyMulti() };
-        layers.push(
-          {
-            id: "heat",
-            type: "line",
-            source: "heat",
-            paint: {
-              "line-color": night ? "#7ee0ff" : "#3d9bff",
-              "line-width": 3,
-              "line-opacity": 0.45
-            }
-          },
-          {
-            id: "heat-cells",
-            type: "circle",
-            source: "heatCells",
-            paint: {
-              "circle-radius": [
-                "interpolate", ["linear"], ["get", "weight"],
-                0, 8,
-                5000, 18,
-                20000, 28
-              ],
-              "circle-color": night ? "#7ee0ff" : "#ff7a3d",
-              "circle-opacity": 0.28,
-              "circle-blur": 0.55
-            }
-          },
-          {
-            id: "track-glow",
-            type: "line",
-            source: "track",
-            paint: { "line-color": "#7ee0ff", "line-width": 10, "line-opacity": 0.28 }
-          },
-          {
-            id: "track",
-            type: "line",
-            source: "track",
-            paint: { "line-color": "#2f7dff", "line-width": 4, "line-opacity": 0.95 }
-          },
-          {
-            id: "lap-zone",
-            type: "fill",
-            source: "lapZone",
-            paint: { "fill-color": "#df663c", "fill-opacity": 0.18 },
-            filter: ["==", ["geometry-type"], "Polygon"]
-          },
-          {
-            id: "lap-zone-line",
-            type: "line",
-            source: "lapZone",
-            paint: { "line-color": "#df663c", "line-width": 2, "line-opacity": 0.9 },
-            filter: ["==", ["geometry-type"], "Polygon"]
-          },
-          {
-            id: "lap-start",
-            type: "circle",
-            source: "lapZone",
-            paint: {
-              "circle-radius": 9,
-              "circle-color": "#df663c",
-              "circle-stroke-width": 3,
-              "circle-stroke-color": "#fff"
-            },
-            filter: ["==", ["geometry-type"], "Point"]
-          },
-          {
-            id: "laps",
-            type: "circle",
-            source: "laps",
-            paint: {
-              "circle-radius": 7,
-              "circle-color": "#f2b461",
-              "circle-stroke-width": 2,
-              "circle-stroke-color": "#fff"
-            }
-          },
-          {
-            id: "live",
-            type: "circle",
-            source: "live",
-            paint: {
-              "circle-radius": 8,
-              "circle-color": "#2f7dff",
-              "circle-stroke-width": 4,
-              "circle-stroke-color": "#fff"
-            }
-          }
-        );
-        return { version: 8, sources, layers };
+      function resolveMapTypeId() {
+        if (state.mapType === "satellite") return google.maps.MapTypeId.SATELLITE;
+        if (state.mapType === "hybrid") return google.maps.MapTypeId.HYBRID;
+        return google.maps.MapTypeId.ROADMAP;
       }
 
-      function emptyLine() {
-        return { type: "Feature", geometry: { type: "LineString", coordinates: [] }, properties: {} };
-      }
-      function emptyMulti() {
-        return { type: "FeatureCollection", features: [] };
-      }
-      function emptyPoint() {
-        return { type: "Feature", geometry: { type: "Point", coordinates: [0, 0] }, properties: { hidden: true } };
+      function resolveStyles() {
+        // Cloud mapId + styles conflict; skip styles when mapId is set.
+        if (MAP_ID) return null;
+        if (state.activityMap === "night") return NIGHT_STYLES;
+        if (state.mapType === "winter") return WINTER_STYLES;
+        return null;
       }
 
-      const map = new maplibregl.Map({
-        container: "map",
-        style: buildStyle(),
-        center: [-46.63, -23.55],
-        zoom: 14,
-        pitch: 0,
-        attributionControl: true
-      });
-
-      function apply3d() {
-        map.easeTo({ pitch: state.is3d ? 60 : 0, bearing: state.is3d ? -18 : 0, duration: 500 });
+      function applyCamera3d() {
+        if (!map) return;
         document.getElementById("btn3d").classList.toggle("active", state.is3d);
+        map.setTilt(state.is3d ? 67.5 : 0);
+        map.setHeading(state.is3d ? -18 : 0);
       }
 
-      function refreshStyle() {
-        const center = map.getCenter();
-        const zoom = map.getZoom();
-        const bearing = map.getBearing();
-        const pitch = map.getPitch();
-        map.setStyle(buildStyle());
-        map.once("styledata", () => {
-          map.jumpTo({ center, zoom, bearing, pitch });
-          if (state.lapMarker) setLapMarker(state.lapMarker);
-          if (state.laps && state.laps.length) setLaps(state.laps);
+      function applyBaseAppearance() {
+        if (!map) return;
+        map.setMapTypeId(resolveMapTypeId());
+        const styles = resolveStyles();
+        map.setOptions({ styles: styles || [] });
+        applyCamera3d();
+        applyRasterOverlays();
+        updateLayerBadge();
+      }
+
+      function makeImageMapType(name, urlTemplate, opacity) {
+        return new google.maps.ImageMapType({
+          getTileUrl(coord, zoom) {
+            const n = Math.pow(2, zoom);
+            if (coord.y < 0 || coord.y >= n) return null;
+            const x = ((coord.x % n) + n) % n;
+            return urlTemplate
+              .replace("{z}", String(zoom))
+              .replace("{x}", String(x))
+              .replace("{y}", String(coord.y));
+          },
+          tileSize: new google.maps.Size(256, 256),
+          name,
+          opacity: opacity == null ? 0.65 : opacity,
+          maxZoom: 18
         });
       }
 
-      function setTrack(points) {
-        const coords = (points || []).map((p) => [p.lng, p.lat]);
-        const src = map.getSource("track");
-        if (src) src.setData({ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} });
-        if (coords.length > 1) {
-          const bounds = coords.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
-          map.fitBounds(bounds, { padding: 48, maxZoom: 16, duration: 400, pitch: state.is3d ? 60 : 0 });
+      function applyRasterOverlays() {
+        if (!map) return;
+        while (map.overlayMapTypes.getLength()) map.overlayMapTypes.pop();
+        if (state.layers.bikeLanes) {
+          map.overlayMapTypes.push(
+            makeImageMapType("bike", "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png", 0.7)
+          );
+        }
+        if (state.layers.slope || state.layers.avalanche) {
+          map.overlayMapTypes.push(
+            makeImageMapType("topo", "https://a.tile.opentopomap.org/{z}/{x}/{y}.png", state.layers.avalanche ? 0.7 : 0.55)
+          );
+        }
+        if (state.layers.aspect) {
+          map.overlayMapTypes.push(
+            makeImageMapType(
+              "hill",
+              "https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
+              0.5
+            )
+          );
+        }
+      }
+
+      function clearHeat() {
+        heatLines.forEach((line) => line.setMap(null));
+        heatCircles.forEach((c) => c.setMap(null));
+        heatLines = [];
+        heatCircles = [];
+      }
+
+      function clearLapMarkers() {
+        lapMarkers.forEach((m) => m.setMap(null));
+        lapMarkers = [];
+      }
+
+      function setTrack(points, fit) {
+        state.track = points || [];
+        const path = state.track.map(toLatLng).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+        if (!trackGlow) {
+          trackGlow = new google.maps.Polyline({
+            map,
+            path: [],
+            strokeColor: "#7ee0ff",
+            strokeOpacity: 0.28,
+            strokeWeight: 12,
+            zIndex: 2
+          });
+        }
+        if (!trackLine) {
+          trackLine = new google.maps.Polyline({
+            map,
+            path: [],
+            strokeColor: "#2f7dff",
+            strokeOpacity: 0.95,
+            strokeWeight: 5,
+            zIndex: 3
+          });
+        }
+        trackGlow.setPath(path);
+        trackLine.setPath(path);
+        if (fit && path.length > 1) {
+          const bounds = new google.maps.LatLngBounds();
+          path.forEach((p) => bounds.extend(p));
+          map.fitBounds(bounds, 48);
+          if (state.is3d) {
+            google.maps.event.addListenerOnce(map, "idle", () => applyCamera3d());
+          }
         }
       }
 
       function setHeat(tracks, cells) {
-        const src = map.getSource("heat");
-        if (src) {
-          src.setData({
-            type: "FeatureCollection",
-            features: (tracks || [])
-              .filter((t) => t && t.length > 1)
-              .map((t) => ({
-                type: "Feature",
-                geometry: { type: "LineString", coordinates: t.map((p) => [p.lng, p.lat]) },
-                properties: {}
-              }))
+        state.heatTracks = tracks || [];
+        state.heatCells = cells || [];
+        clearHeat();
+        const night = state.activityMap === "night";
+        state.heatTracks
+          .filter((t) => t && t.length > 1)
+          .forEach((t) => {
+            heatLines.push(
+              new google.maps.Polyline({
+                map,
+                path: t.map(toLatLng),
+                strokeColor: night ? "#7ee0ff" : "#3d9bff",
+                strokeOpacity: 0.45,
+                strokeWeight: 3,
+                zIndex: 1
+              })
+            );
           });
-        }
-        const cellSrc = map.getSource("heatCells");
-        if (cellSrc) {
-          cellSrc.setData({
-            type: "FeatureCollection",
-            features: (cells || [])
-              .filter((c) => c && Number.isFinite(c.lat) && Number.isFinite(c.lng))
-              .map((c) => ({
-                type: "Feature",
-                geometry: { type: "Point", coordinates: [c.lng, c.lat] },
-                properties: { weight: Number(c.weight) || 1, activities: Number(c.activities) || 1 }
-              }))
+        state.heatCells
+          .filter((c) => c && Number.isFinite(c.lat) && Number.isFinite(c.lng))
+          .forEach((c) => {
+            const weight = Number(c.weight) || 1;
+            const radius = Math.min(90, 18 + Math.log10(Math.max(weight, 1)) * 12);
+            heatCircles.push(
+              new google.maps.Circle({
+                map,
+                center: { lat: c.lat, lng: c.lng },
+                radius,
+                fillColor: night ? "#7ee0ff" : "#ff7a3d",
+                fillOpacity: 0.22,
+                strokeWeight: 0,
+                zIndex: 1
+              })
+            );
           });
-        }
       }
 
-      function setLive(lat, lng) {
-        const src = map.getSource("live");
-        if (src) src.setData({ type: "Feature", geometry: { type: "Point", coordinates: [lng, lat] }, properties: {} });
-        map.easeTo({ center: [lng, lat], duration: 250, pitch: state.is3d ? 60 : map.getPitch() });
-      }
-
-      function circlePolygon(lng, lat, radiusM) {
-        const coords = [];
-        const steps = 64;
-        for (let i = 0; i <= steps; i += 1) {
-          const angle = (i / steps) * Math.PI * 2;
-          const dx = (radiusM * Math.cos(angle)) / (111320 * Math.cos((lat * Math.PI) / 180));
-          const dy = (radiusM * Math.sin(angle)) / 110540;
-          coords.push([lng + dx, lat + dy]);
+      function setLive(lat, lng, follow) {
+        state.live = { lat, lng };
+        const pos = { lat, lng };
+        if (!liveMarker) {
+          liveMarker = new google.maps.Marker({
+            map,
+            position: pos,
+            zIndex: 10,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 8,
+              fillColor: "#2f7dff",
+              fillOpacity: 1,
+              strokeColor: "#ffffff",
+              strokeWeight: 3
+            }
+          });
+        } else {
+          liveMarker.setPosition(pos);
         }
-        return { type: "Polygon", coordinates: [coords] };
+        const shouldFollow = follow !== false && state.follow && !state.userInteracting;
+        if (shouldFollow) {
+          map.panTo(pos);
+          if (state.is3d) applyCamera3d();
+        }
       }
 
       function setLapMarker(marker) {
         state.lapMarker = marker || null;
-        const src = map.getSource("lapZone");
-        if (!src) return;
-        if (!marker || !marker.lat || !marker.lng) {
-          src.setData({ type: "FeatureCollection", features: [] });
-          return;
+        if (lapCircle) {
+          lapCircle.setMap(null);
+          lapCircle = null;
         }
-        src.setData({
-          type: "FeatureCollection",
-          features: [
-            {
-              type: "Feature",
-              geometry: circlePolygon(marker.lng, marker.lat, marker.radiusMeters || 22),
-              properties: {}
-            },
-            {
-              type: "Feature",
-              geometry: { type: "Point", coordinates: [marker.lng, marker.lat] },
-              properties: {}
-            }
-          ]
+        if (lapStartMarker) {
+          lapStartMarker.setMap(null);
+          lapStartMarker = null;
+        }
+        if (!marker || !Number.isFinite(marker.lat) || !Number.isFinite(marker.lng)) return;
+        const center = { lat: marker.lat, lng: marker.lng };
+        lapCircle = new google.maps.Circle({
+          map,
+          center,
+          radius: marker.radiusMeters || 22,
+          fillColor: "#df663c",
+          fillOpacity: 0.18,
+          strokeColor: "#df663c",
+          strokeOpacity: 0.9,
+          strokeWeight: 2,
+          zIndex: 4
+        });
+        lapStartMarker = new google.maps.Marker({
+          map,
+          position: center,
+          zIndex: 5,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 9,
+            fillColor: "#df663c",
+            fillOpacity: 1,
+            strokeColor: "#ffffff",
+            strokeWeight: 3
+          }
         });
       }
 
       function setLaps(laps) {
         state.laps = laps || [];
-        const src = map.getSource("laps");
-        if (!src) return;
-        src.setData({
-          type: "FeatureCollection",
-          features: (laps || []).map((lap, index) => ({
-            type: "Feature",
-            geometry: { type: "Point", coordinates: [lap.lng, lap.lat] },
-            properties: { n: index + 1 }
-          }))
+        clearLapMarkers();
+        state.laps.forEach((lap, index) => {
+          lapMarkers.push(
+            new google.maps.Marker({
+              map,
+              position: { lat: lap.lat, lng: lap.lng },
+              label: {
+                text: String(index + 1),
+                color: "#1a1208",
+                fontWeight: "700",
+                fontSize: "11px"
+              },
+              icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 10,
+                fillColor: "#f2b461",
+                fillOpacity: 1,
+                strokeColor: "#ffffff",
+                strokeWeight: 2
+              },
+              zIndex: 6
+            })
+          );
         });
       }
 
@@ -367,39 +417,61 @@
         state.pickMode = Boolean(on);
         document.getElementById("map").classList.toggle("is-picking", state.pickMode);
         document.getElementById("pickBanner").classList.toggle("is-on", state.pickMode);
-        map.getCanvas().style.cursor = state.pickMode ? "crosshair" : "";
       }
 
-      function layerCount() {
+      function extraLayerCount() {
         const l = state.layers;
-        return ["pois", "bikeLanes", "avalanche", "slope", "aspect"].filter((k) => l[k]).length + 1;
+        return ["bikeLanes", "avalanche", "slope", "aspect"].filter((k) => l[k]).length;
+      }
+
+      function updateLayerBadge() {
+        const n = extraLayerCount();
+        const badge = document.getElementById("layerBadge");
+        badge.textContent = String(n);
+        badge.classList.toggle("is-on", n > 0);
+      }
+
+      function restoreOverlays() {
+        if (state.track.length) setTrack(state.track, false);
+        setHeat(state.heatTracks, state.heatCells);
+        if (state.live) setLive(state.live.lat, state.live.lng, false);
+        setLapMarker(state.lapMarker);
+        setLaps(state.laps);
       }
 
       window.applyMapCommand = function applyMapCommand(raw) {
         const msg = typeof raw === "string" ? JSON.parse(raw) : raw;
-        if (!msg || !msg.type) return;
+        if (!msg || !msg.type || !map) return;
         if (msg.type === "init" || msg.type === "setView") {
-          if (msg.lat && msg.lng) map.jumpTo({ center: [msg.lng, msg.lat], zoom: msg.zoom || 15 });
+          if (msg.lat && msg.lng) {
+            state.userInteracting = false;
+            map.setCenter({ lat: msg.lat, lng: msg.lng });
+            if (msg.zoom) map.setZoom(msg.zoom);
+          }
         }
-        if (msg.type === "setTrack") setTrack(msg.points || []);
+        if (msg.type === "setFollow") {
+          state.follow = msg.on !== false;
+          if (state.follow) state.userInteracting = false;
+        }
+        if (msg.type === "setTrack") setTrack(msg.points || [], Boolean(msg.fit));
         if (msg.type === "setHeat") setHeat(msg.tracks || [], msg.cells || []);
-        if (msg.type === "setLive" && msg.lat && msg.lng) setLive(msg.lat, msg.lng);
+        if (msg.type === "setLive" && msg.lat && msg.lng) setLive(msg.lat, msg.lng, msg.follow);
         if (msg.type === "setMapType") {
           state.mapType = msg.mapType || "standard";
-          refreshStyle();
+          applyBaseAppearance();
         }
         if (msg.type === "setActivityMap") {
           state.activityMap = msg.mode || "personal";
-          refreshStyle();
+          applyBaseAppearance();
         }
         if (msg.type === "setLayers") {
           state.layers = Object.assign(state.layers, msg.layers || {});
-          document.getElementById("layerBadge").textContent = String(layerCount());
-          refreshStyle();
+          applyRasterOverlays();
+          updateLayerBadge();
         }
         if (msg.type === "set3d") {
           state.is3d = Boolean(msg.on);
-          apply3d();
+          applyCamera3d();
         }
         if (msg.type === "showControls") {
           document.getElementById("fabs").style.display = msg.on === false ? "none" : "grid";
@@ -423,19 +495,81 @@
       document.getElementById("layersBtn").onclick = () => emit({ type: "open-layers" });
       document.getElementById("btn3d").onclick = () => {
         state.is3d = !state.is3d;
-        apply3d();
+        applyCamera3d();
         emit({ type: "toggle-3d", on: state.is3d });
       };
-      document.getElementById("locateBtn").onclick = () => emit({ type: "locate-request" });
+      document.getElementById("locateBtn").onclick = () => {
+        state.follow = true;
+        state.userInteracting = false;
+        emit({ type: "locate-request" });
+      };
 
-      map.on("click", (event) => {
-        if (!state.pickMode) return;
-        const { lng, lat } = event.lngLat;
-        emit({ type: "map-pick", kind: "lap-start", lat, lng });
-        setPickMode(false);
-      });
+      function initMap() {
+        const options = {
+          center: { lat: -23.55, lng: -46.63 },
+          zoom: 15,
+          disableDefaultUI: true,
+          clickableIcons: false,
+          gestureHandling: "greedy",
+          keyboardShortcuts: false,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+          zoomControl: false,
+          tilt: 0,
+          heading: 0,
+          mapTypeId: google.maps.MapTypeId.ROADMAP
+        };
+        if (MAP_ID) options.mapId = MAP_ID;
 
-      map.on("load", () => emit({ type: "ready" }));
+        map = new google.maps.Map(document.getElementById("map"), options);
+        applyBaseAppearance();
+
+        map.addListener("dragstart", () => {
+          state.userInteracting = true;
+          emit({ type: "user-pan" });
+        });
+        map.addListener("click", (event) => {
+          if (!state.pickMode || !event.latLng) return;
+          const lat = event.latLng.lat();
+          const lng = event.latLng.lng();
+          emit({ type: "map-pick", kind: "lap-start", lat, lng });
+          setPickMode(false);
+        });
+
+        restoreOverlays();
+        if (!readyEmitted) {
+          readyEmitted = true;
+          emit({ type: "ready" });
+        }
+        showError("");
+      }
+
+      window.__onGoogleMapsReady = function __onGoogleMapsReady() {
+        try {
+          initMap();
+        } catch (err) {
+          showError(err && err.message ? err.message : "Falha ao iniciar Google Maps.");
+        }
+      };
+
+      window.gm_authFailure = function gm_authFailure() {
+        showError("Chave do Google Maps inválida ou API não habilitada. Configure VITE_GOOGLE_MAPS_API_KEY.");
+      };
+
+      if (!API_KEY) {
+        showError("Configure VITE_GOOGLE_MAPS_API_KEY na Vercel (Maps JavaScript API).");
+      } else {
+        const script = document.createElement("script");
+        script.async = true;
+        script.defer = true;
+        script.src =
+          "https://maps.googleapis.com/maps/api/js?key=" +
+          encodeURIComponent(API_KEY) +
+          "&v=weekly&callback=__onGoogleMapsReady";
+        script.onerror = () => showError("Não foi possível carregar o Google Maps.");
+        document.head.appendChild(script);
+      }
     </script>
   </body>
 </html>

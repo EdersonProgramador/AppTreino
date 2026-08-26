@@ -23147,6 +23147,41 @@ html.is-native-app.keyboard-open .login-shell {
   min-height: 240px;
 }
 
+.student-activity-native-cta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 10px 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(223, 102, 60, 0.14), rgba(242, 180, 97, 0.18));
+  border: 1px solid rgba(223, 102, 60, 0.28);
+  color: #15100b;
+  text-decoration: none;
+}
+
+.student-activity-native-cta strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.student-activity-native-cta em {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.72;
+  line-height: 1.25;
+}
+
+html.dark .student-activity-native-cta {
+  color: #f4ebe0;
+  background: linear-gradient(135deg, rgba(223, 102, 60, 0.22), rgba(242, 180, 97, 0.12));
+  border-color: rgba(242, 180, 97, 0.28);
+}
+
 .student-activity-pick-banner {
   position: absolute;
   left: 12px;

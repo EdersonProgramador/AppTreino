@@ -22,6 +22,10 @@ npm --prefix apps/mobile install
 npm run dev:mobile
 ```
 
+No celular: **Expo Go** (QR). Persistência GPS usa `expo-sqlite` (compatível com Go).
+
+> `react-native-track-player` e Google Maps nativo no Android exigem **development build** (`npx expo run:android` / `run:ios`). No Expo Go o áudio cai para `expo-av`.
+
 ## URL
 
 ```txt

@@ -26,7 +26,8 @@ import { formatClock, formatKm, formatPace } from "../../student/activity-geo";
 import { useStudent } from "../../student/StudentContext";
 import { useSt, type StudentTokens } from "../../student/theme";
 import type { FeedStackParamList } from "../../navigation/types";
-import type { SocialAuthor, SocialPostRow, SocialStoryRail } from "../../types";
+import type { SocialAuthor, SocialPostRow, SocialStoryGalleryItem, SocialStoryRail } from "../../types";
+import { galleryItemsToRail, StoryViewerModal } from "./StoryViewerModal";
 
 type FeedMode = "for-you" | "following";
 type MediaItem = { url: string; type: "IMAGE" | "VIDEO"; localUri?: string };
@@ -118,6 +119,9 @@ export function FeedScreen() {
   const [storyCaption, setStoryCaption] = useState("");
   const [storyMedia, setStoryMedia] = useState<MediaItem | null>(null);
   const [viewer, setViewer] = useState<{ rail: number; item: number } | null>(null);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryItems, setGalleryItems] = useState<SocialStoryGalleryItem[]>([]);
+  const [galleryViewerIndex, setGalleryViewerIndex] = useState<number | null>(null);
   const [reportPostId, setReportPostId] = useState<string | null>(null);
   const [reportReason, setReportReason] = useState("");
 
@@ -125,6 +129,25 @@ export function FeedScreen() {
     const data = await apiGet<{ rails: SocialStoryRail[] }>("/student/social/stories", session.token);
     setRails(data.rails);
   }, [session.token]);
+
+  const loadGallery = useCallback(async () => {
+    const data = await apiGet<{ items: SocialStoryGalleryItem[] }>("/student/social/stories/gallery", session.token);
+    setGalleryItems(data.items);
+  }, [session.token]);
+
+  async function openGallery() {
+    setGalleryOpen(true);
+    try {
+      await loadGallery();
+    } catch {
+      setGalleryItems([]);
+    }
+  }
+
+  const galleryRail = useMemo(
+    () => (galleryViewerIndex == null ? null : galleryItemsToRail(galleryItems, galleryViewerIndex)),
+    [galleryItems, galleryViewerIndex]
+  );
 
   const load = useCallback(
     async (nextMode = mode, nextPage = 0, append = false, search = query) => {
@@ -339,8 +362,6 @@ export function FeedScreen() {
   }
 
   const suggestions = people.filter((person) => !person.following).slice(0, 8);
-  const viewerRail = viewer ? rails[viewer.rail] : null;
-  const viewerItem = viewerRail ? viewerRail.items[viewer.item] : null;
 
   return (
     <StudentPage refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void Promise.all([load(), loadStories()])} tintColor={st.gold} />}>
@@ -416,7 +437,15 @@ export function FeedScreen() {
       ) : null}
 
       <View style={styles.stories}>
-        <Text style={styles.sectionTitle}>Momentos</Text>
+        <View style={styles.storiesHead}>
+          <View>
+            <Text style={styles.sectionTitle}>Momentos</Text>
+            <Text style={styles.meta}>Somem em 24h</Text>
+          </View>
+          <Pressable onPress={() => void openGallery()} hitSlop={8}>
+            <Text style={styles.galleryLink}>Galeria</Text>
+          </Pressable>
+        </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
           <Pressable
             style={styles.storyAdd}
@@ -707,20 +736,61 @@ export function FeedScreen() {
         </View>
       </Modal>
 
-      <Modal visible={Boolean(viewer && viewerItem)} transparent animationType="fade" onRequestClose={() => setViewer(null)}>
-        <View style={styles.viewer}>
-          <Pressable style={styles.viewerClose} onPress={() => setViewer(null)}>
-            <Ionicons name="close" size={22} color="#fff" />
-          </Pressable>
-          {viewerItem ? (
-            <>
-              <Text style={styles.viewerTitle}>{viewerRail?.isMine ? "Você" : viewerRail?.username}</Text>
-              <Image source={{ uri: mediaUrl(viewerItem.mediaUrl) }} style={styles.viewerMedia} />
-              {viewerItem.caption ? <Text style={styles.viewerCaption}>{viewerItem.caption}</Text> : null}
-            </>
-          ) : null}
+      <Modal visible={galleryOpen} transparent animationType="slide" onRequestClose={() => setGalleryOpen(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setGalleryOpen(false)} />
+        <View style={[styles.sheet, styles.gallerySheet]}>
+          <View style={styles.composerHead}>
+            <Text style={styles.sectionTitle}>Galeria</Text>
+            <Pressable onPress={() => setGalleryOpen(false)}>
+              <Ionicons name="close" size={20} color={st.muted} />
+            </Pressable>
+          </View>
+          <Text style={styles.meta}>Momentos salvos não expiram. Os ativos somem em 24h.</Text>
+          {galleryItems.length === 0 ? (
+            <EmptyState icon="images-outline" title="Galeria vazia" text="Salve um momento seu para guardar aqui." />
+          ) : (
+            <ScrollView contentContainerStyle={styles.galleryGrid}>
+              {galleryItems.map((entry, index) => {
+                const thumb = entry.coverUrl || (String(entry.mediaType).toUpperCase() === "IMAGE" ? entry.mediaUrl : entry.coverUrl) || entry.mediaUrl;
+                return (
+                  <Pressable key={entry.id} style={styles.galleryTile} onPress={() => setGalleryViewerIndex(index)}>
+                    {String(entry.mediaType).toUpperCase() === "VIDEO" && !entry.coverUrl ? (
+                      <View style={[styles.galleryThumb, styles.mediaVideo]}>
+                        <Ionicons name="play-circle" size={28} color="#fff" />
+                      </View>
+                    ) : (
+                      <Image source={{ uri: mediaUrl(thumb) }} style={styles.galleryThumb} />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
         </View>
       </Modal>
+
+      <StoryViewerModal
+        visible={Boolean(viewer)}
+        rails={rails}
+        startRail={viewer?.rail ?? 0}
+        startItem={viewer?.item ?? 0}
+        token={session.token}
+        onClose={() => {
+          setViewer(null);
+          void loadStories();
+        }}
+        onSaved={() => void loadGallery()}
+      />
+
+      <StoryViewerModal
+        visible={Boolean(galleryRail)}
+        rails={galleryRail ? [galleryRail] : []}
+        startRail={0}
+        startItem={galleryViewerIndex ?? 0}
+        token={session.token}
+        archiveMode
+        onClose={() => setGalleryViewerIndex(null)}
+      />
     </StudentPage>
   );
 }
@@ -810,6 +880,12 @@ function createStyles(st: StudentTokens) {
     comment: { color: st.text, fontSize: 13 },
     error: { color: st.danger, marginHorizontal: 16, fontWeight: "700" },
     stories: { marginHorizontal: 16, marginTop: 8, marginBottom: 4, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: st.line, backgroundColor: st.card, gap: 8 },
+    storiesHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+    galleryLink: { color: st.coral, fontWeight: "800", fontSize: 13 },
+    gallerySheet: { maxHeight: "78%" },
+    galleryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingTop: 8, paddingBottom: 24 },
+    galleryTile: { width: "31%", aspectRatio: 1, borderRadius: 12, overflow: "hidden", backgroundColor: "#111" },
+    galleryThumb: { width: "100%", height: "100%" },
     sectionTitle: { color: st.text, fontWeight: "800", fontSize: 15 },
     storyAdd: { width: 76, alignItems: "center", gap: 6 },
     storyCircle: { width: 58, height: 58, borderRadius: 29, backgroundColor: st.fill, alignItems: "center", justifyContent: "center" },

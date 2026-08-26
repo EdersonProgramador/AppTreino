@@ -1,6 +1,6 @@
 import Constants from "expo-constants";
 
-const DEFAULT_WEB_URL = "https://edersonprogramador.com";
+const DEFAULT_WEB_URL = "https://app-treino-api.vercel.app";
 const DEFAULT_WEB_PORT = "5174";
 
 function metroLanHost(): string | null {
@@ -42,7 +42,7 @@ function resolveWebUrl() {
   }
 }
 
-const DEFAULT_API_URL = "https://api.edersonprogramador.com";
+const DEFAULT_API_URL = "https://apptreino-backend.onrender.com";
 const DEFAULT_API_PORT = "3333";
 
 function resolveApiUrl() {

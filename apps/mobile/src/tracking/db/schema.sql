@@ -1,4 +1,4 @@
--- Tracking Core Módulo 1 — schema local ACID (OP-SQLite)
+-- Tracking Core — schema local (expo-sqlite)
 PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
 PRAGMA foreign_keys=ON;

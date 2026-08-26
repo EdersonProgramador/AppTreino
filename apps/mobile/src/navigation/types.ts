@@ -4,6 +4,7 @@ export type FeedStackParamList = {
   Feed: undefined;
   Reels: undefined;
   Live: undefined;
+  LiveRoom: { mode: "host" | "viewer"; liveId?: string; title?: string };
   Messages: undefined;
   DirectMessage: { userId: string; name: string };
   Chat: undefined;

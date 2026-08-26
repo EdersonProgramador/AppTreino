@@ -11,11 +11,14 @@ import {
   Pause,
   Play,
   Settings2,
+  Smartphone,
   Timer,
   X
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPost, apiUpload } from "../../api";
+import { paths } from "../../auth/session";
 import {
   formatClock,
   formatKm,
@@ -26,6 +29,7 @@ import {
   updateLapCrossing
 } from "../../lib/activity-geo";
 import { WebGpsPipeline, fixFromGeolocation } from "../../lib/gps-filter";
+import { isNativeAppShell } from "../../lib/native-bridge";
 import type { OutdoorActivityRow, OutdoorSport, SocialPostRow, UploadResponse } from "../../types";
 import { RunnerIcon } from "../shared/RunnerIcon";
 
@@ -564,6 +568,16 @@ export function StudentActivitySection({
           </button>
         ))}
       </div>
+
+      {!isNativeAppShell() ? (
+        <Link to={paths.download} className="student-activity-native-cta">
+          <Smartphone size={18} aria-hidden />
+          <span>
+            <strong>Melhor no app</strong>
+            <em>GPS nativo e mapa estáveis para outdoor</em>
+          </span>
+        </Link>
+      ) : null}
 
       <div className="student-activity-map">
         <iframe ref={iframeRef} title="Mapa da atividade" src={ACTIVITY_MAP_SRC} />

@@ -473,9 +473,11 @@ export type SocialStoryItem = {
   id: string;
   mediaUrl: string;
   mediaType: string;
+  coverUrl?: string | null;
   caption?: string | null;
   mood: string;
   createdAt: string;
+  expiresAt?: string;
   seen: boolean;
 };
 
@@ -486,6 +488,17 @@ export type SocialStoryRail = {
   isMine: boolean;
   unseen: boolean;
   items: SocialStoryItem[];
+};
+
+export type SocialStoryGalleryItem = {
+  id: string;
+  storyId?: string | null;
+  mediaUrl: string;
+  mediaType: string;
+  coverUrl?: string | null;
+  caption?: string | null;
+  mood?: string | null;
+  savedAt: string;
 };
 
 export type ClubChallengeRow = {

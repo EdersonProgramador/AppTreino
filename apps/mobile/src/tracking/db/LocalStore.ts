@@ -1,66 +1,66 @@
-import { open, type DB } from "@op-engineering/op-sqlite";
+import * as SQLite from "expo-sqlite";
 import type { FilteredFix, PointRow, SessionStatus, Sport, TrackingSession } from "../types";
 
 const DB_NAME = "tracking_core.sqlite";
 
-const SCHEMA_STATEMENTS = [
-  "PRAGMA journal_mode=WAL",
-  "PRAGMA synchronous=NORMAL",
-  "PRAGMA foreign_keys=ON",
-  `CREATE TABLE IF NOT EXISTS tracking_sessions (
-    id TEXT PRIMARY KEY NOT NULL,
-    server_id TEXT,
-    sport TEXT NOT NULL,
-    status TEXT NOT NULL,
-    started_at INTEGER NOT NULL,
-    ended_at INTEGER,
-    pause_ms INTEGER NOT NULL DEFAULT 0,
-    paused_at INTEGER,
-    device_id TEXT NOT NULL,
-    app_version TEXT,
-    distance_m REAL NOT NULL DEFAULT 0,
-    moving_time_ms INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-  )`,
-  `CREATE TABLE IF NOT EXISTS tracking_points (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    t INTEGER NOT NULL,
-    lat REAL NOT NULL,
-    lng REAL NOT NULL,
-    ele REAL,
-    accuracy_m REAL,
-    speed_mps REAL,
-    heading REAL,
-    filtered_lat REAL,
-    filtered_lng REAL,
-    filtered_speed_mps REAL,
-    pace_sec_km REAL,
-    is_accepted INTEGER NOT NULL DEFAULT 1,
-    reject_reason TEXT,
-    h3_r9 TEXT,
-    h3_r11 TEXT,
-    seq INTEGER NOT NULL,
-    FOREIGN KEY(session_id) REFERENCES tracking_sessions(id) ON DELETE CASCADE
-  )`,
-  "CREATE INDEX IF NOT EXISTS idx_points_session_seq ON tracking_points(session_id, seq)",
-  "CREATE INDEX IF NOT EXISTS idx_points_session_t ON tracking_points(session_id, t)",
-  "CREATE INDEX IF NOT EXISTS idx_sessions_status ON tracking_sessions(status)",
-  `CREATE TABLE IF NOT EXISTS tracking_outbox (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    payload_json TEXT NOT NULL,
-    attempts INTEGER NOT NULL DEFAULT 0,
-    next_attempt_at INTEGER NOT NULL,
-    created_at INTEGER NOT NULL
-  )`,
-  `CREATE TABLE IF NOT EXISTS tracking_meta (
-    key TEXT PRIMARY KEY NOT NULL,
-    value TEXT NOT NULL
-  )`
-];
+const SCHEMA_SQL = `
+PRAGMA journal_mode=WAL;
+PRAGMA synchronous=NORMAL;
+PRAGMA foreign_keys=ON;
+CREATE TABLE IF NOT EXISTS tracking_sessions (
+  id TEXT PRIMARY KEY NOT NULL,
+  server_id TEXT,
+  sport TEXT NOT NULL,
+  status TEXT NOT NULL,
+  started_at INTEGER NOT NULL,
+  ended_at INTEGER,
+  pause_ms INTEGER NOT NULL DEFAULT 0,
+  paused_at INTEGER,
+  device_id TEXT NOT NULL,
+  app_version TEXT,
+  distance_m REAL NOT NULL DEFAULT 0,
+  moving_time_ms INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS tracking_points (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  t INTEGER NOT NULL,
+  lat REAL NOT NULL,
+  lng REAL NOT NULL,
+  ele REAL,
+  accuracy_m REAL,
+  speed_mps REAL,
+  heading REAL,
+  filtered_lat REAL,
+  filtered_lng REAL,
+  filtered_speed_mps REAL,
+  pace_sec_km REAL,
+  is_accepted INTEGER NOT NULL DEFAULT 1,
+  reject_reason TEXT,
+  h3_r9 TEXT,
+  h3_r11 TEXT,
+  seq INTEGER NOT NULL,
+  FOREIGN KEY(session_id) REFERENCES tracking_sessions(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_points_session_seq ON tracking_points(session_id, seq);
+CREATE INDEX IF NOT EXISTS idx_points_session_t ON tracking_points(session_id, t);
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON tracking_sessions(status);
+CREATE TABLE IF NOT EXISTS tracking_outbox (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS tracking_meta (
+  key TEXT PRIMARY KEY NOT NULL,
+  value TEXT NOT NULL
+);
+`;
 
 function mapSession(row: Record<string, unknown>): TrackingSession {
   return {
@@ -105,26 +105,24 @@ function mapPoint(row: Record<string, unknown>): PointRow {
 }
 
 /**
- * Persistência ACID local (WAL) via OP-SQLite.
+ * Persistência local via expo-sqlite (funciona no Expo Go e em builds nativos).
  * Cada ponto é gravado imediatamente — base do crash recovery.
  */
 export class LocalStore {
-  private db: DB | null = null;
+  private db: SQLite.SQLiteDatabase | null = null;
   private boot: Promise<void> | null = null;
 
   async init(): Promise<void> {
     if (!this.boot) {
       this.boot = (async () => {
-        this.db = open({ name: DB_NAME });
-        for (const sql of SCHEMA_STATEMENTS) {
-          await this.db.execute(sql);
-        }
+        this.db = await SQLite.openDatabaseAsync(DB_NAME);
+        await this.db.execAsync(SCHEMA_SQL);
       })();
     }
     await this.boot;
   }
 
-  private conn(): DB {
+  private conn(): SQLite.SQLiteDatabase {
     if (!this.db) throw new Error("LocalStore não inicializado.");
     return this.db;
   }
@@ -136,11 +134,17 @@ export class LocalStore {
     appVersion?: string | null;
   }): Promise<TrackingSession> {
     const now = Date.now();
-    await this.conn().execute(
+    await this.conn().runAsync(
       `INSERT INTO tracking_sessions
         (id, sport, status, started_at, pause_ms, device_id, app_version, distance_m, moving_time_ms, created_at, updated_at)
        VALUES (?, ?, 'LIVE', ?, 0, ?, ?, 0, 0, ?, ?)`,
-      [input.id, input.sport, now, input.deviceId, input.appVersion ?? null, now, now]
+      input.id,
+      input.sport,
+      now,
+      input.deviceId,
+      input.appVersion ?? null,
+      now,
+      now
     );
     const session = await this.getSession(input.id);
     if (!session) throw new Error("Falha ao criar sessão.");
@@ -148,18 +152,20 @@ export class LocalStore {
   }
 
   async getSession(id: string): Promise<TrackingSession | null> {
-    const res = await this.conn().execute(`SELECT * FROM tracking_sessions WHERE id = ? LIMIT 1`, [id]);
-    const row = (res.rows?.[0] ?? null) as Record<string, unknown> | null;
+    const row = await this.conn().getFirstAsync<Record<string, unknown>>(
+      `SELECT * FROM tracking_sessions WHERE id = ? LIMIT 1`,
+      id
+    );
     return row ? mapSession(row) : null;
   }
 
   async findActiveSessions(): Promise<TrackingSession[]> {
-    const res = await this.conn().execute(
+    const rows = await this.conn().getAllAsync<Record<string, unknown>>(
       `SELECT * FROM tracking_sessions
        WHERE status IN ('LIVE','PAUSED','ORPHAN')
        ORDER BY updated_at DESC`
     );
-    return ((res.rows ?? []) as Record<string, unknown>[]).map(mapSession);
+    return rows.map(mapSession);
   }
 
   async updateSession(
@@ -176,30 +182,25 @@ export class LocalStore {
   ): Promise<void> {
     const current = await this.getSession(id);
     if (!current) return;
-    await this.conn().execute(
+    await this.conn().runAsync(
       `UPDATE tracking_sessions SET
         status = ?, ended_at = ?, pause_ms = ?, paused_at = ?,
         distance_m = ?, moving_time_ms = ?, server_id = ?, updated_at = ?
        WHERE id = ?`,
-      [
-        patch.status ?? current.status,
-        patch.endedAt !== undefined ? patch.endedAt : current.endedAt,
-        patch.pauseMs ?? current.pauseMs,
-        patch.pausedAt !== undefined ? patch.pausedAt : current.pausedAt,
-        patch.distanceM ?? current.distanceM,
-        patch.movingTimeMs ?? current.movingTimeMs,
-        patch.serverId !== undefined ? patch.serverId : current.serverId,
-        Date.now(),
-        id
-      ]
+      patch.status ?? current.status,
+      patch.endedAt !== undefined ? patch.endedAt : current.endedAt,
+      patch.pauseMs ?? current.pauseMs,
+      patch.pausedAt !== undefined ? patch.pausedAt : current.pausedAt,
+      patch.distanceM ?? current.distanceM,
+      patch.movingTimeMs ?? current.movingTimeMs,
+      patch.serverId !== undefined ? patch.serverId : current.serverId,
+      Date.now(),
+      id
     );
   }
 
   async touchSession(id: string): Promise<void> {
-    await this.conn().execute(`UPDATE tracking_sessions SET updated_at = ? WHERE id = ?`, [
-      Date.now(),
-      id
-    ]);
+    await this.conn().runAsync(`UPDATE tracking_sessions SET updated_at = ? WHERE id = ?`, Date.now(), id);
   }
 
   async appendPoint(
@@ -208,80 +209,85 @@ export class LocalStore {
     distanceM: number,
     movingTimeMs: number
   ): Promise<void> {
-    await this.conn().transaction(async (tx) => {
-      await tx.execute(
+    await this.conn().withTransactionAsync(async () => {
+      await this.conn().runAsync(
         `INSERT INTO tracking_points
           (session_id, t, lat, lng, ele, accuracy_m, speed_mps, heading,
            filtered_lat, filtered_lng, filtered_speed_mps, pace_sec_km,
            is_accepted, reject_reason, h3_r9, h3_r11, seq)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          sessionId,
-          fix.t,
-          fix.lat,
-          fix.lng,
-          fix.ele,
-          fix.accuracyM,
-          fix.speedMps,
-          fix.heading,
-          fix.filteredLat,
-          fix.filteredLng,
-          fix.filteredSpeedMps,
-          fix.paceSecKm,
-          fix.isAccepted ? 1 : 0,
-          fix.rejectReason,
-          fix.h3r9 ?? null,
-          fix.h3r11 ?? null,
-          fix.seq
-        ]
+        sessionId,
+        fix.t,
+        fix.lat,
+        fix.lng,
+        fix.ele,
+        fix.accuracyM,
+        fix.speedMps,
+        fix.heading,
+        fix.filteredLat,
+        fix.filteredLng,
+        fix.filteredSpeedMps,
+        fix.paceSecKm,
+        fix.isAccepted ? 1 : 0,
+        fix.rejectReason,
+        fix.h3r9 ?? null,
+        fix.h3r11 ?? null,
+        fix.seq
       );
-      await tx.execute(
+      await this.conn().runAsync(
         `UPDATE tracking_sessions SET distance_m = ?, moving_time_ms = ?, updated_at = ? WHERE id = ?`,
-        [distanceM, movingTimeMs, Date.now(), sessionId]
+        distanceM,
+        movingTimeMs,
+        Date.now(),
+        sessionId
       );
     });
   }
 
   async lastAcceptedPoint(sessionId: string): Promise<PointRow | null> {
-    const res = await this.conn().execute(
+    const row = await this.conn().getFirstAsync<Record<string, unknown>>(
       `SELECT * FROM tracking_points
        WHERE session_id = ? AND is_accepted = 1
        ORDER BY seq DESC LIMIT 1`,
-      [sessionId]
+      sessionId
     );
-    const row = (res.rows?.[0] ?? null) as Record<string, unknown> | null;
     return row ? mapPoint(row) : null;
   }
 
   async listAcceptedPoints(sessionId: string): Promise<PointRow[]> {
-    const res = await this.conn().execute(
+    const rows = await this.conn().getAllAsync<Record<string, unknown>>(
       `SELECT * FROM tracking_points
        WHERE session_id = ? AND is_accepted = 1
        ORDER BY seq ASC`,
-      [sessionId]
+      sessionId
     );
-    return ((res.rows ?? []) as Record<string, unknown>[]).map(mapPoint);
+    return rows.map(mapPoint);
   }
 
   async enqueueOutbox(sessionId: string, kind: string, payload: unknown): Promise<void> {
-    await this.conn().execute(
+    await this.conn().runAsync(
       `INSERT INTO tracking_outbox (session_id, kind, payload_json, attempts, next_attempt_at, created_at)
        VALUES (?, ?, ?, 0, ?, ?)`,
-      [sessionId, kind, JSON.stringify(payload), Date.now(), Date.now()]
+      sessionId,
+      kind,
+      JSON.stringify(payload),
+      Date.now(),
+      Date.now()
     );
   }
 
   async listDueOutbox(now = Date.now(), limit = 20): Promise<
     Array<{ id: number; sessionId: string; kind: string; payload: Record<string, unknown>; attempts: number }>
   > {
-    const res = await this.conn().execute(
+    const rows = await this.conn().getAllAsync<Record<string, unknown>>(
       `SELECT * FROM tracking_outbox
        WHERE next_attempt_at <= ?
        ORDER BY id ASC
        LIMIT ?`,
-      [now, limit]
+      now,
+      limit
     );
-    return ((res.rows ?? []) as Record<string, unknown>[]).map((row) => {
+    return rows.map((row) => {
       let payload: Record<string, unknown> = {};
       try {
         payload = JSON.parse(String(row.payload_json ?? "{}")) as Record<string, unknown>;
@@ -299,29 +305,32 @@ export class LocalStore {
   }
 
   async bumpOutbox(id: number, attempts: number, nextAttemptAt: number): Promise<void> {
-    await this.conn().execute(
+    await this.conn().runAsync(
       `UPDATE tracking_outbox SET attempts = ?, next_attempt_at = ? WHERE id = ?`,
-      [attempts, nextAttemptAt, id]
+      attempts,
+      nextAttemptAt,
+      id
     );
   }
 
   async deleteOutbox(id: number): Promise<void> {
-    await this.conn().execute(`DELETE FROM tracking_outbox WHERE id = ?`, [id]);
+    await this.conn().runAsync(`DELETE FROM tracking_outbox WHERE id = ?`, id);
   }
 
   async setMeta(key: string, value: string): Promise<void> {
-    await this.conn().execute(
+    await this.conn().runAsync(
       `INSERT INTO tracking_meta (key, value) VALUES (?, ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-      [key, value]
+      key,
+      value
     );
   }
 
   async getMeta(key: string): Promise<string | null> {
-    const res = await this.conn().execute(`SELECT value FROM tracking_meta WHERE key = ? LIMIT 1`, [
+    const row = await this.conn().getFirstAsync<{ value?: string }>(
+      `SELECT value FROM tracking_meta WHERE key = ? LIMIT 1`,
       key
-    ]);
-    const row = res.rows?.[0] as { value?: string } | undefined;
+    );
     return row?.value ?? null;
   }
 }

@@ -23,7 +23,7 @@ function isWebAssetPath(pathname: string) {
 }
 
 function isKnownCdnHost(host: string) {
-  return /(youtube\.com|youtu\.be|ytimg\.com|vimeo\.com|giphy\.com|tenor\.com|imgur\.com|cloudinary\.com|googleusercontent\.com|fbcdn\.net)/i.test(
+  return /(youtube\.com|youtu\.be|ytimg\.com|vimeo\.com|giphy\.com|tenor\.com|imgur\.com|cloudinary\.com|googleusercontent\.com|fbcdn\.net|r2\.dev|cloudflarestorage\.com|media\.edersonprogramador\.com)/i.test(
     host
   );
 }

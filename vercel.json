@@ -14,7 +14,7 @@
       "destination": "https://apptreino-backend.onrender.com/public/posts/:path*"
     },
     {
-      "source": "/((?!assets/|activity-map\\.html).*)",
+      "source": "/((?!assets/|activity-map\\.html|live-room\\.html).*)",
       "destination": "/index.html"
     }
   ],

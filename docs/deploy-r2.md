@@ -90,7 +90,12 @@ No bucket R2 → **Settings** → **CORS policy**:
 ```json
 [
   {
-    "AllowedOrigins": ["https://edersonprogramador.com", "https://www.edersonprogramador.com", "http://localhost:5174"],
+    "AllowedOrigins": [
+      "https://edersonprogramador.com",
+      "https://www.edersonprogramador.com",
+      "https://app-treino-api.vercel.app",
+      "http://localhost:5174"
+    ],
     "AllowedMethods": ["GET", "HEAD"],
     "AllowedHeaders": ["*"],
     "MaxAgeSeconds": 86400

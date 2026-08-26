@@ -1,6 +1,10 @@
-import "react-native-gesture-handler";
-import { registerRootComponent } from "expo";
-import Constants from "expo-constants";
+// MUST be first (no ESM imports above this — Metro hoists them).
+// Hermes TextDecoder lacks utf-16le; h3-js crashes without this polyfill.
+require("./src/polyfills/textEncoding");
+require("react-native-gesture-handler");
+
+const { registerRootComponent } = require("expo");
+const Constants = require("expo-constants").default;
 
 // Task GPS em background (TaskManager) — registrar antes do App montar.
 require("./src/tracking/location/trackingLocationTask");

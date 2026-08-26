@@ -640,6 +640,10 @@ export function ActivityScreen() {
               lapAwayRef.current = false;
             }}
           />
+          <View style={styles.nativeMapsBadge} pointerEvents="none">
+            <Ionicons name="navigate" size={12} color="#fff" />
+            <Text style={styles.nativeMapsBadgeText}>Google Maps · GPS nativo</Text>
+          </View>
           {snap?.isAutoPaused ? (
             <View style={styles.autoPauseBadge}>
               <Text style={styles.autoPauseText}>Auto-pause · ritmo suavizado</Text>
@@ -1003,6 +1007,25 @@ function createStyles(st: StudentTokens) {
     tabText: { color: "#605a52", fontWeight: "800", fontSize: 12 },
     tabTextOn: { color: "#df663c" },
     map: { flex: 1, backgroundColor: "#0b1a12" },
+    nativeMapsBadge: {
+      position: "absolute",
+      top: 12,
+      left: 12,
+      zIndex: 6,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: "rgba(21, 16, 11, 0.82)",
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999
+    },
+    nativeMapsBadgeText: {
+      color: "#fff",
+      fontWeight: "700",
+      fontSize: 11,
+      letterSpacing: 0.2
+    },
     autoPauseBadge: {
       position: "absolute",
       top: 12,

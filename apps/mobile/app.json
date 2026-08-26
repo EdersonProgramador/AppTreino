@@ -20,8 +20,8 @@
         "NSLocationWhenInUseUsageDescription": "Permitir a localização para gravar corrida, caminhada e ciclismo.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Permitir localização em segundo plano para gravar a atividade com o app minimizado.",
         "NSLocationAlwaysUsageDescription": "Permitir localização em segundo plano para gravar a atividade com o app minimizado.",
-      "NSCameraUsageDescription": "Permitir a camera para compartilhar o treino.",
-        "NSMicrophoneUsageDescription": "Permitir o microfone ao gravar video do treino.",
+        "NSCameraUsageDescription": "Permitir a camera para lives e compartilhar o treino.",
+        "NSMicrophoneUsageDescription": "Permitir o microfone ao gravar video e nas lives.",
         "NSPhotoLibraryUsageDescription": "Permitir acesso as fotos para compartilhar o treino.",
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
@@ -62,6 +62,7 @@
       "./plugins/withBackgroundPlayback",
       "expo-asset",
       "expo-font",
+      "expo-sqlite",
       [
         "expo-location",
         {
@@ -76,6 +77,14 @@
         "expo-av",
         {
           "microphonePermission": "Permitir o microfone ao gravar video do treino."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permitir a camera para lives e compartilhar o treino.",
+          "microphonePermission": "Permitir o microfone nas lives.",
+          "recordAudioAndroid": true
         }
       ],
       [

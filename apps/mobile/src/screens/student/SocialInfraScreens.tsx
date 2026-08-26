@@ -1,10 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Dimensions,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type ViewToken
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { io, type Socket } from "socket.io-client";
 import * as ImagePicker from "expo-image-picker";
+import { ResizeMode, Video } from "expo-av";
 import { apiGet, apiPost, apiUploadFile } from "../../auth/api";
 import { API_URL } from "../../config";
 import { mediaUrl } from "../../lib/media";
@@ -24,74 +34,178 @@ function getSocket(token: string) {
 }
 
 type Nav = NativeStackNavigationProp<FeedStackParamList>;
+type ReelRow = {
+  id: string;
+  videoUrl: string;
+  coverUrl?: string | null;
+  caption: string;
+  author: SocialAuthor;
+  likesCount: number;
+  likedByMe: boolean;
+};
+
+const REEL_HEIGHT = Dimensions.get("window").height;
+
+function ReelSlide({
+  reel,
+  active,
+  onLike
+}: {
+  reel: ReelRow;
+  active: boolean;
+  onLike: () => void;
+}) {
+  const videoRef = useRef<Video>(null);
+  const uri = mediaUrl(reel.videoUrl);
+
+  useEffect(() => {
+    if (!videoRef.current) return;
+    if (active) void videoRef.current.playAsync().catch(() => undefined);
+    else void videoRef.current.pauseAsync().catch(() => undefined);
+  }, [active]);
+
+  return (
+    <View style={reelStyles.slide}>
+      {uri ? (
+        <Video
+          ref={videoRef}
+          source={{ uri }}
+          style={StyleSheet.absoluteFill}
+          resizeMode={ResizeMode.COVER}
+          shouldPlay={active}
+          isLooping
+          isMuted={false}
+        />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, reelStyles.fallback]} />
+      )}
+      <View style={reelStyles.overlay}>
+        <Text style={reelStyles.author}>{reel.author.name}</Text>
+        {reel.caption ? <Text style={reelStyles.caption}>{reel.caption}</Text> : null}
+      </View>
+      <Pressable style={reelStyles.likeBtn} onPress={onLike}>
+        <Ionicons name={reel.likedByMe ? "heart" : "heart-outline"} size={30} color={reel.likedByMe ? "#df663c" : "#fff"} />
+        <Text style={reelStyles.likeCount}>{reel.likesCount}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const reelStyles = StyleSheet.create({
+  slide: { height: REEL_HEIGHT, width: "100%", backgroundColor: "#000" },
+  fallback: { backgroundColor: "#111" },
+  overlay: {
+    position: "absolute",
+    left: 16,
+    right: 88,
+    bottom: 48,
+    gap: 6
+  },
+  author: { color: "#fff", fontWeight: "800", fontSize: 16 },
+  caption: { color: "rgba(255,255,255,0.9)", fontSize: 14, lineHeight: 20 },
+  likeBtn: { position: "absolute", right: 16, bottom: 120, alignItems: "center", gap: 4 },
+  likeCount: { color: "#fff", fontWeight: "800" }
+});
 
 export function ReelsScreen() {
   const { session } = useStudent();
   const { st } = useSt();
   const styles = useMemo(() => createStyles(st), [st]);
   const navigation = useNavigation<Nav>();
-  const [reels, setReels] = useState<
-    Array<{ id: string; videoUrl: string; caption: string; author: SocialAuthor; likesCount: number; likedByMe: boolean }>
-  >([]);
+  const [reels, setReels] = useState<ReelRow[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    void apiGet<{ reels: typeof reels }>("/student/social/reels", session.token).then((data) => setReels(data.reels));
+  const load = useCallback(async () => {
+    const data = await apiGet<{ reels: ReelRow[] }>("/student/social/reels", session.token);
+    setReels(data.reels);
+    setActiveId((current) => current ?? data.reels[0]?.id ?? null);
   }, [session.token]);
 
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    const first = viewableItems.find((row) => row.isViewable);
+    if (first?.item && typeof first.item === "object" && "id" in first.item) {
+      setActiveId(String((first.item as ReelRow).id));
+    }
+  }).current;
+
   return (
-    <StudentPage>
-      <Pressable onPress={() => navigation.goBack()}>
-        <Text style={styles.back}>← Feed</Text>
-      </Pressable>
-      <Text style={styles.title}>Clipes</Text>
-      <GreenButton
-        label="Novo clipe"
-        onPress={async () => {
-          const pick = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["videos"], quality: 0.8 });
-          if (pick.canceled || !pick.assets[0]) return;
-          const uploaded = await apiUploadFile<{ file: { url: string } }>(
-            "/student/social/uploads",
-            pick.assets[0].uri,
-            session.token,
-            "reel.mp4"
-          );
-          await apiPost("/student/social/reels", { videoUrl: uploaded.file.url, caption: "" }, session.token);
-          const data = await apiGet<{ reels: typeof reels }>("/student/social/reels", session.token);
-          setReels(data.reels);
-        }}
-      />
+    <View style={{ flex: 1, backgroundColor: "#000" }}>
+      <View style={styles.reelsTop}>
+        <Pressable onPress={() => navigation.goBack()} hitSlop={10}>
+          <Ionicons name="chevron-back" size={24} color="#fff" />
+        </Pressable>
+        <Text style={styles.reelsTitle}>Clipes</Text>
+        <Pressable
+          disabled={busy}
+          onPress={async () => {
+            const pick = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["videos"], quality: 0.8, videoMaxDuration: 60 });
+            if (pick.canceled || !pick.assets[0]) return;
+            setBusy(true);
+            try {
+              const uploaded = await apiUploadFile<{ file: { url: string } }>(
+                "/student/social/uploads",
+                pick.assets[0].uri,
+                session.token,
+                "reel.mp4"
+              );
+              await apiPost("/student/social/reels", { videoUrl: uploaded.file.url, caption: "" }, session.token);
+              await load();
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <Ionicons name="add-circle-outline" size={26} color="#fff" />
+        </Pressable>
+      </View>
+
       {reels.length === 0 ? (
-        <EmptyState icon="film-outline" title="Sem clipes" text="Publique um vídeo vertical." />
+        <View style={styles.reelsEmpty}>
+          <EmptyState icon="film-outline" title="Sem clipes" text="Publique um vídeo vertical." />
+        </View>
       ) : (
-        reels.map((reel) => (
-          <View key={reel.id} style={styles.card}>
-            <Text style={styles.name}>{reel.author.name}</Text>
-            <Text style={styles.meta}>{reel.caption || "Clipe"}</Text>
-            <Text style={styles.meta}>{mediaUrl(reel.videoUrl)}</Text>
-            <Pressable
-              style={styles.chip}
-              onPress={async () => {
-                const result = await apiPost<{ liked: boolean }>(`/student/social/reels/${reel.id}/like`, {}, session.token);
-                setReels((current) =>
-                  current.map((row) =>
-                    row.id === reel.id
-                      ? {
-                          ...row,
-                          likedByMe: result.liked,
-                          likesCount: Math.max(0, row.likesCount + (result.liked ? 1 : -1))
-                        }
-                      : row
-                  )
-                );
+        <FlatList
+          data={reels}
+          keyExtractor={(item) => item.id}
+          pagingEnabled
+          showsVerticalScrollIndicator={false}
+          decelerationRate="fast"
+          snapToInterval={REEL_HEIGHT}
+          snapToAlignment="start"
+          disableIntervalMomentum
+          getItemLayout={(_, index) => ({ length: REEL_HEIGHT, offset: REEL_HEIGHT * index, index })}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={{ itemVisiblePercentThreshold: 70 }}
+          renderItem={({ item }) => (
+            <ReelSlide
+              reel={item}
+              active={item.id === activeId}
+              onLike={() => {
+                void (async () => {
+                  const result = await apiPost<{ liked: boolean }>(`/student/social/reels/${item.id}/like`, {}, session.token);
+                  setReels((current) =>
+                    current.map((row) =>
+                      row.id === item.id
+                        ? {
+                            ...row,
+                            likedByMe: result.liked,
+                            likesCount: Math.max(0, row.likesCount + (result.liked ? 1 : -1))
+                          }
+                        : row
+                    )
+                  );
+                })();
               }}
-            >
-              <Ionicons name={reel.likedByMe ? "heart" : "heart-outline"} size={16} color={st.coral} />
-              <Text style={styles.chipText}>{reel.likesCount}</Text>
-            </Pressable>
-          </View>
-        ))
+            />
+          )}
+        />
       )}
-    </StudentPage>
+    </View>
   );
 }
 
@@ -103,7 +217,6 @@ export function LiveScreen() {
   const [lives, setLives] = useState<Array<{ id: string; title: string; host: SocialAuthor; isMine: boolean }>>([]);
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function loadLives() {
@@ -137,41 +250,39 @@ export function LiveScreen() {
         placeholder="Ex.: Treino de hoje"
         style={styles.input}
         placeholderTextColor={st.faint}
-        editable={!busy}
       />
       <GreenButton
-        label={busy ? "Abrindo…" : "Entrar no ar"}
-        onPress={async () => {
+        label="Entrar no ar"
+        onPress={() => {
           if (title.trim().length < 2) {
             setError("Digite um título com pelo menos 2 caracteres.");
             return;
           }
-          setBusy(true);
           setError(null);
-          try {
-            await apiPost("/student/social/live", { title: title.trim() }, session.token);
-            setTitle("");
-            await loadLives();
-          } catch (err) {
-            setError(err instanceof Error ? err.message : "Não foi possível iniciar a live.");
-          } finally {
-            setBusy(false);
-          }
+          navigation.navigate("LiveRoom", { mode: "host", title: title.trim() });
         }}
       />
+      <Pressable style={[styles.chip, { marginBottom: 12 }]} onPress={() => void loadLives()}>
+        <Ionicons name="refresh" size={14} color={st.text} />
+        <Text style={styles.chipText}>Atualizar</Text>
+      </Pressable>
       {loading ? (
         <Text style={styles.meta}>Carregando lives…</Text>
       ) : lives.length === 0 ? (
         <Text style={styles.meta}>Ninguém no ar agora. Comece a sua transmissão acima.</Text>
       ) : (
         lives.map((live) => (
-          <View key={live.id} style={styles.card}>
+          <Pressable
+            key={live.id}
+            style={styles.card}
+            onPress={() => navigation.navigate("LiveRoom", { mode: live.isMine ? "host" : "viewer", liveId: live.id, title: live.title })}
+          >
             <Text style={styles.name}>{live.title}</Text>
             <Text style={styles.meta}>
               {live.host.name}
-              {live.isMine ? " · você" : ""}
+              {live.isMine ? " · você" : ""} · tocar para {live.isMine ? "voltar" : "assistir"}
             </Text>
-          </View>
+          </Pressable>
         ))
       )}
     </StudentPage>
@@ -372,6 +483,18 @@ function createStyles(st: StudentTokens) {
     input: { borderWidth: 1, borderColor: st.line, borderRadius: 12, padding: 10, color: st.text, backgroundColor: st.inputBg, marginBottom: 10 },
     chip: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: st.line, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8, alignSelf: "flex-start" },
     chipText: { color: st.text, fontWeight: "800", fontSize: 12 },
-    row: { flexDirection: "row", gap: 8, flexWrap: "wrap" }
+    row: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+    reelsTop: {
+      position: "absolute",
+      top: 48,
+      left: 12,
+      right: 12,
+      zIndex: 4,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between"
+    },
+    reelsTitle: { color: "#fff", fontWeight: "800", fontSize: 18 },
+    reelsEmpty: { flex: 1, justifyContent: "center", padding: 24, backgroundColor: st.bg }
   });
 }

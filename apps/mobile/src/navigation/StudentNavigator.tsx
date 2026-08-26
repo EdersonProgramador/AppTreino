@@ -12,6 +12,7 @@ import {
   ReelsScreen,
   RequestsScreen
 } from "../screens/student/SocialInfraScreens";
+import { LiveRoomScreen } from "../screens/student/LiveRoomScreen";
 import { ClubScreen } from "../screens/student/ClubScreen";
 import { ActivityScreen } from "../screens/student/ActivityScreen";
 import { MembershipScreen, PaymentsScreen, ProfileScreen, ProfileSettingsScreen, PurchasesScreen } from "../screens/student/AccountScreens";
@@ -65,6 +66,7 @@ function FeedStackScreen() {
       <FeedStack.Screen name="Feed" component={FeedScreen} />
       <FeedStack.Screen name="Reels" component={ReelsScreen} />
       <FeedStack.Screen name="Live" component={LiveScreen} />
+      <FeedStack.Screen name="LiveRoom" component={LiveRoomScreen} options={{ presentation: "fullScreenModal" }} />
       <FeedStack.Screen name="Messages" component={MessagesScreen} />
       <FeedStack.Screen name="DirectMessage" component={DirectMessageScreen} />
       <FeedStack.Screen name="Chat" component={ChatScreen} />
