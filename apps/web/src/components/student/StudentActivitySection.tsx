@@ -97,11 +97,11 @@ export function StudentActivitySection({
   const bufferRef = useRef<GpsPoint[]>([]);
   const pipelineRef = useRef(new WebGpsPipeline());
   const followMapRef = useRef(true);
-  const sportRef = useRef(sport);
   const lapAwayRef = useRef(false);
   const lapMarkerRef = useRef<LapMarker | null>(null);
-  sportRef.current = sport;
   const [sport, setSport] = useState<OutdoorSport>(preferredSport);
+  const sportRef = useRef(sport);
+  sportRef.current = sport;
   const [mapType, setMapType] = useState<MapType>("standard");
   const [activityMap, setActivityMap] = useState<ActivityMap>("personal");
   const [layers, setLayers] = useState<Record<LayerKey, boolean>>({
