@@ -1,4 +1,4 @@
-import { apiPost, NativeApiError } from "../auth/api";
+import { apiPost, apiUploadFile, NativeApiError } from "../auth/api";
 
 export type CoachChatResponse = {
   reply: string;
@@ -43,21 +43,50 @@ function localCoachFallback(body: unknown): CoachChatResponse {
     return {
       source: "local",
       reply:
-        "Pelo perfil padrão (mesomorfo até a próxima avaliação): proteína em toda refeição, carbo em volta do treino, vegetais no prato. Peça de novo “monte uma dieta pelo meu biotipo” quando o servidor terminar de atualizar — ou gere o plano abaixo."
+        "Beleza. Enquanto o servidor atualiza, o caminho seguro é proteína em toda refeição, carbo perto do treino e verdura no prato. Quando a API voltar, pede de novo “como eu como nessa semana?” que eu fecho os números."
     };
   }
   if (/treino|semana|montar|gerar|muscul|corrida|hiit/.test(text)) {
     return {
       source: "local",
       reply:
-        "Semana sugerida: Push, pernas, corrida leve e yoga. Use “Gerar plano” abaixo para gravar a rotina na sua conta agora."
+        "Hoje eu iria de um full body curto: agachamento, supino, remada e prancha. Se quiser gravar a semana na conta, usa Gerar plano abaixo — ou manda de novo quando o chat da API estiver no ar."
     };
   }
   return {
     source: "local",
-    reply:
-      "Posso montar treino da semana ou dieta pelo biotipo. Escreva o que você quer — se o chat da API ainda não estiver no ar, o botão Gerar plano abaixo já funciona."
+    reply: "Tô aqui. Me fala se você quer treinar agora, organizar a semana ou olhar a comida."
   };
+}
+
+export function coachAudioUploadMeta(uri: string) {
+  const clean = uri.split("?")[0] ?? uri;
+  const ext = (clean.split(".").pop() || "m4a").toLowerCase();
+  const safe = ["m4a", "mp4", "mp3", "wav", "webm", "aac", "caf"].includes(ext) ? ext : "m4a";
+  const mime =
+    safe === "webm"
+      ? "audio/webm"
+      : safe === "wav"
+        ? "audio/wav"
+        : safe === "mp3"
+          ? "audio/mpeg"
+          : "audio/mp4";
+  return { filename: `coach.${safe}`, mime };
+}
+
+export async function transcribeCoachAudio(uri: string, token: string) {
+  const { filename, mime } = coachAudioUploadMeta(uri);
+  let lastUploadError: unknown;
+  for (const path of COACH_TRANSCRIBE_PATHS) {
+    try {
+      return await apiUploadFile<{ text: string }>(path, uri, token, filename, mime);
+    } catch (caught) {
+      lastUploadError = caught;
+      if (caught instanceof NativeApiError && caught.status === 404) continue;
+      throw caught;
+    }
+  }
+  throw lastUploadError instanceof Error ? lastUploadError : new Error("Não gravei o áudio.");
 }
 
 export async function postCoachChat(body: unknown, token: string) {

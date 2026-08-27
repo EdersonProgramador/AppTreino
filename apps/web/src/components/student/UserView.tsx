@@ -4287,11 +4287,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         )}
 
         {studentSection === "ai" && publicConfig["module_ai"] !== "false" && (
-          <section className="student-sheet">
+          <section className="student-sheet student-ai-sheet">
             <div className="student-sheet-heading">
-              <span>Agente IA</span>
-              <h1>Especialista em treino e nutrição</h1>
-              <p>Voz e chat agora. A IA cria treinos de todas as modalidades e dieta pelo biotipo.</p>
+              <span>Coach IA</span>
+              <h1>Coach AppTreino</h1>
+              <p>Chat e voz no mesmo fluxo — como um especialista ao seu lado.</p>
             </div>
             {token ? (
               <StudentAiCoachChat
@@ -4300,7 +4300,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 onPlanSaved={() => void loadUserData()}
               />
             ) : null}
-            <form className="student-form student-ai-form" onSubmit={handleCreateAiPlan}>
+            <details className="coach-gpt-plan">
+              <summary>Gerar rotina pelo objetivo</summary>
+              <form className="student-form student-ai-form" onSubmit={handleCreateAiPlan}>
               <label>
                 <span>Objetivo</span>
                 <select name="objective" defaultValue={profile?.objective || "condicionamento"} required>
@@ -4338,6 +4340,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 {aiBusy ? "Gerando rotina…" : "Gerar rotina pelo objetivo"}
               </button>
             </form>
+            </details>
             {latestAiPlan ? (
               <article className="student-ai-plan">
                 <div className="student-info-card">

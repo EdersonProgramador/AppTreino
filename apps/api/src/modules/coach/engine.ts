@@ -201,31 +201,59 @@ function lastUserText(messages: Array<{ role: string; content: string }>) {
   return "";
 }
 
+function isSmallTalk(text: string) {
+  const value = text
+    .trim()
+    .toLowerCase()
+    .replace(/[!?.]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!value) return true;
+  return /^(oi+|ol[aá]|e a[ií]|eae|fala|opa|hey|salve|beleza|bom dia|boa tarde|boa noite)( tudo bem| td bem)?$/.test(
+    value
+  );
+}
+
 export function localCoachChat(ctx: CoachContext, messages: Array<{ role: string; content: string }>): CoachChatResult {
   const text = lastUserText(messages).toLowerCase();
-  const first = ctx.name.split(" ")[0] || "atleta";
+  const first = ctx.name.split(" ")[0] || "aí";
   const wantsDiet = /dieta|refei|comer|biotipo|ectomor|endomor|mesomor|prote[ií]na|kcal|card[aá]pio/.test(text);
   const wantsPlan = /treino|s[eé]rie|carga|muscul|hiit|yoga|for[cç]a|hipertrof|montar|gerar|semana|modalidade/.test(text);
   const wantsRun = /corrida|correr|pace|km |pedal|caminh/.test(text);
   const wantsStreak = /ofensiva|consist|sequ[eê]ncia|faltou|desânimo|desanimo/.test(text);
+
+  if (isSmallTalk(text) && !wantsDiet && !wantsPlan && !wantsRun) {
+    const streak =
+      ctx.streakDays > 0 ? ` Tá com ${ctx.streakDays} dia${ctx.streakDays === 1 ? "" : "s"} de ofensiva — isso já é constância.` : "";
+    return {
+      source: "local",
+      reply: `E aí, ${first}.${streak} Me fala o que você quer agora: treinar hoje, organizar a semana ou olhar a comida?`
+    };
+  }
 
   if (wantsDiet && !wantsPlan) {
     const diet = buildDiet(ctx);
     return {
       source: "local",
       diet,
-      reply: `${first}, pelo seu recorte (${ctx.biotypeReason}) você está no perfil **${diet.biotype}**.\n\n${diet.strategy}\nAlvo: ${diet.kcal} kcal · ${diet.proteinG}g proteína · ${diet.carbsG}g carbo · ${diet.fatG}g gordura.\n\n${diet.meals.map((meal) => `• ${meal.name}: ${meal.items.join(", ")}`).join("\n")}\n\nIsso é ponto de partida clínico-prático, não prescrição médica.`
+      reply: `${first}, sem enrolação: o caminho que combina com você é ${diet.strategy.toLowerCase()}\n\nDá pra começar por aí, mais ou menos ${diet.kcal} kcal com ${diet.proteinG}g de proteína.\n\n${diet.meals.map((meal) => `• ${meal.name}: ${meal.items.join(", ")}`).join("\n")}\n\nQuer que eu ajuste isso pra emagrecer, ganhar massa ou manter? Isso é orientação prática, não prescrição médica.`
     };
   }
 
   if (wantsPlan || wantsRun || /hoje|agora|bora treinar|montar/.test(text)) {
     const plan = buildWorkoutPlan(ctx);
     const diet = plan.diet;
+    const today = plan.days[0];
     return {
       source: "local",
       plan,
       diet,
-      reply: `${first}, montei a semana com as modalidades do AppTreino (musculação, ${plan.days.map((day) => day.modality).filter((item, index, all) => all.indexOf(item) === index).join(", ")}).\n\n${plan.summary}\n\n${plan.days.map((day) => `• ${day.title}: ${day.exercises.map((item) => item.name).slice(0, 3).join(", ")}`).join("\n")}\n\n${plan.recommendations[0]}\nBiotipo ${ctx.biotype}: dieta em ${diet?.kcal ?? "—"} kcal. Quer que eu foque só hipertrofia, só corrida ou emagrecimento?`
+      reply: `Bora, ${first}. Se fosse hoje, eu começaria em **${today?.title ?? "treino"}**: ${today?.exercises
+        .map((item) => item.name)
+        .slice(0, 3)
+        .join(", ") || "o básico bem feito"}.\n\nO restante da semana:\n${plan.days
+        .map((day) => `• ${day.title} — ${day.exercises.map((item) => item.name).slice(0, 3).join(", ")}`)
+        .join("\n")}\n\n${plan.recommendations[0]}\nQuer que eu foque mais em musculação, corrida ou emagrecer?`
     };
   }
 
@@ -234,14 +262,14 @@ export function localCoachChat(ctx: CoachContext, messages: Array<{ role: string
       source: "local",
       reply:
         ctx.streakDays > 0
-          ? `${first}, você está com ${ctx.streakDays} dia(s) de ofensiva. O cérebro tenta negociar folga; o padrão vencedor é o mínimo inegociável de hoje. Marque o dia — treino, corrida, caminhada ou pedal.`
-          : `${first}, a ofensiva está zerada. Não precisa do treino perfeito: 20 minutos já reabrem a sequência. Qual modalidade você consegue fazer nas próximas 2 horas?`
+          ? `${first}, ${ctx.streakDays} dia${ctx.streakDays === 1 ? "" : "s"} já tá no bolso. O cérebro vai tentar negociar folga; o que funciona é o mínimo de hoje. Treino, corrida, caminhada ou pedal — o que cabe na sua agenda agora?`
+          : `${first}, a sequência zerou, acontece. Não precisa do treino perfeito: 20 minutos já reabrem o jogo. O que você consegue fazer nas próximas duas horas?`
     };
   }
 
   return {
     source: "local",
-    reply: `${first}, estou no seu contexto: objetivo ${ctx.objective}, nível ${ctx.level}, biotipo ${ctx.biotype}, ofensiva ${ctx.streakDays}d. Posso montar treino da semana (todas as modalidades), dieta pelo biotipo, ajustar carga ou sugerir o cardio pelo clima. O que você quer agora?`
+    reply: `Pode falar, ${first}. Tô aqui pra montar o treino, a semana ou a comida — o que tá mais na cabeça agora?`
   };
 }
 

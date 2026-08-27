@@ -21,16 +21,16 @@ export async function stopCoachVoice() {
   }
 }
 
-export async function recordCoachClip(maxMs = 12_000): Promise<string | null> {
-  const recording = await startCoachRecording();
-  await new Promise((resolve) => setTimeout(resolve, maxMs));
-  return stopCoachRecording(recording);
-}
-
 export async function startCoachRecording() {
   const permission = await Audio.requestPermissionsAsync();
   if (!permission.granted) throw new Error("Permita o microfone para falar com o Coach.");
-  await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+  await Audio.setAudioModeAsync({
+    allowsRecordingIOS: true,
+    playsInSilentModeIOS: true,
+    staysActiveInBackground: false,
+    shouldDuckAndroid: true,
+    playThroughEarpieceAndroid: false
+  });
   const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
   return recording;
 }
@@ -41,6 +41,6 @@ export async function stopCoachRecording(recording: Audio.Recording) {
   } catch {
     // ignore
   }
-  await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+  await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
   return recording.getURI();
 }

@@ -13,8 +13,12 @@ export class NativeApiError extends Error {
 
 async function readError(response: Response, path?: string) {
   try {
-    const data = (await response.json()) as { message?: string; issues?: Array<{ message: string }> };
-    const detail = data.message ?? data.issues?.[0]?.message;
+    const data = (await response.json()) as {
+      message?: string;
+      error?: string;
+      issues?: Array<{ message: string }>;
+    };
+    const detail = data.message ?? data.error ?? data.issues?.[0]?.message;
     if (detail) return detail;
   } catch {
     // ignore
@@ -148,6 +152,7 @@ export function apiDelete<T>(path: string, token?: string | null) {
 
 function guessUploadMime(filename: string, mimeType?: string | null) {
   const declared = (mimeType ?? "").split(";")[0]?.trim().toLowerCase();
+  if (declared === "audio/m4a" || declared === "audio/x-m4a" || declared === "audio/aac") return "audio/mp4";
   if (declared) return declared;
   const lower = filename.toLowerCase();
   const extension = lower.split(".").pop() ?? "";
@@ -181,6 +186,16 @@ function guessUploadMime(filename: string, mimeType?: string | null) {
     av1: "video/av1"
   };
   if (videoMime[extension]) return videoMime[extension];
+  const audioMime: Record<string, string> = {
+    m4a: "audio/mp4",
+    aac: "audio/mp4",
+    mp3: "audio/mpeg",
+    wav: "audio/wav",
+    webm: "audio/webm",
+    caf: "audio/x-caf",
+    ogg: "audio/ogg"
+  };
+  if (audioMime[extension]) return audioMime[extension];
   if (lower.endsWith(".png")) return "image/png";
   if (lower.endsWith(".webp")) return "image/webp";
   if (lower.endsWith(".gif")) return "image/gif";

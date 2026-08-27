@@ -32,18 +32,33 @@ const TOOLS = [
   }
 ] as const;
 
+function firstNameOf(ctx: CoachContext) {
+  return ctx.name.split(" ")[0] || "você";
+}
+
 function systemPrompt(ctx: CoachContext) {
+  const first = firstNameOf(ctx);
   return [
-    "Você é o Coach AppTreino, especialista em treino de alta performance, nutrição prática e psicologia do sucesso (PNL).",
-    "Fale em português do Brasil, direto, sem enrolação, 1–3 parágrafos + bullets quando fizer sentido.",
-    "Nunca invente números de dieta: use a tool montar_dieta_biotipo. Nunca invente a grade de treino: use gerar_treino_personalizado.",
-    "Não é substituto de médico. Se houver dor aguda ou transtorno alimentar, oriente procurar profissional.",
-    `Atleta: ${ctx.name}. Objetivo: ${ctx.objective}. Nível: ${ctx.level}. Dias/semana: ${ctx.daysPerWeek}.`,
-    `Biotipo: ${ctx.biotype} (${ctx.biotypeReason}). Peso ${ctx.weightKg ?? "—"} kg · altura ${ctx.heightCm ?? "—"} cm · %gordura ${ctx.bodyFatPct ?? "—"}.`,
-    `Ofensiva: ${ctx.streakDays} dia(s). Volume recente: treino ${ctx.sportTotals.WORKOUT}, corrida ${ctx.sportTotals.RUN}, caminhada ${ctx.sportTotals.WALK}, pedal ${ctx.sportTotals.RIDE}.`,
-    ctx.weather ? `Clima no local: ${ctx.weather.tempC}° · ${ctx.weather.label ?? ""} (código ${ctx.weather.code ?? "—"})` : "Clima não informado nesta mensagem.",
-    `Cidade: ${ctx.city ?? "—"}. Equipamento: ${ctx.equipmentTags.join(", ") || "não informado"}.`
+    `Você é o Coach do AppTreino — um treinador de verdade no WhatsApp. A pessoa se chama ${first}.`,
+    "Fale português do Brasil, caloroso e humano. Frases curtas. Como um coach que conhece o aluno, não como um relatório.",
+    "NUNCA recapitulue a ficha (objetivo, nível, biotipo, ofensiva) só para mostrar que leu. Use esses dados em silêncio.",
+    "Se a pessoa só cumprimentar (oi, e aí, tudo bem), responda o cumprimento, chame pelo nome no máximo uma vez e pergunte UMA coisa: treino de hoje, semana ou comida. Sem menu de serviços.",
+    "Combine o tamanho da resposta com a mensagem: 'oi' ganha 2–4 linhas. Pedido de treino/dieta pode ter lista.",
+    "Quando montar treino ou dieta, comece pelo que fazer HOJE, depois o restante. Termine com uma pergunta natural.",
+    "Nunca invente números de dieta: use montar_dieta_biotipo. Nunca invente a grade da semana: use gerar_treino_personalizado.",
+    "Não é médico. Dor aguda, tontura ou transtorno alimentar → oriente procurar profissional, com calma.",
+    "Dados internos (não vomitar de volta):",
+    `objetivo ${ctx.objective}; nível ${ctx.level}; ${ctx.daysPerWeek}x/semana; biotipo ${ctx.biotype} (${ctx.biotypeReason});`,
+    `peso ${ctx.weightKg ?? "—"} kg; altura ${ctx.heightCm ?? "—"} cm; %gordura ${ctx.bodyFatPct ?? "—"}; ofensiva ${ctx.streakDays}d;`,
+    `volume recente: treino ${ctx.sportTotals.WORKOUT}, corrida ${ctx.sportTotals.RUN}, caminhada ${ctx.sportTotals.WALK}, pedal ${ctx.sportTotals.RIDE};`,
+    ctx.weather ? `clima: ${ctx.weather.tempC}° · ${ctx.weather.label ?? ""}` : "clima não informado",
+    `cidade ${ctx.city ?? "—"}; equipamento ${ctx.equipmentTags.join(", ") || "não informado"}.`
   ].join("\n");
+}
+
+export function conversationForModel(history: CoachMessage[]): CoachMessage[] {
+  if (history[0]?.role === "assistant") return history.slice(1);
+  return history;
 }
 
 type OpenAiMessage = { role: "system" | "user" | "assistant" | "tool"; content?: string | null; tool_call_id?: string; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> };
@@ -62,7 +77,9 @@ async function openaiChat(messages: OpenAiMessage[], tools = true) {
       },
       body: JSON.stringify({
         model: env.OPENAI_MODEL,
-        temperature: 0.6,
+        temperature: tools ? 0.85 : 0.7,
+        frequency_penalty: 0.35,
+        presence_penalty: 0.2,
         messages,
         ...(tools ? { tools: TOOLS, tool_choice: "auto" } : {})
       }),
@@ -87,10 +104,12 @@ export async function llmCoachChat(ctx: CoachContext, history: CoachMessage[]): 
   if (!env.OPENAI_API_KEY) return null;
   const messages: OpenAiMessage[] = [
     { role: "system", content: systemPrompt(ctx) },
-    ...history.slice(-16).map((item) => ({
-      role: item.role === "assistant" ? ("assistant" as const) : ("user" as const),
-      content: item.content
-    }))
+    ...conversationForModel(history)
+      .slice(-16)
+      .map((item) => ({
+        role: item.role === "assistant" ? ("assistant" as const) : ("user" as const),
+        content: item.content
+      }))
   ];
   const first = await openaiChat(messages, true);
   const message = first?.choices?.[0]?.message;
@@ -138,7 +157,19 @@ export async function llmCoachChat(ctx: CoachContext, history: CoachMessage[]): 
         toolMessages.push({ role: "tool", tool_call_id: call.id, content: "{}" });
       }
     }
-    const second = await openaiChat([...messages, message, ...toolMessages], false);
+    const second = await openaiChat(
+      [
+        ...messages,
+        message,
+        ...toolMessages,
+        {
+          role: "system",
+          content:
+            "Agora fale com a pessoa. Sem recap de ficha. Comece pelo que vale HOJE, depois o plano em lista curta, uma pergunta no fim."
+        }
+      ],
+      false
+    );
     const reply = second?.choices?.[0]?.message?.content?.trim();
     if (reply) return { reply, source: "llm", plan, diet };
   }
@@ -148,22 +179,7 @@ export async function llmCoachChat(ctx: CoachContext, history: CoachMessage[]): 
   return null;
 }
 
-export async function transcribeAudio(buffer: Buffer, filename: string, mimeType?: string) {
-  if (!env.OPENAI_API_KEY) return null;
-  const url = `${env.OPENAI_BASE_URL.replace(/\/$/, "")}/audio/transcriptions`;
-  const form = new FormData();
-  form.append("file", new Blob([new Uint8Array(buffer)], { type: mimeType || "audio/m4a" }), filename || "audio.m4a");
-  form.append("model", "whisper-1");
-  form.append("language", "pt");
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` },
-    body: form
-  });
-  if (!response.ok) return null;
-  const data = (await response.json()) as { text?: string };
-  return data.text?.trim() || null;
-}
+export { transcribeAudio } from "./whisper.js";
 
 export async function coachReply(ctx: CoachContext, history: CoachMessage[]): Promise<CoachChatResult> {
   const llm = await llmCoachChat(ctx, history);

@@ -23,24 +23,92 @@ export function stopCoachWeb() {
   window.speechSynthesis.cancel();
 }
 
+function speechCtor() {
+  if (typeof window === "undefined") return null;
+  return (
+    (window as unknown as { SpeechRecognition?: RecCtor; webkitSpeechRecognition?: RecCtor }).SpeechRecognition ||
+    (window as unknown as { webkitSpeechRecognition?: RecCtor }).webkitSpeechRecognition ||
+    null
+  );
+}
+
+export function canUseWebSpeech() {
+  return Boolean(speechCtor());
+}
+
 export function listenCoachWeb(): Promise<string> {
-  const ctor = (window as unknown as { SpeechRecognition?: RecCtor; webkitSpeechRecognition?: RecCtor })
-    .SpeechRecognition || (window as unknown as { webkitSpeechRecognition?: RecCtor }).webkitSpeechRecognition;
+  const ctor = speechCtor();
   if (!ctor) {
-    return Promise.reject(new Error("Este navegador não reconhece fala. Use Chrome ou o app nativo."));
+    return Promise.reject(new Error("Este navegador não reconhece fala. Use o microfone com Whisper ou o app nativo."));
   }
   return new Promise((resolve, reject) => {
     const rec = new ctor();
     rec.lang = "pt-BR";
     rec.interimResults = false;
     rec.maxAlternatives = 1;
+    let settled = false;
     rec.onresult = (event) => {
       const text = event.results[0]?.[0]?.transcript?.trim();
+      settled = true;
       if (text) resolve(text);
       else reject(new Error("Não entendi. Tente de novo."));
     };
-    rec.onerror = () => reject(new Error("Não foi possível ouvir. Permita o microfone."));
-    rec.onend = () => undefined;
+    rec.onerror = () => {
+      if (settled) return;
+      settled = true;
+      reject(new Error("Não foi possível ouvir. Permita o microfone."));
+    };
+    rec.onend = () => {
+      if (settled) return;
+      settled = true;
+      reject(new Error("Não entendi. Fale de novo e solte o microfone."));
+    };
     rec.start();
   });
+}
+
+export type CoachWebRecording = {
+  stream: MediaStream;
+  mimeType: string;
+  startedAt: number;
+  stop: () => Promise<Blob>;
+};
+
+export async function startCoachWebRecording(): Promise<CoachWebRecording> {
+  if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+    throw new Error("Este navegador não grava áudio. Escreva no chat ou use o Chrome.");
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((type) => MediaRecorder.isTypeSupported(type)) ?? "";
+  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  const chunks: Blob[] = [];
+  recorder.ondataavailable = (event) => {
+    if (event.data.size > 0) chunks.push(event.data);
+  };
+  recorder.start();
+  return {
+    stream,
+    mimeType: recorder.mimeType || mimeType || "audio/webm",
+    startedAt: Date.now(),
+    stop() {
+      return new Promise((resolve, reject) => {
+        const finish = () => {
+          stream.getTracks().forEach((track) => track.stop());
+          const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+          if (blob.size < 800) reject(new Error("Áudio muito curto. Segure o microfone, fale e solte."));
+          else resolve(blob);
+        };
+        recorder.onerror = () => {
+          stream.getTracks().forEach((track) => track.stop());
+          reject(new Error("Falha ao gravar o áudio."));
+        };
+        if (recorder.state === "inactive") {
+          finish();
+          return;
+        }
+        recorder.onstop = finish;
+        recorder.stop();
+      });
+    }
+  };
 }

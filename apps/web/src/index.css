@@ -24752,63 +24752,289 @@ body:has(.student-app-shell) {
   color: var(--app-text-muted);
 }
 
-.student-ai-chat {
+.student-ai-sheet {
+  gap: 14px;
+}
+
+.student-ai-sheet .student-sheet-heading {
+  text-align: left;
+  padding: 0 4px;
+}
+
+.student-ai-sheet .student-sheet-heading h1 {
+  margin: 4px 0;
+}
+
+.coach-gpt {
   display: grid;
-  gap: 10px;
-  margin-bottom: 16px;
-  padding: 14px;
-  border-radius: 18px;
+  grid-template-rows: auto minmax(280px, 1fr) auto;
+  min-height: min(72vh, 760px);
+  height: min(78vh, 840px);
+  margin: 0;
+  overflow: hidden;
+  border-radius: 22px;
   border: 1px solid var(--app-border);
   background: var(--app-panel);
+  box-shadow: 0 18px 40px rgba(8, 10, 14, 0.18);
 }
 
-.student-ai-chat-log {
+.coach-gpt-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--app-border);
+  background: color-mix(in srgb, var(--app-panel) 86%, #000 14%);
+}
+
+.coach-gpt-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.coach-gpt-brand strong {
+  display: block;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+}
+
+.coach-gpt-brand small {
+  display: block;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.coach-gpt-avatar {
+  flex: none;
+  width: 38px;
+  height: 38px;
   display: grid;
-  gap: 8px;
-  max-height: 240px;
-  overflow: auto;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f2b461, #df663c);
+  color: #15100b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }
 
-.student-ai-chat-log p {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: 12px;
-  font-size: 13px;
-  line-height: 1.4;
+.coach-gpt-avatar.is-sm {
+  width: 30px;
+  height: 30px;
+  font-size: 10px;
+  margin-top: 2px;
 }
 
-.student-ai-chat-log .is-coach {
-  background: var(--app-fill);
+.coach-gpt-avatar.is-user {
+  background: color-mix(in srgb, var(--app-fill) 40%, #2a3340);
   color: var(--app-text);
 }
 
-.student-ai-chat-log .is-me {
-  justify-self: end;
+.coach-gpt-thread {
+  overflow: auto;
+  padding: 18px 16px 10px;
+  background:
+    radial-gradient(1200px 240px at 50% -40px, rgba(242, 180, 97, 0.08), transparent 70%),
+    var(--app-panel);
+}
+
+.coach-gpt-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 760px;
+  margin: 0 auto 16px;
+}
+
+.coach-gpt-row.is-me {
+  flex-direction: row-reverse;
+}
+
+.coach-gpt-bubble {
+  max-width: min(100%, 640px);
+  padding: 12px 14px;
+  border-radius: 18px;
+  font-size: 15px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.coach-gpt-bubble.is-coach {
+  background: var(--app-fill);
+  color: var(--app-text);
+  border-top-left-radius: 6px;
+}
+
+.coach-gpt-bubble.is-me {
+  background: linear-gradient(135deg, #f2b461, #df663c);
+  color: #15100b;
+  border-top-right-radius: 6px;
+}
+
+.coach-gpt-status {
+  max-width: 760px;
+  margin: 0 auto 12px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.coach-gpt-typing {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  min-height: 38px;
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: var(--app-fill);
+}
+
+.coach-gpt-typing i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--app-text-muted);
+  animation: coach-gpt-dot 1.1s infinite ease-in-out;
+}
+
+.coach-gpt-typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.coach-gpt-typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes coach-gpt-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+.coach-gpt-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 760px;
+  margin: 8px auto 0;
+}
+
+.coach-gpt-hints button {
+  border: 1px solid var(--app-border);
+  background: color-mix(in srgb, var(--app-fill) 70%, transparent);
+  color: var(--app-text);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.coach-gpt-dock {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 12px;
+  padding: 8px 8px 8px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 28px;
+  background: var(--app-fill);
+}
+
+.coach-gpt-dock textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 24px;
+  max-height: 160px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--app-text);
+  font: inherit;
+  line-height: 1.45;
+  padding: 8px 4px;
+}
+
+.coach-gpt-icon-btn {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--app-text);
+  cursor: pointer;
+}
+
+.coach-gpt-icon-btn.is-send {
   background: linear-gradient(135deg, #f2b461, #df663c);
   color: #15100b;
 }
 
-.student-ai-chat-compose {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 8px;
+.coach-gpt-icon-btn.is-send:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
-.student-ai-chat-compose input {
-  min-width: 0;
+.coach-gpt-icon-btn.is-live {
+  background: #c73d2e;
+  color: #fff;
+  animation: coach-gpt-pulse 1.2s infinite;
+}
+
+@keyframes coach-gpt-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(199, 61, 46, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(199, 61, 46, 0);
+  }
+}
+
+.coach-gpt-plan {
   border: 1px solid var(--app-border);
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: var(--app-fill);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: var(--app-panel);
+}
+
+.coach-gpt-plan summary {
+  cursor: pointer;
+  font-weight: 700;
   color: var(--app-text);
 }
 
+.coach-gpt-plan .student-form {
+  margin-top: 12px;
+}
+
+.student-ai-chat,
+.student-ai-chat-log,
+.student-ai-chat-compose {
+  display: none;
+}
+
 @media (max-width: 640px) {
-  .student-ai-chat-compose {
-    grid-template-columns: 1fr 1fr;
+  .coach-gpt {
+    min-height: min(68vh, 640px);
+    height: min(74vh, 720px);
+    border-radius: 18px;
   }
 
-  .student-ai-chat-compose input {
-    grid-column: 1 / -1;
+  .coach-gpt-dock {
+    margin: 10px;
   }
 }

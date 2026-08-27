@@ -75,22 +75,32 @@ export function attachCoachRoutes(app: FastifyInstance, prefix: string) {
     await assertModuleEnabled("module_ai", "Coach IA desativado.");
     if (!llmConfigured()) {
       return reply.code(501).send({
+        message:
+          "Transcrição de voz precisa de OPENAI_API_KEY (Whisper). Enquanto isso, fale pelo teclado — o TTS já responde.",
         error:
           "Transcrição de voz precisa de OPENAI_API_KEY (Whisper). Enquanto isso, fale pelo teclado — o TTS já responde."
       });
     }
     const file = await request.file({ limits: { fileSize: 12 * 1024 * 1024, files: 1 } });
     if (!file) {
-      return reply.code(400).send({ error: "Envie um áudio." });
+      return reply.code(400).send({ message: "Envie um áudio.", error: "Envie um áudio." });
     }
     const chunks: Buffer[] = [];
     for await (const chunk of file.file) {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     }
-    const text = await transcribeAudio(Buffer.concat(chunks), file.filename || "audio.m4a", file.mimetype);
+    const audio = Buffer.concat(chunks);
+    if (audio.byteLength < 1800) {
+      return reply.code(422).send({
+        message: "Áudio muito curto. Segure o microfone, fale e solte para enviar.",
+        error: "Áudio muito curto. Segure o microfone, fale e solte para enviar."
+      });
+    }
+    const text = await transcribeAudio(audio, file.filename || "audio.m4a", file.mimetype);
     if (!text) {
       return reply.code(422).send({
-        error: "Não deu para transcrever. Tente de novo em um lugar mais silencioso."
+        message: "Não deu para transcrever. Fale um pouco mais perto do microfone e envie de novo.",
+        error: "Não deu para transcrever. Fale um pouco mais perto do microfone e envie de novo."
       });
     }
     return { text };

@@ -1,13 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Image, Pressable, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { CompositeNavigationProp, useNavigation } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { apiPost, apiUploadFile, NativeApiError } from "../../auth/api";
-import { postCoachChat, COACH_TRANSCRIBE_PATHS } from "../../ai/coachApi";
-import { speakCoach, startCoachRecording, stopCoachRecording, stopCoachVoice } from "../../ai/coachVoice";
-import { fetchWeatherHere } from "../../student/weather";
+import { apiPost, NativeApiError } from "../../auth/api";
+import { CoachChatPanel } from "../../ai/CoachChatPanel";
 import { mediaUrl } from "../../lib/media";
 import type { MenuStackParamList, StudentTabParamList } from "../../navigation/types";
 import { labelLocationType, labelTicketCategory, labelTicketStatus } from "../../student/commerce";
@@ -466,16 +464,6 @@ export function AiScreen() {
   const [focus, setFocus] = useState("");
   const [days, setDays] = useState("3");
   const [busy, setBusy] = useState(false);
-  const [chatBusy, setChatBusy] = useState(false);
-  const [listening, setListening] = useState(false);
-  const recordingRef = useRef<Awaited<ReturnType<typeof startCoachRecording>> | null>(null);
-  const [draft, setDraft] = useState("");
-  const [messages, setMessages] = useState<Array<{ role: "coach" | "me"; text: string }>>([
-    {
-      role: "coach",
-      text: `Olá, ${profile?.name?.split(" ")[0] ?? "atleta"}. Eu sou o Coach AppTreino. Posso montar treino, dieta pelo biotipo e te acompanhar por chat ou voz. Como você quer treinar hoje?`
-    }
-  ]);
   const latest = aiPlans[0];
 
   async function generate() {
@@ -496,87 +484,6 @@ export function AiScreen() {
     }
   }
 
-  async function askCoach(text: string, speak = false) {
-    const trimmed = text.trim();
-    if (!trimmed || chatBusy) return;
-    setDraft("");
-    const history = [...messages, { role: "me" as const, text: trimmed }];
-    setMessages(history);
-    setChatBusy(true);
-    try {
-      const weather = await fetchWeatherHere("WORKOUT");
-      const payload = await postCoachChat(
-        {
-          messages: history.map((item) => ({
-            role: item.role === "me" ? "user" : "assistant",
-            content: item.text
-          })),
-          weather: weather
-            ? { tempC: weather.tempC, label: weather.label, code: weather.code }
-            : undefined
-        },
-        session.token
-      );
-      setMessages((current) => [...current, { role: "coach", text: payload.reply }]);
-      if (payload.savedPlanId) await refresh();
-      if (speak) void speakCoach(payload.reply);
-      uiSounds.success();
-    } catch (caught) {
-      Alert.alert("Coach", caught instanceof NativeApiError ? caught.message : "Não foi possível falar com o Coach.");
-      uiSounds.error();
-    } finally {
-      setChatBusy(false);
-    }
-  }
-
-  function sendChat() {
-    void askCoach(draft);
-  }
-
-  async function talk() {
-    stopCoachVoice();
-    try {
-      if (listening && recordingRef.current) {
-        const uri = await stopCoachRecording(recordingRef.current);
-        recordingRef.current = null;
-        setListening(false);
-        if (!uri) throw new Error("Não gravei o áudio.");
-        let transcribed: { text: string } | null = null;
-        let lastUploadError: unknown;
-        for (const path of COACH_TRANSCRIBE_PATHS) {
-          try {
-            transcribed = await apiUploadFile<{ text: string }>(path, uri, session.token, "coach.m4a", "audio/m4a");
-            break;
-          } catch (caught) {
-            lastUploadError = caught;
-            if (caught instanceof NativeApiError && caught.status === 404) continue;
-            throw caught;
-          }
-        }
-        if (!transcribed) {
-          throw lastUploadError instanceof Error ? lastUploadError : new Error("Não gravei o áudio.");
-        }
-        await askCoach(transcribed.text, true);
-        return;
-      }
-      recordingRef.current = await startCoachRecording();
-      setListening(true);
-      uiSounds.submit();
-    } catch (caught) {
-      recordingRef.current = null;
-      setListening(false);
-      Alert.alert(
-        "Voz",
-        caught instanceof NativeApiError
-          ? caught.message
-          : caught instanceof Error
-            ? caught.message
-            : "Toque em Falar, fale, toque de novo para enviar. Sem chave Whisper, escreva no chat — a resposta ainda é falada."
-      );
-      uiSounds.error();
-    }
-  }
-
   if (!moduleOn(publicConfig, "module_ai")) {
     return (
       <StudentPage>
@@ -589,38 +496,8 @@ export function AiScreen() {
   return (
     <StudentPage>
       <BackChip label="Menu" onPress={() => navigation.goBack()} />
-      <SheetHeading
-        kicker="Coach IA"
-        title="Especialista em treino e nutrição"
-        subtitle="Chat e voz. Treino de todas as modalidades e dieta pelo seu biotipo, ofensiva e clima."
-      />
-      <View style={styles.card}>
-        <Text style={styles.gold}>Conversa com o coach</Text>
-        {messages.map((item, index) => (
-          <View key={`${item.role}-${index}`} style={[item.role === "me" ? styles.chatMe : styles.chatThem, { padding: 10, borderRadius: 12 }]}>
-            <Text style={styles.muted}>{item.text}</Text>
-          </View>
-        ))}
-        {chatBusy ? <Text style={styles.faint}>Coach pensando…</Text> : null}
-        <TextInput
-          value={draft}
-          onChangeText={setDraft}
-          placeholder="Escreva para o coach…"
-          placeholderTextColor={st.faint}
-          style={styles.input}
-        />
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          <View style={{ flex: 1 }}>
-            <GreenButton label={chatBusy ? "Enviando…" : "Enviar"} loading={chatBusy} onPress={sendChat} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <OutlineButton
-              icon={listening ? "radio-outline" : "mic-outline"}
-              label={listening ? "Ouvindo…" : "Falar"}
-              onPress={() => void talk()}
-            />
-          </View>
-        </View>
+      <View style={{ height: 620 }}>
+        <CoachChatPanel token={session.token} athleteName={profile?.name} onPlanSaved={refresh} />
       </View>
       <SheetHeading kicker="Agente IA" title="Plano inteligente" subtitle="Gere uma rotina baseada no seu objetivo." />
       <View style={styles.card}>
