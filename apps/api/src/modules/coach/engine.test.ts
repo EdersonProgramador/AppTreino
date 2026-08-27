@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { localCoachChat } from "./engine.js";
-import { conversationForModel } from "./llm.js";
+import { conversationForModel, coachMessageText } from "./llm.js";
 import type { CoachContext } from "./types.js";
 
 const ctx: CoachContext = {
@@ -77,5 +77,12 @@ describe("conversationForModel", () => {
     assert.equal(next.length, 2);
     assert.equal(next[0]?.content, "oi");
     assert.equal(next[1]?.content, "Tô sem tempo hoje");
+  });
+});
+
+describe("coachMessageText", () => {
+  it("lê texto em array no estilo gpt-oss", () => {
+    assert.equal(coachMessageText({ content: "ok" }), "ok");
+    assert.equal(coachMessageText({ content: [{ type: "text", text: "Faz 18 min." }] }), "Faz 18 min.");
   });
 });

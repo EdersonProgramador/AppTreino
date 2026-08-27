@@ -42,10 +42,29 @@ export function conversationForModel(history: CoachMessage[]): CoachMessage[] {
 
 type OpenAiMessage = {
   role: "system" | "user" | "assistant" | "tool";
-  content?: string | null;
+  content?: string | null | Array<{ type?: string; text?: string; content?: string }>;
+  reasoning?: string | null;
+  thinking?: string | null;
   tool_call_id?: string;
   tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
 };
+
+export function coachMessageText(message?: {
+  content?: OpenAiMessage["content"];
+  reasoning?: string | null;
+  thinking?: string | null;
+}) {
+  const raw = message?.content;
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  if (Array.isArray(raw)) {
+    const joined = raw
+      .map((part) => (typeof part === "string" ? part : part.text || part.content || ""))
+      .join("")
+      .trim();
+    if (joined) return joined;
+  }
+  return "";
+}
 
 function envSlice(): LlmEnvSlice {
   return {

@@ -24,7 +24,7 @@ describe("resolveLlmRuntime", () => {
     assert.equal(runtime?.name, "ollama");
     assert.equal(runtime?.host, "ollama-cloud");
     assert.equal(runtime?.baseUrl, "https://ollama.com/v1");
-    assert.equal(runtime?.model, "llama3.3");
+    assert.equal(runtime?.model, "gpt-oss:20b");
     assert.equal(runtime?.sendOpenAiPenalties, false);
     assert.match(llmRuntimeLabel(runtime), /Ollama Cloud/);
   });

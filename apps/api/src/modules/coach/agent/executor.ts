@@ -1,5 +1,5 @@
 import { localCoachChat } from "../engine.js";
-import { llmConfigured, openaiCoach, systemPrompt } from "../llm.js";
+import { llmConfigured, openaiCoach, systemPrompt, coachMessageText } from "../llm.js";
 import type { AgentPlan, AgentTrace, CoachChatResult, CoachContext, CoachMessage, DietPlan } from "../types.js";
 import { MAX_REACT_ITERATIONS, MAX_TOOL_CALLS } from "./guardrails.js";
 import { logTrace } from "./observability.js";
@@ -94,7 +94,7 @@ async function executeStructured(
       ],
       false
     );
-    const reply = spoken?.choices?.[0]?.message?.content?.trim();
+    const reply = coachMessageText(spoken?.choices?.[0]?.message);
     if (reply) {
       return { result: { ...result, reply, source: "llm" }, traces, iterations: 1, toolCalls };
     }
@@ -145,7 +145,7 @@ async function executeReact(
     if (!message) break;
 
     if (!message.tool_calls?.length) {
-      const reply = message.content?.trim();
+      const reply = coachMessageText(message);
       if (reply) result = { ...result, reply };
       logTrace(traces, "reasoning", { thought: "resposta final sem tool" });
       break;

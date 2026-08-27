@@ -5204,6 +5204,38 @@ html.light .finance-hub-tabs button {
   flex-direction: column;
 }
 
+.student-app-shell.is-ai .student-app-scroll {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.student-app-shell.is-ai .student-ai-sheet {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  gap: 10px;
+}
+
+.student-app-shell.is-ai .student-ai-sheet .student-sheet-heading {
+  flex: none;
+  padding-bottom: 0;
+}
+
+.student-app-shell.is-ai .coach-gpt {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.student-app-shell.is-ai .coach-gpt-plan {
+  flex: none;
+  max-height: 34%;
+  overflow: auto;
+}
+
 .student-app-shell.workout-immersive .student-app-scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -24767,9 +24799,9 @@ body:has(.student-app-shell) {
 
 .coach-gpt {
   display: grid;
-  grid-template-rows: auto minmax(280px, 1fr) auto;
-  min-height: min(72vh, 760px);
-  height: min(78vh, 840px);
+  grid-template-rows: auto minmax(200px, 1fr) auto;
+  min-height: 360px;
+  height: min(58vh, 640px);
   margin: 0;
   overflow: hidden;
   border-radius: 22px;
@@ -25029,8 +25061,8 @@ body:has(.student-app-shell) {
 
 @media (max-width: 640px) {
   .coach-gpt {
-    min-height: min(68vh, 640px);
-    height: min(74vh, 720px);
+    min-height: 280px;
+    height: min(48vh, 520px);
     border-radius: 18px;
   }
 

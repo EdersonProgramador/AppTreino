@@ -466,6 +466,8 @@ export function AiScreen() {
   const [busy, setBusy] = useState(false);
   const latest = aiPlans[0];
 
+  const [planOpen, setPlanOpen] = useState(false);
+
   async function generate() {
     setBusy(true);
     try {
@@ -494,59 +496,41 @@ export function AiScreen() {
   }
 
   return (
-    <StudentPage>
-      <BackChip label="Menu" onPress={() => navigation.goBack()} />
-      <View style={{ height: 620 }}>
-        <CoachChatPanel token={session.token} athleteName={profile?.name} onPlanSaved={refresh} />
-      </View>
-      <SheetHeading kicker="Agente IA" title="Plano inteligente" subtitle="Gere uma rotina baseada no seu objetivo." />
-      <View style={styles.card}>
-        <TextInput value={objective} onChangeText={setObjective} placeholder="Objetivo" placeholderTextColor={st.faint} style={styles.input} />
-        <TextInput value={level} onChangeText={setLevel} placeholder="Nível" placeholderTextColor={st.faint} style={styles.input} />
-        <TextInput value={focus} onChangeText={setFocus} placeholder="Foco da semana" placeholderTextColor={st.faint} style={styles.input} />
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {["2", "3", "4", "5", "6"].map((item) => (
-            <Pressable key={item} onPress={() => setDays(item)} style={[styles.badge, days === item && { backgroundColor: st.coral }]}>
-              <Text style={{ color: days === item ? "#fff" : st.goldUi, fontWeight: "800" }}>{item} dias</Text>
-            </Pressable>
-          ))}
+    <StudentPage scroll={false}>
+      <View style={{ flex: 1, minHeight: 0 }}>
+        <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+          <BackChip label="Menu" onPress={() => navigation.goBack()} />
         </View>
-        <GreenButton label={busy ? "Gerando…" : "Gerar plano"} loading={busy} onPress={() => void generate()} />
-      </View>
-      {latest ? (
-        <View style={styles.card}>
-          <Text style={styles.title}>Último plano</Text>
-          <Text style={styles.muted}>{latest.plan?.summary ?? `${latest.objective} · ${latest.level} · ${latest.daysPerWeek}x`}</Text>
-          <Text style={styles.faint}>{`${latest.objective} · ${latest.level} · ${latest.daysPerWeek}x`}</Text>
-          {(latest.plan?.days ?? []).map((day) => (
-            <View key={day.title} style={{ gap: 4 }}>
-              <Text style={styles.gold}>{day.title}</Text>
-              <Text style={styles.muted}>{day.focus}</Text>
-              {day.exercises.map((exercise) => (
-                <Text key={exercise.name} style={styles.faint}>{`${exercise.name} · ${exercise.sets}x ${exercise.reps}`}</Text>
-              ))}
-            </View>
-          ))}
-          {(latest.plan?.recommendations ?? []).length > 0 ? (
-            <View style={{ gap: 4, marginTop: 8 }}>
-              <Text style={styles.gold}>Recomendações</Text>
-              {(latest.plan?.recommendations ?? []).map((item) => (
-                <Text key={item} style={styles.muted}>{item}</Text>
-              ))}
-            </View>
-          ) : null}
-          {latest.plan?.diet ? (
-            <View style={{ gap: 4, marginTop: 8 }}>
-              <Text style={styles.gold}>Dieta · {latest.plan.diet.biotype}</Text>
-              <Text style={styles.muted}>{latest.plan.diet.strategy}</Text>
-              <Text style={styles.faint}>{`${latest.plan.diet.kcal} kcal · ${latest.plan.diet.proteinG}g proteína · ${latest.plan.diet.carbsG}g carbo · ${latest.plan.diet.fatG}g gordura`}</Text>
-              {latest.plan.diet.meals.map((meal) => (
-                <Text key={meal.name} style={styles.faint}>{`${meal.name}: ${meal.items.join(", ")}`}</Text>
-              ))}
-            </View>
-          ) : null}
+        <View style={{ flex: 1, minHeight: 0 }}>
+          <CoachChatPanel token={session.token} athleteName={profile?.name} onPlanSaved={refresh} />
         </View>
-      ) : null}
+        <Pressable
+          onPress={() => setPlanOpen((open) => !open)}
+          style={{ paddingHorizontal: 20, paddingVertical: 10 }}
+        >
+          <Text style={styles.gold}>{planOpen ? "Ocultar rotina" : "Gerar rotina pelo objetivo"}</Text>
+        </Pressable>
+        {planOpen ? (
+          <View style={[styles.card, { maxHeight: 280 }]}>
+            <TextInput value={objective} onChangeText={setObjective} placeholder="Objetivo" placeholderTextColor={st.faint} style={styles.input} />
+            <TextInput value={level} onChangeText={setLevel} placeholder="Nível" placeholderTextColor={st.faint} style={styles.input} />
+            <TextInput value={focus} onChangeText={setFocus} placeholder="Foco da semana" placeholderTextColor={st.faint} style={styles.input} />
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              {["2", "3", "4", "5", "6"].map((item) => (
+                <Pressable key={item} onPress={() => setDays(item)} style={[styles.badge, days === item && { backgroundColor: st.coral }]}>
+                  <Text style={{ color: days === item ? "#fff" : st.goldUi, fontWeight: "800" }}>{item} dias</Text>
+                </Pressable>
+              ))}
+            </View>
+            <GreenButton label={busy ? "Gerando…" : "Gerar plano"} loading={busy} onPress={() => void generate()} />
+            {latest ? (
+              <Text style={styles.muted} numberOfLines={3}>
+                {latest.plan?.summary ?? `${latest.objective} · ${latest.level} · ${latest.daysPerWeek}x`}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
     </StudentPage>
   );
 }

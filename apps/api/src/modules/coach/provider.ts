@@ -95,7 +95,7 @@ export function resolveLlmRuntime(slice: LlmEnvSlice): LlmRuntime | null {
     host: cloud ? "ollama-cloud" : "ollama-local",
     baseUrl,
     apiKey,
-    model: slice.OLLAMA_MODEL || (cloud ? "llama3.3" : "llama3.1"),
+    model: slice.OLLAMA_MODEL || (cloud ? "gpt-oss:20b" : "llama3.1"),
     embeddingModel: slice.OLLAMA_EMBEDDING_MODEL || "nomic-embed-text",
     chatTimeoutMs: cloud ? 45_000 : 90_000,
     sendOpenAiPenalties: false,

@@ -232,7 +232,8 @@ export function StudentNavigator() {
           component={MenuStackScreen}
           options={{ title: "Menu", tabBarIcon: icon("menu-outline", "menu") }}
           listeners={({ navigation }) => ({
-            tabPress: () => {
+            tabPress: (event) => {
+              event.preventDefault();
               navigation.navigate("MenuTab", { screen: "Menu" });
             }
           })}

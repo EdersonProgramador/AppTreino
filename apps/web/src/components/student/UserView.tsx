@@ -2406,8 +2406,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       className={`student-app-shell${hideStudentChrome ? " workout-immersive" : ""}${
         musicQueueLength && !musicMiniHidden ? " has-music-dock" : ""
       }${studentSection === "play" ? " is-play" : ""}${studentSection === "activity" ? " is-activity" : ""}${
-        isFeedFamilySection ? " is-feed" : ""
-      }`}
+        studentSection === "ai" ? " is-ai" : ""
+      }${isFeedFamilySection ? " is-feed" : ""}`}
     >
       {adminPreviewBanner}
       {token && !hideStudentChrome ? <StudentDailyMotivation /> : null}
