@@ -78,4 +78,32 @@ export type CoachChatResult = {
   source: "llm" | "local";
   plan?: CoachPlan;
   diet?: DietPlan;
+  agent?: CoachAgentMeta;
+};
+
+export type AgentKind = "interactive" | "task" | "goal" | "autonomous";
+export type AgentPattern = "react" | "plan-execute" | "reflect";
+
+export type CoachAgentMeta = {
+  kind: AgentKind;
+  pattern: AgentPattern;
+  iterations: number;
+  toolCalls: number;
+  runId?: string;
+  blocked?: boolean;
+};
+
+export type AgentTrace = {
+  phase: "perception" | "reasoning" | "action" | "feedback";
+  thought?: string;
+  action?: string;
+  observation?: string;
+};
+
+export type AgentPlan = {
+  kind: AgentKind;
+  pattern: AgentPattern;
+  steps: string[];
+  useTools: boolean;
+  persistPlan: boolean;
 };

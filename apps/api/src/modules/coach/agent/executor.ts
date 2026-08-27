@@ -1,0 +1,162 @@
+import { localCoachChat } from "../engine.js";
+import { llmConfigured, openaiCoach, systemPrompt } from "../llm.js";
+import type { AgentPlan, AgentTrace, CoachChatResult, CoachContext, CoachMessage, DietPlan } from "../types.js";
+import { MAX_REACT_ITERATIONS, MAX_TOOL_CALLS } from "./guardrails.js";
+import { logTrace } from "./observability.js";
+import { executeTool } from "./toolbox.js";
+
+type OpenAiMessage = {
+  role: "system" | "user" | "assistant" | "tool";
+  content?: string | null;
+  tool_call_id?: string;
+  tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
+};
+
+export type Execution = {
+  result: CoachChatResult;
+  traces: AgentTrace[];
+  iterations: number;
+  toolCalls: number;
+};
+
+function mergeTool(current: CoachChatResult, outcome: ReturnType<typeof executeTool>): CoachChatResult {
+  return {
+    ...current,
+    plan: outcome.plan ?? current.plan,
+    diet: (outcome.diet ?? current.diet) as DietPlan | undefined
+  };
+}
+
+export async function executePlan(
+  ctx: CoachContext,
+  history: CoachMessage[],
+  plan: AgentPlan,
+  memoryBlock: string
+): Promise<Execution> {
+  const traces: AgentTrace[] = [];
+  logTrace(traces, "reasoning", {
+    thought: `${plan.kind} via ${plan.pattern}`,
+    action: plan.steps.join(",") || "responder"
+  });
+
+  if (plan.pattern === "plan-execute" && plan.steps.length) {
+    return executeStructured(ctx, history, plan, memoryBlock, traces);
+  }
+  return executeReact(ctx, history, plan, memoryBlock, traces);
+}
+
+async function executeStructured(
+  ctx: CoachContext,
+  history: CoachMessage[],
+  plan: AgentPlan,
+  memoryBlock: string,
+  traces: AgentTrace[]
+): Promise<Execution> {
+  let result: CoachChatResult = { reply: "", source: llmConfigured() ? "llm" : "local" };
+  let toolCalls = 0;
+  const observations: string[] = [];
+  for (const name of plan.steps.slice(0, MAX_TOOL_CALLS)) {
+    const outcome = executeTool(name, "{}", ctx);
+    toolCalls += 1;
+    result = mergeTool(result, outcome);
+    observations.push(outcome.observation);
+    logTrace(traces, "action", { action: name, observation: outcome.observation.slice(0, 400) });
+  }
+  if (llmConfigured()) {
+    const spoken = await openaiCoach(
+      [
+        { role: "system", content: systemPrompt(ctx, memoryBlock) },
+        ...history.map((item) => ({
+          role: item.role === "assistant" ? ("assistant" as const) : ("user" as const),
+          content: item.content
+        })),
+        {
+          role: "system",
+          content: `Resultado das tools (plan-and-execute). Fale com a pessoa. Hoje primeiro.\n${observations.join("\n").slice(0, 4000)}`
+        }
+      ],
+      false
+    );
+    const reply = spoken?.choices?.[0]?.message?.content?.trim();
+    if (reply) {
+      return { result: { ...result, reply, source: "llm" }, traces, iterations: 1, toolCalls };
+    }
+  }
+  const local = localCoachChat(ctx, history);
+  return {
+    result: { ...local, plan: result.plan ?? local.plan, diet: result.diet ?? local.diet },
+    traces,
+    iterations: 1,
+    toolCalls
+  };
+}
+
+async function executeReact(
+  ctx: CoachContext,
+  history: CoachMessage[],
+  plan: AgentPlan,
+  memoryBlock: string,
+  traces: AgentTrace[]
+): Promise<Execution> {
+  if (!llmConfigured()) {
+    const local = localCoachChat(ctx, history);
+    if (plan.steps.length) {
+      let next = local;
+      for (const name of plan.steps.slice(0, MAX_TOOL_CALLS)) {
+        next = mergeTool(next, executeTool(name, "{}", ctx));
+        logTrace(traces, "action", { action: name, observation: "local-tool" });
+      }
+      return { result: next, traces, iterations: 1, toolCalls: plan.steps.length };
+    }
+    return { result: local, traces, iterations: 1, toolCalls: 0 };
+  }
+
+  const messages: OpenAiMessage[] = [
+    { role: "system", content: systemPrompt(ctx, memoryBlock) },
+    ...history.map((item) => ({
+      role: item.role === "assistant" ? ("assistant" as const) : ("user" as const),
+      content: item.content
+    }))
+  ];
+
+  let result: CoachChatResult = { reply: "", source: "llm" };
+  let toolCalls = 0;
+  let iterations = 0;
+
+  for (let i = 0; i < MAX_REACT_ITERATIONS; i += 1) {
+    iterations = i + 1;
+    const round = await openaiCoach(messages, plan.useTools && toolCalls < MAX_TOOL_CALLS);
+    const message = round?.choices?.[0]?.message;
+    if (!message) break;
+
+    if (!message.tool_calls?.length) {
+      const reply = message.content?.trim();
+      if (reply) result = { ...result, reply };
+      logTrace(traces, "reasoning", { thought: "resposta final sem tool" });
+      break;
+    }
+
+    messages.push(message);
+    for (const call of message.tool_calls) {
+      if (toolCalls >= MAX_TOOL_CALLS) {
+        logTrace(traces, "action", { action: call.function.name, observation: "cap de tools" });
+        messages.push({ role: "tool", tool_call_id: call.id, content: "{\"error\":\"limite de tools\"}" });
+        continue;
+      }
+      const outcome = executeTool(call.function.name, call.function.arguments, ctx);
+      toolCalls += 1;
+      result = mergeTool(result, outcome);
+      messages.push({ role: "tool", tool_call_id: call.id, content: outcome.observation });
+      logTrace(traces, "action", {
+        action: call.function.name,
+        observation: outcome.observation.slice(0, 400)
+      });
+    }
+  }
+
+  if (!result.reply) {
+    const local = localCoachChat(ctx, history);
+    result = { ...local, plan: result.plan ?? local.plan, diet: result.diet ?? local.diet };
+  }
+  return { result, traces, iterations, toolCalls };
+}

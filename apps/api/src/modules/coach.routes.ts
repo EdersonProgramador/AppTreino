@@ -4,7 +4,8 @@ import { requireAuth } from "../auth.js";
 import { prisma } from "../prisma.js";
 import { assertModuleEnabled, isModuleEnabled } from "./commerce.utils.js";
 import { loadCoachContext } from "./coach/context.js";
-import { coachReply, llmConfigured, transcribeAudio } from "./coach/llm.js";
+import { llmConfigured, transcribeAudio } from "./coach/llm.js";
+import { runCoachAgent } from "./coach/agent/loop.js";
 
 const coachWeatherSchema = z
   .object({
@@ -35,7 +36,39 @@ export function attachCoachRoutes(app: FastifyInstance, prefix: string) {
   app.get(`${prefix}/status`, async (request) => {
     await requireAuth(app, request);
     const enabled = await isModuleEnabled("module_ai");
-    return { enabled, llm: enabled && llmConfigured(), voice: enabled && llmConfigured() };
+    return { enabled, llm: enabled && llmConfigured(), voice: enabled && llmConfigured(), agent: true };
+  });
+
+  app.get(`${prefix}/runs`, async (request) => {
+    const authUser = await requireAuth(app, request);
+    await assertModuleEnabled("module_ai", "Coach IA desativado.");
+    try {
+      const store = prisma as unknown as {
+        coachAgentRun?: {
+          findMany: (args: object) => Promise<unknown[]>;
+        };
+      };
+      const rows =
+        (await store.coachAgentRun?.findMany({
+          where: { userId: authUser.id },
+          orderBy: { createdAt: "desc" },
+          take: 20,
+          select: {
+            id: true,
+            agentKind: true,
+            pattern: true,
+            iterations: true,
+            toolCalls: true,
+            blocked: true,
+            blockReason: true,
+            replyPreview: true,
+            createdAt: true
+          }
+        })) ?? [];
+      return { runs: rows };
+    } catch {
+      return { runs: [] };
+    }
   });
 
   app.post(`${prefix}/chat`, async (request, reply) => {
@@ -43,7 +76,7 @@ export function attachCoachRoutes(app: FastifyInstance, prefix: string) {
     await assertModuleEnabled("module_ai", "Coach IA desativado.");
     const body = chatBodySchema.parse(request.body);
     const ctx = await loadCoachContext(authUser.id, { weather: body.weather ?? null });
-    const result = await coachReply(ctx, body.messages);
+    const result = await runCoachAgent(ctx, body.messages, { userId: authUser.id });
     let savedPlanId: string | undefined;
     if (result.plan) {
       const saved = await prisma.aiWorkoutPlan.create({
@@ -66,7 +99,8 @@ export function attachCoachRoutes(app: FastifyInstance, prefix: string) {
       diet: result.diet ?? null,
       savedPlanId: savedPlanId ?? null,
       biotype: ctx.biotype,
-      streakDays: ctx.streakDays
+      streakDays: ctx.streakDays,
+      agent: result.agent ?? null
     });
   });
 

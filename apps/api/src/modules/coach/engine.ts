@@ -194,14 +194,14 @@ export function buildWorkoutPlan(ctx: CoachContext): CoachPlan {
   };
 }
 
-function lastUserText(messages: Array<{ role: string; content: string }>) {
+export function lastUserText(messages: Array<{ role: string; content: string }>) {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     if (messages[i]?.role === "user") return messages[i].content.trim();
   }
   return "";
 }
 
-function isSmallTalk(text: string) {
+export function isSmallTalk(text: string) {
   const value = text
     .trim()
     .toLowerCase()

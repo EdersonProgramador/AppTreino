@@ -31,6 +31,8 @@ model User {
   supportTickets      SupportTicket[]      @relation("SupportTicketStudent")
   assignedTickets     SupportTicket[]      @relation("SupportTicketAssignee")
   aiWorkoutPlans      AiWorkoutPlan[]
+  coachMemories       CoachMemory[]
+  coachAgentRuns      CoachAgentRun[]
   userProgress        UserProgress[]
   purchases           Purchase[]
   cart                Cart?
@@ -546,6 +548,53 @@ model AiWorkoutPlan {
   createdAt   DateTime  @default(now()) @map("created_at")
 
   @@map("ai_workout_plans")
+}
+
+enum CoachMemoryKind {
+  LONG_TERM
+  EPISODIC
+  CONTEXTUAL
+  GLOBAL
+
+  @@map("coach_memory_kind")
+}
+
+/// Memória do Coach: longa (preferências), episódica (turnos), contextual (pedido) e coletiva (global).
+model CoachMemory {
+  id        String          @id @default(cuid())
+  userId    String?         @map("user_id")
+  user      User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      CoachMemoryKind
+  content   String
+  embedding Json?
+  metadata  Json?
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  @@index([userId, kind, createdAt])
+  @@index([kind, createdAt])
+  @@map("coach_memories")
+}
+
+/// Auditoria do loop percepção → raciocínio → ação → feedback.
+model CoachAgentRun {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agentKind    String   @map("agent_kind")
+  pattern      String
+  perception   Json
+  traces       Json
+  actions      Json
+  feedback     Json?
+  iterations   Int      @default(1)
+  toolCalls    Int      @default(0)
+  blocked      Boolean  @default(false)
+  blockReason  String?  @map("block_reason")
+  replyPreview String?  @map("reply_preview")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("coach_agent_runs")
 }
 
 enum UserRole {
