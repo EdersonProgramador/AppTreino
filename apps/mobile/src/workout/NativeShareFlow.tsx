@@ -190,7 +190,12 @@ export function NativeShareFlow({
         `${exerciseCount} exercícios · ${durationLabel}`,
         caption.trim() || null
       ].filter(Boolean);
-      await Share.share({ message: lines.join("\n"), title: programTitle });
+      try {
+        await Share.share({ message: lines.join("\n"), title: programTitle });
+      } catch {
+        /* cancelar o sheet nativo não deve impedir a publicação */
+      }
+      await onPublish(payload(true));
     } finally {
       setSharing(false);
     }
@@ -301,8 +306,12 @@ export function NativeShareFlow({
                   >
                     <Text style={styles.primaryText}>{busy ? "Publicando..." : "Publicar no Feed"}</Text>
                   </Pressable>
-                  <Pressable style={styles.secondaryFull} disabled={locked} onPress={() => void shareNative()}>
-                    <Text style={styles.secondaryText}>{sharing ? "Abrindo..." : "Compartilhar"}</Text>
+                  <Pressable
+                    style={styles.secondaryFull}
+                    disabled={!ready || locked}
+                    onPress={() => void shareNative()}
+                  >
+                    <Text style={styles.secondaryText}>{sharing ? "Abrindo..." : "Compartilhar e publicar"}</Text>
                   </Pressable>
                 </>
               )}

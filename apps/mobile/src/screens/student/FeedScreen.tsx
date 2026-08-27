@@ -531,8 +531,9 @@ export function FeedScreen() {
   );
 
   useEffect(() => {
+    if (!isFocused) return;
     void Promise.all([load(), loadStories(), loadActiveLives()]);
-  }, [load, loadStories, loadActiveLives]);
+  }, [isFocused, load, loadStories, loadActiveLives]);
 
   useEffect(() => {
     bindFeedChrome({

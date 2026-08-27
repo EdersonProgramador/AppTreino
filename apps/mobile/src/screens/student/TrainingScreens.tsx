@@ -650,22 +650,32 @@ export function WorkoutPlayerScreen() {
       }}
       onWorkoutComplete={async (completedSessionId, share) => {
         try {
+          const mediaItems = (share?.mediaItems ?? [])
+            .filter((item) => item.url)
+            .map((item) => ({
+              url: item.url,
+              type: item.type,
+              ...(item.coverUrl ? { coverUrl: item.coverUrl } : {})
+            }));
           const response = await apiPost<{ completed?: boolean; post?: { id: string } | null }>(
             "/student/workout/complete-day",
             {
               assignmentId: program.assignmentId,
               sessionId: completedSessionId,
               publish: share?.publish === true,
-              caption: share?.caption,
-              photoUrl: share?.photoUrl,
-              videoUrl: share?.videoUrl,
-              mediaItems: share?.mediaItems,
+              ...(share?.caption ? { caption: share.caption } : {}),
+              ...(share?.photoUrl ? { photoUrl: share.photoUrl } : {}),
+              ...(share?.videoUrl ? { videoUrl: share.videoUrl } : {}),
+              ...(mediaItems.length ? { mediaItems } : {}),
               exerciseCount: share?.exerciseCount ?? day.block.exercises.length
             },
             session.token
           );
           await refresh();
           const published = Boolean(share?.publish && response.post);
+          if (share?.publish === true && !response.post) {
+            throw new Error("Treino concluído, mas o Feed não recebeu a publicação. Tente de novo.");
+          }
           Alert.alert(
             "Treino",
             published

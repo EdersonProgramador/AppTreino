@@ -268,6 +268,7 @@ export function NativeWorkoutPlayer({
   const [isPaused, setIsPaused] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(sessionId ?? null);
+  const sessionIdRef = useRef<string | null>(sessionId ?? null);
   const [panel, setPanel] = useState<RunnerPanel>("sequence");
   const [phase, setPhase] = useState<RunnerPhase>("idle");
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
@@ -381,6 +382,10 @@ export function NativeWorkoutPlayer({
   useEffect(() => {
     if (sessionId) setActiveSessionId(sessionId);
   }, [sessionId]);
+
+  useEffect(() => {
+    sessionIdRef.current = activeSessionId ?? sessionId ?? null;
+  }, [activeSessionId, sessionId]);
 
   useEffect(() => {
     onSessionActiveChange?.(isRunning || workoutReadyToComplete);
@@ -653,6 +658,7 @@ export function NativeWorkoutPlayer({
       const started = await onWorkoutStart?.();
       const nextSessionId = started && "id" in started ? started.id : null;
       setActiveSessionId(nextSessionId);
+      sessionIdRef.current = nextSessionId;
       elapsedBaseRef.current = 0;
       runningStartedAtRef.current = Date.now();
       setElapsedSeconds(0);
@@ -808,11 +814,17 @@ export function NativeWorkoutPlayer({
   }
 
   async function completeWorkout(share?: WorkoutSharePayload) {
-    if (!workoutReadyToComplete || !allCompleted || dayCompleted || !activeSessionId) return;
+    const sessionToComplete = sessionIdRef.current ?? activeSessionId ?? sessionId ?? null;
+    if (!workoutReadyToComplete || dayCompleted || !sessionToComplete) {
+      if (!sessionToComplete) {
+        Alert.alert("Treino", "Sessão não encontrada. Volte e inicie o treino de novo.");
+      }
+      return;
+    }
     uiSounds.workoutComplete();
     setDayCompleted(true);
     try {
-      await onWorkoutComplete?.(activeSessionId, share);
+      await onWorkoutComplete?.(sessionToComplete, share);
       await clearWorkoutRunner();
       setIsRunning(false);
       setIsPaused(false);
@@ -1406,8 +1418,8 @@ export function NativeWorkoutPlayer({
           exerciseCount={exercises.length}
           durationLabel={formatElapsedTime(elapsedSeconds)}
           busy={dayCompleted}
-          onPublish={(payload) => void completeWorkout(payload)}
-          onFinishWithoutPublish={() => void completeWorkout({ publish: false, exerciseCount: exercises.length })}
+          onPublish={(payload) => completeWorkout(payload)}
+          onFinishWithoutPublish={() => completeWorkout({ publish: false, exerciseCount: exercises.length })}
         />
       ) : null}
     </View>

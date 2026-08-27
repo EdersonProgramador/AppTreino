@@ -32,7 +32,11 @@ const workoutShareMediaSchema = z.object({
 const completeWorkoutSchema = z.object({
   assignmentId: z.string().min(1),
   sessionId: z.string().min(1),
-  publish: z.boolean().optional().default(false),
+  publish: z
+  .union([z.boolean(), z.literal("true"), z.literal("false"), z.literal(1), z.literal(0)])
+  .optional()
+  .transform((value) => value === true || value === "true" || value === 1)
+  .default(false),
   caption: z.string().max(2000).nullish(),
   photoUrl: z.string().nullish(),
   videoUrl: z.string().nullish(),
@@ -1553,8 +1557,31 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       now: finishedAt
     });
 
-    const [updatedAssignment, completedSession] = await prisma.$transaction([
-      prisma.userProgram.update({
+    const durationSeconds = Math.max(
+      1,
+      Math.round((finishedAt.getTime() - session.startedAt.getTime()) / 1000)
+    );
+    const exerciseCount = Math.max(0, body.exerciseCount ?? session.workoutBlock?._count.exercises ?? 0);
+    const programTitle = assignment.program.title;
+    const blockTitle = session.workoutBlock?.title || programTitle;
+    const caption =
+      body.caption?.trim() ||
+      `Concluí ${blockTitle} (${programTitle}) em ${formatWorkoutDuration(durationSeconds)} · ${exerciseCount} exercício${
+        exerciseCount === 1 ? "" : "s"
+      }`;
+    const mediaItems = workoutShareMediaItems(body);
+    const first = mediaItems[0] ?? null;
+    const workoutSnapshot = {
+      programTitle,
+      blockTitle,
+      dayNumber: completedDayNumber,
+      exerciseCount,
+      durationSeconds,
+      structureType: session.workoutBlock?.structureType ?? null
+    };
+
+    const { updatedAssignment, completedSession, post } = await prisma.$transaction(async (tx) => {
+      const updatedAssignment = await tx.userProgram.update({
         where: { id: assignment.id },
         data: {
           currentDay: isLastWorkout ? completedDayNumber : nextDayNumber,
@@ -1562,19 +1589,33 @@ export async function registerStudentRoutes(app: FastifyInstance) {
           status: isLastWorkout ? "COMPLETED" : "ACTIVE",
           completedAt: isLastWorkout ? finishedAt : null
         }
-      }),
-      prisma.workoutSession.update({
+      });
+      const completedSession = await tx.workoutSession.update({
         where: { id: session.id },
         data: {
           status: "COMPLETED",
           finishedAt,
-          durationSeconds: Math.max(
-            1,
-            Math.round((finishedAt.getTime() - session.startedAt.getTime()) / 1000)
-          )
+          durationSeconds
         }
-      })
-    ]);
+      });
+      if (!body.publish) {
+        return { updatedAssignment, completedSession, post: null as { id: string } | null };
+      }
+      const created = await tx.socialPost.create({
+        data: {
+          authorId: authUser.id,
+          kind: "WORKOUT",
+          body: caption,
+          mediaUrl: first?.url ?? null,
+          mediaType: first?.type ?? null,
+          mediaItems: mediaItems.length ? mediaItems : undefined,
+          workoutSessionId: completedSession.id,
+          workout: workoutSnapshot
+        },
+        select: { id: true }
+      });
+      return { updatedAssignment, completedSession, post: created };
+    });
 
     try {
       const today = new Date(
@@ -1610,52 +1651,6 @@ export async function registerStudentRoutes(app: FastifyInstance) {
         });
       } catch (completionError) {
         request.log.warn({ err: completionError }, "Falha ao registrar selo de conclusão do programa.");
-      }
-    }
-
-    let post: { id: string } | null = null;
-    if (body.publish) {
-      const durationSeconds = completedSession.durationSeconds ?? 1;
-      const exerciseCount = Math.max(
-        0,
-        body.exerciseCount ?? session.workoutBlock?._count.exercises ?? 0
-      );
-      const programTitle = assignment.program.title;
-      const blockTitle = session.workoutBlock?.title || programTitle;
-      const caption =
-        body.caption?.trim() ||
-        `Concluí ${blockTitle} (${programTitle}) em ${formatWorkoutDuration(durationSeconds)} · ${exerciseCount} exercício${exerciseCount === 1 ? "" : "s"}`;
-      const mediaItems = workoutShareMediaItems(body);
-      const first = mediaItems[0];
-      const workoutSnapshot = {
-        programTitle,
-        blockTitle,
-        dayNumber: completedDayNumber,
-        exerciseCount,
-        durationSeconds,
-        structureType: session.workoutBlock?.structureType ?? null
-      };
-
-      try {
-        post = await prisma.socialPost.create({
-          data: {
-            authorId: authUser.id,
-            kind: "WORKOUT",
-            body: caption,
-            mediaUrl: first?.url ?? null,
-            mediaType: first?.type ?? null,
-            mediaItems: mediaItems.length ? mediaItems : undefined,
-            workoutSessionId: completedSession.id,
-            workout: workoutSnapshot
-          },
-          select: { id: true }
-        });
-      } catch (publishError) {
-        request.log.warn({ err: publishError }, "Falha ao publicar o treino no Feed.");
-        post = await prisma.socialPost.findUnique({
-          where: { workoutSessionId: completedSession.id },
-          select: { id: true }
-        });
       }
     }
 
