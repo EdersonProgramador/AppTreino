@@ -5,6 +5,7 @@ import { executePlan } from "./executor.js";
 import { autonomyCap, inspectGuardrails } from "./guardrails.js";
 import { remember, retrieveMemories } from "./memory.js";
 import { logAgentRun, logTrace, tooManyRuns } from "./observability.js";
+import { perceive } from "./perceive.js";
 import { planTurn } from "./planner.js";
 import { reflectOnReply } from "./reflect.js";
 
@@ -20,8 +21,11 @@ export async function runCoachAgent(
   const userId = extras?.userId;
   const traces: AgentTrace[] = [];
   const userText = lastUserText(history);
+  const perception = perceive(history);
 
-  logTrace(traces, "perception", { thought: userText.slice(0, 240) });
+  logTrace(traces, "perception", {
+    thought: perception.threadBrief.slice(0, 400)
+  });
 
   if (userId && (await tooManyRuns(userId))) {
     const reply =
@@ -77,10 +81,14 @@ export async function runCoachAgent(
     action: planned.steps.join(",") || "chat"
   });
 
-  const executed = await executePlan(ctx, stitched.history, planned, stitched.memoryBlock);
+  const executed = await executePlan(ctx, stitched.history, planned, stitched.memoryBlock, perception);
   traces.push(...executed.traces);
 
-  const reflected = reflectOnReply(executed.result.reply, userText, planned);
+  const reflected = reflectOnReply(executed.result.reply, userText, planned, {
+    ctx,
+    history: stitched.history,
+    perception
+  });
   logTrace(traces, "feedback", {
     thought: reflected.ok ? "ok" : reflected.notes.join("; "),
     observation: reflected.reply.slice(0, 200)

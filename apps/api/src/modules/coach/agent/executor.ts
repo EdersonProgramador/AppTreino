@@ -3,6 +3,7 @@ import { llmConfigured, openaiCoach, systemPrompt } from "../llm.js";
 import type { AgentPlan, AgentTrace, CoachChatResult, CoachContext, CoachMessage, DietPlan } from "../types.js";
 import { MAX_REACT_ITERATIONS, MAX_TOOL_CALLS } from "./guardrails.js";
 import { logTrace } from "./observability.js";
+import { type Perception, perceptionSystemBlock } from "./perceive.js";
 import { executeTool } from "./toolbox.js";
 
 type OpenAiMessage = {
@@ -19,6 +20,23 @@ export type Execution = {
   toolCalls: number;
 };
 
+function historyForModel(history: CoachMessage[], perception: Perception): OpenAiMessage[] {
+  const mapped: OpenAiMessage[] = history.map((item) => ({
+    role: item.role === "assistant" ? ("assistant" as const) : ("user" as const),
+    content: item.content
+  }));
+  for (let i = mapped.length - 1; i >= 0; i -= 1) {
+    if (mapped[i]?.role === "user") {
+      mapped[i] = {
+        role: "user",
+        content: `${perceptionSystemBlock(perception)}\n\nMensagem do aluno (responda isto, não um menu):\n${mapped[i]?.content ?? ""}`
+      };
+      break;
+    }
+  }
+  return mapped;
+}
+
 function mergeTool(current: CoachChatResult, outcome: ReturnType<typeof executeTool>): CoachChatResult {
   return {
     ...current,
@@ -31,18 +49,19 @@ export async function executePlan(
   ctx: CoachContext,
   history: CoachMessage[],
   plan: AgentPlan,
-  memoryBlock: string
+  memoryBlock: string,
+  perception: Perception
 ): Promise<Execution> {
   const traces: AgentTrace[] = [];
   logTrace(traces, "reasoning", {
-    thought: `${plan.kind} via ${plan.pattern}`,
+    thought: `${plan.kind} via ${plan.pattern} | ${perception.question.slice(0, 160)}`,
     action: plan.steps.join(",") || "responder"
   });
 
   if (plan.pattern === "plan-execute" && plan.steps.length) {
-    return executeStructured(ctx, history, plan, memoryBlock, traces);
+    return executeStructured(ctx, history, plan, memoryBlock, perception, traces);
   }
-  return executeReact(ctx, history, plan, memoryBlock, traces);
+  return executeReact(ctx, history, plan, memoryBlock, perception, traces);
 }
 
 async function executeStructured(
@@ -50,6 +69,7 @@ async function executeStructured(
   history: CoachMessage[],
   plan: AgentPlan,
   memoryBlock: string,
+  perception: Perception,
   traces: AgentTrace[]
 ): Promise<Execution> {
   let result: CoachChatResult = { reply: "", source: llmConfigured() ? "llm" : "local" };
@@ -66,13 +86,10 @@ async function executeStructured(
     const spoken = await openaiCoach(
       [
         { role: "system", content: systemPrompt(ctx, memoryBlock) },
-        ...history.map((item) => ({
-          role: item.role === "assistant" ? ("assistant" as const) : ("user" as const),
-          content: item.content
-        })),
+        ...historyForModel(history, perception),
         {
           role: "system",
-          content: `Resultado das tools (plan-and-execute). Fale com a pessoa. Hoje primeiro.\n${observations.join("\n").slice(0, 4000)}`
+          content: `Resultado das tools. Responda a pergunta atual, começando pelo que vale HOJE.\n${observations.join("\n").slice(0, 4000)}`
         }
       ],
       false
@@ -96,6 +113,7 @@ async function executeReact(
   history: CoachMessage[],
   plan: AgentPlan,
   memoryBlock: string,
+  perception: Perception,
   traces: AgentTrace[]
 ): Promise<Execution> {
   if (!llmConfigured()) {
@@ -113,10 +131,7 @@ async function executeReact(
 
   const messages: OpenAiMessage[] = [
     { role: "system", content: systemPrompt(ctx, memoryBlock) },
-    ...history.map((item) => ({
-      role: item.role === "assistant" ? ("assistant" as const) : ("user" as const),
-      content: item.content
-    }))
+    ...historyForModel(history, perception)
   ];
 
   let result: CoachChatResult = { reply: "", source: "llm" };

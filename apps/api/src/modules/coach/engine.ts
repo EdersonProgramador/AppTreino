@@ -214,20 +214,69 @@ export function isSmallTalk(text: string) {
   );
 }
 
+/** Menu padrão (treino/semana/comida) — não é resposta à pergunta. */
+export function isGenericCoachMenu(text: string) {
+  const value = text.trim();
+  if (!value || value.length > 480) return false;
+  return /treinar (hoje|agora).{0,80}semana.{0,80}comida|organizar a semana ou (falar de |olhar a )?comida|o que tá (mais na cabeça|apertando) agora|Me fala (o que você quer agora|se você quer treinar)|treino de hoje, a semana ou a comida|Pode falar — treino de hoje/i.test(
+    value
+  );
+}
+
 export function localCoachChat(ctx: CoachContext, messages: Array<{ role: string; content: string }>): CoachChatResult {
-  const text = lastUserText(messages).toLowerCase();
+  const raw = lastUserText(messages);
+  const text = raw.toLowerCase();
   const first = ctx.name.split(" ")[0] || "aí";
+  const quoted = raw.trim().replace(/\s+/g, " ").slice(0, 140);
+  const priorAssistant = [...messages].reverse().find((item) => item.role === "assistant" && !isGenericCoachMenu(item.content))
+    ?.content;
+  const userTurns = messages.filter((item) => item.role === "user").length;
   const wantsDiet = /dieta|refei|comer|biotipo|ectomor|endomor|mesomor|prote[ií]na|kcal|card[aá]pio/.test(text);
   const wantsPlan = /treino|s[eé]rie|carga|muscul|hiit|yoga|for[cç]a|hipertrof|montar|gerar|semana|modalidade/.test(text);
   const wantsRun = /corrida|correr|pace|km |pedal|caminh/.test(text);
-  const wantsStreak = /ofensiva|consist|sequ[eê]ncia|faltou|desânimo|desanimo/.test(text);
+  const wantsStreak = /ofensiva|consist|sequ[eê]ncia|faltou|desânimo|desanimo|desmotiv|preguiça|não tô a fim/.test(text);
+  const shortAsk = /em uma frase|resumid|bem curto|só uma linha/.test(text);
+  const lowTime = /\d+\s*min|sem tempo|pouco tempo|rápid|corrido hoje/.test(text);
+  const followUp =
+    (Boolean(priorAssistant) && userTurns > 1) || /^(e |e se|isso|continua|então|entao|e a |e o |tá mas|ta mas)/i.test(raw.trim());
+  const understood = `${first}, você perguntou: “${quoted}”.`;
 
-  if (isSmallTalk(text) && !wantsDiet && !wantsPlan && !wantsRun) {
+  if (isSmallTalk(text) && !wantsDiet && !wantsPlan && !wantsRun && !shortAsk && !lowTime) {
     const streak =
-      ctx.streakDays > 0 ? ` Tá com ${ctx.streakDays} dia${ctx.streakDays === 1 ? "" : "s"} de ofensiva — isso já é constância.` : "";
+      ctx.streakDays > 0 ? ` Vi ${ctx.streakDays} dia${ctx.streakDays === 1 ? "" : "s"} de ofensiva.` : "";
     return {
       source: "local",
-      reply: `E aí, ${first}.${streak} Me fala o que você quer agora: treinar hoje, organizar a semana ou olhar a comida?`
+      reply: `E aí, ${first}.${streak} Me conta o que tá acontecendo hoje no treino ou na rotina — eu respondo em cima da sua pergunta.`
+    };
+  }
+
+  if (followUp && priorAssistant) {
+    const snippet = priorAssistant.replace(/\s+/g, " ").slice(0, 180);
+    const minutes = text.match(/(\d+)\s*min/)?.[1];
+    const delta = shortAsk
+      ? "fecha em uma linha: faz o mínimo de hoje e marca a ofensiva."
+      : minutes
+        ? `aperta em ${minutes} min — 1 min aquecer, blocos de 40s (agachamento ou flexão) e 1 min respirar.`
+        : /dieta|comer/.test(text)
+          ? "na comida, o próximo passo é proteína em cada refeição e carbo perto do treino."
+          : "mantenho o que já combinamos e só aperto o que você acabou de pedir.";
+    return {
+      source: "local",
+      reply: `${understood} Isso é continuação, não um assunto novo.\n\nDo que a gente fechou: ${snippet}\n\nAgora: ${delta}`
+    };
+  }
+
+  if (shortAsk) {
+    return {
+      source: "local",
+      reply: `${first}, em uma frase: faz um treino curto alinhado a ${ctx.objective.toLowerCase()} e acerta proteína no prato.`
+    };
+  }
+
+  if (lowTime) {
+    return {
+      source: "local",
+      reply: `${understood} Pouco tempo: 18 min em casa — 2 min aquecer, 8x (40s agachamento ou flexão / 20s anda), 4 min prancha+core, 2 min respirar. Marca o dia e pronto.`
     };
   }
 
@@ -236,24 +285,30 @@ export function localCoachChat(ctx: CoachContext, messages: Array<{ role: string
     return {
       source: "local",
       diet,
-      reply: `${first}, sem enrolação: o caminho que combina com você é ${diet.strategy.toLowerCase()}\n\nDá pra começar por aí, mais ou menos ${diet.kcal} kcal com ${diet.proteinG}g de proteína.\n\n${diet.meals.map((meal) => `• ${meal.name}: ${meal.items.join(", ")}`).join("\n")}\n\nQuer que eu ajuste isso pra emagrecer, ganhar massa ou manter? Isso é orientação prática, não prescrição médica.`
+      reply: `${understood} Pelo seu recorte, o caminho é ${diet.strategy.toLowerCase()}\n\nCerca de ${diet.kcal} kcal com ${diet.proteinG}g de proteína.\n\n${diet.meals.map((meal) => `• ${meal.name}: ${meal.items.join(", ")}`).join("\n")}\n\nQuer que eu ajuste isso pra emagrecer, ganhar massa ou manter? Orientação prática, não prescrição médica.`
     };
   }
 
-  if (wantsPlan || wantsRun || /hoje|agora|bora treinar|montar/.test(text)) {
+  if (wantsPlan || wantsRun) {
     const plan = buildWorkoutPlan(ctx);
     const diet = plan.diet;
     const today = plan.days[0];
+    const todayOnly = /\bhoje\b|agora/.test(text) && !/semana/.test(text);
+    const todayLine = `Se fosse hoje, eu começaria em **${today?.title ?? "treino"}**: ${
+      today?.exercises
+        .map((item) => item.name)
+        .slice(0, 3)
+        .join(", ") || "o básico bem feito"
+    }.`;
     return {
       source: "local",
       plan,
       diet,
-      reply: `Bora, ${first}. Se fosse hoje, eu começaria em **${today?.title ?? "treino"}**: ${today?.exercises
-        .map((item) => item.name)
-        .slice(0, 3)
-        .join(", ") || "o básico bem feito"}.\n\nO restante da semana:\n${plan.days
-        .map((day) => `• ${day.title} — ${day.exercises.map((item) => item.name).slice(0, 3).join(", ")}`)
-        .join("\n")}\n\n${plan.recommendations[0]}\nQuer que eu foque mais em musculação, corrida ou emagrecer?`
+      reply: todayOnly
+        ? `${understood} ${todayLine}\n\n${plan.recommendations[0]}\nSe sobrar energia, a gente abre o resto da semana depois.`
+        : `${understood} ${todayLine}\n\nO restante da semana:\n${plan.days
+            .map((day) => `• ${day.title} — ${day.exercises.map((item) => item.name).slice(0, 3).join(", ")}`)
+            .join("\n")}\n\n${plan.recommendations[0]}`
     };
   }
 
@@ -262,14 +317,35 @@ export function localCoachChat(ctx: CoachContext, messages: Array<{ role: string
       source: "local",
       reply:
         ctx.streakDays > 0
-          ? `${first}, ${ctx.streakDays} dia${ctx.streakDays === 1 ? "" : "s"} já tá no bolso. O cérebro vai tentar negociar folga; o que funciona é o mínimo de hoje. Treino, corrida, caminhada ou pedal — o que cabe na sua agenda agora?`
-          : `${first}, a sequência zerou, acontece. Não precisa do treino perfeito: 20 minutos já reabrem o jogo. O que você consegue fazer nas próximas duas horas?`
+          ? `${understood} Você já tem ${ctx.streakDays} dia${ctx.streakDays === 1 ? "" : "s"} de sequência. O mínimo de hoje (mesmo curto) segura a ofensiva. O que cabe nas próximas duas horas?`
+          : `${understood} A sequência zerou — acontece. 20 minutos já reabrem o jogo. O que você consegue fazer agora?`
     };
   }
 
+  if (/sono|dormir|insônia|insonia/.test(text)) {
+    return {
+      source: "local",
+      reply: `${understood} Sono manda na recuperação do ${ctx.objective.toLowerCase()}. Fecha 7h+, sem tela 30 min antes, cafeína só até o meio da tarde, treino pesado longe da cama.`
+    };
+  }
+
+  if (/cansad|les[aã]o|joelho|ombro|lombar|travad/.test(text)) {
+    return {
+      source: "local",
+      reply: `${understood} A gente não força a articulação. Troca impacto por amplitude controlada e para se a dor subir. Se for agudo, isso é médico — não treino.`
+    };
+  }
+
+  const weather =
+    ctx.weather && (ctx.weather.code ?? 0) >= 80
+      ? " Clima pesado: cardio indoor."
+      : ctx.weather?.tempC != null
+        ? ` Clima ${ctx.weather.tempC}°.`
+        : "";
+
   return {
     source: "local",
-    reply: `Pode falar, ${first}. Tô aqui pra montar o treino, a semana ou a comida — o que tá mais na cabeça agora?`
+    reply: `${understood} Com ${ctx.daysPerWeek}x e foco em ${ctx.objective.toLowerCase()}, o passo útil agora é um bloco de 30 min nisso — não um cardápio genérico.${weather} O que trava isso hoje: tempo, execução ou consistência?`
   };
 }
 

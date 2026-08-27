@@ -3,11 +3,7 @@ import { cosine, lexicalEmbed, parseEmbedding } from "./embeddings.js";
 import { embedText } from "./embed.js";
 
 export const COLLECTIVE_MEMORY = [
-  "Coach humano: não recitar ficha. Usar dados em silêncio.",
-  "Não é médico. Dor aguda ou transtorno alimentar → encaminhar profissional.",
-  "Treino sustentável > atalho. Sem anabolizante, sem déficit extremo.",
-  "Comece pelo que o aluno faz HOJE; a semana vem depois.",
-  "Uma pergunta por vez. Tom de WhatsApp, português do Brasil."
+  "Atenda a pergunta atual. Não substitua por menu genérico."
 ];
 
 type MemoryKind = "LONG_TERM" | "EPISODIC" | "CONTEXTUAL" | "GLOBAL";

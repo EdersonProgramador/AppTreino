@@ -1,7 +1,7 @@
 import { conversationForModel } from "../llm.js";
 import type { CoachMessage } from "../types.js";
 
-const MAX_TURNS = 8;
+const MAX_TURNS = 12;
 const MAX_STITCH_CHARS = 1800;
 
 export type StitchedContext = {

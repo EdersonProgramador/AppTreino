@@ -29,6 +29,26 @@ describe("localCoachChat tom humano", () => {
     const result = localCoachChat(ctx, [{ role: "user", content: "Oi, responde em uma frase." }]);
     assert.doesNotMatch(result.reply, /estou no seu contexto/i);
     assert.doesNotMatch(result.reply, /^E aí, Aluno\./);
+    assert.doesNotMatch(result.reply, /semana ou (a |falar de )?comida/i);
+    assert.match(result.reply, /em uma frase/i);
+  });
+
+  it("cita a pergunta em vez de oferecer menu", () => {
+    const result = localCoachChat(ctx, [{ role: "user", content: "Como eu durmo melhor pra recuperar?" }]);
+    assert.match(result.reply, /Como eu durmo melhor/i);
+    assert.doesNotMatch(result.reply, /organizar a semana/i);
+    assert.doesNotMatch(result.reply, /treino de hoje, a semana/i);
+  });
+
+  it("amarra follow-up no turno anterior", () => {
+    const result = localCoachChat(ctx, [
+      { role: "user", content: "Tô sem tempo hoje" },
+      { role: "assistant", content: "Faz 18 min: agachamento, flexão e prancha." },
+      { role: "user", content: "E se eu só tiver 10 minutos?" }
+    ]);
+    assert.match(result.reply, /10 minutos/i);
+    assert.match(result.reply, /continuação/i);
+    assert.doesNotMatch(result.reply, /organizar a semana/i);
   });
 });
 
@@ -37,11 +57,25 @@ describe("conversationForModel", () => {
     const next = conversationForModel([
       {
         role: "assistant",
-        content: "E aí, Aluno. Tô por aqui. Quer treinar hoje, organizar a semana ou falar de comida?"
+        content: "E aí, Aluno. Me conta o que tá acontecendo hoje no treino ou na rotina — eu respondo em cima da sua pergunta."
       },
       { role: "user", content: "oi" }
     ]);
     assert.equal(next.length, 1);
     assert.equal(next[0]?.content, "oi");
+  });
+
+  it("não deixa menu genérico no histórico", () => {
+    const next = conversationForModel([
+      { role: "user", content: "oi" },
+      {
+        role: "assistant",
+        content: "Quer treinar hoje, organizar a semana ou falar de comida?"
+      },
+      { role: "user", content: "Tô sem tempo hoje" }
+    ]);
+    assert.equal(next.length, 2);
+    assert.equal(next[0]?.content, "oi");
+    assert.equal(next[1]?.content, "Tô sem tempo hoje");
   });
 });

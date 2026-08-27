@@ -53,7 +53,7 @@ export function StudentAiCoachChat({
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "coach",
-      text: `E aí, ${firstName}. Tô por aqui. Quer treinar hoje, organizar a semana ou falar de comida?`
+      text: `E aí, ${firstName}. Me conta o que tá acontecendo hoje no treino ou na rotina — eu respondo em cima da sua pergunta.`
     }
   ]);
   const logRef = useRef<HTMLDivElement>(null);

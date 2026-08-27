@@ -11,6 +11,7 @@ export function planTurn(history: CoachMessage[]): AgentPlan {
   const wantsRun = /corrida|correr|pace|pedal|caminh/.test(text);
   const autonomous = /pode decidir|faz sozinho|modo autom|age por mim|voc[eê] escolhe/.test(text);
   const goal = (wantsDiet && wantsPlan) || /semana completa|treino e dieta|dieta e treino/.test(text);
+  const shortAsk = /em uma frase|resumid|bem curto|só uma linha/.test(text);
 
   if (autonomous) {
     return {
@@ -30,7 +31,7 @@ export function planTurn(history: CoachMessage[]): AgentPlan {
       persistPlan: true
     };
   }
-  if (isSmallTalk(text) && !wantsDiet && !wantsPlan && !wantsRun) {
+  if ((isSmallTalk(text) || shortAsk) && !wantsDiet && !wantsPlan && !wantsRun) {
     return { kind: "interactive", pattern: "react", steps: [], useTools: false, persistPlan: false };
   }
   if (wantsDiet && !wantsPlan) {

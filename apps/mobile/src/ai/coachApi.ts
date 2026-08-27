@@ -38,24 +38,36 @@ function lastUserText(body: unknown) {
 }
 
 function localCoachFallback(body: unknown): CoachChatResponse {
-  const text = lastUserText(body).toLowerCase();
-  if (/dieta|biotipo|card[aá]pio|prote[ií]na|kcal/.test(text)) {
+  const text = lastUserText(body);
+  const quoted = text.slice(0, 140);
+  const lower = text.toLowerCase();
+  if (/dieta|biotipo|card[aá]pio|prote[ií]na|kcal/.test(lower)) {
     return {
       source: "local",
-      reply:
-        "Beleza. Enquanto o servidor atualiza, o caminho seguro é proteína em toda refeição, carbo perto do treino e verdura no prato. Quando a API voltar, pede de novo “como eu como nessa semana?” que eu fecho os números."
+      reply: `Você perguntou da comida (“${quoted}”). Enquanto o servidor atualiza: proteína em toda refeição, carbo perto do treino e verdura no prato.`
     };
   }
-  if (/treino|semana|montar|gerar|muscul|corrida|hiit/.test(text)) {
+  if (/\d+\s*min|sem tempo|pouco tempo/.test(lower)) {
     return {
       source: "local",
-      reply:
-        "Hoje eu iria de um full body curto: agachamento, supino, remada e prancha. Se quiser gravar a semana na conta, usa Gerar plano abaixo — ou manda de novo quando o chat da API estiver no ar."
+      reply: `Você tá sem tempo (“${quoted}”). Faz 18 min: aquecer, 8x 40s agachamento ou flexão, core, respirar. Marca o dia.`
+    };
+  }
+  if (/treino|semana|montar|gerar|muscul|corrida|hiit/.test(lower)) {
+    return {
+      source: "local",
+      reply: `Você pediu treino (“${quoted}”). Hoje: agachamento, supino, remada e prancha. Quando a API voltar, eu fecho a semana na conta.`
+    };
+  }
+  if (text) {
+    return {
+      source: "local",
+      reply: `Entendi: “${quoted}”. Quando o chat da API voltar eu fecho em cima disso — me manda de novo.`
     };
   }
   return {
     source: "local",
-    reply: "Tô aqui. Me fala se você quer treinar agora, organizar a semana ou olhar a comida."
+    reply: "Tô aqui. Me conta o que tá acontecendo hoje no treino ou na rotina."
   };
 }
 

@@ -55,7 +55,7 @@ export function CoachChatPanel({
   const [messages, setMessages] = useState<ChatMsg[]>([
     {
       role: "coach",
-      text: `E aí, ${firstName}. Tô por aqui. Quer treinar hoje, organizar a semana ou falar de comida?`
+      text: `E aí, ${firstName}. Me conta o que tá acontecendo hoje no treino ou na rotina — eu respondo em cima da sua pergunta.`
     }
   ]);
   const recordingRef = useRef<Awaited<ReturnType<typeof startCoachRecording>> | null>(null);

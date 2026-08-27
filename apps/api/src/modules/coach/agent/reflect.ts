@@ -1,5 +1,6 @@
-import { isSmallTalk } from "../engine.js";
-import type { AgentPlan } from "../types.js";
+import { isGenericCoachMenu, isSmallTalk, localCoachChat } from "../engine.js";
+import type { AgentPlan, CoachContext, CoachMessage } from "../types.js";
+import type { Perception } from "./perceive.js";
 
 export type Reflection = {
   ok: boolean;
@@ -9,14 +10,31 @@ export type Reflection = {
 
 const FICHA = /estou no seu contexto|objetivo [a-zç]+, n[ií]vel|biotipo (ecto|meso|endo)/i;
 
-/** Reflection Pattern: autoavaliação local (barata) antes de devolver a resposta. */
-export function reflectOnReply(reply: string, userText: string, plan: AgentPlan): Reflection {
+/** Reflection: a resposta precisa atender a pergunta, não um menu padrão. */
+export function reflectOnReply(
+  reply: string,
+  userText: string,
+  plan: AgentPlan,
+  extras?: { ctx?: CoachContext; history?: CoachMessage[]; perception?: Perception }
+): Reflection {
   const notes: string[] = [];
   let next = reply.trim();
 
   if (FICHA.test(next)) {
     notes.push("removeu recap de ficha");
     next = next.replace(FICHA, "").replace(/\s{2,}/g, " ").trim();
+  }
+
+  const missed = !isSmallTalk(userText) && isGenericCoachMenu(next);
+  if (missed && extras?.ctx && extras.history) {
+    notes.push("resposta genérica — reescreveu a partir da pergunta");
+    next = localCoachChat(extras.ctx, extras.history).reply;
+  }
+
+  if (extras?.perception?.constraints.includes("resposta curta") && next.length > 280) {
+    notes.push("encurtou porque o aluno pediu frase curta");
+    next = next.split("\n").filter(Boolean).slice(0, 2).join(" ");
+    if (next.length > 240) next = next.slice(0, 220).replace(/\s+\S*$/, "") + ".";
   }
 
   if (isSmallTalk(userText) && next.length > 420) {
@@ -29,7 +47,8 @@ export function reflectOnReply(reply: string, userText: string, plan: AgentPlan)
   }
 
   if (!next) {
-    next = "Pode falar — treino de hoje, semana ou comida. O que cabe agora?";
+    const asked = extras?.perception?.question ?? userText;
+    next = `Pelo que você perguntou (“${asked.slice(0, 80)}”), me confirma só o que trava isso hoje.`;
     notes.push("resposta vazia corrigida");
   }
 
