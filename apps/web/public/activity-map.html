@@ -9,8 +9,9 @@
       .fab-stack {
         position: absolute;
         right: 12px;
-        top: 50%;
-        transform: translateY(-30%);
+        bottom: 16px;
+        top: auto;
+        transform: none;
         display: grid;
         gap: 10px;
         z-index: 4;
@@ -429,7 +430,8 @@
       function setPickMode(on) {
         state.pickMode = Boolean(on);
         document.getElementById("map").classList.toggle("is-picking", state.pickMode);
-        document.getElementById("pickBanner").classList.toggle("is-on", state.pickMode);
+        const nested = window.parent && window.parent !== window;
+        document.getElementById("pickBanner").classList.toggle("is-on", state.pickMode && !nested);
       }
 
       function extraLayerCount() {

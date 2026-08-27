@@ -149,13 +149,32 @@ function ActivityMiniMap({ post }: { post: SocialPostRow }) {
           tempo
         </span>
         <span>
-          <strong>{formatPace(activity.avgPaceSecPerKm)}</strong>
-          /km
+          <strong>
+            {activity.sport === "RIDE" && activity.avgSpeedMps
+              ? `${(activity.avgSpeedMps * 3.6).toFixed(1)}`
+              : formatPace(activity.avgPaceSecPerKm)}
+          </strong>
+          {activity.sport === "RIDE" && activity.avgSpeedMps ? "km/h" : "/km"}
         </span>
         <span>
           <strong>{activity.calories}</strong>
           kcal
         </span>
+        <span>
+          <strong>{Math.round(activity.elevationGainMeters ?? 0)}</strong>
+          m ↑
+        </span>
+        {activity.estimatedPowerWatts != null ? (
+          <span>
+            <strong>{Math.round(activity.estimatedPowerWatts)}</strong>
+            W
+          </span>
+        ) : activity.stepsCount ? (
+          <span>
+            <strong>{activity.stepsCount}</strong>
+            passos
+          </span>
+        ) : null}
       </div>
     </div>
   );

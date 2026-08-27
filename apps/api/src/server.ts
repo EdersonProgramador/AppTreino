@@ -58,8 +58,10 @@ mkdirSync(uploadsDir, { recursive: true });
 
 app.setErrorHandler((error, _request, reply) => {
   if (error instanceof ZodError) {
+    const first = error.issues[0];
+    const path = first?.path?.length ? ` (${first.path.join(".")})` : "";
     return reply.code(400).send({
-      message: "Dados invalidos.",
+      message: `Dados inválidos${path}.`,
       issues: error.issues.map((issue) => ({
         path: issue.path.join("."),
         message: issue.message

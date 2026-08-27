@@ -20,14 +20,18 @@ type FinishPayload = PointsPayload & {
   maskedCount?: number;
   h3r9?: string[];
   h3r11?: string[];
-  antiCheat?: Record<string, unknown>;
-  privacy?: Record<string, unknown>;
+  antiCheat?: Record<string, unknown> | { ok?: boolean; flags?: string[]; score?: number };
+  privacy?: Record<string, unknown> | { homeRadiusM?: number; masked?: boolean };
   distanceM?: number;
   movingTimeMs?: number;
   stepsCount?: number;
   avgCadenceSpm?: number | null;
   avgHeartRateBpm?: number | null;
   maxHeartRateBpm?: number | null;
+  publish?: boolean;
+  caption?: string;
+  photoUrl?: string | null;
+  videoUrl?: string | null;
 };
 
 /**
@@ -101,28 +105,37 @@ export class OutboxSync {
     }
 
     if (row.kind === "FINISH") {
-      if (points.length) {
-        for (let i = 0; i < points.length; i += 200) {
-          await apiPost(`/student/activities/${serverId}/points`, { points: points.slice(i, i + 200) }, token);
-        }
-      }
       try {
         await apiPost(
           `/student/activities/${serverId}/finish`,
           {
             points,
-            publish: false,
+            publish: payload.publish === true,
+            ...(payload.caption ? { caption: payload.caption } : {}),
+            ...(payload.photoUrl ? { photoUrl: payload.photoUrl } : {}),
+            ...(payload.videoUrl ? { videoUrl: payload.videoUrl } : {}),
             trackingMeta: {
               rawCount: payload.rawCount,
               compressedCount: payload.compressedCount,
               maskedCount: payload.maskedCount,
               h3r9: payload.h3r9,
               h3r11: payload.h3r11,
-              antiCheat: payload.antiCheat,
+              antiCheat: payload.antiCheat
+                ? {
+                    ok: Boolean((payload.antiCheat as { ok?: boolean }).ok),
+                    flags: Array.isArray((payload.antiCheat as { flags?: unknown }).flags)
+                      ? (payload.antiCheat as { flags: string[] }).flags
+                      : [],
+                    score: (payload.antiCheat as { score?: number }).score
+                  }
+                : undefined,
               privacy: payload.privacy,
               distanceM: payload.distanceM,
               movingTimeMs: payload.movingTimeMs,
-              stepsCount: payload.stepsCount,
+              stepsCount:
+                typeof payload.stepsCount === "number" && Number.isFinite(payload.stepsCount)
+                  ? Math.max(0, Math.round(payload.stepsCount))
+                  : undefined,
               avgCadenceSpm: payload.avgCadenceSpm,
               avgHeartRateBpm: payload.avgHeartRateBpm,
               maxHeartRateBpm: payload.maxHeartRateBpm

@@ -63,6 +63,13 @@ class LiveMapStore {
     this.emit();
   }
 
+  /** Centraliza o mapa na posição atual sem apagar o trajeto. */
+  centerOn(lat: number, lng: number, t = Date.now()) {
+    this.cursor = { lat, lng, t, source: "filtered" };
+    if (!this.points.length) this.points = [this.cursor];
+    this.emit();
+  }
+
   private appendIfMoved(point: MapTrackPoint) {
     const last = this.points[this.points.length - 1];
     if (!last) {

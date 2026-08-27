@@ -408,10 +408,15 @@ export type OutdoorActivityRow = {
   title: string;
   status: string;
   startedAt: string;
+  pausedAt?: string | null;
   finishedAt?: string | null;
+  pauseMs?: number;
   elapsedSeconds: number;
+  movingSeconds?: number;
   distanceMeters: number;
   avgPaceSecPerKm?: number | null;
+  avgSpeedMps?: number | null;
+  maxSpeedMps?: number | null;
   calories: number;
   elevationGainMeters?: number;
   elevationLossMeters?: number;

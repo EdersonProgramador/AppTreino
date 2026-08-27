@@ -17,7 +17,8 @@ import {
   mergeAntiCheat,
   shouldBlockPublish,
   shouldQuarantine,
-  antiCheatUserMessage
+  antiCheatUserMessage,
+  type AntiCheatReport
 } from "./activity-anti-cheat.js";
 import {
   activityTitle,
@@ -71,15 +72,170 @@ const goalsSchema = z
   })
   .optional();
 
-const pointSchema = z.object({
-  lat: z.number(),
-  lng: z.number(),
-  t: z.number(),
-  ele: z.number().nullable().optional(),
-  accuracy: z.number().nullable().optional(),
-  h3r9: z.string().optional(),
-  h3r11: z.string().optional()
+const finiteOrNull = z.preprocess((value) => {
+  if (value == null) return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}, z.number().finite().nullable().optional());
+
+const pointSchema = z
+  .object({
+    lat: z.number().finite(),
+    lng: z.number().finite(),
+    t: z.number().finite(),
+    ele: finiteOrNull,
+    accuracy: finiteOrNull,
+    h3r9: z.string().optional(),
+    h3r11: z.string().optional()
+  })
+  .passthrough();
+
+const finishBodySchema = z.object({
+  caption: z.string().max(2000).nullish(),
+  photoUrl: z.string().nullish(),
+  videoUrl: z.string().nullish(),
+  mapType: mapTypeSchema.optional(),
+  activityMap: activityMapSchema.optional(),
+  layers: layersSchema,
+  is3d: z.boolean().optional(),
+  points: z.array(pointSchema).optional(),
+  goals: goalsSchema,
+  publish: z.boolean().optional().default(true),
+  trackingMeta: z
+    .object({
+      rawCount: z.number().optional(),
+      compressedCount: z.number().optional(),
+      maskedCount: z.number().optional(),
+      h3r9: z.array(z.string()).optional(),
+      h3r11: z.array(z.string()).optional(),
+      antiCheat: z
+        .object({
+          ok: z.boolean().optional(),
+          flags: z.array(z.string()).optional(),
+          maxImpliedSpeedMps: z.number().optional(),
+          teleportCount: z.number().optional(),
+          spikeCount: z.number().optional(),
+          score: z.number().optional()
+        })
+        .passthrough()
+        .optional(),
+      privacy: z
+        .object({
+          homeRadiusM: z.number().optional(),
+          masked: z.boolean().optional()
+        })
+        .passthrough()
+        .optional(),
+      distanceM: z.number().optional(),
+      movingTimeMs: z.number().optional(),
+      stepsCount: z.number().min(0).optional(),
+      avgCadenceSpm: z.number().min(0).nullable().optional(),
+      avgHeartRateBpm: z.number().min(30).max(250).nullable().optional(),
+      maxHeartRateBpm: z.number().min(30).max(250).nullable().optional()
+    })
+    .passthrough()
+    .optional()
 });
+
+type FinishBody = z.infer<typeof finishBodySchema>;
+
+function antiCheatFromStored(activity: { antiCheatFlags: unknown; antiCheatScore: number }): AntiCheatReport {
+  const stored =
+    activity.antiCheatFlags && typeof activity.antiCheatFlags === "object" && !Array.isArray(activity.antiCheatFlags)
+      ? (activity.antiCheatFlags as { flags?: unknown; score?: unknown; ok?: unknown })
+      : {};
+  const flags = Array.isArray(stored.flags) ? stored.flags.filter((flag): flag is string => typeof flag === "string") : [];
+  const score = typeof stored.score === "number" ? stored.score : activity.antiCheatScore ?? 0;
+  return {
+    ok: typeof stored.ok === "boolean" ? stored.ok : flags.length === 0 && score < 30,
+    flags,
+    maxImpliedSpeedMps: 0,
+    teleportCount: 0,
+    spikeCount: 0,
+    score,
+    source: "merged"
+  };
+}
+
+async function respondCompletedFinish(
+  user: { id: string },
+  activity: Parameters<typeof serializeActivity>[0] & {
+    antiCheatFlags: unknown;
+    antiCheatScore: number;
+    flagged?: boolean;
+  },
+  body: FinishBody
+) {
+  const antiCheat = antiCheatFromStored(activity);
+  const publishBlocked = shouldBlockPublish(antiCheat) || Boolean(activity.flagged);
+  const wantPublish = body.publish !== false && !publishBlocked;
+
+  let post = await prisma.socialPost.findUnique({
+    where: { activityId: activity.id },
+    include: postInclude
+  });
+
+  let latest = activity;
+  if (wantPublish && !post) {
+    const caption =
+      body.caption?.trim() ||
+      activity.caption ||
+      `${activityTitle(activity.sport as OutdoorSportKind, activity.startedAt)} · ${((activity.distanceMeters ?? 0) / 1000).toFixed(2)} km · ${sportLabel(activity.sport as OutdoorSportKind)}`;
+    const photoUrl = body.photoUrl ?? activity.photoUrl;
+    const videoUrl = body.videoUrl ?? activity.videoUrl;
+    const mediaUrl = photoUrl || videoUrl || null;
+    latest = await prisma.outdoorActivity.update({
+      where: { id: activity.id },
+      data: {
+        photoUrl,
+        videoUrl,
+        caption
+      }
+    });
+    try {
+      post = await prisma.socialPost.create({
+        data: {
+          authorId: user.id,
+          kind: "ACTIVITY",
+          body: caption,
+          mediaUrl,
+          mediaType: videoUrl ? "VIDEO" : photoUrl ? "IMAGE" : null,
+          activityId: activity.id
+        },
+        include: postInclude
+      });
+    } catch {
+      post = await prisma.socialPost.findUnique({
+        where: { activityId: activity.id },
+        include: postInclude
+      });
+    }
+  }
+
+  const segmentEfforts = await prisma.outdoorSegmentEffort.findMany({
+    where: { activityId: activity.id },
+    include: { segment: { select: { name: true } } }
+  });
+
+  return {
+    activity: serializeActivity(latest),
+    segmentEfforts: segmentEfforts.map((effort) => ({
+      segmentId: effort.segmentId,
+      name: effort.segment.name,
+      elapsedSeconds: effort.elapsedSeconds,
+      paceSecPerKm: effort.paceSecPerKm,
+      isPr: effort.isPr
+    })),
+    post: post ? await serializePost({ ...post, activity: post.activity ?? latest }, user.id) : null,
+    moderation: {
+      published: Boolean(post),
+      blockedByAntiCheat: publishBlocked,
+      antiCheat,
+      quarantine: shouldQuarantine(antiCheat),
+      message: antiCheatUserMessage(antiCheat)
+    }
+  };
+}
 
 function extractGoals(layers: unknown) {
   if (!layers || typeof layers !== "object" || Array.isArray(layers)) return null;
@@ -1451,7 +1607,26 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     const current = await prisma.outdoorActivity.findFirst({
       where: { userId: user.id, status: { in: ["LIVE", "PAUSED"] } }
     });
-    if (current) return { activity: serializeActivity(current), resumed: true };
+    if (current) {
+      if (current.status === "PAUSED") {
+        const extra = current.pausedAt ? Date.now() - current.pausedAt.getTime() : 0;
+        const updated = await prisma.outdoorActivity.update({
+          where: { id: current.id },
+          data: {
+            status: "LIVE",
+            pausedAt: null,
+            pauseMs: current.pauseMs + Math.max(0, extra),
+            sport: body.sport,
+            mapType: body.mapType ?? current.mapType,
+            activityMap: body.activityMap ?? current.activityMap,
+            layers: withGoals(body.layers ?? current.layers, body.goals ?? extractGoals(current.layers)),
+            is3d: body.is3d ?? current.is3d
+          }
+        });
+        return { activity: serializeActivity(updated), resumed: true };
+      }
+      return { activity: serializeActivity(current), resumed: true };
+    }
 
     const distanceKm = body.goals?.distanceKm;
     const activity = await prisma.outdoorActivity.create({
@@ -1478,7 +1653,6 @@ export async function registerSocialRoutes(app: FastifyInstance) {
       where: { id, userId: user.id, status: { in: ["LIVE", "PAUSED"] } }
     });
     if (!activity) throw httpError(404, "Atividade não encontrada.");
-    if (activity.status === "PAUSED") throw httpError(409, "Atividade pausada.");
 
     const merged = sanitizePoints([...(sanitizePoints(activity.polyline) as GpsPoint[]), ...points]).slice(-20000);
     const stats = buildStravaSummary(activity.sport, activity.startedAt, merged, activity.pauseMs, {
@@ -1527,11 +1701,48 @@ export async function registerSocialRoutes(app: FastifyInstance) {
   app.post("/student/activities/:id/pause", async (request) => {
     requireDatabase();
     const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const parsed = z
+      .object({ points: z.array(pointSchema).max(20000).optional() })
+      .safeParse(request.body ?? {});
+    const incoming = parsed.success ? parsed.data.points ?? [] : [];
     const { activity } = await ownLive(request, id);
-    if (activity.status !== "LIVE") throw httpError(409, "Atividade não está em andamento.");
+    if (activity.status === "COMPLETED" || activity.status === "CANCELED") {
+      throw httpError(409, "Atividade não está em andamento.");
+    }
+    if (activity.status !== "LIVE" && activity.status !== "PAUSED") {
+      throw httpError(409, "Atividade não está em andamento.");
+    }
+    if (activity.status === "PAUSED" && !incoming.length) {
+      return { activity: serializeActivity(activity) };
+    }
+    const merged = incoming.length
+      ? sanitizePoints([...(sanitizePoints(activity.polyline) as GpsPoint[]), ...incoming]).slice(-20000)
+      : null;
+    const stats = merged
+      ? buildStravaSummary(activity.sport, activity.startedAt, merged, activity.pauseMs, {
+          is3d: activity.is3d,
+          mapType: activity.mapType
+        })
+      : null;
     const updated = await prisma.outdoorActivity.update({
       where: { id },
-      data: { status: "PAUSED", pausedAt: new Date() }
+      data: {
+        status: "PAUSED",
+        pausedAt: activity.status === "PAUSED" ? activity.pausedAt ?? new Date() : new Date(),
+        ...(merged && stats
+          ? {
+              polyline: merged,
+              distanceMeters: stats.distanceMeters,
+              elapsedSeconds: stats.elapsedSeconds,
+              movingSeconds: stats.movingSeconds,
+              avgPaceSecPerKm: stats.avgPaceSecPerKm,
+              avgSpeedMps: stats.avgSpeedMps,
+              maxSpeedMps: stats.maxSpeedMps,
+              elevationGainMeters: stats.elevationGainMeters,
+              calories: stats.calories
+            }
+          : {})
+      }
     });
     return { activity: serializeActivity(updated) };
   });
@@ -1540,6 +1751,7 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     requireDatabase();
     const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
     const { activity } = await ownLive(request, id);
+    if (activity.status === "LIVE") return { activity: serializeActivity(activity) };
     if (activity.status !== "PAUSED") throw httpError(409, "Atividade não está pausada.");
     const extra = activity.pausedAt ? Date.now() - activity.pausedAt.getTime() : 0;
     const updated = await prisma.outdoorActivity.update({
@@ -1565,52 +1777,11 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     requireDatabase();
     const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
     const { user, activity } = await ownLive(request, id);
-    if (activity.status === "COMPLETED") throw httpError(409, "Atividade já finalizada.");
-    const body = z
-      .object({
-        caption: z.string().max(2000).optional(),
-        photoUrl: z.string().optional(),
-        videoUrl: z.string().optional(),
-        mapType: mapTypeSchema.optional(),
-        activityMap: activityMapSchema.optional(),
-        layers: layersSchema,
-        is3d: z.boolean().optional(),
-        points: z.array(pointSchema).optional(),
-        goals: goalsSchema,
-        publish: z.boolean().optional().default(true),
-        trackingMeta: z
-          .object({
-            rawCount: z.number().optional(),
-            compressedCount: z.number().optional(),
-            maskedCount: z.number().optional(),
-            h3r9: z.array(z.string()).optional(),
-            h3r11: z.array(z.string()).optional(),
-            antiCheat: z
-              .object({
-                ok: z.boolean(),
-                flags: z.array(z.string()),
-                maxImpliedSpeedMps: z.number().optional(),
-                teleportCount: z.number().optional(),
-                spikeCount: z.number().optional(),
-                score: z.number().optional()
-              })
-              .optional(),
-            privacy: z
-              .object({
-                homeRadiusM: z.number().optional(),
-                masked: z.boolean().optional()
-              })
-              .optional(),
-            distanceM: z.number().optional(),
-            movingTimeMs: z.number().optional(),
-            stepsCount: z.number().int().min(0).optional(),
-            avgCadenceSpm: z.number().min(0).nullable().optional(),
-            avgHeartRateBpm: z.number().min(30).max(250).nullable().optional(),
-            maxHeartRateBpm: z.number().min(30).max(250).nullable().optional()
-          })
-          .optional()
-      })
-      .parse(request.body ?? {});
+    const body = finishBodySchema.parse(request.body ?? {});
+    if (activity.status === "CANCELED") throw httpError(409, "Atividade cancelada.");
+    if (activity.status === "COMPLETED") {
+      return respondCompletedFinish(user, activity, body);
+    }
 
     let pauseMs = activity.pauseMs;
     if (activity.status === "PAUSED" && activity.pausedAt) {

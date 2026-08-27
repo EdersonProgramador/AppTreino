@@ -68,6 +68,23 @@ const LAYER_ITEMS: Array<{ id: LayerKey; group: string; label: string }> = [
 ];
 
 type GpsPoint = { lat: number; lng: number; t: number; ele?: number | null; accuracy?: number | null };
+
+function mergeRoutePoints(
+  ...sources: Array<Array<{ lat: number; lng: number; t?: number; ele?: number | null; accuracy?: number | null }> | null | undefined>
+): GpsPoint[] {
+  const byT = new Map<number, GpsPoint>();
+  for (const src of sources) {
+    for (const point of src ?? []) {
+      if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) continue;
+      const t = Number(point.t);
+      if (!Number.isFinite(t)) continue;
+      if (!byT.has(t)) {
+        byT.set(t, { lat: point.lat, lng: point.lng, t, ele: point.ele, accuracy: point.accuracy });
+      }
+    }
+  }
+  return [...byT.values()].sort((a, b) => a.t - b.t);
+}
 type LapMarker = { lat: number; lng: number; radiusMeters?: number };
 type LapRecord = { index: number; lat: number; lng: number; t: number; distanceMeters: number };
 
@@ -163,10 +180,11 @@ export function StudentActivitySection({
   }, [preferredSportKey, preferredSport]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function currentGoals() {
+    const parsedSpeed = Number(targetSpeed.replace(",", "."));
     return {
-      distanceKm: Number.isFinite(parsedKm) && parsedKm > 0 ? parsedKm : undefined,
+      distanceKm: Number.isFinite(parsedKm) && parsedKm > 0 ? Math.min(parsedKm, 200) : undefined,
       durationSeconds: targetDuration,
-      speedKmh: Number(targetSpeed.replace(",", ".")) || undefined,
+      speedKmh: Number.isFinite(parsedSpeed) && parsedSpeed > 0 ? Math.min(parsedSpeed, 80) : undefined,
       lapRadiusMeters: LAP_RADIUS_M,
       lapCounterOn,
       lapMarker: lapCounterOn ? lapMarker : null,
@@ -340,9 +358,43 @@ export function StudentActivitySection({
 
   async function flushPoints(id: string, extra: GpsPoint[] = []) {
     const batch = [...bufferRef.current, ...extra];
-    bufferRef.current = [];
     if (!batch.length) return;
-    await apiPost(`/student/activities/${id}/points`, { points: batch }, token);
+    bufferRef.current = [];
+    try {
+      for (let i = 0; i < batch.length; i += 200) {
+        await apiPost(`/student/activities/${id}/points`, { points: batch.slice(i, i + 200) }, token);
+      }
+    } catch (err) {
+      bufferRef.current = [...batch, ...bufferRef.current];
+      throw err;
+    }
+  }
+
+  async function persistRoute(id: string) {
+    const batch = mergeRoutePoints(points, bufferRef.current);
+    bufferRef.current = [];
+    if (!batch.length) return batch;
+    for (let i = 0; i < batch.length; i += 200) {
+      try {
+        await apiPost(`/student/activities/${id}/points`, { points: batch.slice(i, i + 200) }, token);
+      } catch {
+        /* o pause/finish ainda envia o lote completo */
+      }
+    }
+    return batch;
+  }
+
+  function applyTrack(route: GpsPoint[], fit = false) {
+    setPoints(route);
+    if (!route.length) {
+      pipelineRef.current.reset();
+      postToMap({ type: "setTrack", points: [], fit });
+      return;
+    }
+    const last = route[route.length - 1];
+    pipelineRef.current.warmStart(last.lat, last.lng, last.t);
+    postToMap({ type: "setTrack", points: route, fit });
+    postToMap({ type: "setLive", lat: last.lat, lng: last.lng, follow: followMapRef.current });
   }
 
   function startWatch(id: string) {
@@ -422,19 +474,27 @@ export function StudentActivitySection({
     setBusy(true);
     try {
       if (paused && activity) {
-        const data = await apiPost<{ activity: OutdoorActivityRow }>(`/student/activities/${activity.id}/resume`, {}, token);
-        setActivity(data.activity);
+        try {
+          const data = await apiPost<{ activity: OutdoorActivityRow }>(`/student/activities/${activity.id}/resume`, {}, token);
+          setActivity(data.activity);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "";
+          if (!/não está pausada|already|409/i.test(msg)) {
+            setError(err instanceof Error ? err.message : "Não foi possível retomar.");
+            return;
+          }
+        }
         if (points.length) {
           const last = points[points.length - 1];
           pipelineRef.current.warmStart(last.lat, last.lng, last.t);
         } else {
           pipelineRef.current.reset();
         }
-        startWatch(data.activity.id);
+        startWatch(activity.id);
         return;
       }
       const goals = currentGoals();
-      const data = await apiPost<{ activity: OutdoorActivityRow }>(
+      const data = await apiPost<{ activity: OutdoorActivityRow; resumed?: boolean }>(
         "/student/activities",
         {
           sport,
@@ -448,7 +508,17 @@ export function StudentActivitySection({
         token
       );
       setActivity(data.activity);
-      pipelineRef.current.reset();
+      const recovered = Array.isArray(data.activity.polyline)
+        ? data.activity.polyline.map((p) => ({
+            lat: p.lat,
+            lng: p.lng,
+            t: p.t ?? Date.now(),
+            ele: p.ele,
+            accuracy: (p as { accuracy?: number | null }).accuracy ?? null
+          }))
+        : [];
+      const isResume = Boolean(data.resumed) && data.activity.sport === sport;
+      applyTrack(isResume ? recovered : [], false);
       startWatch(data.activity.id);
       locate(true);
     } catch (err) {
@@ -461,9 +531,40 @@ export function StudentActivitySection({
   async function pause() {
     if (!activity) return;
     stopWatch();
-    await flushPoints(activity.id);
-    const data = await apiPost<{ activity: OutdoorActivityRow }>(`/student/activities/${activity.id}/pause`, {}, token);
-    setActivity(data.activity);
+    const pausedAtIso = new Date().toISOString();
+    setActivity((current) =>
+      current ? { ...current, status: "PAUSED", pausedAt: current.pausedAt ?? pausedAtIso } : current
+    );
+    const route = mergeRoutePoints(points, bufferRef.current);
+    if (route.length) applyTrack(route, false);
+    try {
+      await persistRoute(activity.id);
+    } catch {
+      /* polyline fica no estado local e vai no finish */
+    }
+    try {
+      const data = await apiPost<{ activity: OutdoorActivityRow }>(
+        `/student/activities/${activity.id}/pause`,
+        { points: route },
+        token
+      );
+      setActivity({
+        ...data.activity,
+        status: "PAUSED",
+        polyline: route.length ? route : data.activity.polyline
+      });
+    } catch {
+      setActivity((current) =>
+        current
+          ? {
+              ...current,
+              status: "PAUSED",
+              pausedAt: current.pausedAt ?? new Date().toISOString(),
+              polyline: route.length ? route : current.polyline
+            }
+          : current
+      );
+    }
   }
 
   async function uploadMedia(file: File, kind: "photo" | "video") {
@@ -479,18 +580,19 @@ export function StudentActivitySection({
     setBusy(true);
     try {
       stopWatch();
-      await flushPoints(activity.id);
+      const saved = await persistRoute(activity.id).catch(() => points);
+      const route = mergeRoutePoints(saved, points);
       await apiPost<{ post: SocialPostRow | null }>(
         `/student/activities/${activity.id}/finish`,
         {
-          caption: publish ? caption : undefined,
-          photoUrl: publish ? photoUrl : undefined,
-          videoUrl: publish ? videoUrl : undefined,
+          ...(publish && caption.trim() ? { caption: caption.trim() } : {}),
+          ...(publish && photoUrl ? { photoUrl } : {}),
+          ...(publish && videoUrl ? { videoUrl } : {}),
           mapType,
           activityMap,
           layers,
           is3d,
-          points: bufferRef.current,
+          points: route,
           goals: currentGoals(),
           publish
         },
@@ -502,11 +604,13 @@ export function StudentActivitySection({
       setElapsed(0);
       setLaps([]);
       lapAwayRef.current = false;
+      bufferRef.current = [];
       pipelineRef.current.reset();
       setPickingLapStart(false);
       setCaption("");
       setPhotoUrl(null);
       setVideoUrl(null);
+      applyTrack([], false);
       if (publish) onPublished();
     } catch (err) {
       setError(err instanceof Error ? err.message : publish ? "Não foi possível publicar." : "Não foi possível finalizar.");
@@ -534,9 +638,20 @@ export function StudentActivitySection({
   }
 
   async function selectSport(next: OutdoorSport) {
-    if (next === sport || running) return;
+    if (running) return;
     setError(null);
-    if (activity) {
+    if (next !== sport) {
+      stopWatch();
+      bufferRef.current = [];
+      setPoints([]);
+      setElapsed(0);
+      setLaps([]);
+      lapAwayRef.current = false;
+      pipelineRef.current.reset();
+      postToMap({ type: "setTrack", points: [], fit: false });
+      postToMap({ type: "setLaps", laps: [] });
+    }
+    if (next !== sport && activity) {
       stopWatch();
       try {
         await apiPost(`/student/activities/${activity.id}/cancel`, {}, token);
@@ -553,30 +668,14 @@ export function StudentActivitySection({
       postToMap({ type: "setTrack", points: [], fit: false });
       postToMap({ type: "setLaps", laps: [] });
     }
-    setSport(next);
+    if (next !== sport) setSport(next);
+    locate(true);
   }
 
   const sportMeta = SPORTS.find((item) => item.id === sport) ?? SPORTS[0];
 
   return (
     <section className="student-activity">
-      <div className="student-activity-tabs" role="tablist" aria-label="Modalidade">
-        {SPORTS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={sport === item.id}
-            className={sport === item.id ? "is-on" : ""}
-            disabled={running}
-            onClick={() => void selectSport(item.id)}
-          >
-            {item.id === "RUN" ? <RunnerIcon size={16} gender={athleteGender} /> : <item.Icon size={16} />}
-            {item.label}
-          </button>
-        ))}
-      </div>
-
       {!isNativeAppShell() ? (
         <Link to={paths.download} className="student-activity-native-cta">
           <Smartphone size={18} aria-hidden />
@@ -588,6 +687,22 @@ export function StudentActivitySection({
       ) : null}
 
       <div className="student-activity-map">
+        <div className="student-activity-tabs" role="tablist" aria-label="Modalidade">
+          {SPORTS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={sport === item.id}
+              className={sport === item.id ? "is-on" : ""}
+              disabled={running}
+              onClick={() => void selectSport(item.id)}
+            >
+              {item.id === "RUN" ? <RunnerIcon size={16} gender={athleteGender} /> : <item.Icon size={16} />}
+              {item.label}
+            </button>
+          ))}
+        </div>
         <iframe
           ref={iframeRef}
           title="Mapa da atividade"
@@ -615,11 +730,11 @@ export function StudentActivitySection({
             <strong>{formatClock(elapsed)}</strong>
           </div>
           <div>
-            <small>Ritmo médio (/km)</small>
+            <small>Ritmo</small>
             <strong>{formatPace(pace)}</strong>
           </div>
           <div>
-            <small>Distância (km)</small>
+            <small>Distância</small>
             <strong>{formatKm(distance)}</strong>
           </div>
         </div>

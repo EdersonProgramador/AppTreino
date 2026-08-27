@@ -12,6 +12,7 @@ type Props = {
   stepsCount?: number;
   cadenceSpm?: number | null;
   powerWatts?: number | null;
+  calories?: number;
   bestEffortLabel?: string | null;
   caption?: string | null;
 };
@@ -27,6 +28,7 @@ export function OutdoorShareCard({
   stepsCount,
   cadenceSpm,
   powerWatts,
+  calories,
   bestEffortLabel,
   caption
 }: Props) {
@@ -42,6 +44,7 @@ export function OutdoorShareCard({
       stepsCount ? `${stepsCount} passos` : null,
       cadenceSpm != null ? `Cadência ${Math.round(cadenceSpm)} spm` : null,
       powerWatts != null ? `Potência ~${Math.round(powerWatts)} W` : null,
+      calories ? `${calories} kcal` : null,
       bestEffortLabel ? `Best: ${bestEffortLabel}` : null,
       caption?.trim() || null
     ].filter(Boolean);
@@ -62,7 +65,7 @@ export function OutdoorShareCard({
         <Stat label="↓ Elev" value={`${Math.round(elevationLossMeters)} m`} color={st.text} muted={st.muted} />
         <Stat label="Best" value={bestEffortLabel ?? "—"} color={st.text} muted={st.muted} />
       </View>
-      {(stepsCount || cadenceSpm != null || powerWatts != null) && (
+      {Boolean(stepsCount || cadenceSpm != null || powerWatts != null || calories) ? (
         <View style={styles.row}>
           <Stat label="Passos" value={stepsCount ? String(stepsCount) : "—"} color={st.text} muted={st.muted} />
           <Stat
@@ -72,13 +75,13 @@ export function OutdoorShareCard({
             muted={st.muted}
           />
           <Stat
-            label="Potência"
-            value={powerWatts != null ? `${Math.round(powerWatts)} W` : "—"}
+            label={powerWatts != null ? "Potência" : "kcal"}
+            value={powerWatts != null ? `${Math.round(powerWatts)} W` : calories ? String(calories) : "—"}
             color={st.text}
             muted={st.muted}
           />
         </View>
-      )}
+      ) : null}
       <Pressable style={[styles.btn, { backgroundColor: st.goldUi }]} onPress={() => void share()}>
         <Text style={styles.btnText}>Compartilhar</Text>
       </Pressable>

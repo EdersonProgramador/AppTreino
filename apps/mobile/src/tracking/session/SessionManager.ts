@@ -9,7 +9,7 @@ import { liveMapStore } from "../map/liveMapStore";
 import { pedometerBridge } from "../sensors/PedometerBridge";
 import type { FilteredFix, LiveSnapshot, RawFix, Sport, TrackingSession } from "../types";
 
-type Listener = (snap: LiveSnapshot) => void;
+type Listener = (snap: LiveSnapshot | null) => void;
 
 /** GPS → NoiseGates → Kalman → Pace/AutoPause → SQLite → UI/Mapa */
 export class SessionManager {
@@ -49,7 +49,7 @@ export class SessionManager {
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
-    if (this.session) listener(this.snapshot());
+    listener(this.session ? this.snapshot() : null);
     return () => {
       this.listeners.delete(listener);
     };
@@ -79,8 +79,7 @@ export class SessionManager {
   }
 
   private emit() {
-    if (!this.session) return;
-    const snap = this.snapshot();
+    const snap = this.session ? this.snapshot() : null;
     for (const listener of this.listeners) listener(snap);
   }
 
@@ -153,6 +152,7 @@ export class SessionManager {
   async start(sport: Sport): Promise<TrackingSession> {
     await this.init();
     if (this.session?.status === "LIVE") throw new Error("Já existe uma sessão LIVE.");
+    if (this.session?.status === "FINISHED") this.session = null;
 
     // Após um crash `this.session` volta nulo, mas a linha LIVE/PAUSED/ORPHAN
     // continua no SQLite — sem esta checagem criaríamos uma segunda sessão ativa.
@@ -184,6 +184,11 @@ export class SessionManager {
       appVersion: "0.1.0"
     });
 
+    const seed = await this.bridge.getCurrentFix();
+    if (seed) {
+      this.pipeline.warmStart(seed.lat, seed.lng, seed.t, 0);
+      liveMapStore.pushFiltered(seed.lat, seed.lng, seed.t);
+    }
     await this.startGps(sport);
     this.startHeartbeat();
     this.emit();
@@ -289,23 +294,43 @@ export class SessionManager {
   }
 
   async pause(): Promise<void> {
-    if (!this.session || this.session.status !== "LIVE") return;
-    await this.bridge.stop();
-    await pedometerBridge.stop();
+    this.stopHeartbeat();
+    this.moveTickAt = null;
+    try {
+      await this.flushPendingOutbox();
+    } catch {
+      /* o persist da UI ainda cobre o trajeto */
+    }
+    try {
+      await this.bridge.stop();
+    } catch {
+      /* GPS pode já estar parado */
+    }
+    try {
+      await pedometerBridge.stop();
+    } catch {
+      /* ignore */
+    }
     this.unsubSteps?.();
     this.unsubSteps = null;
     this.unsubscribeFix?.();
     this.unsubscribeFix = null;
-    this.stopHeartbeat();
-    this.moveTickAt = null;
-    await localStore.updateSession(this.session.id, {
-      status: "PAUSED",
-      pausedAt: Date.now(),
-      distanceM: this.distanceM,
-      movingTimeMs: this.movingTimeMs
-    });
-    this.session = (await localStore.getSession(this.session.id))!;
-    this.emit();
+    if (!this.session) return;
+    if (this.session.status === "LIVE" || this.session.status === "ORPHAN") {
+      await localStore.updateSession(this.session.id, {
+        status: "PAUSED",
+        pausedAt: Date.now(),
+        distanceM: this.distanceM,
+        movingTimeMs: this.movingTimeMs
+      });
+      const next = await localStore.getSession(this.session.id);
+      if (next) this.session = next;
+    }
+    try {
+      this.emit();
+    } catch {
+      /* UI listener não pode abortar o pause */
+    }
   }
 
   async resume(): Promise<void> {
@@ -401,7 +426,6 @@ export class SessionManager {
 
   async discard(sessionId?: string): Promise<void> {
     const id = sessionId ?? this.session?.id;
-    if (!id) return;
     await this.bridge.stop();
     await pedometerBridge.stop();
     this.unsubSteps?.();
@@ -409,9 +433,23 @@ export class SessionManager {
     this.unsubscribeFix?.();
     this.unsubscribeFix = null;
     this.stopHeartbeat();
+    this.lastFinishPayload = null;
+    this.lastFix = null;
+    this.distanceM = 0;
+    this.movingTimeMs = 0;
+    this.moveTickAt = null;
+    this.autoPaused = false;
+    this.queue = [];
+    this.pendingOutboxPoints = [];
+    this.acceptedSinceOutbox = 0;
+    this.totalSteps = 0;
+    this.cadenceSpm = null;
     liveMapStore.clear();
-    await localStore.updateSession(id, { status: "FINISHED", endedAt: Date.now() });
-    if (this.session?.id === id) this.session = null;
+    if (id) {
+      await localStore.updateSession(id, { status: "FINISHED", endedAt: Date.now() });
+    }
+    this.session = null;
+    this.emit();
   }
 }
 

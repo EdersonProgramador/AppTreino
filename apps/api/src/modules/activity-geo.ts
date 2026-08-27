@@ -48,7 +48,14 @@ export function sanitizePoints(raw: unknown): GpsPoint[] {
       accuracy: Number.isFinite(Number(row.accuracy)) ? Number(row.accuracy) : null
     });
   }
-  return points.sort((a, b) => a.t - b.t);
+  points.sort((a, b) => a.t - b.t);
+  const unique: GpsPoint[] = [];
+  for (const point of points) {
+    const prev = unique[unique.length - 1];
+    if (prev && prev.t === point.t) continue;
+    unique.push(point);
+  }
+  return unique;
 }
 
 export function formatClock(totalSeconds: number) {
@@ -311,7 +318,8 @@ export function summarizeTrack(sport: OutdoorSportKind, points: GpsPoint[], paus
     const d = haversineMeters(prev, cur);
     distance += d;
     const speed = dt > 0 ? d / (dt / 1000) : 0;
-    if (speed > maxSpeed && speed < 25) maxSpeed = speed;
+    const maxReasonableMps = sport === "RIDE" ? 40 : sport === "RUN" ? 12 : 5;
+    if (speed > maxSpeed && speed < maxReasonableMps) maxSpeed = speed;
     if (dt > 0 && dt < GAP_MS && speed >= MOVING_MIN_MPS) movingMs += dt;
     if (typeof cur.ele === "number" && typeof prev.ele === "number") {
       const climb = cur.ele - prev.ele;

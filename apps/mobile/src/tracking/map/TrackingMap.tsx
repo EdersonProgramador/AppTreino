@@ -10,6 +10,7 @@ type Props = {
   pickMode?: boolean;
   lapMarker?: { lat: number; lng: number } | null;
   mapType?: "standard" | "satellite" | "hybrid";
+  is3d?: boolean;
   heatTracks?: Array<Array<{ lat: number; lng: number }>>;
 };
 
@@ -24,6 +25,7 @@ export function TrackingMap({
   pickMode = false,
   lapMarker = null,
   mapType = "standard",
+  is3d = false,
   heatTracks = []
 }: Props) {
   const mapRef = useRef<MapView>(null);
@@ -48,11 +50,12 @@ export function TrackingMap({
     mapRef.current.animateCamera(
       {
         center: { latitude: cursor.lat, longitude: cursor.lng },
+        pitch: is3d ? 45 : 0,
         zoom: 16.5
       },
       { duration: 400 }
     );
-  }, [cursor?.lat, cursor?.lng, followUser]);
+  }, [cursor?.lat, cursor?.lng, followUser, is3d]);
 
   return (
     <View style={styles.fill}>
@@ -62,8 +65,12 @@ export function TrackingMap({
         provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
         mapType={mapType}
         initialRegion={initialRegion}
+        pitchEnabled={is3d}
+        rotateEnabled={is3d}
         showsUserLocation
         showsMyLocationButton={false}
+        showsCompass={false}
+        toolbarEnabled={false}
         followsUserLocation={false}
         onPress={(e) => {
           if (!pickMode || !onMapPress) return;

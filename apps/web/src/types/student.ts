@@ -232,6 +232,7 @@ export interface OutdoorActivityRow {
   title: string;
   status: "LIVE" | "PAUSED" | "COMPLETED" | "CANCELED" | string;
   startedAt: string;
+  pausedAt?: string | null;
   finishedAt?: string | null;
   pauseMs?: number;
   elapsedSeconds: number;
@@ -242,6 +243,10 @@ export interface OutdoorActivityRow {
   maxSpeedMps?: number | null;
   elevationGainMeters: number;
   calories: number;
+  elevationLossMeters?: number;
+  estimatedPowerWatts?: number | null;
+  stepsCount?: number;
+  avgCadenceSpm?: number | null;
   mapType: string;
   activityMap: string;
   layers?: {

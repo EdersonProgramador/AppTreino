@@ -19,6 +19,55 @@ export function formatKm(meters: number | null | undefined) {
   return ((meters ?? 0) / 1000).toFixed(2);
 }
 
+const MET: Record<"RUN" | "WALK" | "RIDE", number> = {
+  RUN: 9.8,
+  WALK: 3.5,
+  RIDE: 7.5
+};
+
+/** Estimativa local (70 kg) — o servidor recalcula no finish. */
+export function estimateCalories(sport: "RUN" | "WALK" | "RIDE", elapsedSeconds: number) {
+  const hours = Math.max(0, elapsedSeconds) / 3600;
+  return Math.round(MET[sport] * 70 * hours);
+}
+
+export function liveElevation(points: Array<{ ele?: number | null }>) {
+  let gain = 0;
+  let loss = 0;
+  for (let i = 1; i < points.length; i += 1) {
+    const prev = points[i - 1]?.ele;
+    const cur = points[i]?.ele;
+    if (typeof prev !== "number" || typeof cur !== "number") continue;
+    const delta = cur - prev;
+    if (delta > 0.4) gain += delta;
+    else if (delta < -0.4) loss += -delta;
+  }
+  return { gain, loss };
+}
+
+export function liveElapsedSeconds(
+  activity: {
+    startedAt: string;
+    status: string;
+    pauseMs?: number | null;
+    pausedAt?: string | null;
+  },
+  now = Date.now()
+) {
+  const started = new Date(activity.startedAt).getTime();
+  const pauseMs = activity.pauseMs ?? 0;
+  if (!Number.isFinite(started)) return 0;
+  const pausedAtMs = activity.pausedAt ? new Date(activity.pausedAt).getTime() : NaN;
+  if (activity.status === "PAUSED" || activity.status === "COMPLETED" || activity.status === "FINISHED") {
+    const until = Number.isFinite(pausedAtMs) ? pausedAtMs : now;
+    return Math.max(0, Math.floor((until - started - pauseMs) / 1000));
+  }
+  if (activity.status !== "LIVE") {
+    return Math.max(0, Math.floor((now - started - pauseMs) / 1000));
+  }
+  return Math.max(0, Math.floor((now - started - pauseMs) / 1000));
+}
+
 const EARTH_M = 6371000;
 
 export function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {

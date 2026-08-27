@@ -28,6 +28,7 @@ import { EmptyState, GreenButton, StudentPage } from "../../student/layout";
 import { bindFeedChrome, setFeedCreateMenuOpen, setFeedSearchOpen } from "../../student/feedChrome";
 import { brand } from "../../student/brand";
 import { formatClock, formatKm, formatPace } from "../../student/activity-geo";
+import { ActivityRouteMap } from "../../student/ActivityRouteMap";
 import { useStudent } from "../../student/StudentContext";
 import { useSt, type StudentTokens } from "../../student/theme";
 import type { FeedStackParamList } from "../../navigation/types";
@@ -303,10 +304,45 @@ const FeedPostCard = memo(function FeedPostCard({
       </View>
       {post.body && !isLiveCard ? <Text style={styles.body}>{post.body}</Text> : null}
       {post.activity ? (
-        <View style={styles.stats}>
-          <Text style={styles.stat}>{formatKm(post.activity.distanceMeters)} km</Text>
-          <Text style={styles.stat}>{formatClock(post.activity.elapsedSeconds)}</Text>
-          <Text style={styles.stat}>{formatPace(post.activity.avgPaceSecPerKm)} /km</Text>
+        <View style={styles.activityBlock}>
+          {post.activity.polyline?.length ? (
+            <ActivityRouteMap
+              points={post.activity.polyline}
+              height={168}
+              mapType={
+                post.activity.mapType === "satellite" || post.activity.mapType === "hybrid"
+                  ? post.activity.mapType
+                  : "standard"
+              }
+              is3d={Boolean(post.activity.is3d)}
+            />
+          ) : null}
+          <View style={styles.stats}>
+            <Text style={styles.stat} numberOfLines={1}>{formatKm(post.activity.distanceMeters)} km</Text>
+            <Text style={styles.stat} numberOfLines={1}>{formatClock(post.activity.elapsedSeconds)}</Text>
+            <Text style={styles.stat} numberOfLines={1}>
+              {post.activity.sport === "RIDE" && post.activity.avgSpeedMps
+                ? `${(post.activity.avgSpeedMps * 3.6).toFixed(1)} km/h`
+                : `${formatPace(post.activity.avgPaceSecPerKm)} /km`}
+            </Text>
+          </View>
+          <View style={styles.statsMuted}>
+            <Text style={styles.statMuted} numberOfLines={1}>{post.activity.calories ?? 0} kcal</Text>
+            <Text style={styles.statMuted} numberOfLines={1}>
+              ↑ {Math.round(post.activity.elevationGainMeters ?? 0)} m
+            </Text>
+            {post.activity.sport === "RIDE" && post.activity.estimatedPowerWatts != null ? (
+              <Text style={styles.statMuted}>{Math.round(post.activity.estimatedPowerWatts)} W</Text>
+            ) : post.activity.stepsCount ? (
+              <Text style={styles.statMuted}>{post.activity.stepsCount} passos</Text>
+            ) : post.activity.avgCadenceSpm != null ? (
+              <Text style={styles.statMuted}>{Math.round(post.activity.avgCadenceSpm)} spm</Text>
+            ) : (
+              <Text style={styles.statMuted}>
+                {formatPace(post.activity.avgPaceSecPerKm)} /km
+              </Text>
+            )}
+          </View>
         </View>
       ) : null}
       {isLiveCard && liveId ? (
@@ -1252,8 +1288,11 @@ function createStyles(st: StudentTokens) {
     },
     postMenuText: { color: st.text, fontWeight: "700", fontSize: 13 },
     body: { color: st.text, lineHeight: 20 },
-    stats: { flexDirection: "row", justifyContent: "space-between" },
-    stat: { color: st.text, fontWeight: "800" },
+    activityBlock: { gap: 8 },
+    stats: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
+    statsMuted: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    stat: { flex: 1, minWidth: 0, color: st.text, fontWeight: "800" },
+    statMuted: { color: st.muted, fontWeight: "700", fontSize: 12 },
     media: {
       width: "100%",
       aspectRatio: 4 / 5,
