@@ -2880,6 +2880,11 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       label: "Favoritos e avaliações",
       description: "Favoritos e notas de produtos/treinos (ativa os dois módulos juntos).",
       syncKeys: ["module_ratings", "module_favorites"]
+    },
+    {
+      key: "module_ai",
+      label: "Coach IA",
+      description: "Chat, voz, treino de todas as modalidades e dieta pelo biotipo."
     }
   ];
 

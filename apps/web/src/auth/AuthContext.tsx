@@ -153,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let cancelled = false;
-    let retryTimer: ReturnType<typeof window.setTimeout> | null = null;
+    let retryTimer: number | null = null;
     store.beginRestore();
 
     const finishRestore = (nextUser: AuthUser) => {

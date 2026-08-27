@@ -35,6 +35,7 @@ import {
   toggleFeedCreateMenu
 } from "./feedChrome";
 import { RunnerIcon } from "./RunnerIcon";
+import { StreakKindIcons } from "./StreakCalendar";
 import { moduleOn, studentCodeFromName, useSt, type StudentTokens } from "./theme";
 import { navigateStudentTarget } from "./navigate";
 import { uiSounds } from "./uiSounds";
@@ -135,7 +136,7 @@ export function StudentChrome({ play = false }: { play?: boolean }) {
   const navigation = useNavigation<ChromeNav>();
   const { st } = useSt();
   const styles = useMemo(() => createChromeStyles(st), [st]);
-  const { profile, cart, notifications, publicConfig, streak, session, refresh, requestQr, logout } = useStudent();
+  const { profile, cart, notifications, publicConfig, streak, streakDates, streakDayKinds, session, refresh, requestQr, logout } = useStudent();
   const [notesOpen, setNotesOpen] = useState(false);
   const [socialMenuOpen, setSocialMenuOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(getFeedCreateMenuOpen);
@@ -152,7 +153,6 @@ export function StudentChrome({ play = false }: { play?: boolean }) {
   const code = studentCodeFromName(profile?.name);
   const unread = notifications.filter((item) => !item.readAt).length;
   const showCart = moduleOn(publicConfig, "module_products") && (cart?.itemCount ?? 0) > 0;
-  const streakDates = useStudent().streakDates;
   // StudentChrome lives inside a stack screen; tab route is on a parent navigator.
   const feedFlagsKey = useNavigationState((state) => {
     void state;
@@ -563,9 +563,11 @@ export function StudentChrome({ play = false }: { play?: boolean }) {
               {Array.from({ length: daysInMonth }).map((_, index) => {
                 const day = index + 1;
                 const key = `${monthPrefix}${String(day).padStart(2, "0")}`;
-                const done = completed.has(key);
+                const kinds = streakDayKinds[key] ?? [];
+                const done = kinds.length > 0 || completed.has(key);
                 return (
                   <View key={key} style={[styles.calCell, done && styles.calDone]}>
+                    {done ? <StreakKindIcons kinds={kinds.length ? kinds : ["WORKOUT"]} gender={profile?.gender} size={10} /> : null}
                     <Text style={[styles.calDay, done && styles.calDayDone]}>{day}</Text>
                   </View>
                 );

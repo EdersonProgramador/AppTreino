@@ -9,6 +9,8 @@ import { FALLBACK_WORKOUT_MODALITY, openTrainingProgram } from "./navigate";
 import { useStudent } from "./StudentContext";
 import { moduleOn, useSt, type StudentTokens } from "./theme";
 import { uiSounds } from "./uiSounds";
+import { WeatherChip } from "./WeatherChip";
+import { fetchWeatherHere, type WeatherSnapshot } from "./weather";
 import type { StudentTabParamList, TrainingStackParamList } from "../navigation/types";
 
 type TrainingNav = CompositeNavigationProp<
@@ -22,6 +24,7 @@ export function TodayWorkoutHero() {
   const styles = useMemo(() => createHeroStyles(st), [st]);
   const navigation = useNavigation<TrainingNav>();
   const [showQr, setShowQr] = useState(false);
+  const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
   const today = programs[0];
   const done = consistency?.completedWorkoutCount ?? today?.completedWorkouts ?? 0;
   const total = consistency?.totalWorkoutDays ?? today?.totalWorkouts ?? today?.totalDays ?? 0;
@@ -32,8 +35,13 @@ export function TodayWorkoutHero() {
   );
   const exercises = today?.block.exercises ?? [];
   const qrEnabled = moduleOn(publicConfig, "module_qr") && publicConfig["qr_checkin_enabled"] !== "false";
+  const aiEnabled = moduleOn(publicConfig, "module_ai");
   const qrUrl = publicConfig["qr_checkin_url"] || "https://edersonprogramador.com/checkin";
   const qrImage = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrUrl)}`;
+
+  useEffect(() => {
+    void fetchWeatherHere("WORKOUT").then(setWeather).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!qrRequested) return;
@@ -73,6 +81,7 @@ export function TodayWorkoutHero() {
           ) : null}
         </View>
       ) : null}
+      {weather ? <WeatherChip weather={weather} sport="WORKOUT" /> : null}
       <View style={styles.actions}>
         {today ? (
           <>
@@ -102,6 +111,16 @@ export function TodayWorkoutHero() {
           </>
         ) : null}
       </View>
+      {aiEnabled ? (
+        <OutlineButton
+          icon="sparkles-outline"
+          label="Coach IA"
+          onPress={() => {
+            uiSounds.itemSelect();
+            navigation.navigate("MenuTab", { screen: "Ai" });
+          }}
+        />
+      ) : null}
       {qrEnabled ? (
         <OutlineButton
           icon="qr-code-outline"

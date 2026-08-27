@@ -122,6 +122,7 @@ export type StudentProfile = {
   avatarUrl?: string | null;
   bio?: string | null;
   coverColor?: string | null;
+  coverUrl?: string | null;
   isPrivate?: boolean;
   createdAt?: string | null;
   locationId?: string | null;
@@ -375,8 +376,18 @@ export type AiWorkoutPlan = {
     days?: Array<{
       title: string;
       focus: string;
+      modality?: string;
       exercises: Array<{ name: string; sets: number; reps: string; restSeconds?: number }>;
     }>;
+    diet?: {
+      biotype: string;
+      kcal: number;
+      proteinG: number;
+      carbsG: number;
+      fatG: number;
+      strategy: string;
+      meals: Array<{ name: string; items: string[] }>;
+    };
   };
 };
 

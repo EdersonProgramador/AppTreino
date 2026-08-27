@@ -13,6 +13,7 @@ const rows = await prisma.systemSetting.findMany({
         "module_contact",
         "module_ratings",
         "module_favorites",
+        "module_ai",
         "qr_checkin_enabled"
       ]
     }

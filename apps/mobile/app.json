@@ -17,6 +17,9 @@
       "bundleIdentifier": "com.edersonprogramador.apptreino",
       "infoPlist": {
         "UIBackgroundModes": ["audio", "location"],
+        "NSMotionUsageDescription": "O Apptreino usa movimento e passos para gravar caminhada, corrida e a ofensiva.",
+        "NSHealthShareUsageDescription": "O Apptreino deseja acessar seus dados de saúde: batimento, distância a pé e correndo, ciclismo, energia ativa, exercícios, passos e rotas.",
+        "NSHealthUpdateUsageDescription": "O Apptreino deseja atualizar seus dados de saúde: batimento, distância a pé e correndo, ciclismo, energia ativa, exercícios e passos.",
         "NSLocationWhenInUseUsageDescription": "Permitir a localização para gravar corrida, caminhada e ciclismo.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Permitir localização em segundo plano para gravar a atividade com o app minimizado.",
         "NSLocationAlwaysUsageDescription": "Permitir localização em segundo plano para gravar a atividade com o app minimizado.",
@@ -38,6 +41,14 @@
         "backgroundColor": "#08090b"
       },
       "permissions": [
+        "ACTIVITY_RECOGNITION",
+        "BODY_SENSORS",
+        "HIGH_SAMPLING_RATE_SENSORS",
+        "android.permission.health.READ_HEART_RATE",
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_DISTANCE",
+        "android.permission.health.READ_EXERCISE",
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",

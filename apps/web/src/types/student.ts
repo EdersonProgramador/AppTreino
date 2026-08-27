@@ -187,6 +187,8 @@ export interface WorkoutSessionResponse {
   };
 }
 
+export type ConsistencySportKind = "WORKOUT" | "RUN" | "WALK" | "RIDE";
+
 export interface WorkoutConsistencyResponse {
   year: number;
   month: number;
@@ -201,6 +203,9 @@ export interface WorkoutConsistencyResponse {
     finishedAt: string | null;
     durationSeconds: number | null;
   }>;
+  dayKinds?: Record<string, ConsistencySportKind[]>;
+  sportTotals?: Record<ConsistencySportKind, { count: number; km: number; minutes: number; calories?: number }>;
+  weeklyVolume?: Array<{ weekStart: string; workouts: number; outdoorKm: number; minutes: number }>;
 }
 
 export type OutdoorSport = "RUN" | "WALK" | "RIDE";

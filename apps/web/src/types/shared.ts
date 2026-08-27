@@ -171,6 +171,15 @@ export interface AiWorkoutPlanRow {
       }>;
     }>;
     recommendations: string[];
+    diet?: {
+      biotype: string;
+      kcal: number;
+      proteinG: number;
+      carbsG: number;
+      fatG: number;
+      strategy: string;
+      meals: Array<{ name: string; items: string[] }>;
+    };
   };
   createdAt: string;
   user: AdminUser;

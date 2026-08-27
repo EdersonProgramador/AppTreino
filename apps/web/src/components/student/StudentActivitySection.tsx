@@ -24,6 +24,8 @@ import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPost, apiUpload } from "../../api";
 import { paths } from "../../auth/session";
+import { fetchWeather, fetchWeatherHere, adviceForSport, type WeatherSnapshot } from "../../lib/weather";
+import { StudentWeatherChip } from "./StudentWeatherChip";
 import {
   estimateCalories,
   formatClock,
@@ -247,6 +249,8 @@ export function StudentActivitySection({
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
+  const weatherRef = useRef<WeatherSnapshot | null>(null);
 
   const sessionActive = Boolean(
     !sessionClosed && activity && (activity.status === "LIVE" || activity.status === "PAUSED")
@@ -294,6 +298,14 @@ export function StudentActivitySection({
     if (sport !== preferredSport) setSport(preferredSport);
     locate(true);
   }, [preferredSportKey, preferredSport]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    void fetchWeatherHere(sport).then((snap) => {
+      if (!snap) return;
+      weatherRef.current = snap;
+      setWeather(snap);
+    });
+  }, [sport]);
 
   function currentGoals() {
     const parsedSpeed = Number(targetSpeed.replace(",", "."));
@@ -480,6 +492,11 @@ export function StudentActivitySection({
         const fix = fixFromGeolocation(pos);
         postToMap({ type: "setLive", lat: fix.lat, lng: fix.lng, follow: followMapRef.current });
         if (follow) postToMap({ type: "setView", lat: fix.lat, lng: fix.lng, zoom: 17 });
+        void fetchWeather(fix.lat, fix.lng, sportRef.current).then((snap) => {
+          if (!snap) return;
+          weatherRef.current = snap;
+          setWeather(snap);
+        });
         void apiGet<{
           segments: Array<{ id: string; name: string; distanceMeters: number; sport: string }>;
         }>(
@@ -884,7 +901,19 @@ export function StudentActivitySection({
         is3d,
         points: route,
         goals: currentGoals(),
-        publish
+        publish,
+        trackingMeta: weatherRef.current
+          ? {
+              weather: {
+                tempC: weatherRef.current.tempC,
+                code: weatherRef.current.code,
+                label: weatherRef.current.label,
+                windKmh: weatherRef.current.windKmh,
+                humidity: weatherRef.current.humidity,
+                capturedAt: weatherRef.current.capturedAt
+              }
+            }
+          : undefined
       }),
       token
     );
@@ -1126,6 +1155,11 @@ export function StudentActivitySection({
           src={ACTIVITY_MAP_SRC}
           onLoad={() => pushMapsConfig()}
         />
+        {weather ? (
+          <div className="student-activity-weather">
+            <StudentWeatherChip weather={weather} sport={sport} compact />
+          </div>
+        ) : null}
         {pickingLapStart && (
           <div className="student-activity-pick-banner">
             <Flag size={16} />
@@ -1166,6 +1200,11 @@ export function StudentActivitySection({
         <button type="button" className="student-activity-sport" onClick={() => setLayersOpen(true)}>
           {sportMeta.label} <ChevronDown size={16} />
         </button>
+        {weather ? (
+          <p className="student-activity-weather-line">
+            {weather.tempC}° · {weather.label} · {adviceForSport(sport, weather)}
+          </p>
+        ) : null}
         <div className="student-activity-stats">
           <div>
             <small>Tempo</small>

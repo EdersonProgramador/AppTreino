@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Alert, Image, Modal, Pressable, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -17,28 +17,15 @@ import { studentLocationLabel } from "../../student/commerce";
 import { trainingCopy } from "../../student/copy";
 import { BackChip, EmptyState, GreenButton, OutlineButton, SheetHeading, StudentPage } from "../../student/layout";
 import { useMenuStyles } from "../../student/menuStyles";
+import { StreakCalendar } from "../../student/StreakCalendar";
 import { useStudent } from "../../student/StudentContext";
 import { useSt } from "../../student/theme";
 import { uiSounds } from "../../student/uiSounds";
 import { formatDate, formatDateTime } from "../../theme";
 import type { PhysicalAssessmentForm } from "../../types";
 
-const WEEKDAYS = ["D", "S", "T", "Q", "Q", "S", "S"];
-
 function monthLabel(year: number, month: number) {
   return new Date(year, month - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-}
-
-function calendarCells(year: number, month: number) {
-  const first = new Date(year, month - 1, 1);
-  const startPad = first.getDay();
-  const days = new Date(year, month, 0).getDate();
-  const cells: Array<{ day?: number; isoDate?: string }> = Array.from({ length: startPad }, () => ({}));
-  for (let day = 1; day <= days; day += 1) {
-    const isoDate = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    cells.push({ day, isoDate });
-  }
-  return cells;
 }
 
 export function AssessmentsScreen() {
@@ -451,20 +438,12 @@ export function AssessmentsScreen() {
 }
 
 export function StatusScreen() {
-  const { attendance, consistency, streak } = useStudent();
+  const { attendance, consistency, streak, streakDayKinds, profile } = useStudent();
   const navigation = useNavigation();
-  const { st } = useSt();
   const styles = useMenuStyles();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const year = now.getFullYear();
-  const completed = useMemo(
-    () => new Set((consistency?.completedDates ?? consistency?.historyDates ?? []).map((item) => item.slice(0, 10))),
-    [consistency]
-  );
-  const cells = calendarCells(year, month);
-  const doneThisMonth = cells.filter((cell) => cell.isoDate && completed.has(cell.isoDate)).length;
-  const todayIso = now.toISOString().slice(0, 10);
   const attendanceThisMonth = attendance.filter((item) => {
     const date = new Date(item.date);
     return date.getMonth() + 1 === now.getMonth() + 1 && date.getFullYear() === now.getFullYear();
@@ -495,40 +474,18 @@ export function StatusScreen() {
         </View>
       </View>
       <View style={styles.card}>
-        <View style={styles.row}>
-          <Pressable disabled={month <= 1} onPress={() => setMonth((value) => Math.max(1, value - 1))}>
-            <Ionicons name="chevron-back" size={20} color={month <= 1 ? st.faint : st.text} />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.faint}>Treinos concluídos</Text>
-            <Text style={styles.title}>{monthLabel(year, month)}</Text>
-          </View>
-          <Pressable disabled={month >= now.getMonth() + 1} onPress={() => setMonth((value) => Math.min(now.getMonth() + 1, value + 1))}>
-            <Ionicons name="chevron-forward" size={20} color={month >= now.getMonth() + 1 ? st.faint : st.text} />
-          </Pressable>
-          <Text style={styles.faint}>{doneThisMonth} treino(s) no mês</Text>
-        </View>
-        <View style={styles.calendarGrid}>
-          {WEEKDAYS.map((day, index) => (
-            <View key={`${day}-${index}`} style={styles.calendarCell}>
-              <Text style={styles.faint}>{day}</Text>
-            </View>
-          ))}
-          {cells.map((cell, index) => {
-            const done = Boolean(cell.isoDate && completed.has(cell.isoDate));
-            const today = cell.isoDate === todayIso;
-            return (
-              <View key={`${cell.isoDate ?? "empty"}-${index}`} style={styles.calendarCell}>
-                {cell.day ? (
-                  <View style={[done && styles.calendarDone, today && styles.calendarToday]}>
-                    <Text style={[styles.calendarDay, done && { color: "#fff" }]}>{cell.day}</Text>
-                  </View>
-                ) : null}
-              </View>
-            );
-          })}
-        </View>
-        <Text style={styles.muted}>Dias marcados representam treinos concluídos. O calendário mostra o mês atual e meses anteriores.</Text>
+        <StreakCalendar
+          year={year}
+          month={month}
+          dayKinds={streakDayKinds}
+          monthLabel={monthLabel(year, month)}
+          gender={profile?.gender}
+          canPrev={month > 1}
+          canNext={month < now.getMonth() + 1}
+          onPrev={() => setMonth((value) => Math.max(1, value - 1))}
+          onNext={() => setMonth((value) => Math.min(now.getMonth() + 1, value + 1))}
+          caption="Dias marcados com o ícone da modalidade concluída: treino, corrida, caminhada ou pedal."
+        />
       </View>
       <SheetHeading kicker="Acessos" title="Registros de acesso" />
       {attendance.length === 0 ? (

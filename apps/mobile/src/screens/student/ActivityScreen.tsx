@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -24,6 +24,10 @@ import { RunnerIcon } from "../../student/RunnerIcon";
 import { useStudent } from "../../student/StudentContext";
 import { useSt, type StudentTokens } from "../../student/theme";
 import { OutdoorShareCard } from "../../student/OutdoorShareCard";
+import { WeatherChip } from "../../student/WeatherChip";
+import { fetchWeather, type WeatherSnapshot } from "../../student/weather";
+import { hasHealthAccess, hydrateHealthGrants, markHealthPrompted, wasHealthPrompted } from "../../student/healthPermissions";
+import { isMapCompassEnabled, setMapCompassEnabled, subscribeMapCompass } from "../../student/prefs";
 import {
   TrackingMap,
   liveMapStore,
@@ -89,7 +93,7 @@ function compactRecord<T extends Record<string, unknown>>(value: T) {
 }
 
 export function ActivityScreen() {
-  const { session, profile } = useStudent();
+  const { session, profile, refresh } = useStudent();
   const { st } = useSt();
   const styles = useMemo(() => createStyles(st), [st]);
   const navigation = useNavigation<BottomTabNavigationProp<StudentTabParamList>>();
@@ -115,6 +119,7 @@ export function ActivityScreen() {
   const [activityMap, setActivityMap] = useState<ActivityMap>("personal");
   const [layers, setLayers] = useState({ pois: true, bikeLanes: false, avalanche: false, slope: false, aspect: false });
   const [is3d, setIs3d] = useState(false);
+  const [compassOn, setCompassOn] = useState(isMapCompassEnabled);
   const [sheet, setSheet] = useState<"layers" | "finish" | "goals" | null>(null);
   const [activity, setActivity] = useState<OutdoorActivityRow | null>(null);
   const [points, setPoints] = useState<GpsPoint[]>([]);
@@ -131,6 +136,8 @@ export function ActivityScreen() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
+  const weatherRef = useRef<WeatherSnapshot | null>(null);
   const [finishing, setFinishing] = useState(false);
   const [finishSplits, setFinishSplits] = useState<Array<{
     km: number;
@@ -249,6 +256,23 @@ export function ActivityScreen() {
       void (async () => {
         const fix = await locate();
         if (fix) liveMapStore.centerOn(fix.lat, fix.lng, fix.t);
+        await hydrateHealthGrants();
+        if (!(await wasHealthPrompted()) && !hasHealthAccess()) {
+          Alert.alert(
+            "O Apptreino deseja acessar e atualizar seus dados de saúde.",
+            "Para monitorar a FC com o seu relógio, precisamos de permissão para acessar o sensor de frequência cardíaca.",
+            [
+              { text: "Agora não", style: "cancel", onPress: () => void markHealthPrompted() },
+              {
+                text: "Permitir",
+                onPress: () => {
+                  void markHealthPrompted();
+                  navigation.navigate("MenuTab", { screen: "HealthPermissions" });
+                }
+              }
+            ]
+          );
+        }
       })();
     }, [activity?.status, sessionClosed])
   );
@@ -268,6 +292,8 @@ export function ActivityScreen() {
       laps: lapCounterOn ? laps : []
     };
   }
+
+  useEffect(() => subscribeMapCompass(setCompassOn), []);
 
   useEffect(() => {
     const gen = ++liveHydrateGen.current;
@@ -433,6 +459,12 @@ export function ActivityScreen() {
         return null;
       }
       liveMapStore.centerOn(fix.lat, fix.lng, fix.t);
+      void fetchWeather(fix.lat, fix.lng, sport)
+        .then((snap) => {
+          weatherRef.current = snap;
+          setWeather(snap);
+        })
+        .catch(() => undefined);
       void apiGet<{
         segments: Array<{ id: string; name: string; distanceMeters: number; sport: string }>;
       }>(
@@ -954,7 +986,17 @@ export function ActivityScreen() {
           avgCadenceSpm:
             typeof track.avgCadenceSpm === "number" && Number.isFinite(track.avgCadenceSpm)
               ? track.avgCadenceSpm
-              : undefined
+              : undefined,
+          weather: weatherRef.current
+            ? {
+                tempC: weatherRef.current.tempC,
+                code: weatherRef.current.code,
+                label: weatherRef.current.label,
+                windKmh: weatherRef.current.windKmh,
+                humidity: weatherRef.current.humidity,
+                capturedAt: weatherRef.current.capturedAt
+              }
+            : undefined
         })
       : undefined;
     const finishBody = compactRecord({
@@ -1053,6 +1095,7 @@ export function ActivityScreen() {
       session.token
     );
     void outboxSync.flush(session.token);
+    void refresh();
     if (result.moderation?.message) {
       setError(result.moderation.message);
     }
@@ -1308,6 +1351,7 @@ export function ActivityScreen() {
             lapMarker={lapMarker}
             mapType={nativeMapType(mapType)}
             is3d={is3d}
+            compassEnabled={compassOn}
             onMapPress={(coord) => {
               if (!pickingLapStart) return;
               const marker = { lat: coord.lat, lng: coord.lng, radiusMeters: LAP_RADIUS_M };
@@ -1317,6 +1361,26 @@ export function ActivityScreen() {
               lapAwayRef.current = false;
             }}
           />
+          {weather ? (
+            <View style={styles.weatherChip} pointerEvents="box-none">
+              <WeatherChip weather={weather} sport={sport} compact />
+            </View>
+          ) : null}
+          {pickingLapStart ? null : (
+            <Pressable
+              onPress={() => {
+                const next = !compassOn;
+                setMapCompassEnabled(next);
+                setCompassOn(next);
+              }}
+              style={[styles.compassBtn, compassOn && styles.compassBtnOn]}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: compassOn }}
+              accessibilityLabel={compassOn ? "Desativar bússola e rotação do mapa" : "Ativar bússola e rotação do mapa"}
+            >
+              <Ionicons name="compass-outline" size={18} color={compassOn ? "#fff" : "#f5f0e8"} />
+            </Pressable>
+          )}
           {pickingLapStart ? (
             <View style={styles.pickBanner}>
               <Text style={styles.pickBannerText}>Toque no mapa para marcar o ponto de partida da volta</Text>
@@ -1356,6 +1420,11 @@ export function ActivityScreen() {
         ) : null}
         <View style={styles.card}>
           <Text style={styles.sport}>{SPORTS.find((item) => item.id === sport)?.label}</Text>
+          {weather ? (
+            <Text style={styles.weatherLine}>
+              {weather.tempC}° · {weather.label} · {weather.advice}
+            </Text>
+          ) : null}
           <View style={styles.stats}>
             <View style={styles.stat}>
               <Text style={styles.statLabel} numberOfLines={1}>Tempo</Text>
@@ -1539,8 +1608,22 @@ export function ActivityScreen() {
               </Text>
             </Pressable>
           ))}
-          <Pressable style={styles.chip} onPress={() => setIs3d((value) => !value)}>
+          <Pressable style={[styles.chip, is3d && styles.chipOn]} onPress={() => setIs3d((value) => !value)}>
             <Text style={styles.chipText}>{is3d ? "3D ligado" : "Abrir mapa 3D"}</Text>
+          </Pressable>
+          <Text style={styles.sheetTitle}>Bússola</Text>
+          <Text style={styles.meta}>
+            Magnetômetro e giroscópio giram o mapa na direção que você aponta. Desligue para manter o norte fixo.
+          </Text>
+          <Pressable
+            style={[styles.chip, compassOn && styles.chipOn]}
+            onPress={() => {
+              const next = !compassOn;
+              setMapCompassEnabled(next);
+              setCompassOn(next);
+            }}
+          >
+            <Text style={styles.chipText}>{compassOn ? "Bússola e rotação ligadas" : "Bússola e rotação desligadas"}</Text>
           </Pressable>
         </View>
       </Modal>
@@ -1762,6 +1845,21 @@ function createStyles(st: StudentTokens) {
       gap: 10
     },
     sport: { fontWeight: "800", color: "#15100b" },
+    weatherLine: { color: "#605a52", fontSize: 12, fontWeight: "600" },
+    weatherChip: { position: "absolute", top: 10, left: 12, zIndex: 5 },
+    compassBtn: {
+      position: "absolute",
+      top: 10,
+      right: 12,
+      zIndex: 5,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: "rgba(12,14,18,0.78)",
+      alignItems: "center",
+      justifyContent: "center"
+    },
+    compassBtnOn: { backgroundColor: "#df663c" },
     stats: { flexDirection: "row", gap: 4 },
     stat: { flex: 1, minWidth: 0, alignItems: "center", paddingHorizontal: 2 },
     statLabel: { color: "#605a52", fontSize: 11, fontWeight: "700", textAlign: "center" },

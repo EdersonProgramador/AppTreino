@@ -131,7 +131,18 @@ const finishBodySchema = z.object({
       stepsCount: z.number().min(0).optional(),
       avgCadenceSpm: z.number().min(0).nullable().optional(),
       avgHeartRateBpm: z.number().min(30).max(250).nullable().optional(),
-      maxHeartRateBpm: z.number().min(30).max(250).nullable().optional()
+      maxHeartRateBpm: z.number().min(30).max(250).nullable().optional(),
+      weather: z
+        .object({
+          tempC: z.number(),
+          code: z.number().optional(),
+          label: z.string().optional(),
+          windKmh: z.number().optional(),
+          humidity: z.number().optional(),
+          capturedAt: z.string().optional()
+        })
+        .passthrough()
+        .optional()
     })
     .passthrough()
     .optional()

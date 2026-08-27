@@ -171,7 +171,8 @@ export async function registerPublicRoutes(app: FastifyInstance) {
       "module_cards",
       "module_favorites",
       "module_ratings",
-      "module_contact"
+      "module_contact",
+      "module_ai"
     ];
 
     const records = await prisma.systemSetting.findMany({

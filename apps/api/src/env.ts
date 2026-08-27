@@ -43,7 +43,10 @@ const envSchema = z.object({
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET_NAME: z.string().optional(),
-  R2_PUBLIC_URL: z.string().url().optional()
+  R2_PUBLIC_URL: z.string().url().optional(),
+  OPENAI_API_KEY: z.preprocess((value) => (value === "" ? undefined : value), z.string().optional()),
+  OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
+  OPENAI_MODEL: z.string().default("gpt-4o-mini")
 });
 
 export const env = envSchema.parse(process.env);

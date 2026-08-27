@@ -40,6 +40,7 @@ export type MenuStackParamList = {
   Settings: undefined;
   Qr: undefined;
   Ai: undefined;
+  HealthPermissions: undefined;
 };
 
 export type StudentTabParamList = {

@@ -18,6 +18,7 @@ import {
 import { createAsaasCheckout, purchaseExternalReference, type AsaasBillingType } from "./asaas.client.js";
 import { asaasCheckoutItemName } from "./checkout.utils.js";
 import { ensureProgramCycleRecorded, recordProgramCycleCompletion } from "./program-completion.utils.js";
+import { attachCoachRoutes } from "./coach.routes.js";
 
 const substituteSchema = z.object({
   exerciseId: z.string().min(1)
@@ -1342,7 +1343,7 @@ export async function registerStudentRoutes(app: FastifyInstance) {
     const endsAt = new Date(Date.UTC(year, month, 1));
     const historyStartsAt = new Date(Date.UTC(year - 1, month - 1, 1));
 
-    const [sessions, historySessions, userPrograms] = await Promise.all([
+    const [sessions, historySessions, outdoorHistory, userPrograms] = await Promise.all([
       prisma.workoutSession.findMany({
         where: {
           userId: authUser.id,
@@ -1366,7 +1367,28 @@ export async function registerStudentRoutes(app: FastifyInstance) {
           }
         },
         select: {
-          finishedAt: true
+          finishedAt: true,
+          durationSeconds: true
+        },
+        orderBy: {
+          finishedAt: "asc"
+        }
+      }),
+      prisma.outdoorActivity.findMany({
+        where: {
+          userId: authUser.id,
+          status: "COMPLETED",
+          finishedAt: {
+            gte: historyStartsAt,
+            lt: endsAt
+          }
+        },
+        select: {
+          sport: true,
+          finishedAt: true,
+          distanceMeters: true,
+          elapsedSeconds: true,
+          calories: true
         },
         orderBy: {
           finishedAt: "asc"
@@ -1394,23 +1416,89 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       })
     ]);
 
+    const isoDay = (value: Date | null) => (value ? value.toISOString().slice(0, 10) : null);
+    const dayKinds = new Map<string, Set<"WORKOUT" | "RUN" | "WALK" | "RIDE">>();
+    function markDay(date: string | null, kind: "WORKOUT" | "RUN" | "WALK" | "RIDE") {
+      if (!date) return;
+      const set = dayKinds.get(date) ?? new Set();
+      set.add(kind);
+      dayKinds.set(date, set);
+    }
+
     const completedDateSet = new Set<string>();
     sessions.forEach((session) => {
-      if (session.finishedAt) {
-        completedDateSet.add(session.finishedAt.toISOString().slice(0, 10));
+      const day = isoDay(session.finishedAt);
+      if (day) {
+        completedDateSet.add(day);
+        markDay(day, "WORKOUT");
       }
     });
     const historyDateSet = new Set<string>();
     historySessions.forEach((session) => {
-      if (session.finishedAt) {
-        historyDateSet.add(session.finishedAt.toISOString().slice(0, 10));
+      const day = isoDay(session.finishedAt);
+      if (day) {
+        historyDateSet.add(day);
+        markDay(day, "WORKOUT");
       }
     });
+    outdoorHistory.forEach((activity) => {
+      const day = isoDay(activity.finishedAt);
+      if (!day) return;
+      historyDateSet.add(day);
+      if (activity.finishedAt && activity.finishedAt >= startsAt && activity.finishedAt < endsAt) {
+        completedDateSet.add(day);
+      }
+      markDay(day, activity.sport);
+    });
+
     const totalWorkoutDays = userPrograms.reduce((total, assignment) => total + assignment.totalWorkouts, 0);
     const completedWorkoutCount = userPrograms.reduce(
       (total, assignment) => total + Math.min(assignment.completedWorkouts, assignment.totalWorkouts),
       0
     );
+
+    const sportTotals = {
+      WORKOUT: { count: historySessions.length, km: 0, minutes: 0, calories: 0 },
+      RUN: { count: 0, km: 0, minutes: 0, calories: 0 },
+      WALK: { count: 0, km: 0, minutes: 0, calories: 0 },
+      RIDE: { count: 0, km: 0, minutes: 0, calories: 0 }
+    };
+    historySessions.forEach((session) => {
+      sportTotals.WORKOUT.minutes += Math.round((session.durationSeconds ?? 0) / 60);
+    });
+    outdoorHistory.forEach((activity) => {
+      const bucket = sportTotals[activity.sport];
+      bucket.count += 1;
+      bucket.km += activity.distanceMeters / 1000;
+      bucket.minutes += Math.round(activity.elapsedSeconds / 60);
+      bucket.calories += activity.calories;
+    });
+
+    const weekMap = new Map<string, { workouts: number; outdoorKm: number; minutes: number }>();
+    function weekStart(iso: string) {
+      const date = new Date(`${iso}T00:00:00.000Z`);
+      const weekday = date.getUTCDay();
+      date.setUTCDate(date.getUTCDate() - weekday);
+      return date.toISOString().slice(0, 10);
+    }
+    historySessions.forEach((session) => {
+      const day = isoDay(session.finishedAt);
+      if (!day) return;
+      const key = weekStart(day);
+      const row = weekMap.get(key) ?? { workouts: 0, outdoorKm: 0, minutes: 0 };
+      row.workouts += 1;
+      row.minutes += Math.round((session.durationSeconds ?? 0) / 60);
+      weekMap.set(key, row);
+    });
+    outdoorHistory.forEach((activity) => {
+      const day = isoDay(activity.finishedAt);
+      if (!day) return;
+      const key = weekStart(day);
+      const row = weekMap.get(key) ?? { workouts: 0, outdoorKm: 0, minutes: 0 };
+      row.outdoorKm += activity.distanceMeters / 1000;
+      row.minutes += Math.round(activity.elapsedSeconds / 60);
+      weekMap.set(key, row);
+    });
 
     return {
       year,
@@ -1419,6 +1507,26 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       totalWorkoutDays,
       completedDates: Array.from(completedDateSet).sort(),
       historyDates: Array.from(historyDateSet).sort(),
+      dayKinds: Object.fromEntries(
+        [...dayKinds.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, kinds]) => [date, [...kinds]])
+      ),
+      sportTotals: {
+        WORKOUT: sportTotals.WORKOUT,
+        RUN: { ...sportTotals.RUN, km: Number(sportTotals.RUN.km.toFixed(2)) },
+        WALK: { ...sportTotals.WALK, km: Number(sportTotals.WALK.km.toFixed(2)) },
+        RIDE: { ...sportTotals.RIDE, km: Number(sportTotals.RIDE.km.toFixed(2)) }
+      },
+      weeklyVolume: [...weekMap.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .slice(-12)
+        .map(([weekStartDate, row]) => ({
+          weekStart: weekStartDate,
+          workouts: row.workouts,
+          outdoorKm: Number(row.outdoorKm.toFixed(2)),
+          minutes: row.minutes
+        })),
       sessions: sessions.map((session) => ({
         id: session.id,
         dayNumber: session.dayNumber,
@@ -2105,4 +2213,6 @@ export async function registerStudentRoutes(app: FastifyInstance) {
 
     return { locations };
   });
+
+  attachCoachRoutes(app, "/student/coach");
 }

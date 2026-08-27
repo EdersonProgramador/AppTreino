@@ -12,6 +12,10 @@ import { persistUploadedFile } from "../upload-persist.js";
 import { autoCloseStaleTickets, ticketInclude } from "./ticket.utils.js";
 import { calculateBodyFatEstimate, physicalAssessmentFormSchema } from "./physical-assessment.utils.js";
 import { validActiveMembershipWhere } from "./membership.utils.js";
+import { assertModuleEnabled } from "./commerce.utils.js";
+import { loadCoachContext } from "./coach/context.js";
+import { buildWorkoutPlan } from "./coach/engine.js";
+import { attachCoachRoutes } from "./coach.routes.js";
 
 const eventRegistrationSchema = z.object({
   eventId: z.string().min(1)
@@ -203,51 +207,6 @@ async function getCurrentUserMembership(userId: string) {
     },
     orderBy: [{ startsAt: "desc" }, { createdAt: "desc" }]
   });
-}
-
-function buildAiWorkoutPlan(input: {
-  objective: string;
-  level: string;
-  daysPerWeek: number;
-  focus?: string;
-}) {
-  const split =
-    input.daysPerWeek >= 5
-      ? ["Push", "Pull", "Pernas", "Upper", "Lower", "Mobilidade"]
-      : input.daysPerWeek === 4
-        ? ["Upper A", "Lower A", "Upper B", "Lower B"]
-        : ["Full body A", "Full body B", "Condicionamento"];
-  const level = input.level.toLowerCase();
-  const sets = level.includes("avanc") ? 4 : level.includes("inter") ? 3 : 2;
-  const restSeconds = level.includes("avanc") ? 90 : 60;
-  const focus = input.focus || input.objective;
-  const exerciseMap = [
-    ["Agachamento", "Supino reto", "Remada curvada", "Prancha"],
-    ["Levantamento terra romeno", "Desenvolvimento", "Puxada alta", "Panturrilha"],
-    ["Leg press", "Flexao de bracos", "Remada baixa", "Abdominal dead bug"],
-    ["Avanão", "Crucifixo", "Face pull", "Farmer walk"],
-    ["Cadeira extensora", "Mesa flexora", "Elevação lateral", "Cardio intervalado"],
-    ["Mobilidade de quadril", "Mobilidade toracica", "Core anti-rotacao", "Caminhada inclinada"]
-  ];
-
-  return {
-    summary: `Plano ${input.daysPerWeek}x por semana para ${input.objective}, com foco em ${focus}.`,
-    recommendations: [
-      "Registrar carga e repetições a cada sessão.",
-      "Manter 1 a 2 repetições em reserva nos exercícios principais.",
-      "Reavaliar medidas e desempenho em 30 dias."
-    ],
-    days: split.slice(0, input.daysPerWeek).map((title, index) => ({
-      title,
-      focus,
-      exercises: exerciseMap[index % exerciseMap.length].map((name, exerciseIndex) => ({
-        name,
-        sets,
-        reps: exerciseIndex === 3 ? "30-45s" : level.includes("avanc") ? "6-10" : "10-12",
-        restSeconds
-      }))
-    }))
-  };
 }
 
 export async function registerUserRoutes(app: FastifyInstance) {
@@ -937,8 +896,16 @@ export async function registerUserRoutes(app: FastifyInstance) {
   app.post("/user/ai-workout-plans", async (request, reply) => {
     requireDatabase();
     const user = await requireAuth(app, request);
+    await assertModuleEnabled("module_ai", "Coach IA desativado.");
     const body = aiWorkoutRequestSchema.parse(request.body);
-    const generatedPlan = buildAiWorkoutPlan(body);
+    const ctx = await loadCoachContext(user.id, { focus: body.focus });
+    const generatedPlan = buildWorkoutPlan({
+      ...ctx,
+      objective: body.objective,
+      level: body.level,
+      daysPerWeek: body.daysPerWeek,
+      focus: body.focus
+    });
     const plan = await prisma.aiWorkoutPlan.create({
       data: {
         userId: user.id,
@@ -952,4 +919,6 @@ export async function registerUserRoutes(app: FastifyInstance) {
 
     return reply.code(201).send({ plan });
   });
+
+  attachCoachRoutes(app, "/user/coach");
 }

@@ -1,5 +1,5 @@
 import { ChevronLeft, MessageCircle, Pencil, Send, Settings, Share2, ThumbsUp, UserRound, X } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { brand } from "../../lib/brand";
@@ -37,6 +37,7 @@ type Props = {
   athleteSocial: AthleteSocial | null;
   onOpenSettings: () => void;
   onProfileUpdated: (profile: StudentProfile) => void;
+  children?: ReactNode;
 };
 
 function handleFromName(name: string) {
@@ -141,7 +142,8 @@ export function StudentAthleteProfileSection({
   profile,
   athleteSocial,
   onOpenSettings,
-  onProfileUpdated
+  onProfileUpdated,
+  children
 }: Props) {
   const [posts, setPosts] = useState<SocialPostRow[]>([]);
   const [busy, setBusy] = useState(false);
@@ -488,8 +490,10 @@ export function StudentAthleteProfileSection({
         </div>
       </header>
 
+      {children}
+
       <div className="student-athlete-posts">
-        <h2>Minhas publicações ({posts.length})</h2>
+        <h2>Minhas publicações ({athleteSocial?.postsCount ?? posts.length})</h2>
         {posts.length === 0 ? (
           <article className="student-athlete-posts-empty">Nenhuma publicação ainda :(</article>
         ) : (

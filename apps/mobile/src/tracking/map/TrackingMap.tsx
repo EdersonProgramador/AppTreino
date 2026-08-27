@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type LatLng, type Region } from "react-native-maps";
+import { headingBridge } from "../sensors/HeadingBridge";
 import { useLiveMapTrack } from "./useLiveMapTrack";
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
   mapType?: "standard" | "satellite" | "hybrid";
   is3d?: boolean;
   heatTracks?: Array<Array<{ lat: number; lng: number }>>;
+  compassEnabled?: boolean;
 };
 
 /**
@@ -26,10 +28,12 @@ export function TrackingMap({
   lapMarker = null,
   mapType = "standard",
   is3d = false,
-  heatTracks = []
+  heatTracks = [],
+  compassEnabled = true
 }: Props) {
   const mapRef = useRef<MapView>(null);
   const { points, cursor } = useLiveMapTrack();
+  const [heading, setHeading] = useState(0);
   const coords: LatLng[] = useMemo(
     () => points.map((p) => ({ latitude: p.lat, longitude: p.lng })),
     [points]
@@ -46,16 +50,30 @@ export function TrackingMap({
   }, []);
 
   useEffect(() => {
+    if (!compassEnabled) {
+      setHeading(0);
+      return;
+    }
+    const unsub = headingBridge.subscribe(setHeading);
+    void headingBridge.start();
+    return () => {
+      unsub();
+      void headingBridge.stop();
+    };
+  }, [compassEnabled]);
+
+  useEffect(() => {
     if (!followUser || !cursor || !mapRef.current) return;
     mapRef.current.animateCamera(
       {
         center: { latitude: cursor.lat, longitude: cursor.lng },
         pitch: is3d ? 45 : 0,
+        heading: compassEnabled ? heading : 0,
         zoom: 16.5
       },
       { duration: 400 }
     );
-  }, [cursor?.lat, cursor?.lng, followUser, is3d]);
+  }, [cursor?.lat, cursor?.lng, followUser, is3d, Math.round(heading / 8), compassEnabled]);
 
   return (
     <View style={styles.fill}>
@@ -66,10 +84,10 @@ export function TrackingMap({
         mapType={mapType}
         initialRegion={initialRegion}
         pitchEnabled={is3d}
-        rotateEnabled={is3d}
+        rotateEnabled={is3d || compassEnabled}
         showsUserLocation
         showsMyLocationButton={false}
-        showsCompass={false}
+        showsCompass={compassEnabled}
         toolbarEnabled={false}
         followsUserLocation={false}
         onPress={(e) => {

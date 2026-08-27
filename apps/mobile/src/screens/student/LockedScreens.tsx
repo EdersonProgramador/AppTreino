@@ -33,7 +33,7 @@ const LOCKED_FEATURES = [
   { icon: "resize-outline" as const, title: trainingCopy.physicalAssessment, text: "Medidas, histórico corporal e acompanhamento de evolução." },
   { icon: "calendar-outline" as const, title: "Eventos", text: "Inscrições em aulas, desafios e encontros da comunidade." },
   { icon: "headset-outline" as const, title: "Atendimento", text: "Abertura de chamados para suporte de treino, pagamento e acesso." },
-  { icon: "sparkles-outline" as const, title: "Agente de Treino IA", text: "Geração de planos personalizados conforme objetivo e nível." }
+  { icon: "sparkles-outline" as const, title: "Coach IA", text: "Chat, voz, treinos de todas as modalidades e dieta pelo biotipo." }
 ];
 
 export function SubscriptionScreen() {

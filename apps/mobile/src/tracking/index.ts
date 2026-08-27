@@ -2,6 +2,7 @@ export { evaluateAntiCheat, shouldQuarantine } from "./filter/AntiCheat";
 export type { AntiCheatReport } from "./filter/AntiCheat";
 export { FIELD_CALIBRATION } from "./fieldCalibration";
 export { pedometerBridge } from "./sensors/PedometerBridge";
+export { headingBridge } from "./sensors/HeadingBridge";
 export { localStore, LocalStore } from "./db/LocalStore";
 export { haversineMeters, haversineM, pathDistanceMeters, clamp, uuid } from "./geo";
 export { GeoKalmanFilter } from "./filter/GeoKalmanFilter";

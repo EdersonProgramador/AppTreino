@@ -15,6 +15,7 @@ export const DEFAULT_SYSTEM_SETTINGS: Record<string, string> = {
   module_contact: "true",
   module_ratings: "true",
   module_favorites: "true",
+  module_ai: "true",
   qr_checkin_enabled: "true"
 };
 

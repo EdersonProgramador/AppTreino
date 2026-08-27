@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { Alert, Pressable, Share, StyleSheet, Text, View, type ImageStyle, type StyleProp } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { CompositeNavigationProp, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
@@ -22,6 +22,8 @@ import {
 import { FALLBACK_WORKOUT_MODALITY } from "../../student/navigate";
 import { useStudent } from "../../student/StudentContext";
 import { TodayWorkoutHero } from "../../student/TodayWorkoutHero";
+import { fetchWeatherHere, type WeatherSnapshot } from "../../student/weather";
+import { WeatherChip } from "../../student/WeatherChip";
 import { tabBarStyleFor, useSt, type StudentTokens } from "../../student/theme";
 import { uiSounds } from "../../student/uiSounds";
 import type { WorkoutProgram } from "../../types";
@@ -153,7 +155,12 @@ export function TrainingWorkoutsScreen() {
   const styles = useTrainingStyles();
   const coverByModality = useModalityCovers();
   const [repeatingId, setRepeatingId] = useState<string | null>(null);
+  const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
   const modality = route.params.modality;
+
+  useEffect(() => {
+    void fetchWeatherHere("WORKOUT").then(setWeather);
+  }, []);
   const list = programs.filter((item) => modalityName(item) === modality);
   const todayId = programs[0]?.programId;
 
@@ -182,6 +189,11 @@ export function TrainingWorkoutsScreen() {
         }}
       />
       <SheetHeading kicker={modality} title={trainingCopy.modalityWorkoutsHeading} subtitle={trainingCopy.pickWorkout} />
+      {weather ? (
+        <View style={{ marginHorizontal: 16, marginBottom: 8 }}>
+          <WeatherChip weather={weather} sport="WORKOUT" />
+        </View>
+      ) : null}
       {list.length === 0 ? (
         <EmptyState icon="barbell-outline" title={trainingCopy.noWorkouts} text={trainingCopy.noWorkoutsHint} />
       ) : (

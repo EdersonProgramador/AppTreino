@@ -11,7 +11,7 @@ import { StudentShell } from "./src/navigation/StudentShell";
 import { AdminNoticeScreen } from "./src/screens/AdminNoticeScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { StudentProvider } from "./src/student/StudentContext";
-import { getTheme, hydrateTheme, setTheme } from "./src/student/prefs";
+import { getTheme, hydrateMapCompass, hydrateTheme, setTheme } from "./src/student/prefs";
 import { StudentThemeProvider, tokensFor, useSt } from "./src/student/theme";
 import { hydrateUiSounds, preloadUiSounds, uiSounds } from "./src/student/uiSounds";
 
@@ -119,7 +119,7 @@ export default function App() {
   const [prefsReady, setPrefsReady] = useState(false);
 
   useEffect(() => {
-    void Promise.all([hydrateTheme(), hydrateUiSounds()]).then(() => setPrefsReady(true));
+    void Promise.all([hydrateTheme(), hydrateMapCompass(), hydrateUiSounds()]).then(() => setPrefsReady(true));
   }, []);
 
   if (!prefsReady) return <BootScreen />;

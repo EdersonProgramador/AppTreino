@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { View } from "react-native";
 import { MusicPlayerScreen } from "../MusicPlayerScreen";
 import { FeedScreen } from "../screens/student/FeedScreen";
 import {
@@ -19,6 +20,8 @@ import { ActivityScreen } from "../screens/student/ActivityScreen";
 import { MembershipScreen, PaymentsScreen, ProfileScreen, ProfileSettingsScreen, PurchasesScreen } from "../screens/student/AccountScreens";
 import { EventsScreen, LocationsScreen, QrScreen, RatingsScreen, SupportScreen, AiScreen } from "../screens/student/CommunityScreens";
 import { AssessmentsScreen, StatusScreen } from "../screens/student/HealthScreens";
+import { HealthPermissionsScreen } from "../screens/student/HealthPermissionsScreen";
+import { DailyMotivationCard } from "../student/DailyMotivationCard";
 import { MenuScreen, NotificationsScreen, SettingsScreen } from "../screens/student/MenuScreens";
 import { PlayScreen } from "../screens/student/PlayScreen";
 import { CartScreen, OrdersScreen, ProductsScreen } from "../screens/student/ShopScreens";
@@ -151,6 +154,7 @@ function MenuStackScreen() {
       <MenuStack.Screen name="Membership" component={MembershipScreen} />
       <MenuStack.Screen name="Payments" component={PaymentsScreen} />
       <MenuStack.Screen name="Assessments" component={AssessmentsScreen} />
+      <MenuStack.Screen name="HealthPermissions" component={HealthPermissionsScreen} />
       <MenuStack.Screen name="Status" component={StatusScreen} />
       <MenuStack.Screen name="Events" component={EventsScreen} />
       <MenuStack.Screen name="Locations" component={LocationsScreen} />
@@ -176,6 +180,7 @@ export function StudentNavigator() {
 
   return (
     <NavigationContainer theme={navigationThemeFor(theme, st)} linking={studentLinking}>
+      <View style={{ flex: 1 }}>
       <Tabs.Navigator
         initialRouteName="TrainingTab"
         screenListeners={{
@@ -226,6 +231,11 @@ export function StudentNavigator() {
           name="MenuTab"
           component={MenuStackScreen}
           options={{ title: "Menu", tabBarIcon: icon("menu-outline", "menu") }}
+          listeners={({ navigation }) => ({
+            tabPress: () => {
+              navigation.navigate("MenuTab", { screen: "Menu" });
+            }
+          })}
         />
         <Tabs.Screen
           name="PlayTab"
@@ -248,6 +258,8 @@ export function StudentNavigator() {
           }}
         />
       </Tabs.Navigator>
+      <DailyMotivationCard />
+      </View>
     </NavigationContainer>
   );
 }

@@ -6048,10 +6048,13 @@ html.light .finance-hub-tabs button {
 }
 
 .student-calendar-grid span {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   aspect-ratio: 1;
   min-width: 0;
-  place-items: center;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
   border: 1px solid var(--app-border);
   border-radius: 10px;
   background: var(--app-fill);
@@ -24404,4 +24407,408 @@ body:has(.student-app-shell) {
   font-size: 12px;
   line-height: 1.35;
   color: #f87171;
+}
+
+.student-streak-kinds {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  line-height: 0;
+}
+
+.student-calendar-grid span.completed .student-streak-kinds {
+  color: #15100b;
+}
+
+.student-weather-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(12, 14, 18, 0.78);
+  color: #fff7ec;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.student-weather-chip strong {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.student-weather-chip em {
+  font-style: normal;
+  opacity: 0.86;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.student-weather-card {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 8px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--app-border);
+  background: var(--app-fill);
+}
+
+.student-weather-card > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.student-weather-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 21px;
+  display: grid;
+  place-items: center;
+  background: rgba(242, 180, 97, 0.18);
+  color: #df663c;
+}
+
+.student-weather-card small {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--app-text-muted);
+}
+
+.student-weather-card strong {
+  display: block;
+  font-size: 16px;
+}
+
+.student-weather-card p {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.student-activity-weather {
+  position: absolute;
+  z-index: 6;
+  top: 56px;
+  left: 12px;
+  pointer-events: none;
+}
+
+.student-activity-weather-line {
+  margin: -4px 0 0;
+  color: #605a52;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.student-perf-charts {
+  display: grid;
+  gap: 12px;
+  margin: 8px 0 16px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--app-border);
+  background: var(--app-panel);
+}
+
+.student-perf-charts header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.student-perf-charts header small {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--app-text-muted);
+}
+
+.student-perf-charts header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.student-perf-charts header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(223, 102, 60, 0.14);
+  color: #df663c;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.student-perf-charts > p,
+.student-perf-charts > strong {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.student-perf-bars {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  align-items: end;
+  gap: 6px;
+  min-height: 104px;
+}
+
+.student-perf-bars em {
+  grid-column: 1 / -1;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--app-text-muted);
+}
+
+.student-perf-bars button {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.student-perf-bars button i {
+  display: block;
+  width: 100%;
+  max-width: 18px;
+  border-radius: 8px 8px 4px 4px;
+  background: rgba(242, 180, 97, 0.45);
+}
+
+.student-perf-bars button.is-on i {
+  background: linear-gradient(180deg, #f2b461, #df663c);
+}
+
+.student-perf-bars small {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--app-text-muted);
+  text-transform: capitalize;
+}
+
+.student-perf-mix {
+  display: grid;
+  gap: 10px;
+}
+
+.student-perf-mix > div p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.student-perf-mix > div p em {
+  margin-left: auto;
+  font-style: normal;
+  color: var(--app-text-muted);
+  font-weight: 600;
+}
+
+.student-perf-mix b {
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--app-fill);
+  overflow: hidden;
+}
+
+.student-perf-mix b i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f2b461, #df663c);
+}
+
+.student-athlete-offensive {
+  margin: 8px 16px 16px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--app-border);
+  background: var(--app-panel);
+  display: grid;
+  gap: 12px;
+}
+
+.student-athlete-offensive header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.student-athlete-offensive header small {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--app-text-muted);
+}
+
+.student-athlete-offensive header h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.student-athlete-offensive > p {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.student-motivation-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(8, 7, 6, 0.55);
+}
+
+.student-motivation-card {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 22px;
+  background: var(--app-panel);
+  color: var(--app-text);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+}
+
+.student-motivation-card header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  color: #df663c;
+}
+
+.student-motivation-card header small {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.student-motivation-card header button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--app-fill);
+  color: var(--app-text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.student-motivation-card h2 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.student-motivation-card p {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.student-motivation-card > div {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--app-fill);
+}
+
+.student-motivation-card > em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--app-text-muted);
+}
+
+.student-ai-chat {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--app-border);
+  background: var(--app-panel);
+}
+
+.student-ai-chat-log {
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.student-ai-chat-log p {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.student-ai-chat-log .is-coach {
+  background: var(--app-fill);
+  color: var(--app-text);
+}
+
+.student-ai-chat-log .is-me {
+  justify-self: end;
+  background: linear-gradient(135deg, #f2b461, #df663c);
+  color: #15100b;
+}
+
+.student-ai-chat-compose {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+}
+
+.student-ai-chat-compose input {
+  min-width: 0;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--app-fill);
+  color: var(--app-text);
+}
+
+@media (max-width: 640px) {
+  .student-ai-chat-compose {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .student-ai-chat-compose input {
+    grid-column: 1 / -1;
+  }
 }

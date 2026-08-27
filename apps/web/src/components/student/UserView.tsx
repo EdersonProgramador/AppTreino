@@ -125,6 +125,12 @@ import {
 } from "./StudentSocialInfraSections";
 import { StudentClubSection } from "./StudentClubSection";
 import { StudentActivitySection } from "./StudentActivitySection";
+import { StudentWeatherChip } from "./StudentWeatherChip";
+import { StudentPerformanceCharts } from "./StudentPerformanceCharts";
+import { StudentStreakMonthGrid } from "./StudentStreakDayIcons";
+import { StudentDailyMotivation } from "./StudentDailyMotivation";
+import { StudentAiCoachChat } from "./StudentAiCoachChat";
+import { useStudentWeather } from "../../lib/weather";
 import { useMusicPlayerStore } from "../../stores/musicPlayerStore";
 import { useFeedChromeStore } from "../../stores/feedChromeStore";
 import { isNativeAppShell } from "../../lib/native-bridge";
@@ -194,6 +200,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       : null
   );
   const [consistency, setConsistency] = useState<WorkoutConsistencyResponse | null>(null);
+  const trainingWeather = useStudentWeather("WORKOUT", studentSection === "training");
   const [membership, setMembership] = useState<StudentMembershipRow | null>(null);
   const [accessReady, setAccessReady] = useState(false);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
@@ -1941,9 +1948,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       text: "Abertura de chamados para suporte de treino, pagamento e acesso."
     },
     {
-      icon: Bot,
-      title: "Agente de Treino IA",
-      text: "Geração de planos personalizados conforme objetivo e nível."
+      icon: Sparkles,
+      title: "Coach IA",
+      text: "Chat, voz, treinos de todas as modalidades e dieta pelo biotipo."
     }
   ];
   const cmsExercisesToday = todayWorkout?.block.exercises ?? [];
@@ -2403,6 +2410,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       }`}
     >
       {adminPreviewBanner}
+      {token && !hideStudentChrome ? <StudentDailyMotivation /> : null}
       {!hideStudentChrome && (
       <section className="student-app-header">
         <div className="student-header-brand">
@@ -2771,6 +2779,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   </div>
                   <strong>{trainingCopy.sessionsDone(workoutsCompleted, totalWorkoutDays)}</strong>
                 </div>
+                <StudentWeatherChip weather={trainingWeather} sport="WORKOUT" />
                 <div className="student-progress-track">
                   <span style={{ width: `${workoutProgressPercent}%` }} />
                 </div>
@@ -2807,6 +2816,16 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                         {trainingCopy.browseWorkouts}
                       </button>
                     ) : null
+                  )}
+                  {publicConfig["module_ai"] !== "false" && (
+                    <button
+                      className="student-outline-button"
+                      type="button"
+                      onClick={() => goToSection("ai")}
+                    >
+                      <Sparkles size={18} />
+                      Coach IA
+                    </button>
                   )}
                   {publicConfig["module_qr"] !== "false" && publicConfig["qr_checkin_enabled"] !== "false" && (
                     <button
@@ -2865,6 +2884,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   <h1>{trainingCopy.modalities}</h1>
                   <p>{publishedModalities.length > 0 ? trainingCopy.pickModality : trainingCopy.noWorkoutsHint}</p>
                 </div>
+                <StudentWeatherChip weather={trainingWeather} sport="WORKOUT" compact />
 
                 {publishedModalities.length > 0 ? (
                   <div className="student-modality-list">
@@ -2924,6 +2944,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   <h1>{trainingCopy.modalityWorkoutsHeading}</h1>
                   <p>{trainingCopy.pickWorkout}</p>
                 </div>
+                <StudentWeatherChip weather={trainingWeather} sport="WORKOUT" compact />
 
                 {modalityWorkouts.length > 0 ? (
                   <AnimatedList className="student-program-list">
@@ -4265,13 +4286,20 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           </section>
         )}
 
-        {studentSection === "ai" && (
+        {studentSection === "ai" && publicConfig["module_ai"] !== "false" && (
           <section className="student-sheet">
             <div className="student-sheet-heading">
               <span>Agente IA</span>
-              <h1>Plano inteligente</h1>
-              <p>Gere uma rotina baseada no seu objetivo.</p>
+              <h1>Especialista em treino e nutrição</h1>
+              <p>Voz e chat agora. A IA cria treinos de todas as modalidades e dieta pelo biotipo.</p>
             </div>
+            {token ? (
+              <StudentAiCoachChat
+                token={token}
+                athleteName={profile?.name}
+                onPlanSaved={() => void loadUserData()}
+              />
+            ) : null}
             <form className="student-form student-ai-form" onSubmit={handleCreateAiPlan}>
               <label>
                 <span>Objetivo</span>
@@ -4347,6 +4375,24 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                     </div>
                   </article>
                 ) : null}
+                {latestAiPlan.plan.diet ? (
+                  <article className="student-info-card">
+                    <Sparkles size={22} />
+                    <div>
+                      <strong>Dieta · {latestAiPlan.plan.diet.biotype}</strong>
+                      <span>{latestAiPlan.plan.diet.strategy}</span>
+                      <small>
+                        {latestAiPlan.plan.diet.kcal} kcal · {latestAiPlan.plan.diet.proteinG}g proteína ·{" "}
+                        {latestAiPlan.plan.diet.carbsG}g carbo · {latestAiPlan.plan.diet.fatG}g gordura
+                      </small>
+                      {latestAiPlan.plan.diet.meals.map((meal) => (
+                        <small key={meal.name}>
+                          {meal.name}: {meal.items.join(", ")}
+                        </small>
+                      ))}
+                    </div>
+                  </article>
+                ) : null}
               </article>
             ) : null}
           </section>
@@ -4380,7 +4426,39 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 )
                 .catch(() => undefined);
             }}
-          />
+          >
+            <section className="student-athlete-offensive">
+              <header>
+                <div>
+                  <small>Ofensiva</small>
+                  <h2>{currentStreak} dia(s)</h2>
+                </div>
+                <button
+                  type="button"
+                  className="student-outline-button"
+                  onClick={() => {
+                    uiSounds.popupOpen();
+                    setStreakCalendarOpen(true);
+                  }}
+                >
+                  <Flame size={16} />
+                  Ver calendário
+                </button>
+              </header>
+              <StudentStreakMonthGrid
+                cells={calendarCells}
+                todayIso={todayIsoDate}
+                completedDates={completedDateSet}
+                dayKinds={consistency?.dayKinds}
+              />
+              <p>Ao concluir treino, corrida, caminhada ou pedal, o dia ganha o ícone da modalidade.</p>
+              <StudentPerformanceCharts
+                streak={currentStreak}
+                sportTotals={consistency?.sportTotals}
+                weeklyVolume={consistency?.weeklyVolume}
+              />
+            </section>
+          </StudentAthleteProfileSection>
         )}
 
         {studentSection === "profile-settings" && (
@@ -4639,6 +4717,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               <span><strong>{attendanceThisMonth}</strong> acessos no mês</span>
               <span><strong>{attendance.length}</strong> acessos registrados</span>
             </div>
+            <StudentPerformanceCharts
+              streak={currentStreak}
+              sportTotals={consistency?.sportTotals}
+              weeklyVolume={consistency?.weeklyVolume}
+            />
             <div className="student-consistency-calendar">
               <div className="student-consistency-heading">
                 <button
@@ -4663,27 +4746,16 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 </button>
                 <small>{completedDateSet.size} treino(s) no mês</small>
               </div>
-              <div className="student-calendar-weekdays" aria-hidden="true">
-                {["D", "S", "T", "Q", "Q", "S", "S"].map((day, index) => (
-                  <span key={`${day}-${index}`}>{day}</span>
-                ))}
-              </div>
-              <div className="student-calendar-grid">
-                {calendarCells.map((cell, index) => {
-                  const isCompleted = Boolean(cell.isoDate && completedDateSet.has(cell.isoDate));
-                  const isToday = cell.isoDate === todayIsoDate;
-
-                  return (
-                    <span
-                      className={`${cell.day ? "" : "empty"} ${isCompleted ? "completed" : ""} ${isToday ? "today" : ""}`}
-                      key={`${cell.isoDate ?? "freq-empty"}-${index}`}
-                    >
-                      {cell.day}
-                    </span>
-                  );
-                })}
-              </div>
-              <p>Dias marcados representam treinos concluídos. O calendário mostra o mês atual e meses anteriores.</p>
+              <StudentStreakMonthGrid
+                cells={calendarCells}
+                todayIso={todayIsoDate}
+                completedDates={completedDateSet}
+                dayKinds={consistency?.dayKinds}
+              />
+              <p>
+                Dias marcados representam treinos, corridas, caminhadas e pedais concluídos. O calendário mostra o mês
+                atual e meses anteriores.
+              </p>
             </div>
             <div className="student-section-title-row">
               <h2 className="student-section-title">Registros de acesso</h2>
@@ -4717,7 +4789,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 { group: "Treino", icon: Dumbbell, title: trainingCopy.workout, action: () => openTrainingCatalog(), favorite: true },
                 { group: "Treino", icon: CorridaNavIcon, title: "Corrida", action: () => openCorrida(), favorite: true },
                 { group: "Treino", icon: Trophy, title: "Desafios", action: () => goToSection("club"), favorite: true },
-                { group: "Treino", icon: Sparkles, title: "Plano inteligente", action: () => goToSection("ai") },
+                { group: "Treino", icon: Sparkles, title: "Coach IA", action: () => goToSection("ai"), moduleKey: "module_ai" },
                 { group: "Conta", icon: ShieldCheck, title: "Matrículas", action: () => goToSection("membership") },
                 { group: "Conta", icon: CreditCard, title: "Pagamentos", action: () => goToSection("payments"), favorite: true },
                 { group: "Saúde", icon: Ruler, title: trainingCopy.physicalAssessment, action: () => goToSection("assessments") },
@@ -4806,13 +4878,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                     }
                 >
               )
-              .map((row) =>
+              .map((row, index) =>
                 row.type === "group" ? (
-                  <h2 className="student-menu-group" key={`g-${row.title}`}>
+                  <h2 className="student-menu-group" key={`g-${index}-${row.title}`}>
                     {row.title}
                   </h2>
                 ) : (
-                  <button className="student-menu-item" key={row.item.title} onClick={row.item.action}>
+                  <button className="student-menu-item" key={`m-${index}-${row.item.title}`} onClick={row.item.action}>
                     <row.item.icon size={24} />
                     <span>{row.item.title}</span>
                     {row.item.favorite && <Star size={18} />}
@@ -4953,29 +5025,15 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   </button>
                   <small>{completedDateSet.size} treino(s) no mês</small>
                 </div>
-                <div className="student-calendar-weekdays" aria-hidden="true">
-                  {["D", "S", "T", "Q", "Q", "S", "S"].map((day, index) => (
-                    <span key={`${day}-${index}`}>{day}</span>
-                  ))}
-                </div>
-                <div className="student-calendar-grid">
-                  {calendarCells.map((cell, index) => {
-                    const isCompleted = Boolean(cell.isoDate && completedDateSet.has(cell.isoDate));
-                    const isToday = cell.isoDate === todayIsoDate;
-
-                    return (
-                      <span
-                        className={`${cell.day ? "" : "empty"} ${isCompleted ? "completed" : ""} ${isToday ? "today" : ""}`}
-                        key={`${cell.isoDate ?? "modal-empty"}-${index}`}
-                      >
-                        {cell.day}
-                      </span>
-                    );
-                  })}
-                </div>
+                <StudentStreakMonthGrid
+                  cells={calendarCells}
+                  todayIso={todayIsoDate}
+                  completedDates={completedDateSet}
+                  dayKinds={consistency?.dayKinds}
+                />
                 <p>
-                  Dias marcados representam treinos concluídos em {currentYear}. O calendário mostra o mês atual e meses
-                  anteriores.
+                  Dias marcados representam treinos, corridas, caminhadas e pedais concluídos em {currentYear}. O
+                  calendário mostra o mês atual e meses anteriores.
                 </p>
               </div>
             </section>

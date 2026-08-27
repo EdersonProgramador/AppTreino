@@ -8,8 +8,11 @@ function metroLanHost(): string | null {
     Constants.expoConfig?.hostUri ||
     (Constants as { linkingUri?: string }).linkingUri ||
     "";
-  const match = String(hostUri).match(/(\d{1,3}(?:\.\d{1,3}){3})/);
-  return match?.[1] ?? null;
+  const value = String(hostUri);
+  const ip = value.match(/(\d{1,3}(?:\.\d{1,3}){3})/);
+  if (ip?.[1]) return ip[1];
+  if (/localhost|127\.0\.0\.1/i.test(value)) return "127.0.0.1";
+  return null;
 }
 
 function isLanHost(host: string) {
@@ -65,6 +68,12 @@ function resolveApiUrl() {
       if (metroHost) return `http://${metroHost}:${DEFAULT_API_PORT}`;
       return raw;
     }
+  }
+
+  // Expo Go in development talks to the machine running Metro, not Render —
+  // otherwise new routes like /student/coach/chat 404 on the hosted API.
+  if (typeof __DEV__ !== "undefined" && __DEV__ && metroHost) {
+    return `http://${metroHost}:${DEFAULT_API_PORT}`;
   }
 
   // LAN web dev → local API on the same host as Expo (port 3333).

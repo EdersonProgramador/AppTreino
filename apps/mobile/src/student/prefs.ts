@@ -64,3 +64,46 @@ export function setTheme(next: UiTheme) {
     // Preferência já está aplicada na sessão.
   });
 }
+
+const COMPASS_KEY = "app-treino-map-compass";
+
+const compassListeners = new Set<(on: boolean) => void>();
+let compassOn = true;
+let compassHydrated = false;
+
+function notifyCompass() {
+  for (const listener of compassListeners) listener(compassOn);
+}
+
+export function subscribeMapCompass(listener: (on: boolean) => void) {
+  compassListeners.add(listener);
+  listener(compassOn);
+  return () => {
+    compassListeners.delete(listener);
+  };
+}
+
+export function isMapCompassEnabled() {
+  return compassOn;
+}
+
+export async function hydrateMapCompass() {
+  if (compassHydrated) return compassOn;
+  try {
+    const saved = await AsyncStorage.getItem(COMPASS_KEY);
+    if (saved === "0") compassOn = false;
+    else if (saved === "1") compassOn = true;
+  } catch {
+    compassOn = true;
+  }
+  compassHydrated = true;
+  notifyCompass();
+  return compassOn;
+}
+
+export function setMapCompassEnabled(next: boolean) {
+  compassOn = next;
+  compassHydrated = true;
+  notifyCompass();
+  void AsyncStorage.setItem(COMPASS_KEY, next ? "1" : "0").catch(() => undefined);
+}

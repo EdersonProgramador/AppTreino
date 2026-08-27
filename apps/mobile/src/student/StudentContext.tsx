@@ -32,11 +32,16 @@ import type {
 import { streakFromDates } from "./theme";
 
 type ModalityRow = { id: string; name: string; description?: string | null; imageUrl?: string | null };
+export type StreakKind = "WORKOUT" | "RUN" | "WALK" | "RIDE";
+
 type Consistency = {
   completedWorkoutCount: number;
   totalWorkoutDays: number;
   completedDates?: string[];
   historyDates?: string[];
+  dayKinds?: Record<string, StreakKind[]>;
+  sportTotals?: Record<StreakKind, { count: number; km: number; minutes: number; calories?: number }>;
+  weeklyVolume?: Array<{ weekStart: string; workouts: number; outdoorKm: number; minutes: number }>;
   sessions: Array<{
     id: string;
     dayNumber: number;
@@ -73,6 +78,7 @@ type StudentData = {
   publicConfig: Record<string, string>;
   streak: number;
   streakDates: string[];
+  streakDayKinds: Record<string, StreakKind[]>;
   qrRequested: boolean;
   requestQr: () => void;
   clearQr: () => void;
@@ -218,6 +224,14 @@ export function StudentProvider({
     const fromAttendance = attendance.map((item) => item.date.slice(0, 10));
     return Array.from(new Set([...fromConsistency, ...fromAttendance]));
   }, [attendance, consistency?.completedDates, consistency?.historyDates]);
+  const streakDayKinds = useMemo(() => {
+    const map: Record<string, StreakKind[]> = { ...(consistency?.dayKinds ?? {}) };
+    for (const item of attendance) {
+      const day = item.date.slice(0, 10);
+      if (!map[day]?.length) map[day] = ["WORKOUT"];
+    }
+    return map;
+  }, [attendance, consistency?.dayKinds]);
   const streak = useMemo(() => streakFromDates(streakDates), [streakDates]);
 
   const value = useMemo<StudentData>(
@@ -248,6 +262,7 @@ export function StudentProvider({
       publicConfig,
       streak,
       streakDates,
+      streakDayKinds,
       qrRequested,
       requestQr: () => setQrRequested(true),
       clearQr: () => setQrRequested(false),
@@ -281,6 +296,7 @@ export function StudentProvider({
       publicConfig,
       streak,
       streakDates,
+      streakDayKinds,
       qrRequested,
       refresh,
       onLogout

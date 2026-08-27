@@ -3,7 +3,7 @@ export const MENU_LINKS: Array<{ href: string; title: string; hint: string; grou
   { group: "Treino", href: "/treino/historico", title: "Histórico", hint: "Treinos concluídos" },
   { group: "Treino", href: "/atividade", title: "Atividade", hint: "Corrida, caminhada e bike" },
   { group: "Treino", href: "/clube", title: "Clube", hint: "Desafios semanais" },
-  { group: "Treino", href: "/ia", title: "Plano inteligente", hint: "Sugestão da semana" },
+  { group: "Treino", href: "/ia", title: "Coach IA", hint: "Treino, dieta e voz" },
   { group: "Play e loja", href: "/play", title: "Play", hint: "Músicas para treinar" },
   { group: "Play e loja", href: "/loja", title: "Vitrine", hint: "Produtos e suplementos" },
   { group: "Play e loja", href: "/loja/carrinho", title: "Carrinho", hint: "Itens selecionados" },

@@ -63,7 +63,8 @@ export const studentLinking: LinkingOptions<StudentTabParamList> = {
           Purchases: "compras",
           Settings: "configuracoes",
           Qr: "qr",
-          Ai: "ia"
+          Ai: "ia",
+          HealthPermissions: "saude"
         }
       }
     }
