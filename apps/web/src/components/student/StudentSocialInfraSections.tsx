@@ -22,7 +22,8 @@ import {
   X
 } from "lucide-react";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
-import { mediaUrl } from "../../lib/urls";
+import { mediaUrl, retryVideoAsCompatible } from "../../lib/urls";
+import { VIDEO_FILE_ACCEPT } from "../../lib/video-formats";
 import { getSocialSocket } from "../../lib/social-socket";
 import type { SocialAuthor, UploadResponse } from "../../types";
 import { CAMERA_FILTERS, cameraFilterCss, applyCameraZoom, clampCameraZoom, readCameraZoomCaps, zoomFromPinch, StudentCameraCapture, type CameraFilterId, type CameraZoomCaps } from "./StudentCameraCapture";
@@ -308,6 +309,7 @@ export function StudentReelsSection({
             <video
               src={mediaUrl(reel.videoUrl)}
               poster={reel.coverUrl ? mediaUrl(reel.coverUrl) : undefined}
+              onError={(event) => retryVideoAsCompatible(event.currentTarget, reel.videoUrl)}
               playsInline
               loop
               muted
@@ -413,7 +415,7 @@ export function StudentReelsSection({
       <input
         ref={fileRef}
         type="file"
-        accept="video/*"
+        accept={VIDEO_FILE_ACCEPT}
         hidden
         onChange={(event) => {
           const file = event.target.files?.[0];
@@ -1603,23 +1605,41 @@ export function StudentLiveSection({
 
       {replayLive
         ? createPortal(
-            <div className="student-live-save-sheet" role="dialog" aria-label="Replay da live">
-              <div className="student-live-save-card">
+            <div
+              className="student-live-replay-backdrop"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Replay da live"
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget) setReplayLive(null);
+              }}
+            >
+              <section className="student-live-replay-card">
                 <header>
-                  <strong>{replayLive.title}</strong>
+                  <div>
+                    <strong>{replayLive.title}</strong>
+                    <small>{replayLive.host.name}</small>
+                  </div>
                   <button type="button" onClick={() => setReplayLive(null)} aria-label="Fechar">
                     <X size={18} />
                   </button>
                 </header>
-                <div className="student-live-save-preview is-replay">
+                <div className="student-live-replay-stage">
                   {replayLive.videoUrl ? (
-                    <video src={mediaUrl(replayLive.videoUrl)} controls playsInline autoPlay poster={replayLive.coverUrl ? mediaUrl(replayLive.coverUrl) : undefined} />
+                    <video
+                      src={mediaUrl(replayLive.videoUrl)}
+                      controls
+                      playsInline
+                      autoPlay
+                      preload="metadata"
+                      poster={replayLive.coverUrl ? mediaUrl(replayLive.coverUrl) : undefined}
+                      onError={(event) => retryVideoAsCompatible(event.currentTarget, replayLive.videoUrl)}
+                    />
                   ) : replayLive.coverUrl ? (
                     <img src={mediaUrl(replayLive.coverUrl)} alt="" />
                   ) : null}
                 </div>
-                <small className="student-activity-hint">{replayLive.host.name}</small>
-              </div>
+              </section>
             </div>,
             document.body
           )

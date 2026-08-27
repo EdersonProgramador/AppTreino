@@ -107,14 +107,6 @@ export function getYouTubeVideoId(url: string) {
   return match ? match[1] : "";
 }
 
-export function getYouTubeEmbedUrl(url: string, autoplay = false) {
-  const id = getYouTubeVideoId(url);
-  if (!id) return "";
-  const params = new URLSearchParams({ rel: "0", playsinline: "1" });
-  if (autoplay) params.set("autoplay", "1");
-  return `https://www.youtube-nocookie.com/embed/${id}?${params.toString()}`;
-}
-
 export function getYouTubeThumbnailUrl(url: string) {
   const id = getYouTubeVideoId(url);
   return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : "";

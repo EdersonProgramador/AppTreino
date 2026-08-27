@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { apiGet } from "../../api";
 import { brand } from "../../lib/brand";
-import { assetUrl, mediaUrl } from "../../lib/urls";
+import { assetUrl, mediaUrl, retryVideoAsCompatible } from "../../lib/urls";
 import { useAuth } from "../../auth/AuthContext";
 import { homePathForRole, paths } from "../../auth/paths";
 import { TransitionScreen } from "../../auth/RouteGuards";
@@ -130,7 +130,13 @@ export function SharedPostPage() {
 
             <div className="shared-post-media">
               {media?.type === "VIDEO" ? (
-                <video src={mediaUrl(media.url)} controls playsInline poster={post.coverUrl ? mediaUrl(post.coverUrl) : undefined} />
+                <video
+                  src={mediaUrl(media.url)}
+                  controls
+                  playsInline
+                  poster={post.coverUrl ? mediaUrl(post.coverUrl) : undefined}
+                  onError={(event) => retryVideoAsCompatible(event.currentTarget, media.url)}
+                />
               ) : media?.url || post.coverUrl ? (
                 <img src={mediaUrl(media?.url || post.coverUrl || "")} alt="" />
               ) : (

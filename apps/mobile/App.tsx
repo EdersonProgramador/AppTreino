@@ -8,8 +8,8 @@ import { clearNativeSession, readNativeSession, writeNativeSession } from "./src
 import type { NativeSession } from "./src/auth/types";
 import { musicPlayback } from "./src/musicPlayback";
 import { StudentShell } from "./src/navigation/StudentShell";
+import { AdminNoticeScreen } from "./src/screens/AdminNoticeScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
-import { PanelWebView, resetPanelShell } from "./src/screens/PanelWebView";
 import { StudentProvider } from "./src/student/StudentContext";
 import { getTheme, hydrateTheme, setTheme } from "./src/student/prefs";
 import { StudentThemeProvider, tokensFor, useSt } from "./src/student/theme";
@@ -43,7 +43,6 @@ function AppGate() {
 
   const onLogout = useCallback(() => {
     uiSounds.toggleOff();
-    resetPanelShell();
     void musicPlayback.stop();
     void clearNativeSession();
     setSession(null);
@@ -83,6 +82,7 @@ function AppGate() {
           await clearNativeSession();
           setSession(null);
         } else {
+          // Falha de rede/servidor não invalida a sessão: mantém o acesso offline.
           setSession(stored);
         }
       }
@@ -94,7 +94,6 @@ function AppGate() {
   }, []);
 
   const onLoggedIn = useCallback((next: NativeSession) => {
-    resetPanelShell();
     setTheme("light");
     setSession(next);
     preloadUiSounds();
@@ -106,7 +105,7 @@ function AppGate() {
   if (!ready) return <BootScreen />;
   if (!session) return <LoginScreen onLoggedIn={onLoggedIn} />;
   if (session.user.role === "ADMIN") {
-    return <PanelWebView session={session} onLogout={onLogout} />;
+    return <AdminNoticeScreen session={session} onLogout={onLogout} />;
   }
   return (
     <StudentProvider session={session} onLogout={onLogout}>

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -12,6 +11,7 @@ import { useNavigation, useRoute, type RouteProp } from "@react-navigation/nativ
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { apiGet, apiPost } from "../../auth/api";
 import { mediaUrl } from "../../lib/media";
+import { MediaImage } from "../../lib/MediaImage";
 import { brand } from "../../student/brand";
 import { EmptyState, GreenButton, OutlineButton, StudentPage } from "../../student/layout";
 import { useStudent } from "../../student/StudentContext";
@@ -163,7 +163,7 @@ export function PeerProfileScreen() {
         <>
           <View style={styles.card}>
             <View style={[styles.cover, { backgroundColor: coverColor }]}>
-              {coverImageUrl ? <Image source={{ uri: coverImageUrl }} style={StyleSheet.absoluteFillObject} /> : null}
+              {coverImageUrl ? <MediaImage uri={coverImageUrl} style={StyleSheet.absoluteFillObject} /> : null}
               <Text style={styles.handle}>@{handleFromName(peer.name)}</Text>
               {peer.live ? (
                 <Pressable
@@ -184,13 +184,11 @@ export function PeerProfileScreen() {
 
             <View style={styles.body}>
               <View style={[styles.avatarWrap, peer.live ? styles.avatarLive : null]}>
-                {peer.avatarUrl ? (
-                  <Image source={{ uri: mediaUrl(peer.avatarUrl) }} style={styles.avatar} />
-                ) : (
-                  <View style={[styles.avatar, styles.avatarFallback]}>
-                    <Ionicons name="person" size={36} color={st.gold} />
-                  </View>
-                )}
+                <MediaImage
+                  uri={peer.avatarUrl}
+                  style={styles.avatar}
+                  fallback={<Ionicons name="person" size={36} color={st.gold} />}
+                />
                 {peer.live ? (
                   <View style={styles.liveBadge}>
                     <Text style={styles.liveBadgeText}>LIVE</Text>
@@ -270,7 +268,7 @@ export function PeerProfileScreen() {
                 return (
                   <View key={post.id} style={styles.gridItem}>
                     {thumb ? (
-                      <Image source={{ uri: mediaUrl(thumb) }} style={styles.gridThumb} />
+                      <MediaImage uri={thumb} style={styles.gridThumb} />
                     ) : (
                       <Text style={styles.gridText} numberOfLines={4}>
                         {post.body?.slice(0, 80) || brand.athlete}
@@ -304,8 +302,8 @@ function createStyles(st: StudentTokens) {
       borderRadius: 18,
       overflow: "hidden",
       borderWidth: 1,
-      borderColor: st.border,
-      backgroundColor: st.panel,
+      borderColor: st.line,
+      backgroundColor: st.panelBg,
       marginBottom: 16
     },
     cover: { minHeight: 120, justifyContent: "flex-end", padding: 12 },
@@ -360,9 +358,9 @@ function createStyles(st: StudentTokens) {
       aspectRatio: 1,
       borderRadius: 12,
       overflow: "hidden",
-      backgroundColor: st.panel,
+      backgroundColor: st.panelBg,
       borderWidth: 1,
-      borderColor: st.border,
+      borderColor: st.line,
       alignItems: "center",
       justifyContent: "center",
       padding: 6

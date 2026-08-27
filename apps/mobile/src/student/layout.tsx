@@ -6,7 +6,8 @@ import {
   StyleSheet,
   Text,
   View,
-  type RefreshControlProps
+  type RefreshControlProps,
+  type ScrollViewProps
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -125,13 +126,17 @@ export function StudentPage({
   scroll = true,
   play = false,
   chrome = true,
-  refreshControl
+  refreshControl,
+  onScroll,
+  scrollEventThrottle
 }: {
   children: ReactNode;
   scroll?: boolean;
   play?: boolean;
   chrome?: boolean;
   refreshControl?: ReactElement<RefreshControlProps>;
+  onScroll?: ScrollViewProps["onScroll"];
+  scrollEventThrottle?: number;
 }) {
   const { st } = useSt();
   const styles = useLayoutStyles();
@@ -141,6 +146,8 @@ export function StudentPage({
       contentContainerStyle={[styles.scroll, play && styles.playScroll]}
       keyboardShouldPersistTaps="handled"
       refreshControl={refreshControl}
+      onScroll={onScroll}
+      scrollEventThrottle={scrollEventThrottle ?? (onScroll ? 16 : undefined)}
     >
       {children}
     </ScrollView>

@@ -4,7 +4,8 @@ export type FeedStackParamList = {
   Feed: undefined;
   Reels: undefined;
   Live: undefined;
-  LiveRoom: { mode: "host" | "viewer"; liveId?: string; title?: string };
+  /** `mode` é opcional: deep link externo nunca entra como host. */
+  LiveRoom: { mode?: "host" | "viewer"; liveId?: string; title?: string };
   PeerProfile: { userId: string };
   Messages: undefined;
   DirectMessage: { userId: string; name: string };

@@ -6,15 +6,13 @@ import { downloadObjectToTemp, isObjectStorageEnabled, removeTempDownload } from
 import { persistUploadedFile } from "./upload-persist.js";
 import { uploadsDir } from "./upload-security.js";
 
-/** Containers/codecs that often fail on iOS (and some Android) players. */
-const TRANSCODE_TO_MP4 = new Set(["webm", "ogv", "ogg", "mkv", "avi", "mov"]);
-
 export function videoExtension(pathOrName: string) {
   return extname(pathOrName).replace(/^\./, "").toLowerCase();
 }
 
 export function needsVideoTranscodeToMp4(extension: string) {
-  return TRANSCODE_TO_MP4.has(extension.toLowerCase().replace(/^\./, ""));
+  const normalized = extension.toLowerCase().replace(/^\./, "");
+  return normalized !== "mp4" && normalized !== "m4v";
 }
 
 function ffmpegBin() {
@@ -42,12 +40,20 @@ export async function transcodeFileToMp4(inputPath: string, outputPath: string) 
       "-y",
       "-i",
       inputPath,
+      "-map",
+      "0:v:0",
+      "-map",
+      "0:a:0?",
+      "-sn",
+      "-dn",
       "-c:v",
       "libx264",
       "-preset",
       "veryfast",
       "-crf",
       "23",
+      "-vf",
+      "scale=trunc(iw/2)*2:trunc(ih/2)*2",
       "-pix_fmt",
       "yuv420p",
       "-c:a",
@@ -58,18 +64,32 @@ export async function transcodeFileToMp4(inputPath: string, outputPath: string) 
       "2",
       "-movflags",
       "+faststart",
+      "-max_muxing_queue_size",
+      "1024",
       outputPath
     ];
     const child = spawn(bin, args, { stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
+    let settled = false;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (error) reject(error);
+      else resolvePromise();
+    };
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      finish(new Error("ffmpeg timed out while normalizing video"));
+    }, 180_000);
     child.stderr?.on("data", (chunk) => {
       stderr += String(chunk);
       if (stderr.length > 8000) stderr = stderr.slice(-4000);
     });
-    child.on("error", (err) => reject(err));
+    child.on("error", (err) => finish(err));
     child.on("close", (code) => {
-      if (code === 0) resolvePromise();
-      else reject(new Error(`ffmpeg failed (${code}): ${stderr.slice(-500) || "unknown error"}`));
+      if (code === 0) finish();
+      else finish(new Error(`ffmpeg failed (${code}): ${stderr.slice(-500) || "unknown error"}`));
     });
   });
 }
@@ -83,8 +103,10 @@ export async function ensureUploadedVideoIsMp4(params: {
   extension: string;
   group: string;
   baseFilename: string;
-  /** When true (default), always produce H.264/AAC MP4 even if source is already .mp4 (HEVC). */
+  /** When true, always produce H.264/AAC MP4 even if source is already .mp4 (HEVC). */
   forceCompatible?: boolean;
+  /** False for public uploads: invalid/unsupported input must never be persisted raw. */
+  allowOriginalFallback?: boolean;
 }): Promise<{
   filename: string;
   relativePath: string;
@@ -115,6 +137,14 @@ export async function ensureUploadedVideoIsMp4(params: {
   try {
     await transcodeFileToMp4(inputPath, absolutePath);
   } catch (err) {
+    if (params.allowOriginalFallback === false) {
+      await Promise.all([
+        rm(inputPath, { force: true }).catch(() => undefined),
+        rm(absolutePath, { force: true }).catch(() => undefined)
+      ]);
+      throw err;
+    }
+
     // If ffmpeg missing, keep original extension so upload does not hard-fail in dev.
     const fallbackName = `${params.baseFilename}.${ext}`;
     const fallbackRelative = `${params.group}/${fallbackName}`;

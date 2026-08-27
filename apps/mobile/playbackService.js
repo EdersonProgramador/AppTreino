@@ -12,9 +12,7 @@ module.exports = async function playbackService() {
   TrackPlayer.addEventListener(Event.RemotePause, () => {
     void TrackPlayer.pause();
   });
-  TrackPlayer.addEventListener(Event.RemoteStop, () => {
-    void TrackPlayer.stop();
-  });
+  // RemoteStop é tratado em musicPlayback.ts, que também limpa a fila e o estado da UI.
   TrackPlayer.addEventListener(Event.RemoteNext, () => {
     void TrackPlayer.skipToNext();
   });

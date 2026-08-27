@@ -3,7 +3,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { brand } from "../../lib/brand";
-import { mediaUrl } from "../../lib/urls";
+import { mediaUrl, retryVideoAsCompatible } from "../../lib/urls";
 import { shareSocialPost } from "../../lib/share-social-post";
 import { uiSounds } from "../../lib/ui-sounds";
 import type { SocialPostRow, StudentProfile, UploadResponse } from "../../types";
@@ -98,6 +98,7 @@ function ViewerCarousel({ items }: { items: MediaItem[] }) {
             className="student-feed-media"
             src={mediaUrl(current.url)}
             poster={current.coverUrl ? mediaUrl(current.coverUrl) : undefined}
+            onError={(event) => retryVideoAsCompatible(event.currentTarget, current.url)}
             controls
             playsInline
             autoPlay
@@ -505,7 +506,12 @@ export function StudentAthleteProfileSection({
                 >
                   {thumb ? (
                     isVideo && !first?.coverUrl ? (
-                      <video src={mediaUrl(thumb)} muted playsInline />
+                      <video
+                        src={mediaUrl(thumb)}
+                        muted
+                        playsInline
+                        onError={(event) => retryVideoAsCompatible(event.currentTarget, thumb)}
+                      />
                     ) : (
                       <img src={mediaUrl(thumb)} alt="" />
                     )

@@ -10,9 +10,56 @@ export const uploadsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../u
 
 export type UploadGroup = "lessons" | "materials" | "images" | "audio";
 
+/**
+ * Containers de vídeo aceitos na entrada. Todos são validados pelo FFmpeg e
+ * persistidos como MP4 H.264/AAC antes de serem expostos aos players.
+ */
+export const VIDEO_UPLOAD_EXTENSIONS = [
+  "mp4",
+  "m4v",
+  "mov",
+  "qt",
+  "webm",
+  "mkv",
+  "avi",
+  "divx",
+  "ogv",
+  "ogg",
+  "mpg",
+  "mpeg",
+  "mpe",
+  "m2v",
+  "mpv",
+  "ts",
+  "mts",
+  "m2ts",
+  "3gp",
+  "3g2",
+  "flv",
+  "f4v",
+  "wmv",
+  "asf",
+  "vob",
+  "mxf",
+  "rm",
+  "rmvb",
+  "rv",
+  "hevc",
+  "h265",
+  "h264",
+  "av1",
+  "ivf"
+] as const;
+
+const VIDEO_UPLOAD_EXTENSION_SET = new Set<string>(VIDEO_UPLOAD_EXTENSIONS);
+
+export function isVideoUploadExtension(extension: string) {
+  return VIDEO_UPLOAD_EXTENSION_SET.has(extension.toLowerCase().replace(/^\./, ""));
+}
+
 const GROUP_TO_EXTENSIONS: Record<UploadGroup, string[]> = {
   // Exercícios aceitam vídeo e imagem/GIF (UI do CMS).
-  lessons: ["mp4", "webm", "ogv", "mov", "jpg", "jpeg", "png", "webp", "gif"],
+  lessons: [...VIDEO_UPLOAD_EXTENSIONS, "jpg", "jpeg", "png", "webp", "gif"],
   materials: ["pdf", "doc", "docx", "xls", "xlsx", "csv", "jpg", "jpeg", "png", "webp", "gif"],
   images: ["jpg", "jpeg", "png", "webp", "gif"],
   audio: ["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "webm", "mpeg", "mpga"]
@@ -20,9 +67,20 @@ const GROUP_TO_EXTENSIONS: Record<UploadGroup, string[]> = {
 
 const EXTENSION_TO_MIMETYPE: Record<string, string> = {
   mp4: "video/mp4",
+  m4v: "video/x-m4v",
   webm: "video/webm",
   ogv: "video/ogg",
   mov: "video/quicktime",
+  mkv: "video/x-matroska",
+  avi: "video/x-msvideo",
+  mpg: "video/mpeg",
+  mpeg: "video/mpeg",
+  ts: "video/mp2t",
+  "3gp": "video/3gpp",
+  "3g2": "video/3gpp2",
+  flv: "video/x-flv",
+  wmv: "video/x-ms-wmv",
+  mxf: "application/mxf",
   pdf: "application/pdf",
   doc: "application/msword",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -75,6 +133,9 @@ const MAGIC_BYTES: Array<{ extension: string; offset: number; bytes: number[]; m
   { extension: "jpeg", offset: 0, bytes: [0xff, 0xd8, 0xff] },
   { extension: "gif", offset: 0, bytes: [0x47, 0x49, 0x46, 0x38] },
   { extension: "webm", offset: 0, bytes: [0x1a, 0x45, 0xdf, 0xa3] },
+  { extension: "flv", offset: 0, bytes: [0x46, 0x4c, 0x56] },
+  { extension: "mpg", offset: 0, bytes: [0x00, 0x00, 0x01, 0xba] },
+  { extension: "mxf", offset: 0, bytes: [0x06, 0x0e, 0x2b, 0x34] },
   { extension: "mp3", offset: 0, bytes: [0x49, 0x44, 0x33] },
   { extension: "ogg", offset: 0, bytes: [0x4f, 0x67, 0x67, 0x53] },
   { extension: "flac", offset: 0, bytes: [0x66, 0x4c, 0x61, 0x43] },
@@ -110,6 +171,7 @@ function detectExtensionFromBytes(buffer: Buffer): string | null {
     const riffType = asciiAt(buffer, 8, 4);
     if (riffType === "WEBP") return "webp";
     if (riffType === "WAVE") return "wav";
+    if (riffType === "AVI ") return "avi";
   }
 
   if (bytesMatch(buffer, 4, [0x66, 0x74, 0x79, 0x70])) {
@@ -161,6 +223,35 @@ const AUDIO_MIME_TO_EXTENSION: Record<string, string> = {
   "audio/webm": "webm"
 };
 
+const VIDEO_MIME_TO_EXTENSION: Record<string, string> = {
+  "video/mp4": "mp4",
+  "video/x-m4v": "m4v",
+  "video/quicktime": "mov",
+  "video/webm": "webm",
+  "video/ogg": "ogv",
+  "application/ogg": "ogv",
+  "video/x-matroska": "mkv",
+  "application/x-matroska": "mkv",
+  "video/x-msvideo": "avi",
+  "video/avi": "avi",
+  "video/msvideo": "avi",
+  "video/mpeg": "mpg",
+  "video/mp2t": "ts",
+  "video/3gpp": "3gp",
+  "video/3gpp2": "3g2",
+  "video/x-flv": "flv",
+  "video/x-f4v": "f4v",
+  "video/x-ms-wmv": "wmv",
+  "video/x-ms-asf": "asf",
+  "application/vnd.rn-realmedia": "rm",
+  "video/vnd.rn-realvideo": "rv",
+  "application/mxf": "mxf",
+  "video/h264": "h264",
+  "video/h265": "h265",
+  "video/hevc": "hevc",
+  "video/av1": "av1"
+};
+
 function normalizeStoredAudioExtension(extension: string) {
   if (extension === "mpeg" || extension === "mpga") return "mp3";
   if (extension === "mp4" || extension === "mov") return "m4a";
@@ -180,12 +271,28 @@ function extensionFromMime(mimetype: string | undefined) {
   if (AUDIO_MIME_TO_EXTENSION[mime]) {
     return AUDIO_MIME_TO_EXTENSION[mime];
   }
+  if (VIDEO_MIME_TO_EXTENSION[mime]) {
+    return VIDEO_MIME_TO_EXTENSION[mime];
+  }
+  if (mime.startsWith("video/")) {
+    const subtype = mime.slice("video/".length).replace(/^x-/, "").split("+")[0] ?? "";
+    if (isVideoUploadExtension(subtype)) return subtype;
+  }
   if (mime.startsWith("audio/")) {
     const subtype = mime.slice("audio/".length).replace(/^x-/, "");
     if (subtype === "mpeg") return "mp3";
     return subtype || "";
   }
   return "";
+}
+
+export function isVideoUpload(filename: string | undefined, mimetype: string | undefined) {
+  const mime = (mimetype ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
+  return (
+    mime.startsWith("video/") ||
+    isVideoUploadExtension(extensionFromFilename(filename)) ||
+    isVideoUploadExtension(extensionFromMime(mimetype))
+  );
 }
 
 export function resolveUploadExtension(
@@ -222,6 +329,16 @@ export function resolveUploadExtension(
 
   if (nameExtension && !FORBIDDEN_EXTENSIONS.has(nameExtension) && extensionMatchesGroup(nameExtension, group)) {
     return nameExtension;
+  }
+
+  if (mimeExtension && extensionMatchesGroup(mimeExtension, group)) {
+    return mimeExtension;
+  }
+
+  // MIME de vídeo incomum/novo: FFmpeg fará a validação definitiva. O arquivo
+  // nunca é publicado cru, então usar mp4 como extensão provisória é seguro.
+  if (group === "lessons" && (declaredMimetype ?? "").toLowerCase().startsWith("video/")) {
+    return "mp4";
   }
 
   return null;

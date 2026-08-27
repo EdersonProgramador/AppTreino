@@ -136,7 +136,7 @@ export function ProfileScreen() {
   return (
     <StudentPage>
       <BackChip label="Voltar" onPress={() => navigation.goBack()} />
-      <View style={{ borderRadius: 18, overflow: "hidden", borderWidth: 1, borderColor: st.border, backgroundColor: st.panel }}>
+      <View style={{ borderRadius: 18, overflow: "hidden", borderWidth: 1, borderColor: st.line, backgroundColor: st.panelBg }}>
         <View style={{ minHeight: 140, backgroundColor: cover, justifyContent: "flex-end", padding: 12 }}>
           <Pressable
             onPress={() => {
@@ -169,7 +169,7 @@ export function ProfileScreen() {
               borderRadius: 44,
               marginTop: -36,
               borderWidth: 4,
-              borderColor: st.panel,
+              borderColor: st.panelBg,
               overflow: "hidden",
               backgroundColor: st.bg,
               alignItems: "center",
@@ -220,9 +220,9 @@ export function ProfileScreen() {
                   aspectRatio: 1,
                   borderRadius: 12,
                   overflow: "hidden",
-                  backgroundColor: st.panel,
+                  backgroundColor: st.panelBg,
                   borderWidth: 1,
-                  borderColor: st.border,
+                  borderColor: st.line,
                   alignItems: "center",
                   justifyContent: "center",
                   padding: 6

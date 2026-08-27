@@ -41,14 +41,28 @@ import { uiSounds } from "./uiSounds";
 
 const FEED_FAMILY_SCREENS = new Set(["Feed", "Reels", "Live"]);
 
+/**
+ * Estrutura mínima lida de um navigator. `index` é opcional e `routes` readonly
+ * para aceitar tanto NavigationState quanto PartialState do React Navigation.
+ */
+type ChromeNavState = {
+  index?: number;
+  type?: string;
+  routes: ReadonlyArray<{ name: string; state?: ChromeNavState }>;
+};
+
+type ChromeNavLike = {
+  getParent?: () => unknown;
+  getState?: () => ChromeNavState | undefined;
+};
+
 /** StudentChrome mounts inside a stack screen — useNavigationState is that stack, not the tabs. */
-function resolveFeedChromeFlags(navigation: { getParent?: () => unknown; getState?: () => { index: number; type?: string; routes: Array<{ name: string; state?: { index: number; routes: Array<{ name: string }> } }> } }) {
-  let nav: { getParent?: () => unknown; getState?: () => { index: number; type?: string; routes: Array<{ name: string; state?: { index: number; routes: Array<{ name: string }> } }> } } | null =
-    navigation;
+function resolveFeedChromeFlags(navigation: ChromeNavLike) {
+  let nav: ChromeNavLike | null = navigation;
   while (nav) {
     const state = nav.getState?.();
     if (state?.type === "tab") {
-      const tab = state.routes[state.index];
+      const tab = state.routes[state.index ?? 0];
       if (tab?.name === "FeedTab") {
         const stack = tab.state;
         const screen = stack?.routes?.[stack.index ?? 0]?.name ?? "Feed";
@@ -66,7 +80,7 @@ function resolveFeedChromeFlags(navigation: { getParent?: () => unknown; getStat
 
   // Fallback: Chrome is already inside Feed stack (or similar).
   const local = navigation.getState?.();
-  const screen = local?.routes?.[local.index]?.name ?? null;
+  const screen = local?.routes?.[local.index ?? 0]?.name ?? null;
   const onFeedFamily = screen != null && FEED_FAMILY_SCREENS.has(screen);
   return {
     onFeedTab: onFeedFamily,

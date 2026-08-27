@@ -67,6 +67,7 @@ function resolveApiUrl() {
     }
   }
 
+  // LAN web dev → local API on the same host as Expo (port 3333).
   try {
     const web = new URL(WEB_URL);
     if (web.hostname === "localhost" || web.hostname === "127.0.0.1" || isLanHost(web.hostname)) {
@@ -76,7 +77,7 @@ function resolveApiUrl() {
     // ignore
   }
 
-  if (metroHost) return `http://${metroHost}:${DEFAULT_API_PORT}`;
+  // Production web (Vercel) or no LAN context → always use hosted API.
   return DEFAULT_API_URL;
 }
 

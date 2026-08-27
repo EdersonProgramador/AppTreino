@@ -15,7 +15,7 @@ import {
   Trophy,
   Wrench
 } from "lucide-react";
-import { mediaUrl as appMediaUrl } from "../../lib/urls";
+import { mediaUrl as appMediaUrl, retryVideoAsCompatible } from "../../lib/urls";
 import { uiSounds } from "../../lib/ui-sounds";
 import {
   clearWorkoutRunner,
@@ -283,6 +283,7 @@ function MediaBlock({ exercise, expanded = false, resting = false, lesson = fals
             src={mediaUrl}
             controls={expanded}
             autoPlay={lesson}
+            onError={(event) => retryVideoAsCompatible(event.currentTarget, mediaUrl)}
             loop={lesson || !expanded}
             muted={!expanded}
             playsInline
@@ -1004,7 +1005,13 @@ export function WorkoutPlayer({
                         isYouTubeUrl(mediaUrl) ? (
                           <img src={getYouTubeThumbnailUrl(mediaUrl)} alt={mediaAlt(resolvedExercise)} onClick={() => openExerciseFromSequence(index)} />
                         ) : isVideoMedia(mediaUrl) && !isImageMedia(mediaUrl) ? (
-                          <video src={mediaUrl} muted playsInline onClick={() => openExerciseFromSequence(index)} />
+                          <video
+                            src={mediaUrl}
+                            muted
+                            playsInline
+                            onClick={() => openExerciseFromSequence(index)}
+                            onError={(event) => retryVideoAsCompatible(event.currentTarget, mediaUrl)}
+                          />
                         ) : (
                           <img src={mediaUrl} alt={mediaAlt(resolvedExercise)} onClick={() => openExerciseFromSequence(index)} />
                         )

@@ -8,7 +8,7 @@ import { hashPassword, requirePathRole, requireRole } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { isImageUploadExtension, optimizeUploadedImage } from "../media-optimize.js";
-import { saveValidatedUpload, uploadsDir } from "../upload-security.js";
+import { isVideoUploadExtension, saveValidatedUpload, uploadsDir } from "../upload-security.js";
 import type { UploadGroup } from "../upload-security.js";
 import { persistUploadedFile } from "../upload-persist.js";
 import { ensureUploadedVideoIsMp4 } from "../video-transcode.js";
@@ -1220,37 +1220,23 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       mimeType = optimized.mimeType;
       relativePath = optimized.relativePath;
       absolutePath = optimized.absolutePath;
-    } else if (
-      group === "lessons" &&
-      ["mp4", "m4v", "mov", "webm", "ogv", "mkv", "avi"].includes(extension)
-    ) {
+    } else if (group === "lessons" && isVideoUploadExtension(extension)) {
       try {
         const video = await ensureUploadedVideoIsMp4({
           rawPath: targetPath,
           extension,
           group,
-          baseFilename
+          baseFilename,
+          forceCompatible: true,
+          allowOriginalFallback: false
         });
         storedFilename = video.filename;
         mimeType = video.mimeType;
         relativePath = video.relativePath;
         absolutePath = video.absolutePath;
       } catch (err) {
-        const fallback = (err as { fallback?: {
-          filename: string;
-          relativePath: string;
-          absolutePath: string;
-          mimeType: string;
-        } }).fallback;
-        if (fallback) {
-          request.log.warn({ err }, "admin video transcode failed; keeping original format");
-          storedFilename = fallback.filename;
-          mimeType = fallback.mimeType;
-          relativePath = fallback.relativePath;
-          absolutePath = fallback.absolutePath;
-        } else {
-          throw err;
-        }
+        request.log.warn({ err, extension, filename: file.filename }, "admin video normalization failed");
+        throw httpError(422, "O vídeo não pôde ser convertido para MP4 H.264/AAC.");
       }
     } else {
       const { rename } = await import("node:fs/promises");

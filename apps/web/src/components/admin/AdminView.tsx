@@ -95,7 +95,7 @@ import {
   orderStatusTone,
   shippingMethodLabel
 } from "../../lib/commerce";
-import { assetUrl, mediaUrl } from "../../lib/urls";
+import { assetUrl, mediaUrl, retryVideoAsCompatible } from "../../lib/urls";
 import {
   labelLocationType,
   locationTypeLabel,
@@ -1274,7 +1274,9 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     const resolved = src.startsWith("data:") ? src : mediaUrl(src);
 
     if (kind === "image") return <img src={resolved} alt={label} />;
-    if (kind === "video") return <video src={resolved} controls />;
+    if (kind === "video") {
+      return <video src={resolved} controls onError={(event) => retryVideoAsCompatible(event.currentTarget, src)} />;
+    }
     if (kind === "audio") return <audio src={resolved} controls />;
 
     return (

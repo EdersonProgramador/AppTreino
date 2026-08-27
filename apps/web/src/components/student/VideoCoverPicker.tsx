@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { mediaUrl } from "../../lib/urls";
+import { mediaUrl, retryVideoAsCompatible } from "../../lib/urls";
 import {
   ensureVideoDuration,
   formatVideoClock,
@@ -100,7 +100,12 @@ export function VideoCoverPicker({
             if (duration > 0) setDurationSec(duration);
           }}
           onSeeked={() => void captureFrame()}
-          onError={() => {
+          onError={(event) => {
+            if (retryVideoAsCompatible(event.currentTarget, videoSrc)) {
+              setLoading(true);
+              setCaptureError(null);
+              return;
+            }
             setLoading(false);
             setCaptureError("Não foi possível carregar o vídeo para escolher a capa.");
           }}

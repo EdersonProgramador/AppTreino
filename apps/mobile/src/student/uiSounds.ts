@@ -4,7 +4,7 @@ import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from "expo-av";
 const SOUND_KEY = "app-treino-sound-enabled";
 const CDN = "https://reactsounds.sfo3.cdn.digitaloceanspaces.com/v1";
 
-/** Mesmos arquivos hashed do react-sounds 1.0.30 usados no WebView. */
+/** Mesmos arquivos hashed do react-sounds 1.0.30 usados no app web. */
 const FILES: Record<string, string> = {
   "game/void": "game/void.ab99118.mp3",
   "notification/error": "notification/error.b92d3c6.mp3",
@@ -136,7 +136,7 @@ async function playLibrarySound(name: string, volume = 0.45) {
       );
       cache.set(name, created.sound);
     } catch {
-      // Sem rede/CDN — a UI segue sem áudio, igual ao WebView.
+      // Sem rede/CDN — a UI segue sem áudio.
     }
   }
 }

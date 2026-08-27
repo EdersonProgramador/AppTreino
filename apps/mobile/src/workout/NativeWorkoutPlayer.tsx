@@ -18,7 +18,6 @@ import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
-import { WebView } from "react-native-webview";
 import { AppVideo } from "../components/AppVideo";
 import { MediaImage } from "../lib/MediaImage";
 import type { WorkoutExercise, WorkoutStructureType } from "../types";
@@ -39,7 +38,6 @@ import {
   dropSetMax,
   exerciseInstanceKey,
   formatElapsedTime,
-  getYouTubeEmbedUrl,
   instructionSteps,
   intensityLabel,
   isImageMedia,
@@ -91,6 +89,23 @@ function MediaFallback() {
   return <Ionicons name="barbell" size={54} color="#cfd2d3" />;
 }
 
+/**
+ * Conteúdo legado do YouTube: os termos do serviço exigem o player oficial, que
+ * só existe em WebView. Enquanto esses vídeos não migram para a hospedagem
+ * própria, abrimos no app do YouTube em vez de embutir um browser aqui.
+ */
+function YouTubeCard({ url, preview, height }: { url: string; preview: string; height: number }) {
+  return (
+    <Pressable style={[styles.mediaFrame, { height }]} onPress={() => void Linking.openURL(url)}>
+      <MediaImage uri={preview} style={styles.mediaFill} resizeMode="cover" fallback={<MediaFallback />} />
+      <View style={styles.ytOverlay}>
+        <Ionicons name="logo-youtube" size={46} color="#fff" />
+        <Text style={styles.ytText}>Assistir no YouTube</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 function MediaBlock({
   exercise,
   expanded = false,
@@ -103,7 +118,6 @@ function MediaBlock({
   lesson?: boolean;
 }) {
   const url = resolvedMedia(exercise.videoUrl);
-  const youtube = isYouTubeUrl(url) ? getYouTubeEmbedUrl(url, lesson) : "";
   const preview = previewMediaUrl(exercise.videoUrl);
   const height = expanded ? 220 : 180;
 
@@ -116,8 +130,8 @@ function MediaBlock({
       </View>
     );
   }
-  if (youtube && expanded) {
-    return <WebView source={{ uri: youtube }} style={[styles.mediaFrame, { height }]} allowsFullscreenVideo />;
+  if (url && isYouTubeUrl(url) && expanded) {
+    return <YouTubeCard url={url} preview={preview} height={height} />;
   }
   if (url && isVideoMedia(url) && !isImageMedia(url) && !isYouTubeUrl(url)) {
     return (
@@ -1548,6 +1562,14 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%"
   },
+  ytOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "rgba(0,0,0,0.42)"
+  },
+  ytText: { color: "#fff", fontWeight: "800" },
   mediaRest: { backgroundColor: "#fff8f1" },
   restStage: { width: 88, height: 88, alignItems: "center", justifyContent: "center" },
   audioBtn: {

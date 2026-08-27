@@ -3,7 +3,7 @@ import { API_URL, WEB_URL } from "../config";
 /**
  * Mesma regra da web (`apps/web/src/lib/urls.ts` + `getMediaBaseUrl`):
  * - uploads → CDN (EXPO_PUBLIC_MEDIA_URL / R2)
- * - containers legados (webm/mov/…) → API `/media/video?path=` (MP4 H.264)
+ * - containers legados (webm/mov/…) → R2 direto; fallback usa o MP4 irmão
  * - http externos → intactos
  */
 
@@ -37,8 +37,93 @@ function encodeSpaces(href: string) {
   return href.includes(" ") ? encodeURI(href) : href;
 }
 
-function needsVideoBridge(path: string) {
-  return /\.(webm|ogv|ogg|mov|mkv|avi)(\?|#|$)/i.test(path);
+const VIDEO_EXTENSION =
+  /\.(mp4|m4v|mov|qt|webm|mkv|avi|divx|ogv|ogg|mpg|mpeg|mpe|m2v|mpv|ts|mts|m2ts|3gp|3g2|flv|f4v|wmv|asf|vob|mxf|rm|rmvb|rv|hevc|h265|h264|av1|ivf)(?=$|[?#])/i;
+const resolvedCompatibleVideos = new Map<string, Promise<string | null>>();
+
+function compatibleVideoRelativePath(relativePath: string) {
+  const cleaned = relativePath.replace(/^\/+/, "").split(/[?#]/)[0];
+  if (/\.compat\.mp4$/i.test(cleaned) || !VIDEO_EXTENSION.test(cleaned)) return null;
+  if (/\.mp4$/i.test(cleaned)) {
+    return cleaned.replace(/\.mp4$/i, ".compat.mp4");
+  }
+  return cleaned.replace(VIDEO_EXTENSION, ".mp4");
+}
+
+/**
+ * Plano B sem passar pelo Render: o upload e o transcodificador persistem
+ * `nome.mp4` ao lado do arquivo legado no R2. Range requests de vídeo no
+ * `/media/video` acionavam o desafio 429 do Cloudflare antes de chegar à API.
+ */
+export function videoBridgeUrl(path?: string | null): string | null {
+  const relative = uploadRelativePath(path);
+  if (!relative) return null;
+  const compatible = compatibleVideoRelativePath(relative);
+  if (!compatible) return null;
+  const bridged = uploadPublicUrl(compatible);
+  return bridged === path ? null : bridged;
+}
+
+/**
+ * Prepara vídeo antigo apenas quando o MP4 irmão ainda não existe.
+ * Chamadas simultâneas para o mesmo arquivo compartilham uma única Promise,
+ * impedindo rajadas no servidor.
+ */
+export function resolvePlayableVideoUrl(path?: string | null): Promise<string | null> {
+  const relative = uploadRelativePath(path);
+  if (!relative || !compatibleVideoRelativePath(relative)) return Promise.resolve(null);
+
+  const cleaned = relative.replace(/^\/+/, "").split(/[?#]/)[0];
+  const cached = resolvedCompatibleVideos.get(cleaned);
+  if (cached) return cached;
+
+  const task = fetch(`${originOf(API_URL)}/media/video-url?path=${encodeURIComponent(cleaned)}`, {
+    headers: { Accept: "application/json" }
+  })
+    .then(async (response) => {
+      if (response.ok) {
+        const data = (await response.json()) as { url?: unknown };
+        if (typeof data.url === "string" && /^https?:\/\//i.test(data.url)) {
+          return encodeSpaces(data.url);
+        }
+      }
+
+      // Compatibilidade enquanto `/media/video-url` ainda não estiver no
+      // backend publicado: HEAD aciona o conversor antigo sem baixar o vídeo.
+      if (response.status === 404) {
+        // A rota antiga não força recodificação de MP4/HEVC; só a nova cria
+        // `.compat.mp4`. Evita afirmar que um arquivo inexistente foi criado.
+        if (/\.(mp4|m4v)$/i.test(cleaned)) return null;
+        const legacy = await fetch(
+          `${originOf(API_URL)}/media/video?path=${encodeURIComponent(cleaned)}`,
+          { method: "HEAD" }
+        );
+        if (legacy.ok) {
+          try {
+            const finalUrl = new URL(legacy.url);
+            // Sem redirect: a rota terminou de converter e respondeu ela mesma.
+            if (/\/media\/video$/i.test(finalUrl.pathname)) {
+              return videoBridgeUrl(cleaned);
+            }
+          } catch {
+            // Continua pela verificação do caminho abaixo.
+          }
+          const redirectedPath = uploadRelativePath(legacy.url);
+          if (!redirectedPath || !VIDEO_EXTENSION.test(redirectedPath)) {
+            return videoBridgeUrl(cleaned);
+          }
+        }
+      }
+      return null;
+    })
+    .catch(() => null)
+    .then((url) => {
+      if (!url) resolvedCompatibleVideos.delete(cleaned);
+      return url;
+    });
+
+  resolvedCompatibleVideos.set(cleaned, task);
+  return task;
 }
 
 /** Path relativo de upload (`images|lessons|materials|audio/...`), igual à web. */
@@ -87,13 +172,9 @@ function uploadPublicUrl(relativePath: string) {
   return encodeSpaces(`${MEDIA_URL}/${cleaned}`);
 }
 
-/** Legado → bridge da API (igual web). MP4/imagem → CDN. */
+/** Toda mídia começa pelo CDN; AppVideo tenta o MP4 irmão se o codec falhar. */
 function playableUploadUrl(relativePath: string) {
   const cleaned = relativePath.replace(/^\/+/, "").split(/[?#]/)[0];
-  if (needsVideoBridge(cleaned)) {
-    const api = originOf(API_URL);
-    return `${api}/media/video?path=${encodeURIComponent(cleaned)}`;
-  }
   return uploadPublicUrl(cleaned);
 }
 

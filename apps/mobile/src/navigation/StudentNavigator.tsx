@@ -33,6 +33,7 @@ import { RunnerIcon } from "../student/RunnerIcon";
 import { useStudent } from "../student/StudentContext";
 import { navigationThemeFor, tabBarStyleFor, useSt } from "../student/theme";
 import { uiSounds } from "../student/uiSounds";
+import { studentLinking } from "./linking";
 import type {
   ActivityStackParamList,
   ClubStackParamList,
@@ -174,7 +175,7 @@ export function StudentNavigator() {
   const { profile } = useStudent();
 
   return (
-    <NavigationContainer theme={navigationThemeFor(theme, st)}>
+    <NavigationContainer theme={navigationThemeFor(theme, st)} linking={studentLinking}>
       <Tabs.Navigator
         initialRouteName="TrainingTab"
         screenListeners={{

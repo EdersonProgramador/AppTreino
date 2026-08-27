@@ -8,7 +8,7 @@ import { env } from "../env.js";
 import { isImageUploadExtension, optimizeUploadedImage } from "../media-optimize.js";
 import { prisma } from "../prisma.js";
 import type { Prisma } from "@prisma/client";
-import { saveValidatedUpload, uploadsDir } from "../upload-security.js";
+import { isVideoUpload, saveValidatedUpload, uploadsDir } from "../upload-security.js";
 import { persistUploadedFile } from "../upload-persist.js";
 import { ensureUploadedVideoIsMp4 } from "../video-transcode.js";
 import { latLngToCell, cellToLatLng, cellDisk } from "./activity-h3.js";
@@ -1199,7 +1199,7 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     });
     if (!file) return reply.code(400).send({ error: "Selecione uma foto ou vídeo." });
 
-    const isVideo = file.mimetype.startsWith("video/");
+    const isVideo = isVideoUpload(file.filename, file.mimetype);
     const group = isVideo ? "lessons" : "images";
     const targetDir = resolve(uploadsDir, group);
     mkdirSync(targetDir, { recursive: true });
@@ -1219,28 +1219,19 @@ export async function registerSocialRoutes(app: FastifyInstance) {
           rawPath: targetPath,
           extension,
           group,
-          baseFilename
+          baseFilename,
+          forceCompatible: true,
+          allowOriginalFallback: false
         });
         storedFilename = video.filename;
         mimeType = video.mimeType;
         relativePath = video.relativePath;
         absolutePath = video.absolutePath;
       } catch (err) {
-        const fallback = (err as { fallback?: {
-          filename: string;
-          relativePath: string;
-          absolutePath: string;
-          mimeType: string;
-        } }).fallback;
-        if (fallback) {
-          request.log.warn({ err }, "video transcode failed; keeping original format");
-          storedFilename = fallback.filename;
-          mimeType = fallback.mimeType;
-          relativePath = fallback.relativePath;
-          absolutePath = fallback.absolutePath;
-        } else {
-          throw err;
-        }
+        request.log.warn({ err, extension, filename: file.filename }, "social video normalization failed");
+        return reply.code(422).send({
+          error: "O arquivo é um vídeo, mas o codec não pôde ser convertido. Tente exportá-lo novamente."
+        });
       }
     } else if (isImageUploadExtension(extension)) {
       const optimized = await optimizeUploadedImage({

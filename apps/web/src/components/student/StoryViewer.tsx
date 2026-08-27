@@ -8,7 +8,7 @@ import {
   ensureVideoDuration,
   readVideoDuration
 } from "../../lib/video-cover";
-import { mediaUrl } from "../../lib/urls";
+import { mediaUrl, retryVideoAsCompatible } from "../../lib/urls";
 import type { SocialStoryRail } from "../../types/student";
 
 type Props = {
@@ -214,6 +214,7 @@ export function StoryViewer({ rails, startRail, startItem = 0, token, onClose, o
               playsInline
               muted
               autoPlay
+              onError={(event) => retryVideoAsCompatible(event.currentTarget, item.mediaUrl)}
               onLoadedMetadata={(event) => {
                 const seconds = readVideoDuration(event.currentTarget);
                 setSlideDurationMs(Math.min(Math.max(seconds, 0.1) * 1000, STORY_VIDEO_MAX_MS));

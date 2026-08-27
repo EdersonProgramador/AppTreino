@@ -10,7 +10,7 @@ require("fast-text-encoding");
 const NativeDecoder = globalThis.TextDecoder;
 const NativeEncoder = globalThis.TextEncoder;
 
-function SafeTextDecoder(label, options) {
+function SafeTextDecoder(label?: string, options?: TextDecoderOptions) {
   try {
     return new NativeDecoder(label == null ? "utf-8" : label, options);
   } catch {
@@ -23,4 +23,4 @@ polyfillGlobal("TextDecoder", () => SafeTextDecoder);
 if (NativeEncoder) {
   polyfillGlobal("TextEncoder", () => NativeEncoder);
 }
-globalThis.TextDecoder = SafeTextDecoder;
+globalThis.TextDecoder = SafeTextDecoder as unknown as typeof globalThis.TextDecoder;

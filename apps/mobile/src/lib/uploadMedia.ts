@@ -8,6 +8,13 @@ type PickerAssetLike = {
   duration?: number | null;
 };
 
+const VIDEO_EXTENSIONS = new Set([
+  "mp4", "m4v", "mov", "qt", "webm", "mkv", "avi", "divx", "ogv", "ogg",
+  "mpg", "mpeg", "mpe", "m2v", "mpv", "ts", "mts", "m2ts", "3gp", "3g2",
+  "flv", "f4v", "wmv", "asf", "vob", "mxf", "rm", "rmvb", "rv", "hevc",
+  "h265", "h264", "av1", "ivf"
+]);
+
 function extensionFromUri(uri: string) {
   const clean = uri.split("?")[0].split("#")[0];
   const name = clean.split(/[/\\]/).pop() ?? "";
@@ -22,7 +29,7 @@ function isVideoAsset(asset: PickerAssetLike) {
   const mime = (asset.mimeType ?? "").toLowerCase();
   if (mime.startsWith("video/")) return true;
   const ext = extensionFromUri(asset.uri) || extensionFromUri(asset.fileName ?? "");
-  return ["mp4", "m4v", "mov", "webm", "mkv", "avi"].includes(ext);
+  return VIDEO_EXTENSIONS.has(ext);
 }
 
 /** Build a filename that matches the real container (iOS camera is often .mov). */
@@ -31,6 +38,15 @@ export function uploadFilenameForAsset(asset: PickerAssetLike, fallbackBase = "u
   const fromUri = extensionFromUri(asset.uri);
   const mime = (asset.mimeType ?? "").toLowerCase();
   let ext = fromName || fromUri;
+  if (isVideoAsset(asset) && !VIDEO_EXTENSIONS.has(ext)) {
+    if (mime.includes("quicktime")) ext = "mov";
+    else if (mime.includes("webm")) ext = "webm";
+    else if (mime.includes("matroska")) ext = "mkv";
+    else if (mime.includes("mpeg")) ext = "mpg";
+    else if (mime.includes("3gpp2")) ext = "3g2";
+    else if (mime.includes("3gpp")) ext = "3gp";
+    else ext = "mp4";
+  }
   if (!ext) {
     if (mime.includes("quicktime") || mime.includes("mov")) ext = "mov";
     else if (mime.includes("webm")) ext = "webm";

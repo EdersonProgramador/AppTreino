@@ -1,10 +1,12 @@
+import { isVideoFile } from "./video-formats";
+
 export const STORY_IMAGE_DURATION_MS = 6000;
 export const STORY_VIDEO_MAX_SECONDS = 60;
 export const STORY_VIDEO_MAX_MS = STORY_VIDEO_MAX_SECONDS * 1000;
 
 /** Duração de um arquivo de vídeo local (segundos). */
 export function readVideoFileDuration(file: File): Promise<number> {
-  if (!file.type.startsWith("video/")) return Promise.resolve(0);
+  if (!isVideoFile(file)) return Promise.resolve(0);
 
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
@@ -25,7 +27,7 @@ export function readVideoFileDuration(file: File): Promise<number> {
 }
 
 export async function assertStoryVideoWithinLimit(file: File) {
-  if (!file.type.startsWith("video/")) return;
+  if (!isVideoFile(file)) return;
   const duration = await readVideoFileDuration(file);
   if (duration > STORY_VIDEO_MAX_SECONDS + 0.25) {
     throw new Error(`Vídeos de momento podem ter no máximo ${STORY_VIDEO_MAX_SECONDS} segundos.`);

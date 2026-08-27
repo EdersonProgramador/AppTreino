@@ -137,11 +137,14 @@ export function NativeCameraModal({
   }
 
   async function toggleRecord() {
-    if (!cameraRef.current || busy || !ready) return;
+    if (!cameraRef.current || !ready) return;
+    // Parar vem antes de `busy`: gravar mantém `busy` ligado até o vídeo sair,
+    // então checar `busy` primeiro deixava o botão de parar sem efeito.
     if (recording) {
       cameraRef.current.stopRecording();
       return;
     }
+    if (busy) return;
     setBusy(true);
     setRecording(true);
     clearElapsed();
@@ -246,7 +249,11 @@ export function NativeCameraModal({
               ) : null}
 
               <Pressable
-                style={[styles.shutter, recording && styles.shutterRec, (!ready || busy) && styles.shutterDisabled]}
+                style={[
+                  styles.shutter,
+                  recording && styles.shutterRec,
+                  (!ready || (busy && !recording)) && styles.shutterDisabled
+                ]}
                 onPress={handleShutter}
                 disabled={!ready || (busy && !recording)}
               >

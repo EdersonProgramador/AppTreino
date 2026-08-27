@@ -22,12 +22,13 @@ import {
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { apiDelete, apiGet, apiPost, apiUpload } from "../../api";
-import { mediaUrl } from "../../lib/urls";
+import { mediaUrl, retryVideoAsCompatible } from "../../lib/urls";
 import { formatClock, formatKm, formatPace } from "../../lib/activity-geo";
 import { readFeedCache, writeFeedCache } from "../../lib/feed-cache";
 import { useFeedChromeStore } from "../../stores/feedChromeStore";
 import { brand } from "../../lib/brand";
 import { shareSocialPost } from "../../lib/share-social-post";
+import { isVideoFile, MEDIA_FILE_ACCEPT } from "../../lib/video-formats";
 import type {
   SocialAuthor,
   SocialComment,
@@ -198,6 +199,7 @@ function MediaCarousel({ items }: { items: MediaItem[] }) {
             controls
             playsInline
             key={current.url}
+            onError={(event) => retryVideoAsCompatible(event.currentTarget, current.url)}
           />
         ) : (
           <img className="student-feed-media" src={mediaUrl(current.url)} alt="" key={current.url} />
@@ -380,7 +382,7 @@ export function StudentFeedSection({
     const form = new FormData();
     form.append("file", file);
     const uploaded = await apiUpload<UploadResponse>("/student/social/uploads", form, token);
-    const isVideo = file.type.startsWith("video/");
+    const isVideo = isVideoFile(file);
     return {
       url: uploaded.file.url,
       type: (isVideo ? "VIDEO" : "IMAGE") as "IMAGE" | "VIDEO",
@@ -1052,7 +1054,7 @@ export function StudentFeedSection({
               />
             ))}
           <div className="student-feed-composer-bar">
-            <input ref={fileRef} type="file" accept="image/*,video/*" multiple hidden onChange={(event) => void onPickFiles(event.target.files)} />
+            <input ref={fileRef} type="file" accept={MEDIA_FILE_ACCEPT} multiple hidden onChange={(event) => void onPickFiles(event.target.files)} />
             <button type="button" className="student-ghost-chip" onClick={() => fileRef.current?.click()} disabled={busy || mediaItems.length >= MAX_MEDIA}>
               <ImagePlus size={16} /> Mídia
             </button>
@@ -1345,7 +1347,7 @@ export function StudentFeedSection({
               <input
                 ref={storyFileRef}
                 type="file"
-                accept="image/*,video/*"
+                accept={MEDIA_FILE_ACCEPT}
                 hidden
                 onChange={async (event) => {
                   const file = event.target.files?.[0];

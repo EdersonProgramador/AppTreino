@@ -53,7 +53,7 @@ export async function ensureCameraAccess(needMic: boolean) {
       const mic = await Camera.requestMicrophonePermissionsAsync();
       micGranted = mic.granted;
     } catch {
-      micGranted = true;
+      micGranted = false;
     }
     if (!micGranted) {
       openSettingsHint("mic");

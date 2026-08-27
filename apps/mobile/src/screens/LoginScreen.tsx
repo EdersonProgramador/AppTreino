@@ -122,6 +122,9 @@ export function LoginScreen({
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
             {success ? <Text style={styles.ok}>{success}</Text> : null}
+            {__DEV__ || error ? (
+              <Text style={[styles.debug, { color: st.faint }]}>API: {API_URL}</Text>
+            ) : null}
 
             <Pressable
               accessibilityRole="button"
@@ -157,7 +160,6 @@ export function LoginScreen({
             <Pressable onPress={() => void Linking.openURL(`${WEB_URL}/login`)} style={styles.linkWrap}>
               <Text style={[styles.muted, { color: st.faint }]}>Criar conta no site</Text>
             </Pressable>
-            {error ? <Text style={[styles.debug, { color: st.faint }]}>API: {API_URL}</Text> : null}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

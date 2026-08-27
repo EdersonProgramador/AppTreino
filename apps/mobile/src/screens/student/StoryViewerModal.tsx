@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
-  Image,
   Modal,
   Pressable,
   StyleSheet,
@@ -13,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { apiPost } from "../../auth/api";
 import { AppVideo } from "../../components/AppVideo";
 import { mediaUrl } from "../../lib/media";
+import { MediaImage } from "../../lib/MediaImage";
 import { STORY_IMAGE_DURATION_MS, STORY_VIDEO_MAX_MS, STORY_VIDEO_MAX_SECONDS } from "../../student/storyConstants";
 import type { SocialStoryGalleryItem, SocialStoryRail } from "../../types";
 
@@ -148,8 +148,8 @@ export function StoryViewerModal({
     if (paused) return;
 
     if (!isVideo) {
+      // `runProgress` já avança no fim da animação; um timer extra pularia um story.
       runProgress(STORY_IMAGE_DURATION_MS);
-      timerRef.current = setTimeout(() => goNextRef.current(), STORY_IMAGE_DURATION_MS);
       return () => {
         clearTimer();
         stopProgress();
@@ -248,6 +248,7 @@ export function StoryViewerModal({
               loop={archiveMode}
               muted={!archiveMode}
               nativeControls={archiveMode}
+              poster={mediaUrl(item?.coverUrl)}
               restartKey={item?.id}
               maxSeconds={archiveMode ? undefined : STORY_VIDEO_MAX_SECONDS}
               onDurationMs={(ms) => {
@@ -263,7 +264,7 @@ export function StoryViewerModal({
               }}
             />
           ) : uri ? (
-            <Image key={item?.id} source={{ uri }} style={styles.media} resizeMode="contain" />
+            <MediaImage key={item?.id} uri={item?.mediaUrl} style={styles.media} resizeMode="contain" />
           ) : null}
 
           <Pressable

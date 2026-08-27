@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -15,7 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiGet, apiPost } from "../../auth/api";
-import { mediaUrl } from "../../lib/media";
+import { MediaImage } from "../../lib/MediaImage";
 import { useSt, type StudentTokens } from "../../student/theme";
 import type { SocialComment } from "../../types";
 
@@ -167,13 +166,11 @@ export function FeedCommentsSheet({
   function renderItem(comment: SocialComment, rootId: string, isReply = false) {
     return (
       <View style={[styles.item, isReply && styles.itemReply]} key={comment.id}>
-        {comment.author.avatarUrl ? (
-          <Image source={{ uri: mediaUrl(comment.author.avatarUrl) }} style={[styles.avatar, isReply && styles.avatarReply]} />
-        ) : (
-          <View style={[styles.avatar, isReply && styles.avatarReply, styles.avatarFallback]}>
-            <Text style={styles.avatarLetter}>{firstName(comment.author.name).slice(0, 1)}</Text>
-          </View>
-        )}
+        <MediaImage
+          uri={comment.author.avatarUrl}
+          style={[styles.avatar, isReply && styles.avatarReply]}
+          fallback={<Text style={styles.avatarLetter}>{firstName(comment.author.name).slice(0, 1)}</Text>}
+        />
         <View style={styles.bodyCol}>
           <Text style={styles.bodyText}>
             <Text style={styles.authorName}>{firstName(comment.author.name)} </Text>

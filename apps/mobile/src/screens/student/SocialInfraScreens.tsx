@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
-  Image,
   Modal,
   Pressable,
   RefreshControl,
@@ -15,13 +14,13 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { io, type Socket } from "socket.io-client";
 import * as ImagePicker from "expo-image-picker";
 import { apiDelete, apiGet, apiPost } from "../../auth/api";
 import { AppVideo } from "../../components/AppVideo";
 import { NativeCameraModal, type NativeCameraCapture } from "../../components/NativeCameraModal";
-import { API_URL } from "../../config";
 import { mediaUrl } from "../../lib/media";
+import { MediaImage } from "../../lib/MediaImage";
+import { getSocket } from "../../lib/socket";
 import { ensureLibraryAccess, uploadCameraCapture } from "../../lib/nativeMediaPick";
 import { uploadPickerAsset } from "../../lib/uploadMedia";
 import { EmptyState, GreenButton, StudentPage } from "../../student/layout";
@@ -30,15 +29,6 @@ import { useSt, type StudentTokens } from "../../student/theme";
 import { uiSounds } from "../../student/uiSounds";
 import type { SocialAuthor } from "../../types";
 import type { FeedStackParamList } from "../../navigation/types";
-
-let socket: Socket | null = null;
-
-function getSocket(token: string) {
-  if (socket?.connected) return socket;
-  socket?.disconnect();
-  socket = io(API_URL, { path: "/socket.io", auth: { token }, transports: ["websocket"] });
-  return socket;
-}
 
 type Nav = NativeStackNavigationProp<FeedStackParamList>;
 type ReelRow = {
@@ -89,6 +79,7 @@ function ReelSlide({
             playing={active && !paused}
             loop
             muted={muted}
+            poster={mediaUrl(reel.coverUrl)}
           />
         </Pressable>
       ) : (
@@ -349,6 +340,9 @@ export function LiveScreen() {
   const styles = useMemo(() => createLiveStyles(st), [st]);
   const navigation = useNavigation<Nav>();
   const isFocused = useIsFocused();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const replayWidth = Math.min(Math.max(windowWidth - 32, 0), 440);
+  const replayVideoHeight = Math.max(180, Math.min((replayWidth * 16) / 9, windowHeight - 144));
   const [lives, setLives] = useState<
     Array<{ id: string; title: string; host: SocialAuthor; isMine: boolean; savedByMe?: boolean }>
   >([]);
@@ -498,13 +492,11 @@ export function LiveScreen() {
                 });
               }}
             >
-              {live.host.avatarUrl ? (
-                <Image source={{ uri: mediaUrl(live.host.avatarUrl) }} style={styles.liveAvatar} />
-              ) : (
-                <View style={[styles.liveAvatar, styles.liveAvatarFallback]}>
-                  <Text style={styles.liveAvatarLetter}>{live.host.name.slice(0, 1)}</Text>
-                </View>
-              )}
+              <MediaImage
+                uri={live.host.avatarUrl}
+                style={styles.liveAvatar}
+                fallback={<Text style={styles.liveAvatarLetter}>{live.host.name.slice(0, 1)}</Text>}
+              />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.name} numberOfLines={1}>
                   {live.title}
@@ -571,11 +563,11 @@ export function LiveScreen() {
                   }}
                 >
                   <View style={styles.savedCover}>
-                    {cover ? (
-                      <Image source={{ uri: cover }} style={StyleSheet.absoluteFillObject} />
-                    ) : (
-                      <Text style={styles.liveAvatarLetter}>{live.host.name.slice(0, 1)}</Text>
-                    )}
+                    <MediaImage
+                      uri={cover}
+                      style={StyleSheet.absoluteFillObject}
+                      fallback={<Text style={styles.liveAvatarLetter}>{live.host.name.slice(0, 1)}</Text>}
+                    />
                     {video && !stillLive ? (
                       <View style={styles.playChip}>
                         <Ionicons name="play" size={12} color="#fff" />
@@ -609,11 +601,19 @@ export function LiveScreen() {
         </View>
       )}
 
-      <Modal visible={Boolean(replay)} transparent animationType="fade" onRequestClose={() => setReplay(null)}>
+      <Modal
+        visible={Boolean(replay)}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        navigationBarTranslucent
+        onRequestClose={() => setReplay(null)}
+      >
         <View style={styles.replayModal}>
-          <View style={styles.replayCard}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setReplay(null)} accessibilityLabel="Fechar replay" />
+          <View style={[styles.replayCard, { maxHeight: Math.max(280, windowHeight - 32) }]}>
             <View style={styles.replayHead}>
-              <Text style={styles.name} numberOfLines={1}>
+              <Text style={[styles.name, { flex: 1 }]} numberOfLines={1}>
                 {replay?.title || "Replay"}
               </Text>
               <Pressable onPress={() => setReplay(null)} hitSlop={8}>
@@ -623,7 +623,7 @@ export function LiveScreen() {
             {replay ? (
               <AppVideo
                 uri={replay.uri}
-                style={styles.replayVideo}
+                style={[styles.replayVideo, { height: replayVideoHeight }]}
                 contentFit="contain"
                 nativeControls
                 playing
@@ -982,9 +982,12 @@ function createLiveStyles(st: StudentTokens) {
       flex: 1,
       backgroundColor: "rgba(0,0,0,0.72)",
       justifyContent: "center",
+      alignItems: "center",
       padding: 16
     },
     replayCard: {
+      width: "100%",
+      maxWidth: 440,
       borderRadius: 18,
       overflow: "hidden",
       backgroundColor: st.card,
@@ -997,9 +1000,10 @@ function createLiveStyles(st: StudentTokens) {
       justifyContent: "space-between",
       paddingHorizontal: 14,
       paddingVertical: 12,
-      gap: 10
+      gap: 10,
+      flexShrink: 0
     },
-    replayVideo: { width: "100%", aspectRatio: 9 / 16, maxHeight: 520, backgroundColor: "#000" }
+    replayVideo: { width: "100%", backgroundColor: "#000" }
   });
 }
 

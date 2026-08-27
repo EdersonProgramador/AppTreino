@@ -12,6 +12,20 @@ const googleMapsApiKey =
 
 const expo = { ...appJson.expo };
 
+/**
+ * HTTP em texto puro só existe para o servidor de dev na LAN. Em build de
+ * produção ele é removido: libera MITM e a Apple exige justificativa para
+ * NSAllowsArbitraryLoads na revisão da App Store.
+ */
+const isProductionBuild =
+  process.env.EAS_BUILD_PROFILE === "production" || process.env.APP_ENV === "production";
+
+if (isProductionBuild) {
+  const { NSAppTransportSecurity, ...iosInfoPlist } = expo.ios.infoPlist || {};
+  expo.ios = { ...expo.ios, infoPlist: iosInfoPlist };
+  expo.android = { ...expo.android, usesCleartextTraffic: false };
+}
+
 if (googleMapsApiKey) {
   expo.android = {
     ...(expo.android || {}),

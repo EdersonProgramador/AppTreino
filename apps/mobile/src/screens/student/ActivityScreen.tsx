@@ -76,6 +76,7 @@ export function ActivityScreen() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [finishing, setFinishing] = useState(false);
   const [finishSplits, setFinishSplits] = useState<Array<{
     km: number;
     paceSecPerKm: number;
@@ -146,10 +147,6 @@ export function ActivityScreen() {
     };
   }
 
-  function send(_msg: Record<string, unknown>) {
-    // legado WebView — mapa nativo usa props / liveMapStore
-  }
-
   useEffect(() => {
     void apiGet<{ activity: OutdoorActivityRow | null }>("/student/activities/live", session.token).then((data) => {
       if (!data.activity) return;
@@ -181,17 +178,7 @@ export function ActivityScreen() {
   }, [activityMap, session.token]);
   useEffect(() => {
     liveMapStore.hydrate(points.map((p) => ({ lat: p.lat, lng: p.lng, t: p.t })));
-    send({ type: "setTrack", points });
   }, [points]);
-  useEffect(() => {
-    send({ type: "setLapMarker", marker: lapCounterOn ? lapMarker : null });
-  }, [lapMarker, lapCounterOn]);
-  useEffect(() => {
-    send({ type: "setLaps", laps: lapCounterOn ? laps : [] });
-  }, [laps, lapCounterOn]);
-  useEffect(() => {
-    send({ type: "setPickMode", on: pickingLapStart });
-  }, [pickingLapStart]);
 
   useEffect(() => {
     if (!running || !activity) return;
@@ -207,8 +194,6 @@ export function ActivityScreen() {
         setError("Permita a localização para usar o GPS.");
         return null;
       }
-      send({ type: "setLive", lat: fix.lat, lng: fix.lng });
-      send({ type: "setView", lat: fix.lat, lng: fix.lng, zoom: 16 });
       void apiGet<{
         segments: Array<{ id: string; name: string; distanceMeters: number; sport: string }>;
       }>(
@@ -260,7 +245,6 @@ export function ActivityScreen() {
                 ...currentLaps,
                 { index: currentLaps.length + 1, lat: point.lat, lng: point.lng, t: point.t, distanceMeters: dist }
               ];
-              send({ type: "setLaps", laps: nextLaps });
               void apiPost(`/student/activities/${serverActivityId}/goals`, {
                 goals: { ...currentGoals(), laps: nextLaps, lapMarker: lapMarkerRef.current }
               }, session.token);
@@ -270,7 +254,6 @@ export function ActivityScreen() {
         }
         return next;
       });
-      send({ type: "setLive", lat: point.lat, lng: point.lng });
       if (bufferRef.current.length >= 8) void flush(serverActivityId);
     });
   }
@@ -340,7 +323,9 @@ export function ActivityScreen() {
   }
 
   async function finish(publish = true) {
-    if (!activity) return;
+    if (!activity || finishing) return;
+    setFinishing(true);
+    setError(null);
     engineUnsubRef.current?.();
     engineUnsubRef.current = null;
     try {
@@ -348,6 +333,21 @@ export function ActivityScreen() {
     } catch {
       /* ignore */
     }
+    try {
+      await finishRequest(publish);
+    } catch (e) {
+      // O trajeto já foi gravado no SQLite e enfileirado no outbox pelo engine,
+      // então manter `activity` permite repetir o POST sem perder a corrida.
+      setError(
+        `${e instanceof Error ? e.message : "Falha ao finalizar a atividade."} Toque em finalizar de novo — o trajeto está salvo no aparelho.`
+      );
+    } finally {
+      setFinishing(false);
+    }
+  }
+
+  async function finishRequest(publish: boolean) {
+    if (!activity) return;
     await flush(activity.id);
     const track = trackingEngine.getLastFinishPayload();
     const result = await apiPost<{
@@ -540,8 +540,6 @@ export function ActivityScreen() {
       setLaps([]);
       lapAwayRef.current = false;
       bufferRef.current = [];
-      send({ type: "setTrack", points: [] });
-      send({ type: "setLaps", laps: [] });
     }
     setSport(next);
   }
@@ -559,9 +557,6 @@ export function ActivityScreen() {
     setLapCounterOn(false);
     setPickingLapStart(false);
     lapAwayRef.current = false;
-    send({ type: "setLapMarker", marker: null });
-    send({ type: "setLaps", laps: [] });
-    send({ type: "setPickMode", on: false });
   }
 
   return (
@@ -731,8 +726,10 @@ export function ActivityScreen() {
               <Pressable style={styles.distance} onPress={() => setSheet("finish")}>
                 <Text style={styles.distanceText}>Finalizar e publicar</Text>
               </Pressable>
-              <Pressable style={styles.distanceQuiet} onPress={() => void finish(false)}>
-                <Text style={styles.distanceQuietText}>Finalizar sem publicar</Text>
+              <Pressable style={styles.distanceQuiet} disabled={finishing} onPress={() => void finish(false)}>
+                <Text style={styles.distanceQuietText}>
+                  {finishing ? "Finalizando..." : "Finalizar sem publicar"}
+                </Text>
               </Pressable>
             </View>
           ) : (
@@ -846,11 +843,13 @@ export function ActivityScreen() {
               <Text style={styles.chipText}>Vídeo</Text>
             </Pressable>
           </View>
-          <Pressable style={styles.play} onPress={() => void finish(true)}>
-            <Text style={{ color: "#fff", fontWeight: "800" }}>Publicar atividade</Text>
+          <Pressable style={styles.play} disabled={finishing} onPress={() => void finish(true)}>
+            <Text style={{ color: "#fff", fontWeight: "800" }}>
+              {finishing ? "Publicando..." : "Publicar atividade"}
+            </Text>
           </Pressable>
-          <Pressable style={styles.chip} onPress={() => void finish(false)}>
-            <Text style={styles.chipText}>Finalizar sem publicar</Text>
+          <Pressable style={styles.chip} disabled={finishing} onPress={() => void finish(false)}>
+            <Text style={styles.chipText}>{finishing ? "Finalizando..." : "Finalizar sem publicar"}</Text>
           </Pressable>
         </View>
       </Modal>

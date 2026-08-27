@@ -649,7 +649,28 @@ class MusicPlaybackService {
 
   async cycleRepeat() {
     this.repeatMode = this.repeatMode === "off" ? "all" : this.repeatMode === "all" ? "one" : "off";
+    await this.applyRepeatMode();
     this.emit();
+  }
+
+  /**
+   * Sem isso o RNTP fica em RepeatMode.Off e só emite PlaybackQueueEnded no fim
+   * da fila — o repeat-one pularia para a próxima faixa em vez de repetir.
+   */
+  private async applyRepeatMode() {
+    if (!this.usingTrackPlayer() || !this.rntp) return;
+    const { TrackPlayer, RepeatMode } = this.rntp;
+    const target =
+      this.repeatMode === "one"
+        ? RepeatMode.Track
+        : this.repeatMode === "all"
+          ? RepeatMode.Queue
+          : RepeatMode.Off;
+    try {
+      await TrackPlayer.setRepeatMode(target);
+    } catch {
+      // ignore
+    }
   }
 
   async setShuffle(on: boolean) {

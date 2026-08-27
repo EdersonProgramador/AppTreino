@@ -1,4 +1,5 @@
 import { getApiBaseUrl, getMediaBaseUrl } from "../api";
+import { VIDEO_FILE_EXTENSIONS } from "./video-formats";
 
 export const assetUrl = (path: string) => `${import.meta.env.BASE_URL}${path}`;
 
@@ -54,21 +55,85 @@ function uploadPublicUrl(relativePath: string) {
   return `/uploads/${cleaned}`;
 }
 
-/** Legacy webm/mov/etc → API converts to H.264 MP4 (iOS + Android + web). Same as native. */
+/**
+ * Chrome e Firefox tocam WebM direto do CDN; só Safari precisa de conversão.
+ * Perguntamos ao próprio navegador em vez de checar user agent.
+ */
+let webmSupport: boolean | null = null;
+const ALL_VIDEO_EXTENSIONS = new Set<string>(VIDEO_FILE_EXTENSIONS);
+const LEGACY_VIDEO_EXTENSIONS = new Set<string>(
+  VIDEO_FILE_EXTENSIONS.filter((extension) => extension !== "mp4" && extension !== "m4v")
+);
+
+function videoExtension(path: string) {
+  const match = path.split(/[?#]/)[0].match(/\.([a-z0-9]+)$/i);
+  return match?.[1]?.toLowerCase() ?? "";
+}
+
+function canPlayWebm() {
+  if (webmSupport !== null) return webmSupport;
+  if (typeof document === "undefined") return false;
+  const probe = document.createElement("video");
+  webmSupport = Boolean(
+    probe.canPlayType?.('video/webm; codecs="vp9,opus"') || probe.canPlayType?.("video/webm")
+  );
+  return webmSupport;
+}
+
+/**
+ * Containers legados que o navegador não abre passam uma vez pelo resolvedor:
+ * ele cria o MP4 antigo que estiver faltando e redireciona ao R2. Depois do
+ * redirect, todos os Range GETs são feitos diretamente no CDN.
+ */
 function playableUploadUrl(relativePath: string) {
   const cleaned = relativePath.replace(/^\/+/, "").split(/[?#]/)[0];
-  if (/\.(webm|ogv|ogg|mov|mkv|avi)$/i.test(cleaned)) {
+  const extension = videoExtension(cleaned);
+  const isWebm = extension === "webm";
+  if (isWebm && canPlayWebm()) {
+    return uploadPublicUrl(cleaned);
+  }
+  if (LEGACY_VIDEO_EXTENSIONS.has(extension)) {
     const api = getApiBaseUrl().replace(/\/+$/, "");
-    return `${api}/media/video?path=${encodeURIComponent(cleaned)}`;
+    return `${api}/media/video-url?path=${encodeURIComponent(cleaned)}&redirect=1`;
   }
   return uploadPublicUrl(cleaned);
+}
+
+/** URL usada uma única vez quando o navegador rejeita o codec/container. */
+export function compatibleVideoUrl(path?: string | null) {
+  const relative = uploadRelativePath(path);
+  if (!relative) return "";
+  const cleaned = relative.replace(/^\/+/, "").split(/[?#]/)[0];
+  const extension = videoExtension(cleaned);
+  if (!ALL_VIDEO_EXTENSIONS.has(extension) || /\.compat\.mp4$/i.test(cleaned)) return "";
+  const api = getApiBaseUrl().replace(/\/+$/, "");
+  return `${api}/media/video-url?path=${encodeURIComponent(cleaned)}&redirect=1`;
+}
+
+/**
+ * Conecta ao `onError` de <video>. Evita loop por arquivo e preserva autoplay;
+ * após o redirect, toda reprodução/Range GET acontece no R2.
+ */
+export function retryVideoAsCompatible(video: HTMLVideoElement, originalPath?: string | null) {
+  const fallback = compatibleVideoUrl(originalPath);
+  if (!fallback) return false;
+  const key = uploadRelativePath(originalPath) ?? originalPath ?? "";
+  if (video.dataset.compatAttempted === key) return false;
+  video.dataset.compatAttempted = key;
+  const shouldPlay = video.autoplay || !video.paused;
+  video.src = fallback;
+  video.load();
+  if (shouldPlay) {
+    void video.play().catch(() => undefined);
+  }
+  return true;
 }
 
 /**
  * Resolve URL de mídia cadastrada (web + Expo nativo usam a mesma regra).
  * - http(s) externos: intactos
  * - uploads MP4/imagem: CDN (`VITE_MEDIA_URL`) ou `/uploads` em dev
- * - containers legados: `{API}/media/video?path=`
+ * - containers legados: original no navegador compatível; caso contrário MP4 no CDN
  * - `/assets/...`: assets do front
  */
 export const mediaUrl = (path?: string | null) => {

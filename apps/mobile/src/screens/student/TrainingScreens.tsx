@@ -315,6 +315,8 @@ export function ProgramScreen() {
     null;
   const membershipStartsAt = program.membershipStartsAt ?? membership?.startsAt ?? null;
   const membershipEndsAt = program.membershipEndsAt ?? membership?.endsAt ?? null;
+  // Function declarations são hoisted e perdem o narrowing do `if (!program)` acima.
+  const programModality = modalityName(program);
 
   async function repeat() {
     setBusy(true);
@@ -349,7 +351,7 @@ export function ProgramScreen() {
       index: 1,
       routes: [
         { name: "Training" },
-        { name: "Workouts", params: { modality: modalityName(program) } }
+        { name: "Workouts", params: { modality: programModality } }
       ]
     });
   }

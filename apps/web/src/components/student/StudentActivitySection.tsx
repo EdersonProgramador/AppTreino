@@ -19,6 +19,8 @@ import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPost, apiUpload } from "../../api";
 import { paths } from "../../auth/session";
+import { VIDEO_FILE_ACCEPT } from "../../lib/video-formats";
+import { retryVideoAsCompatible } from "../../lib/urls";
 import {
   formatClock,
   formatKm,
@@ -818,14 +820,21 @@ export function StudentActivitySection({
             </label>
             <label className="student-ghost-chip">
               Vídeo
-              <input type="file" accept="video/*" hidden onChange={(event) => {
+              <input type="file" accept={VIDEO_FILE_ACCEPT} hidden onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (file) void uploadMedia(file, "video");
               }} />
             </label>
           </div>
           {photoUrl && <img className="student-feed-media" src={photoUrl} alt="" />}
-          {videoUrl && <video className="student-feed-media" src={videoUrl} controls />}
+          {videoUrl && (
+            <video
+              className="student-feed-media"
+              src={videoUrl}
+              controls
+              onError={(event) => retryVideoAsCompatible(event.currentTarget, videoUrl)}
+            />
+          )}
           <button type="button" className="student-green-button" disabled={busy} onClick={() => void finish(true)}>
             {busy ? "Publicando..." : "Publicar atividade"}
           </button>

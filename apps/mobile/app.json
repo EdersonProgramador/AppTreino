@@ -64,6 +64,8 @@
       "expo-asset",
       "expo-font",
       "expo-sqlite",
+      "expo-secure-store",
+      "@config-plugins/react-native-webrtc",
       [
         "expo-location",
         {

@@ -2,7 +2,7 @@ import { ArrowLeft, MessageCircle, Radio, UserPlus, UserRound, UserCheck } from 
 import { useEffect, useMemo, useState } from "react";
 import { ApiError, apiGet, apiPost } from "../../api";
 import { brand } from "../../lib/brand";
-import { mediaUrl } from "../../lib/urls";
+import { mediaUrl, retryVideoAsCompatible } from "../../lib/urls";
 import { uiSounds } from "../../lib/ui-sounds";
 import type { SocialPostRow } from "../../types";
 
@@ -229,7 +229,12 @@ export function StudentPeerProfileSection({ token, userId, onBack, onOpenDm, onO
                     <article key={post.id} className="student-athlete-grid-item">
                       {thumb ? (
                         isVideo && !media?.coverUrl ? (
-                          <video src={mediaUrl(thumb)} muted playsInline />
+                          <video
+                            src={mediaUrl(thumb)}
+                            muted
+                            playsInline
+                            onError={(event) => retryVideoAsCompatible(event.currentTarget, thumb)}
+                          />
                         ) : (
                           <img src={mediaUrl(thumb)} alt="" />
                         )

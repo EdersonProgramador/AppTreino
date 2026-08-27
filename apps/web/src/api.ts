@@ -70,10 +70,35 @@ async function getErrorMessage(response: Response) {
   } catch {
     // ignore
   }
-  if (response.status === 502 || response.status === 503) {
-    return "Servidor de upload indisponível. Tente de novo em instantes.";
+  if (COLD_START_STATUSES.has(response.status)) {
+    return "Servidor indisponível. Ele está acordando — tente de novo em instantes.";
   }
   return `API error: ${response.status}`;
+}
+
+/** O Render free hiberna: a primeira chamada devolve 502/503 enquanto acorda. */
+const COLD_START_STATUSES = new Set([502, 503, 504]);
+const RETRY_DELAYS_MS = [2_000, 5_000];
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Só leitura e upload são repetidos. Um 502 em POST/PUT/DELETE pode ter chegado
+ * ao servidor, e repetir criaria post ou live duplicados; um upload repetido no
+ * pior caso deixa um arquivo órfão.
+ */
+async function withColdStartRetry<T>(attempt: () => Promise<T>, maxAttempts: number): Promise<T> {
+  for (let i = 0; ; i++) {
+    try {
+      return await attempt();
+    } catch (err) {
+      const coldStart = err instanceof ApiError && COLD_START_STATUSES.has(err.status);
+      if (!coldStart || i >= maxAttempts - 1) throw err;
+      await sleep(RETRY_DELAYS_MS[i]);
+    }
+  }
 }
 
 function authHeaders(token?: string | null): Record<string, string> {
@@ -101,11 +126,13 @@ async function parseResponse<T>(response: Response, hadSessionToken: boolean): P
 }
 
 export async function apiGet<T>(path: string, token?: string | null): Promise<T> {
-  const response = await fetch(`${apiUrl(path)}`, {
-    headers: authHeaders(token)
-  });
+  return withColdStartRetry(async () => {
+    const response = await fetch(`${apiUrl(path)}`, {
+      headers: authHeaders(token)
+    });
 
-  return parseResponse<T>(response, Boolean(token));
+    return parseResponse<T>(response, Boolean(token));
+  }, RETRY_DELAYS_MS.length + 1);
 }
 
 export async function apiPost<T>(path: string, body: unknown, token?: string | null): Promise<T> {
@@ -144,11 +171,13 @@ export async function apiDelete<T>(path: string, token?: string | null): Promise
 }
 
 export async function apiUpload<T>(path: string, body: FormData, token?: string | null): Promise<T> {
-  const response = await fetch(`${apiUrl(path)}`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body
-  });
+  return withColdStartRetry(async () => {
+    const response = await fetch(`${apiUrl(path)}`, {
+      method: "POST",
+      headers: authHeaders(token),
+      body
+    });
 
-  return parseResponse<T>(response, Boolean(token));
+    return parseResponse<T>(response, Boolean(token));
+  }, 2);
 }

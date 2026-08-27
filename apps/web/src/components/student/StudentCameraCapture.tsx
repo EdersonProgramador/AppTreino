@@ -1,6 +1,7 @@
 import { Camera, Image as ImageIcon, RefreshCcw, Sparkles, Video, X, Zap, ZapOff } from "lucide-react";
 import { useEffect, useRef, useState, type TouchEvent } from "react";
 import { createPortal } from "react-dom";
+import { isVideoFile, VIDEO_FILE_ACCEPT } from "../../lib/video-formats";
 
 export type CaptureMode = "photo" | "video";
 type Facing = "user" | "environment";
@@ -141,7 +142,7 @@ export async function applyFilterToMediaFile(file: File, filterCss: string): Pro
   if (file.type.startsWith("image/") || (!file.type && /\.(jpe?g|png|webp|heic|gif)$/i.test(file.name))) {
     return applyFilterToImageFile(file, filterCss);
   }
-  if (file.type.startsWith("video/")) {
+  if (isVideoFile(file)) {
     return applyFilterToVideoFile(file, filterCss);
   }
   return file;
@@ -813,7 +814,7 @@ export function StudentCameraCapture({
       <input
         ref={nativeRef}
         type="file"
-        accept={captureMode === "video" ? "video/*" : "image/*,image/jpeg,image/png,image/webp"}
+        accept={captureMode === "video" ? VIDEO_FILE_ACCEPT : "image/*,image/jpeg,image/png,image/webp"}
         capture={facing === "user" ? "user" : "environment"}
         hidden
         onChange={(event) => {
