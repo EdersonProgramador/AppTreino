@@ -1,38 +1,45 @@
 import {
   Bike,
+  Camera,
   ChevronDown,
   Flag,
   Footprints,
   Gauge,
+  ImagePlus,
   Layers,
   Loader2,
+  Map as MapIcon,
   MapPinned,
   Music2,
   Pause,
   Play,
   Settings2,
+  Share2,
   Smartphone,
   Timer,
+  Trophy,
   X
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPost, apiUpload } from "../../api";
 import { paths } from "../../auth/session";
-import { VIDEO_FILE_ACCEPT } from "../../lib/video-formats";
-import { retryVideoAsCompatible } from "../../lib/urls";
 import {
+  estimateCalories,
   formatClock,
   formatKm,
   formatPace,
   liveDistance,
+  liveElapsedSeconds,
+  liveElevation,
+  liveKmSplit,
   liveSpeedKmh,
   LAP_RADIUS_M,
   updateLapCrossing
 } from "../../lib/activity-geo";
 import { WebGpsPipeline, fixFromGeolocation } from "../../lib/gps-filter";
 import { isNativeAppShell } from "../../lib/native-bridge";
-import type { OutdoorActivityRow, OutdoorSport, SocialPostRow, UploadResponse } from "../../types";
+import type { OutdoorActivityRow, OutdoorSport, UploadResponse } from "../../types";
 import { RunnerIcon } from "../shared/RunnerIcon";
 
 type MapType = "standard" | "satellite" | "hybrid" | "winter";
@@ -68,6 +75,60 @@ const LAYER_ITEMS: Array<{ id: LayerKey; group: string; label: string }> = [
 ];
 
 type GpsPoint = { lat: number; lng: number; t: number; ele?: number | null; accuracy?: number | null };
+
+type ActivityShareStats = {
+  sportLabel: string;
+  sport: OutdoorSport;
+  distanceMeters: number;
+  elapsedSeconds: number;
+  paceSecPerKm: number | null;
+  speedKmh?: number | null;
+  calories?: number;
+  elevationGainMeters?: number;
+  elevationLossMeters?: number;
+  stepsCount?: number;
+  cadenceSpm?: number | null;
+  powerWatts?: number | null;
+  mapType?: MapType;
+  is3d?: boolean;
+  lapsCount?: number;
+  kmIndex?: number;
+  kmPaceSecPerKm?: number | null;
+  points: Array<{ lat: number; lng: number }>;
+};
+
+type FinishResult = {
+  activity?: {
+    distanceMeters?: number;
+    durationSeconds?: number;
+    elapsedSeconds?: number;
+    avgPaceSecPerKm?: number | null;
+    elevationGainMeters?: number;
+    elevationLossMeters?: number;
+    stepsCount?: number;
+    avgCadenceSpm?: number | null;
+    estimatedPowerWatts?: number | null;
+    calories?: number;
+    splits?: Array<{ km: number; paceSecPerKm: number; elapsedTime: number; partial?: boolean }>;
+    splitsAnalysis?: {
+      bestKm?: number | null;
+      worstKm?: number | null;
+      bestPaceSecPerKm?: number | null;
+      worstPaceSecPerKm?: number | null;
+    };
+    bestEfforts?: Array<{ label: string; elapsedSeconds: number; paceSecPerKm: number }>;
+  };
+  moderation?: { published?: boolean; message?: string | null };
+};
+
+function compactRecord<T extends Record<string, unknown>>(value: T) {
+  const next: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (item === undefined || item === null || item === "") continue;
+    next[key] = item;
+  }
+  return next;
+}
 
 function mergeRoutePoints(
   ...sources: Array<Array<{ lat: number; lng: number; t?: number; ele?: number | null; accuracy?: number | null }> | null | undefined>
@@ -127,6 +188,12 @@ export function StudentActivitySection({
   const followMapRef = useRef(true);
   const lapAwayRef = useRef(false);
   const lapMarkerRef = useRef<LapMarker | null>(null);
+  const pauseHoldRef = useRef(false);
+  const sessionClosedRef = useRef(false);
+  const shareOpenRef = useRef(false);
+  const finishingRef = useRef(false);
+  const liveHydrateGen = useRef(0);
+  const lastTrackRef = useRef<GpsPoint[]>([]);
   const [sport, setSport] = useState<OutdoorSport>(preferredSport);
   const sportRef = useRef(sport);
   sportRef.current = sport;
@@ -153,28 +220,77 @@ export function StudentActivitySection({
   const [lapCounterOn, setLapCounterOn] = useState(false);
   const [pickingLapStart, setPickingLapStart] = useState(false);
   const [goalsOpen, setGoalsOpen] = useState(false);
-  const [finishOpen, setFinishOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareStats, setShareStats] = useState<ActivityShareStats | null>(null);
+  const [locked, setLocked] = useState<ActivityShareStats | null>(null);
+  const [sessionClosed, setSessionClosed] = useState(false);
+  const [pauseHold, setPauseHold] = useState(false);
+  const [finishing, setFinishing] = useState(false);
+  const [shareModel, setShareModel] = useState<"simple" | "photo" | null>(null);
+  const [finishStats, setFinishStats] = useState<ActivityShareStats | null>(null);
+  const [finishSplits, setFinishSplits] = useState<Array<{ km: number; paceSecPerKm: number; elapsedTime: number; partial?: boolean }> | null>(null);
+  const [finishAnalysis, setFinishAnalysis] = useState<{
+    bestKm?: number | null;
+    worstKm?: number | null;
+    bestPaceSecPerKm?: number | null;
+    worstPaceSecPerKm?: number | null;
+  } | null>(null);
+  const [bestEfforts, setBestEfforts] = useState<Array<{ label: string; elapsedSeconds: number; paceSecPerKm: number }>>([]);
+  const [pendingFeedNav, setPendingFeedNav] = useState(false);
+  const [nearbySegments, setNearbySegments] = useState<Array<{ id: string; name: string; distanceMeters: number; sport: string }>>([]);
+  const [segmentBoard, setSegmentBoard] = useState<{
+    name: string;
+    rows: Array<{ rank: number; name: string; elapsedSeconds: number; isPr: boolean }>;
+  } | null>(null);
   const [caption, setCaption] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const running = activity?.status === "LIVE";
-  const paused = activity?.status === "PAUSED";
-  const distance = liveDistance(points);
-  const pace = distance >= 20 ? elapsed / (distance / 1000) : null;
-  const speedKmh = liveSpeedKmh(points);
+  const sessionActive = Boolean(
+    !sessionClosed && activity && (activity.status === "LIVE" || activity.status === "PAUSED")
+  );
+  const running = sessionActive && !pauseHold && activity?.status === "LIVE";
+  const paused = sessionActive && (pauseHold || activity?.status === "PAUSED");
+  const liveDistanceM = sessionActive ? liveDistance(points) : 0;
+  const livePace =
+    sessionActive && liveDistanceM >= 20 && elapsed > 0 ? elapsed / (liveDistanceM / 1000) : null;
+  const liveSpeed = sessionActive ? liveSpeedKmh(points) : 0;
+  const elevation = sessionActive ? liveElevation(points) : { gain: 0, loss: 0 };
+  const liveCalories = sessionActive ? estimateCalories(sport, elapsed) : 0;
+  const liveSplit = sessionActive
+    ? liveKmSplit(points)
+    : { kmIndex: 1, metersInSplit: 0, paceSecPerKm: null, completed: [] as Array<{ km: number; paceSecPerKm: number; elapsedTime: number }> };
+  const distance = sessionActive ? locked?.distanceMeters ?? liveDistanceM : 0;
+  const pace = sessionActive ? locked?.paceSecPerKm ?? livePace : null;
+  const speedKmh = sessionActive ? locked?.speedKmh ?? liveSpeed : 0;
+  const calories = sessionActive ? locked?.calories ?? liveCalories : 0;
+  const shownElapsed = sessionActive ? locked?.elapsedSeconds ?? elapsed : 0;
+  const shownElev = sessionActive ? locked?.elevationGainMeters ?? elevation.gain : 0;
+  const shownLaps = sessionActive ? locked?.lapsCount ?? laps.length : 0;
+  const shownKmIndex = sessionActive ? locked?.kmIndex ?? liveSplit.kmIndex : 1;
+  const shownKmPace = sessionActive ? locked?.kmPaceSecPerKm ?? liveSplit.paceSecPerKm : null;
   const targetDuration = durationSeconds(targetHours, targetMinutes);
   const parsedKm = Number(targetKm.replace(",", "."));
-  const hasGoal =
-    (Number.isFinite(parsedKm) && parsedKm > 0) ||
-    Boolean(targetDuration) ||
-    Boolean(lapCounterOn && lapMarker);
   lapMarkerRef.current = lapCounterOn ? lapMarker : null;
+  shareOpenRef.current = shareOpen;
+  finishingRef.current = finishing;
+  pauseHoldRef.current = pauseHold;
+
+  function markSessionClosed() {
+    sessionClosedRef.current = true;
+    setSessionClosed(true);
+    liveHydrateGen.current += 1;
+  }
+
+  function markSessionOpen() {
+    sessionClosedRef.current = false;
+    setSessionClosed(false);
+  }
 
   useEffect(() => {
-    if (running || paused) return;
+    if (running || paused || sessionClosedRef.current) return;
     if (sport !== preferredSport) setSport(preferredSport);
     locate(true);
   }, [preferredSportKey, preferredSport]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -244,9 +360,12 @@ export function StudentActivitySection({
   });
 
   useEffect(() => {
+    const gen = ++liveHydrateGen.current;
     void apiGet<{ activity: OutdoorActivityRow | null }>("/student/activities/live", token)
       .then((data) => {
+        if (gen !== liveHydrateGen.current || sessionClosedRef.current) return;
         if (!data.activity) return;
+        if (data.activity.status !== "LIVE" && data.activity.status !== "PAUSED") return;
         setActivity(data.activity);
         setSport(data.activity.sport);
         const recovered = Array.isArray(data.activity.polyline)
@@ -290,6 +409,10 @@ export function StudentActivitySection({
   }, [mapType]);
   useEffect(() => {
     postToMap({ type: "setActivityMap", mode: activityMap });
+    if (running || paused) {
+      postToMap({ type: "setHeat", tracks: [], cells: [] });
+      return;
+    }
     void apiGet<{
       tracks: Array<Array<{ lat: number; lng: number }>>;
       cells?: Array<{ lat: number; lng: number; weight: number; activities: number; cell: string }>;
@@ -299,7 +422,7 @@ export function StudentActivitySection({
     )
       .then((data) => postToMap({ type: "setHeat", tracks: data.tracks, cells: data.cells ?? [] }))
       .catch(() => undefined);
-  }, [activityMap, token]);
+  }, [activityMap, token, running, paused]);
   useEffect(() => {
     postToMap({ type: "setLayers", layers });
   }, [layers]);
@@ -317,17 +440,31 @@ export function StudentActivitySection({
   }, [laps, lapCounterOn]);
   useEffect(() => {
     postToMap({ type: "setPickMode", on: pickingLapStart });
+    postToMap({ type: "setFollow", on: !pickingLapStart });
+    if (pickingLapStart) followMapRef.current = false;
   }, [pickingLapStart]);
 
   useEffect(() => {
-    if (!running || !activity) return;
-    const started = new Date(activity.startedAt).getTime();
-    const pauseMs = Number((activity as { pauseMs?: number }).pauseMs ?? 0);
-    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - started - pauseMs) / 1000)));
+    if (locked) {
+      setElapsed(locked.elapsedSeconds);
+      return;
+    }
+    if (!activity || (!running && !paused)) return;
+    const tick = () => {
+      setElapsed(
+        liveElapsedSeconds({
+          startedAt: activity.startedAt,
+          status: paused ? "PAUSED" : "LIVE",
+          pauseMs: activity.pauseMs,
+          pausedAt: activity.pausedAt
+        })
+      );
+    };
     tick();
+    if (!running) return;
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [running, activity]);
+  }, [running, paused, activity, locked]);
 
   function locate(follow = false) {
     if (!navigator.geolocation) {
@@ -343,6 +480,14 @@ export function StudentActivitySection({
         const fix = fixFromGeolocation(pos);
         postToMap({ type: "setLive", lat: fix.lat, lng: fix.lng, follow: followMapRef.current });
         if (follow) postToMap({ type: "setView", lat: fix.lat, lng: fix.lng, zoom: 17 });
+        void apiGet<{
+          segments: Array<{ id: string; name: string; distanceMeters: number; sport: string }>;
+        }>(
+          `/student/activities/named-segments/nearby?lat=${fix.lat}&lng=${fix.lng}&sport=${sportRef.current}&limit=5`,
+          token
+        )
+          .then((data) => setNearbySegments(data.segments ?? []))
+          .catch(() => setNearbySegments([]));
       },
       () => setError("Permita a localização para iniciar o GPS."),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
@@ -404,6 +549,7 @@ export function StudentActivitySection({
     postToMap({ type: "setFollow", on: true });
     watchRef.current = navigator.geolocation.watchPosition(
       (pos) => {
+        if (pauseHoldRef.current || sessionClosedRef.current || shareOpenRef.current || finishingRef.current) return;
         const raw = fixFromGeolocation(pos);
         const result = pipelineRef.current.process(sportRef.current, raw);
         if (!result.accepted) return;
@@ -469,17 +615,85 @@ export function StudentActivitySection({
 
   useEffect(() => () => stopWatch(), []);
 
+  function captureLockedMetrics(route: GpsPoint[]): ActivityShareStats {
+    const dist = liveDistance(route);
+    const pausedAtIso = new Date().toISOString();
+    const timeSec =
+      elapsed > 0
+        ? elapsed
+        : activity
+          ? liveElapsedSeconds({
+              startedAt: activity.startedAt,
+              status: "PAUSED",
+              pauseMs: activity.pauseMs,
+              pausedAt: pausedAtIso
+            })
+          : 0;
+    const elev = liveElevation(route);
+    const split = liveKmSplit(route);
+    const paceSec = dist >= 20 && timeSec > 0 ? timeSec / (dist / 1000) : livePace;
+    return {
+      sportLabel: SPORTS.find((item) => item.id === sport)?.label ?? sport,
+      sport,
+      distanceMeters: dist,
+      elapsedSeconds: timeSec,
+      paceSecPerKm: paceSec,
+      speedKmh: liveSpeedKmh(route),
+      calories: estimateCalories(sport, timeSec),
+      elevationGainMeters: elev.gain,
+      elevationLossMeters: elev.loss,
+      mapType,
+      is3d,
+      points: route,
+      lapsCount: laps.length,
+      kmIndex: split.kmIndex,
+      kmPaceSecPerKm: split.paceSecPerKm
+    };
+  }
+
+  function clearSessionRoute() {
+    bufferRef.current = [];
+    setPoints([]);
+    pipelineRef.current.reset();
+    postToMap({ type: "setTrack", points: [], fit: false });
+    postToMap({ type: "setHeat", tracks: [], cells: [] });
+  }
+
   async function startOrResume() {
+    if (shareOpen || finishing) return;
     setError(null);
     setBusy(true);
+    setLocked(null);
     try {
-      if (paused && activity) {
+      const startFresh = sessionClosedRef.current;
+      if (startFresh) {
+        const leftover = activity;
+        markSessionOpen();
+        stopWatch();
+        if (leftover) {
+          try {
+            await apiPost(`/student/activities/${leftover.id}/cancel`, {}, token);
+          } catch {
+            /* já finalizada */
+          }
+          setActivity(null);
+        }
+        clearSessionRoute();
+      } else if (paused && activity) {
+        setPauseHold(false);
+        pauseHoldRef.current = false;
         try {
-          const data = await apiPost<{ activity: OutdoorActivityRow }>(`/student/activities/${activity.id}/resume`, {}, token);
+          const data = await apiPost<{ activity: OutdoorActivityRow }>(
+            `/student/activities/${activity.id}/resume`,
+            {},
+            token
+          );
           setActivity(data.activity);
         } catch (err) {
           const msg = err instanceof Error ? err.message : "";
           if (!/não está pausada|already|409/i.test(msg)) {
+            setPauseHold(true);
+            pauseHoldRef.current = true;
             setError(err instanceof Error ? err.message : "Não foi possível retomar.");
             return;
           }
@@ -493,6 +707,8 @@ export function StudentActivitySection({
         startWatch(activity.id);
         return;
       }
+      setPauseHold(false);
+      pauseHoldRef.current = false;
       const goals = currentGoals();
       const data = await apiPost<{ activity: OutdoorActivityRow; resumed?: boolean }>(
         "/student/activities",
@@ -507,6 +723,7 @@ export function StudentActivitySection({
         },
         token
       );
+      markSessionOpen();
       setActivity(data.activity);
       const recovered = Array.isArray(data.activity.polyline)
         ? data.activity.polyline.map((p) => ({
@@ -517,26 +734,34 @@ export function StudentActivitySection({
             accuracy: (p as { accuracy?: number | null }).accuracy ?? null
           }))
         : [];
-      const isResume = Boolean(data.resumed) && data.activity.sport === sport;
+      const isResume = !startFresh && Boolean(data.resumed) && data.activity.sport === sport;
       applyTrack(isResume ? recovered : [], false);
       startWatch(data.activity.id);
       locate(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível iniciar.");
+      setError(err instanceof Error ? err.message : "Não foi possível iniciar a atividade.");
     } finally {
       setBusy(false);
     }
   }
 
   async function pause() {
-    if (!activity) return;
+    if (!activity && !points.length) return;
+    if (pauseHold && activity?.status === "PAUSED") return;
+    setPauseHold(true);
+    pauseHoldRef.current = true;
+    setError(null);
     stopWatch();
     const pausedAtIso = new Date().toISOString();
     setActivity((current) =>
       current ? { ...current, status: "PAUSED", pausedAt: current.pausedAt ?? pausedAtIso } : current
     );
     const route = mergeRoutePoints(points, bufferRef.current);
+    const snapshot = captureLockedMetrics(route);
+    setLocked(snapshot);
+    setElapsed(snapshot.elapsedSeconds);
     if (route.length) applyTrack(route, false);
+    if (!activity) return;
     try {
       await persistRoute(activity.id);
     } catch {
@@ -551,7 +776,8 @@ export function StudentActivitySection({
       setActivity({
         ...data.activity,
         status: "PAUSED",
-        polyline: route.length ? route : data.activity.polyline
+        polyline: route.length ? route : data.activity.polyline,
+        pausedAt: data.activity.pausedAt ?? pausedAtIso
       });
     } catch {
       setActivity((current) =>
@@ -559,12 +785,53 @@ export function StudentActivitySection({
           ? {
               ...current,
               status: "PAUSED",
-              pausedAt: current.pausedAt ?? new Date().toISOString(),
+              pausedAt: current.pausedAt ?? pausedAtIso,
               polyline: route.length ? route : current.polyline
             }
           : current
       );
     }
+  }
+
+  async function beginFinish() {
+    if (!activity || shareOpen) return;
+    setFinishing(true);
+    finishingRef.current = true;
+    setPauseHold(true);
+    pauseHoldRef.current = true;
+    setError(null);
+    stopWatch();
+    const pausedAtIso = new Date().toISOString();
+    setActivity((current) =>
+      current
+        ? { ...current, status: current.status === "COMPLETED" ? current.status : "PAUSED", pausedAt: current.pausedAt ?? pausedAtIso }
+        : current
+    );
+    const route = mergeRoutePoints(points, bufferRef.current);
+    const snapshot = captureLockedMetrics(route);
+    setLocked(snapshot);
+    setElapsed(snapshot.elapsedSeconds);
+    if (route.length) applyTrack(route, false);
+    lastTrackRef.current = route;
+    try {
+      await persistRoute(activity.id);
+    } catch {
+      /* finish POST ainda grava o trajeto */
+    }
+    try {
+      await apiPost(`/student/activities/${activity.id}/pause`, { points: route }, token);
+    } catch {
+      /* ignore */
+    }
+    setShareStats({ ...snapshot, points: route });
+    setShareModel(null);
+    setShareOpen(true);
+    shareOpenRef.current = true;
+    setGoalsOpen(false);
+    setLayersOpen(false);
+    setFinishing(false);
+    finishingRef.current = false;
+    markSessionClosed();
   }
 
   async function uploadMedia(file: File, kind: "photo" | "video") {
@@ -576,46 +843,196 @@ export function StudentActivitySection({
   }
 
   async function finish(publish = true) {
-    if (!activity) return;
+    if (!activity || (finishing && !shareOpen)) return;
+    if (!locked) {
+      const route = mergeRoutePoints(points, bufferRef.current);
+      setLocked(captureLockedMetrics(route));
+    }
+    setFinishing(true);
+    finishingRef.current = true;
     setBusy(true);
+    setError(null);
+    stopWatch();
     try {
-      stopWatch();
-      const saved = await persistRoute(activity.id).catch(() => points);
-      const route = mergeRoutePoints(saved, points);
-      await apiPost<{ post: SocialPostRow | null }>(
-        `/student/activities/${activity.id}/finish`,
+      await finishRequest(publish);
+    } catch (err) {
+      setError(
+        `${err instanceof Error ? err.message : "Falha ao finalizar a atividade."} Toque em finalizar de novo — o trajeto está salvo.`
+      );
+    } finally {
+      setFinishing(false);
+      finishingRef.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function finishRequest(publish: boolean) {
+    if (!activity) return;
+    const route = mergeRoutePoints(lastTrackRef.current, points, bufferRef.current);
+    lastTrackRef.current = route;
+    if (route.length) applyTrack(route, false);
+    await persistRoute(activity.id).catch(() => undefined);
+    const result = await apiPost<FinishResult>(
+      `/student/activities/${activity.id}/finish`,
+      compactRecord({
+        caption: publish ? caption.trim() || undefined : undefined,
+        photoUrl: publish ? photoUrl : undefined,
+        videoUrl: publish ? videoUrl : undefined,
+        mapType,
+        activityMap,
+        layers,
+        is3d,
+        points: route,
+        goals: currentGoals(),
+        publish
+      }),
+      token
+    );
+    if (result.moderation?.message) setError(result.moderation.message);
+    const apiSplits = result.activity?.splits ?? [];
+    const localSplits = liveSplit.completed.map((s) => ({
+      km: s.km,
+      paceSecPerKm: s.paceSecPerKm,
+      elapsedTime: s.elapsedTime
+    }));
+    if (liveSplit.metersInSplit >= 25 && liveSplit.paceSecPerKm) {
+      localSplits.push({
+        km: liveSplit.kmIndex,
+        paceSecPerKm: liveSplit.paceSecPerKm,
+        elapsedTime: Math.round((liveSplit.paceSecPerKm * liveSplit.metersInSplit) / 1000)
+      });
+    }
+    const splits = apiSplits.length ? apiSplits : localSplits.length ? localSplits : null;
+    setFinishSplits(splits);
+    setFinishAnalysis(result.activity?.splitsAnalysis ?? null);
+    setBestEfforts(result.activity?.bestEfforts ?? []);
+    setFinishStats({
+      sportLabel: SPORTS.find((item) => item.id === sport)?.label ?? sport,
+      sport,
+      distanceMeters: result.activity?.distanceMeters ?? locked?.distanceMeters ?? distance,
+      elapsedSeconds: result.activity?.durationSeconds ?? result.activity?.elapsedSeconds ?? shownElapsed,
+      paceSecPerKm: result.activity?.avgPaceSecPerKm ?? locked?.paceSecPerKm ?? pace,
+      elevationGainMeters: result.activity?.elevationGainMeters ?? locked?.elevationGainMeters ?? 0,
+      elevationLossMeters: result.activity?.elevationLossMeters ?? locked?.elevationLossMeters ?? 0,
+      stepsCount: result.activity?.stepsCount,
+      cadenceSpm: result.activity?.avgCadenceSpm,
+      powerWatts: result.activity?.estimatedPowerWatts ?? null,
+      calories: result.activity?.calories ?? locked?.calories,
+      mapType,
+      is3d,
+      points: route,
+      lapsCount: laps.length,
+      kmIndex: liveSplit.kmIndex,
+      kmPaceSecPerKm: liveSplit.paceSecPerKm
+    });
+    setPendingFeedNav(Boolean(publish && result.moderation?.published !== false));
+    await resetAfterFinish();
+  }
+
+  async function resetAfterFinish() {
+    stopWatch();
+    bufferRef.current = [];
+    lastTrackRef.current = mergeRoutePoints(lastTrackRef.current, points);
+    setShareOpen(false);
+    shareOpenRef.current = false;
+    setShareStats(null);
+    setShareModel(null);
+    setLocked(null);
+    setPauseHold(false);
+    pauseHoldRef.current = false;
+    setFinishing(false);
+    finishingRef.current = false;
+    markSessionClosed();
+    setActivity(null);
+    setPoints([]);
+    setElapsed(0);
+    setLaps([]);
+    lapAwayRef.current = false;
+    setPickingLapStart(false);
+    setPhotoUrl(null);
+    setVideoUrl(null);
+    setGoalsOpen(false);
+    setLayersOpen(false);
+    pipelineRef.current.reset();
+    clearSessionRoute();
+  }
+
+  function dismissFinishSplits(goToFeed = false) {
+    const goFeed = goToFeed && pendingFeedNav;
+    setFinishSplits(null);
+    setFinishAnalysis(null);
+    setBestEfforts([]);
+    setFinishStats(null);
+    setPendingFeedNav(false);
+    setCaption("");
+    setError(null);
+    setPauseHold(false);
+    pauseHoldRef.current = false;
+    setLocked(null);
+    setElapsed(0);
+    markSessionClosed();
+    clearSessionRoute();
+    if (goFeed) onPublished();
+  }
+
+  async function shareNative(stats: ActivityShareStats) {
+    const isRide = stats.sport === "RIDE";
+    const speedLabel = stats.speedKmh && stats.speedKmh > 0 ? `${stats.speedKmh.toFixed(1)} km/h` : "—";
+    const text = [
+      `App Treino · ${stats.sportLabel}`,
+      `${formatKm(stats.distanceMeters)} km · ${formatClock(stats.elapsedSeconds)} · ${
+        isRide ? speedLabel : `${formatPace(stats.paceSecPerKm)} /km`
+      }`,
+      stats.calories ? `${stats.calories} kcal` : null,
+      stats.elevationGainMeters || stats.elevationLossMeters
+        ? `↑ ${Math.round(stats.elevationGainMeters ?? 0)} m  ↓ ${Math.round(stats.elevationLossMeters ?? 0)} m`
+        : null,
+      caption.trim() || null
+    ]
+      .filter(Boolean)
+      .join("\n");
+    try {
+      if (navigator.share) await navigator.share({ title: stats.sportLabel, text });
+      else await navigator.clipboard.writeText(text);
+    } catch {
+      /* usuário cancelou */
+    }
+  }
+
+  async function openSegmentBoard(seg: { id: string; name: string }) {
+    try {
+      const data = await apiGet<{
+        leaderboard: Array<{ rank: number; name: string; elapsedSeconds: number; isPr: boolean }>;
+      }>(`/student/activities/named-segments/${seg.id}/leaderboard`, token);
+      setSegmentBoard({ name: seg.name, rows: data.leaderboard ?? [] });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao carregar ranking do segmento.");
+    }
+  }
+
+  async function createSegmentFromLastTrack() {
+    const poly = lastTrackRef.current.map((p) => ({ lat: p.lat, lng: p.lng }));
+    if (poly.length < 2) {
+      setError("Precisa de um trajeto com pelo menos 2 pontos para criar o segmento.");
+      return;
+    }
+    try {
+      const created = await apiPost<{ segment: { id: string; name: string } }>(
+        "/student/activities/named-segments",
         {
-          ...(publish && caption.trim() ? { caption: caption.trim() } : {}),
-          ...(publish && photoUrl ? { photoUrl } : {}),
-          ...(publish && videoUrl ? { videoUrl } : {}),
-          mapType,
-          activityMap,
-          layers,
-          is3d,
-          points: route,
-          goals: currentGoals(),
-          publish
+          name: `Segmento ${SPORTS.find((s) => s.id === sport)?.label ?? sport}`,
+          sport,
+          polyline: poly.slice(0, 500)
         },
         token
       );
-      setFinishOpen(false);
-      setActivity(null);
-      setPoints([]);
-      setElapsed(0);
-      setLaps([]);
-      lapAwayRef.current = false;
-      bufferRef.current = [];
-      pipelineRef.current.reset();
-      setPickingLapStart(false);
-      setCaption("");
-      setPhotoUrl(null);
-      setVideoUrl(null);
-      applyTrack([], false);
-      if (publish) onPublished();
+      setNearbySegments((prev) => [
+        { id: created.segment.id, name: created.segment.name, distanceMeters: 0, sport },
+        ...prev
+      ]);
+      setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : publish ? "Não foi possível publicar." : "Não foi possível finalizar.");
-    } finally {
-      setBusy(false);
+      setError(err instanceof Error ? err.message : "Falha ao criar segmento.");
     }
   }
 
@@ -712,13 +1129,38 @@ export function StudentActivitySection({
         {pickingLapStart && (
           <div className="student-activity-pick-banner">
             <Flag size={16} />
-            <span>Toque no mapa para selecionar o ponto de partida da volta</span>
+            <span>Toque no mapa para marcar o ponto de partida da volta</span>
             <button type="button" onClick={() => setPickingLapStart(false)}>
               Cancelar
             </button>
           </div>
         )}
+        {paused ? (
+          <div className="student-activity-map-chip" aria-hidden>
+            Pausado
+          </div>
+        ) : null}
       </div>
+
+      {!running && !paused ? (
+        <div className="student-activity-segments">
+          <div className="student-activity-segments-head">
+            <strong>Segmentos próximos</strong>
+            <button type="button" onClick={() => void createSegmentFromLastTrack()}>
+              Criar do trajeto
+            </button>
+          </div>
+          {nearbySegments.length === 0 ? (
+            <p>Nenhum segmento na área. Finalize uma atividade e crie um.</p>
+          ) : (
+            nearbySegments.slice(0, 3).map((seg) => (
+              <button key={seg.id} type="button" onClick={() => void openSegmentBoard(seg)}>
+                {seg.name} · {formatKm(seg.distanceMeters)} km · ranking
+              </button>
+            ))
+          )}
+        </div>
+      ) : null}
 
       <div className="student-activity-card">
         <button type="button" className="student-activity-sport" onClick={() => setLayersOpen(true)}>
@@ -727,11 +1169,13 @@ export function StudentActivitySection({
         <div className="student-activity-stats">
           <div>
             <small>Tempo</small>
-            <strong>{formatClock(elapsed)}</strong>
+            <strong>{formatClock(shownElapsed)}</strong>
           </div>
           <div>
-            <small>Ritmo</small>
-            <strong>{formatPace(pace)}</strong>
+            <small>{sport === "RIDE" ? "Velocidade" : "Ritmo"}</small>
+            <strong>
+              {sport === "RIDE" ? (speedKmh ? speedKmh.toFixed(1) : "0.0") : formatPace(pace)}
+            </strong>
           </div>
           <div>
             <small>Distância</small>
@@ -740,54 +1184,69 @@ export function StudentActivitySection({
         </div>
         <div className="student-activity-stats student-activity-stats-live">
           <div>
-            <small>Velocidade</small>
-            <strong>{speedKmh ? speedKmh.toFixed(1) : "0.0"}</strong>
-            <em>km/h</em>
+            <small>{sport === "RIDE" ? "Ritmo" : "Velocidade"}</small>
+            <strong>{sport === "RIDE" ? formatPace(pace) : speedKmh ? speedKmh.toFixed(1) : "0.0"}</strong>
+          </div>
+          <div>
+            <small>{`Km ${shownKmIndex}`}</small>
+            <strong>{formatPace(shownKmPace)}</strong>
           </div>
           <div>
             <small>Voltas</small>
-            <strong>{laps.length}</strong>
+            <strong>{String(shownLaps)}</strong>
+          </div>
+        </div>
+        <div className="student-activity-stats student-activity-stats-live">
+          <div>
+            <small>kcal</small>
+            <strong>{String(calories)}</strong>
           </div>
           <div>
-            <small>Meta</small>
-            <strong>{Number.isFinite(parsedKm) && parsedKm > 0 ? formatKm(parsedKm * 1000) : "--"}</strong>
-            <em>km</em>
+            <small>Elevação</small>
+            <strong>{`${Math.round(shownElev)} m`}</strong>
+          </div>
+          <div>
+            <small>{sport === "WALK" || sport === "RUN" ? "Passos" : "Cadência"}</small>
+            <strong>—</strong>
           </div>
         </div>
         <div className="student-activity-controls">
           <button type="button" className="student-activity-side" onClick={() => setLayersOpen(true)} aria-label="Configurações do mapa">
             <Settings2 size={20} />
           </button>
-          {running ? (
-            <button type="button" className="student-activity-play is-pause" onClick={() => void pause()} aria-label="Pausar">
-              <Pause size={28} />
-            </button>
-          ) : (
-            <button type="button" className="student-activity-play" onClick={() => void startOrResume()} disabled={busy} aria-label="Iniciar">
-              {busy ? <Loader2 className="spin" size={28} /> : <Play size={28} />}
-            </button>
-          )}
+          <button
+            type="button"
+            className={running ? "student-activity-play is-pause" : "student-activity-play"}
+            onClick={() => {
+              if (shareOpen || finishing) return;
+              void (running ? pause() : startOrResume());
+            }}
+            disabled={busy && !running}
+            aria-label={running ? "Pausar" : "Iniciar"}
+          >
+            {busy && !running ? <Loader2 className="spin" size={28} /> : running ? <Pause size={28} /> : <Play size={28} />}
+          </button>
           <button type="button" className="student-activity-side" onClick={onOpenPlay} aria-label="Música">
             <Music2 size={20} />
           </button>
         </div>
         {running || paused ? (
           <div className="student-activity-finish-actions">
-            <button type="button" className="student-activity-distance" onClick={() => setFinishOpen(true)} disabled={busy}>
-              Finalizar e publicar
+            <button type="button" className="student-activity-distance" onClick={() => void beginFinish()} disabled={busy}>
+              Finalizar e compartilhar
             </button>
             <button
               type="button"
               className="student-activity-distance is-quiet"
-              disabled={busy}
+              disabled={busy || finishing}
               onClick={() => void finish(false)}
             >
-              Finalizar sem publicar
+              {finishing ? "Finalizando..." : "Finalizar sem publicar"}
             </button>
           </div>
         ) : (
           <button type="button" className="student-activity-distance" onClick={() => setGoalsOpen(true)}>
-            <MapPinned size={14} /> {hasGoal ? `Definir · ${Number.isFinite(parsedKm) && parsedKm > 0 ? `${parsedKm} km` : "meta"}` : "Definir distância"}
+            Definir distância
           </button>
         )}
         {error && <p className="student-activity-error">{error}</p>}
@@ -913,51 +1372,194 @@ export function StudentActivitySection({
         </div>
       )}
 
-      {finishOpen && (
-        <div className="student-activity-sheet" role="dialog" aria-label="Publicar atividade">
+      {shareOpen && shareStats ? (
+        <div className="student-activity-share" role="dialog" aria-label="Percurso concluído">
+          <div className="student-activity-share-sheet">
+            <div className="student-activity-share-trophy">
+              <Trophy size={36} />
+            </div>
+            <h2>Percurso concluído</h2>
+            <p>Escolha o modelo e publique. Distância, ritmo, mapa e as demais métricas vão para o Feed.</p>
+            {!shareModel ? (
+              <div className="student-activity-share-choices">
+                <button type="button" onClick={() => setShareModel("simple")}>
+                  <span className="student-activity-share-circle">
+                    <MapIcon size={26} />
+                  </span>
+                  Modelo simples
+                </button>
+                <button type="button" onClick={() => setShareModel("photo")}>
+                  <span className="student-activity-share-circle is-photo">
+                    <Camera size={26} />
+                  </span>
+                  Com foto
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="student-activity-share-card">
+                  <small>App Treino Social</small>
+                  <strong>{shareStats.sportLabel.toUpperCase()} CONCLUÍDA</strong>
+                  {photoUrl ? <img src={photoUrl} alt="" /> : null}
+                  <div className="student-activity-share-metrics">
+                    <span><em>Distância</em>{formatKm(shareStats.distanceMeters)} km</span>
+                    <span><em>Tempo</em>{formatClock(shareStats.elapsedSeconds)}</span>
+                    <span>
+                      <em>{shareStats.sport === "RIDE" ? "Velocidade" : "Ritmo"}</em>
+                      {shareStats.sport === "RIDE"
+                        ? shareStats.speedKmh && shareStats.speedKmh > 0
+                          ? `${shareStats.speedKmh.toFixed(1)} km/h`
+                          : "—"
+                        : formatPace(shareStats.paceSecPerKm)}
+                    </span>
+                  </div>
+                  <div className="student-activity-share-metrics">
+                    <span><em>kcal</em>{String(shareStats.calories ?? 0)}</span>
+                    <span><em>↑ Elev</em>{`${Math.round(shareStats.elevationGainMeters ?? 0)} m`}</span>
+                    <span><em>Voltas</em>{String(shareStats.lapsCount ?? 0)}</span>
+                  </div>
+                </div>
+                <textarea
+                  value={caption}
+                  onChange={(event) => setCaption(event.target.value)}
+                  placeholder="Como foi o percurso?"
+                  rows={3}
+                />
+                {shareModel === "photo" && !photoUrl ? (
+                  <label className="student-ghost-chip">
+                    <ImagePlus size={16} /> Galeria
+                    <input
+                      type="file"
+                      accept="image/*"
+                      hidden
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void uploadMedia(file, "photo");
+                      }}
+                    />
+                  </label>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="student-green-button"
+                      disabled={busy || finishing}
+                      onClick={() => void finish(true)}
+                    >
+                      {busy || finishing ? "Publicando..." : "Publicar no Feed"}
+                    </button>
+                    <button
+                      type="button"
+                      className="student-ghost-chip"
+                      disabled={busy}
+                      onClick={() => void shareNative(shareStats)}
+                    >
+                      <Share2 size={16} /> Compartilhar
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+            {error ? <p className="student-activity-error">{error}</p> : null}
+            <button
+              type="button"
+              className="student-ghost-chip"
+              disabled={busy || finishing}
+              onClick={() => void finish(false)}
+            >
+              {busy || finishing ? "Salvando..." : "Finalizar sem publicar"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {finishStats ? (
+        <div className="student-activity-sheet is-saved" role="dialog" aria-label="Atividade salva">
           <header>
-            <strong>Compartilhar no Feed</strong>
-            <button type="button" onClick={() => setFinishOpen(false)} aria-label="Fechar">
+            <strong>Atividade salva</strong>
+            <button type="button" onClick={() => dismissFinishSplits(false)} aria-label="Fechar">
               <X size={18} />
             </button>
           </header>
-          <p>
-            {formatKm(distance)} km · {formatClock(elapsed)} · ritmo {formatPace(pace)}
-          </p>
-          <textarea value={caption} onChange={(event) => setCaption(event.target.value)} placeholder="Como foi o percurso?" rows={3} />
-          <div className="student-feed-composer-bar">
-            <label className="student-ghost-chip">
-              Foto
-              <input type="file" accept="image/*" hidden onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) void uploadMedia(file, "photo");
-              }} />
-            </label>
-            <label className="student-ghost-chip">
-              Vídeo
-              <input type="file" accept={VIDEO_FILE_ACCEPT} hidden onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) void uploadMedia(file, "video");
-              }} />
-            </label>
+          <div className="student-activity-saved-card">
+            <small>App Treino · Outdoor</small>
+            <h3>{finishStats.sportLabel}</h3>
+            <div className="student-activity-share-metrics">
+              <span><em>Distância</em>{formatKm(finishStats.distanceMeters)} km</span>
+              <span><em>Tempo</em>{formatClock(finishStats.elapsedSeconds)}</span>
+              <span><em>Ritmo</em>{formatPace(finishStats.paceSecPerKm)}</span>
+            </div>
+            <div className="student-activity-share-metrics">
+              <span><em>↑ Elev</em>{`${Math.round(finishStats.elevationGainMeters ?? 0)} m`}</span>
+              <span><em>↓ Elev</em>{`${Math.round(finishStats.elevationLossMeters ?? 0)} m`}</span>
+              <span><em>kcal</em>{String(finishStats.calories ?? 0)}</span>
+            </div>
+            <button type="button" className="student-green-button" onClick={() => void shareNative(finishStats)}>
+              <Share2 size={16} /> Compartilhar
+            </button>
           </div>
-          {photoUrl && <img className="student-feed-media" src={photoUrl} alt="" />}
-          {videoUrl && (
-            <video
-              className="student-feed-media"
-              src={videoUrl}
-              controls
-              onError={(event) => retryVideoAsCompatible(event.currentTarget, videoUrl)}
-            />
-          )}
-          <button type="button" className="student-green-button" disabled={busy} onClick={() => void finish(true)}>
-            {busy ? "Publicando..." : "Publicar atividade"}
+          {finishAnalysis && (finishAnalysis.bestKm != null || finishAnalysis.worstKm != null) ? (
+            <p className="student-activity-hint">
+              {finishAnalysis.bestKm != null
+                ? `Melhor km ${finishAnalysis.bestKm}${
+                    finishAnalysis.bestPaceSecPerKm != null ? ` · ${formatPace(finishAnalysis.bestPaceSecPerKm)}` : ""
+                  }`
+                : ""}
+              {finishAnalysis.worstKm != null
+                ? `  ·  Pior km ${finishAnalysis.worstKm}${
+                    finishAnalysis.worstPaceSecPerKm != null ? ` · ${formatPace(finishAnalysis.worstPaceSecPerKm)}` : ""
+                  }`
+                : ""}
+            </p>
+          ) : null}
+          {bestEfforts.length ? (
+            <div>
+              <h3>Best efforts</h3>
+              {bestEfforts.map((effort) => (
+                <p key={effort.label} className="student-activity-hint">
+                  {effort.label}: {formatClock(effort.elapsedSeconds)} · {formatPace(effort.paceSecPerKm)}
+                </p>
+              ))}
+            </div>
+          ) : null}
+          {finishSplits?.length ? (
+            <div>
+              <h3>Splits por km</h3>
+              {finishSplits.map((split) => (
+                <p key={split.km} className="student-activity-hint">
+                  Km {split.km}
+                  {split.partial ? " · parcial" : ""} · {formatPace(split.paceSecPerKm)} · {formatClock(split.elapsedTime)}
+                </p>
+              ))}
+            </div>
+          ) : null}
+          <button type="button" className="student-green-button" onClick={() => dismissFinishSplits(false)}>
+            Nova atividade
           </button>
-          <button type="button" className="student-ghost-chip" disabled={busy} onClick={() => void finish(false)}>
-            Finalizar sem publicar
-          </button>
+          {pendingFeedNav ? (
+            <button type="button" className="student-ghost-chip" onClick={() => dismissFinishSplits(true)}>
+              Ver no Feed
+            </button>
+          ) : null}
         </div>
-      )}
+      ) : null}
+
+      {segmentBoard ? (
+        <div className="student-activity-sheet" role="dialog" aria-label="Ranking do segmento">
+          <header>
+            <strong>{segmentBoard.name}</strong>
+            <button type="button" onClick={() => setSegmentBoard(null)} aria-label="Fechar">
+              <X size={18} />
+            </button>
+          </header>
+          {segmentBoard.rows.map((row) => (
+            <p key={`${row.rank}-${row.name}`} className="student-activity-hint">
+              {row.rank}º · {row.name} · {formatClock(row.elapsedSeconds)}
+              {row.isPr ? " · PR" : ""}
+            </p>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -23533,6 +23533,221 @@ html.dark .student-activity-native-cta {
   margin: 0;
 }
 
+.student-activity-map-chip {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 4;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(21, 16, 11, 0.82);
+  color: #fff7ec;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.student-activity-segments {
+  margin: 0 10px 8px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(255, 247, 236, 0.92);
+  display: grid;
+  gap: 6px;
+  z-index: 3;
+}
+
+.student-activity-segments-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.student-activity-segments-head strong {
+  font-size: 13px;
+}
+
+.student-activity-segments-head button,
+.student-activity-segments > button {
+  border: 0;
+  background: transparent;
+  color: #df663c;
+  font-weight: 800;
+  font-size: 12px;
+  text-align: left;
+  padding: 0;
+}
+
+.student-activity-segments p {
+  margin: 0;
+  color: #605a52;
+  font-size: 12px;
+}
+
+.student-activity-share {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.48);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.student-activity-share-sheet {
+  width: min(420px, 100%);
+  max-height: 92%;
+  overflow: auto;
+  background: #fff;
+  border-radius: 18px;
+  padding: 22px;
+  display: grid;
+  gap: 14px;
+}
+
+.student-activity-share-sheet h2 {
+  margin: 0;
+  text-align: center;
+  font-size: 22px;
+}
+
+.student-activity-share-sheet > p {
+  margin: 0;
+  text-align: center;
+  color: #605a52;
+  line-height: 1.4;
+}
+
+.student-activity-share-trophy {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+  background: rgba(242, 180, 97, 0.22);
+  color: #df663c;
+}
+
+.student-activity-share-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.student-activity-share-choices button {
+  min-height: 132px;
+  border-radius: 16px;
+  border: 1px solid rgba(223, 102, 60, 0.22);
+  background: #fff8ee;
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.student-activity-share-circle {
+  width: 64px;
+  height: 64px;
+  border-radius: 32px;
+  display: grid;
+  place-items: center;
+  background: #df663c;
+  color: #fff;
+}
+
+.student-activity-share-circle.is-photo {
+  background: #c73d2e;
+}
+
+.student-activity-share-card {
+  border-radius: 16px;
+  padding: 14px;
+  background: #1a140c;
+  color: #fff7ec;
+  display: grid;
+  gap: 10px;
+  text-align: center;
+}
+
+.student-activity-share-card small {
+  color: #f2b461;
+  font-weight: 800;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.student-activity-share-card img {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  border-radius: 14px;
+}
+
+.student-activity-share-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.student-activity-share-metrics span {
+  display: grid;
+  gap: 2px;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.student-activity-share-metrics em {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: rgba(255, 247, 236, 0.55);
+}
+
+.student-activity-share-sheet textarea {
+  border: 1px solid rgba(21, 16, 11, 0.12);
+  border-radius: 12px;
+  padding: 10px;
+  min-height: 64px;
+  resize: vertical;
+}
+
+.student-activity-saved-card {
+  border: 1px solid rgba(21, 16, 11, 0.12);
+  border-radius: 16px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.student-activity-saved-card small {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #605a52;
+}
+
+.student-activity-saved-card h3 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.student-activity-saved-card .student-activity-share-metrics em {
+  color: #605a52;
+}
+
+.student-activity-saved-card .student-activity-share-metrics span {
+  color: #15100b;
+}
+
+.student-activity-sheet.is-saved {
+  max-height: 88%;
+  z-index: 21;
+}
+
 .student-activity-sheet {
   position: absolute;
   inset: auto 0 0;
