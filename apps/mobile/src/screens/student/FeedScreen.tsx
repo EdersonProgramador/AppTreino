@@ -271,6 +271,7 @@ const FeedPostCard = memo(function FeedPostCard({
           </View>
         </Pressable>
         {post.activity ? <Text style={styles.badge}>{post.activity.sportLabel}</Text> : null}
+        {post.kind === "WORKOUT" || post.workout ? <Text style={styles.badge}>Treino</Text> : null}
         <View style={styles.postMenuWrap}>
           <Pressable onPress={() => onToggleMenu(post.id)} hitSlop={8} accessibilityLabel="Opções">
             <Ionicons name="ellipsis-horizontal" size={18} color={st.muted} />
@@ -342,6 +343,16 @@ const FeedPostCard = memo(function FeedPostCard({
                 {formatPace(post.activity.avgPaceSecPerKm)} /km
               </Text>
             )}
+          </View>
+        </View>
+      ) : post.workout ? (
+        <View style={styles.activityBlock}>
+          <Text style={styles.stat} numberOfLines={2}>{post.workout.blockTitle}</Text>
+          <Text style={styles.statMuted} numberOfLines={1}>{post.workout.programTitle}</Text>
+          <View style={styles.stats}>
+            <Text style={styles.stat} numberOfLines={1}>{formatClock(post.workout.durationSeconds)}</Text>
+            <Text style={styles.stat} numberOfLines={1}>{post.workout.exerciseCount} ex.</Text>
+            <Text style={styles.stat} numberOfLines={1}>Dia {post.workout.dayNumber}</Text>
           </View>
         </View>
       ) : null}

@@ -429,6 +429,7 @@ model WorkoutSession {
   program          Program?             @relation(fields: [programId], references: [id], onDelete: SetNull)
   workoutBlock     WorkoutBlock?        @relation(fields: [workoutBlockId], references: [id], onDelete: SetNull)
   exerciseProgress UserProgress[]
+  socialPost       SocialPost?
 
   @@index([userId])
   @@map("workout_sessions")
@@ -1141,6 +1142,7 @@ enum SocialPostKind {
   PHOTO
   VIDEO
   ACTIVITY
+  WORKOUT
 }
 
 enum OutdoorSport {
@@ -1182,6 +1184,10 @@ model SocialPost {
   mediaItems Json?          @map("media_items")
   activityId String?        @unique @map("activity_id")
   activity   OutdoorActivity? @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  workoutSessionId String?  @unique @map("workout_session_id")
+  workoutSession   WorkoutSession? @relation(fields: [workoutSessionId], references: [id], onDelete: SetNull)
+  /// Snapshot: { programTitle, blockTitle, dayNumber, exerciseCount, durationSeconds, structureType }
+  workout    Json?
   hidden     Boolean        @default(false)
   likes      SocialLike[]
   dislikes   SocialDislike[]

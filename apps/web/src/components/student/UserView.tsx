@@ -133,6 +133,7 @@ import { clearWorkoutRunner } from "../../lib/workout-runner-persist";
 import { flushShellStateToNative } from "../../lib/shell-persist";
 import { PhysicalAssessmentFormView } from "../shared/PhysicalAssessmentFormView";
 import { uiSounds } from "../../lib/ui-sounds";
+import type { WorkoutSharePayload } from "./WorkoutShareFlow";
 
 const WorkoutPlayer = lazy(async () => {
   const module = await import("./WorkoutPlayer");
@@ -1094,28 +1095,42 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     }
   }
 
-  const handleCompleteWorkoutDay = async () => {
+  const handleCompleteWorkoutDay = async (share?: WorkoutSharePayload) => {
     if (!todayWorkout || !workoutSession?.id) {
       setError("Inicie o treino antes de concluir.");
-      return;
+      return { published: false };
     }
 
     try {
-      const response = await apiPost<{ completed?: boolean }>(
+      const response = await apiPost<{ completed?: boolean; post?: { id: string } | null }>(
         "/student/workout/complete-day",
         {
           assignmentId: todayWorkout.assignmentId,
-          sessionId: workoutSession.id
+          sessionId: workoutSession.id,
+          publish: share?.publish === true,
+          caption: share?.caption,
+          photoUrl: share?.photoUrl,
+          videoUrl: share?.videoUrl,
+          mediaItems: share?.mediaItems,
+          exerciseCount: share?.exerciseCount ?? todayWorkout.block.exercises.length
         },
         token
       );
       setWorkoutSession(null);
       await loadUserData();
       setSelectedWorkoutModality(todayWorkout.modality ?? selectedWorkoutModality);
+      const published = Boolean(share?.publish && response.post);
       setSuccess(
-        response.completed ? trainingCopy.programCompletedToast : "Treino concluído! Próximo dia liberado."
+        published
+          ? response.completed
+            ? `${trainingCopy.programCompletedToast} Treino publicado no Feed.`
+            : "Treino publicado no Feed!"
+          : response.completed
+            ? trainingCopy.programCompletedToast
+            : "Treino concluído! Próximo dia liberado."
       );
       setPlayerSessionActive(false);
+      return { published };
     } catch (completeError) {
       uiSounds.error();
       setError(
@@ -3218,6 +3233,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                  timeCapSeconds={todayWorkout.block.timeCapSeconds}
                  instructions={todayWorkout.block.instructions}
                  sessionId={workoutSession?.id ?? null}
+                 token={token ?? ""}
                  onBack={() => {
                    // Após cancel/reset (ou sem sessão), volta ao catálogo sem re-disparar goToSection.
                    restoreStudentChrome();
@@ -3229,14 +3245,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                  onWorkoutStart={handleBeginWorkoutSession}
                  onCancelSession={handleCancelWorkoutSession}
                  onExerciseProgressChange={handleExerciseProgressChange}
-                 onWorkoutComplete={async () => {
-                   await handleCompleteWorkoutDay();
+                 onWorkoutComplete={async (share) => {
+                   const result = await handleCompleteWorkoutDay(share);
                    restoreStudentChrome();
                    uiSounds.studentPage();
                    uiSounds.pageChange();
                    // Minimiza o player expandido, mas não pausa a trilha.
                    useMusicPlayerStore.getState().collapse();
-                   setStudentSection("feed");
+                   setStudentSection(result?.published ? "feed" : "training");
                  }}
                />
              </Suspense>

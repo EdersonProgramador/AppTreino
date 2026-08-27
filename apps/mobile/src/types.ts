@@ -460,6 +460,15 @@ export type OutdoorActivityRow = {
   caption?: string | null;
 };
 
+export type WorkoutShareRow = {
+  programTitle: string;
+  blockTitle: string;
+  dayNumber: number;
+  exerciseCount: number;
+  durationSeconds: number;
+  structureType?: string | null;
+};
+
 export type SocialPostRow = {
   id: string;
   kind: string;
@@ -476,6 +485,7 @@ export type SocialPostRow = {
   commentsCount?: number;
   comments: SocialComment[];
   activity?: OutdoorActivityRow | null;
+  workout?: WorkoutShareRow | null;
   isMine?: boolean;
 };
 

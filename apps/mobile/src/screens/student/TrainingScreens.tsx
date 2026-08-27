@@ -619,6 +619,7 @@ export function WorkoutPlayerScreen() {
       timeCapSeconds={day.block.timeCapSeconds}
       instructions={day.block.instructions}
       sessionId={sessionId}
+      token={session.token}
       onSessionActiveChange={setSessionActive}
       onBack={() => navigation.goBack()}
       onWorkoutStart={async () => {
@@ -647,19 +648,39 @@ export function WorkoutPlayerScreen() {
           throw caught instanceof NativeApiError ? caught : new Error("Não foi possível registrar o exercício.");
         }
       }}
-      onWorkoutComplete={async (completedSessionId) => {
+      onWorkoutComplete={async (completedSessionId, share) => {
         try {
-          const response = await apiPost<{ completed?: boolean }>(
+          const response = await apiPost<{ completed?: boolean; post?: { id: string } | null }>(
             "/student/workout/complete-day",
-            { assignmentId: program.assignmentId, sessionId: completedSessionId },
+            {
+              assignmentId: program.assignmentId,
+              sessionId: completedSessionId,
+              publish: share?.publish === true,
+              caption: share?.caption,
+              photoUrl: share?.photoUrl,
+              videoUrl: share?.videoUrl,
+              mediaItems: share?.mediaItems,
+              exerciseCount: share?.exerciseCount ?? day.block.exercises.length
+            },
             session.token
           );
           await refresh();
+          const published = Boolean(share?.publish && response.post);
           Alert.alert(
             "Treino",
-            response.completed ? trainingCopy.programCompletedToast : "Treino concluído! Próximo dia liberado."
+            published
+              ? response.completed
+                ? `${trainingCopy.programCompletedToast} Treino publicado no Feed.`
+                : "Treino publicado no Feed!"
+              : response.completed
+                ? trainingCopy.programCompletedToast
+                : "Treino concluído! Próximo dia liberado."
           );
-          navigation.goBack();
+          if (published) {
+            navigation.getParent()?.navigate("FeedTab" as never);
+          } else {
+            navigation.goBack();
+          }
         } catch (caught) {
           throw caught instanceof NativeApiError ? caught : new Error("Conclua todas as séries antes de finalizar.");
         }

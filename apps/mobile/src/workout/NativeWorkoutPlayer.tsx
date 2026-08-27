@@ -21,7 +21,7 @@ import { Audio } from "expo-av";
 import { AppVideo } from "../components/AppVideo";
 import { MediaImage } from "../lib/MediaImage";
 import type { WorkoutExercise, WorkoutStructureType } from "../types";
-import { NativeShareFlow } from "./NativeShareFlow";
+import { NativeShareFlow, type WorkoutSharePayload } from "./NativeShareFlow";
 import { NativeWorkoutBar } from "./NativeWorkoutBar";
 import { runner } from "./runnerTheme";
 import { uiSounds } from "../student/uiSounds";
@@ -64,6 +64,7 @@ type Props = {
   timeCapSeconds?: number | null;
   instructions?: string | null;
   sessionId?: string | null;
+  token: string;
   onBack: () => void;
   onWorkoutStart?: () => Promise<{ id: string } | void> | { id: string } | void;
   onCancelSession?: (sessionId: string | null) => Promise<void> | void;
@@ -82,7 +83,7 @@ type Props = {
     perceivedExertion?: number;
     notes?: string;
   }) => Promise<void> | void;
-  onWorkoutComplete?: (sessionId: string) => Promise<void> | void;
+  onWorkoutComplete?: (sessionId: string, share?: WorkoutSharePayload) => Promise<void> | void;
 };
 
 function MediaFallback() {
@@ -250,6 +251,7 @@ export function NativeWorkoutPlayer({
   timeCapSeconds,
   instructions,
   sessionId,
+  token,
   onBack,
   onWorkoutStart,
   onCancelSession,
@@ -805,12 +807,12 @@ export function NativeWorkoutPlayer({
     setShareOpen(true);
   }
 
-  async function completeWorkout() {
+  async function completeWorkout(share?: WorkoutSharePayload) {
     if (!workoutReadyToComplete || !allCompleted || dayCompleted || !activeSessionId) return;
     uiSounds.workoutComplete();
     setDayCompleted(true);
     try {
-      await onWorkoutComplete?.(activeSessionId);
+      await onWorkoutComplete?.(activeSessionId, share);
       await clearWorkoutRunner();
       setIsRunning(false);
       setIsPaused(false);
@@ -1398,12 +1400,14 @@ export function NativeWorkoutPlayer({
 
       {shareOpen ? (
         <NativeShareFlow
+          token={token}
           programTitle={programTitle}
           blockTitle={blockTitle}
           exerciseCount={exercises.length}
           durationLabel={formatElapsedTime(elapsedSeconds)}
           busy={dayCompleted}
-          onDismiss={() => void completeWorkout()}
+          onPublish={(payload) => void completeWorkout(payload)}
+          onFinishWithoutPublish={() => void completeWorkout({ publish: false, exerciseCount: exercises.length })}
         />
       ) : null}
     </View>

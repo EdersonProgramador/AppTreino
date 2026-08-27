@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { brand } from "../../lib/brand";
+import { formatClock } from "../../lib/activity-geo";
 import { mediaUrl, retryVideoAsCompatible } from "../../lib/urls";
 import { shareSocialPost } from "../../lib/share-social-post";
 import { uiSounds } from "../../lib/ui-sounds";
@@ -572,6 +573,26 @@ export function StudentAthleteProfileSection({
                     </div>
                   </header>
                   {post.body ? <p>{post.body}</p> : null}
+                  {post.workout ? (
+                    <div className="student-feed-workout">
+                      <strong>{post.workout.blockTitle}</strong>
+                      <small>{post.workout.programTitle}</small>
+                      <div className="student-feed-activity-stats">
+                        <span>
+                          <strong>{formatClock(post.workout.durationSeconds)}</strong>
+                          tempo
+                        </span>
+                        <span>
+                          <strong>{post.workout.exerciseCount}</strong>
+                          exercícios
+                        </span>
+                        <span>
+                          <strong>{post.workout.dayNumber}</strong>
+                          dia
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
                   <ViewerCarousel key={post.id} items={mediaOf(post)} />
                   <footer>
                     <button

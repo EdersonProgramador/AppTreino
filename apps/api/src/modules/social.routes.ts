@@ -489,6 +489,29 @@ function serializeComment(
   };
 }
 
+function parseWorkoutSnapshot(raw: unknown): {
+  programTitle: string;
+  blockTitle: string;
+  dayNumber: number;
+  exerciseCount: number;
+  durationSeconds: number;
+  structureType: string | null;
+} | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const row = raw as Record<string, unknown>;
+  const programTitle = typeof row.programTitle === "string" ? row.programTitle.trim() : "";
+  if (!programTitle) return null;
+  return {
+    programTitle,
+    blockTitle: typeof row.blockTitle === "string" && row.blockTitle.trim() ? row.blockTitle.trim() : programTitle,
+    dayNumber: typeof row.dayNumber === "number" && Number.isFinite(row.dayNumber) ? row.dayNumber : 1,
+    exerciseCount: typeof row.exerciseCount === "number" && Number.isFinite(row.exerciseCount) ? row.exerciseCount : 0,
+    durationSeconds:
+      typeof row.durationSeconds === "number" && Number.isFinite(row.durationSeconds) ? row.durationSeconds : 0,
+    structureType: typeof row.structureType === "string" ? row.structureType : null
+  };
+}
+
 async function serializePost(
   post: {
     id: string;
@@ -498,6 +521,7 @@ async function serializePost(
     mediaType: string | null;
     mediaItems?: unknown;
     activityId: string | null;
+    workout?: unknown;
     createdAt: Date;
     author: { id: string; name: string; profile?: { avatarUrl?: string | null } | null };
     likes: Array<{ userId: string }>;
@@ -535,6 +559,7 @@ async function serializePost(
     commentsCount: post._count?.comments ?? post.comments.length,
     comments: post.comments.map((comment) => serializeComment(comment, viewerId)),
     activity: post.activity ? serializeActivity(post.activity, options) : null,
+    workout: parseWorkoutSnapshot(post.workout),
     isMine: post.author.id === viewerId
   };
 }

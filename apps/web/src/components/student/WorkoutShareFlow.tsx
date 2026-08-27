@@ -7,21 +7,42 @@ import {
   Share2,
   Trophy,
   UserRound,
+  Video,
   X
 } from "lucide-react";
+import { apiUpload } from "../../api";
 import { blobToBase64, isNativeAppShell, postNativeMessage } from "../../lib/native-bridge";
+import { mediaUrl } from "../../lib/urls";
 import { uiSounds } from "../../lib/ui-sounds";
+import { isVideoFile, VIDEO_FILE_ACCEPT } from "../../lib/video-formats";
 
 type ShareStep = "choose" | "photo" | "camera" | "ready";
 type ShareModel = "simple" | "photo";
 
+export type WorkoutShareMediaItem = {
+  url: string;
+  type: "IMAGE" | "VIDEO";
+  coverUrl?: string | null;
+};
+
+export type WorkoutSharePayload = {
+  publish: boolean;
+  caption?: string;
+  photoUrl?: string | null;
+  videoUrl?: string | null;
+  mediaItems?: WorkoutShareMediaItem[];
+  exerciseCount?: number;
+};
+
 interface WorkoutShareFlowProps {
+  token: string;
   programTitle: string;
   blockTitle: string;
   exerciseCount: number;
   durationLabel: string;
   busy?: boolean;
-  onDismiss: () => void | Promise<void>;
+  onPublish: (payload: WorkoutSharePayload) => void | Promise<void>;
+  onFinishWithoutPublish: () => void | Promise<void>;
 }
 
 function sharePageUrl() {
@@ -39,6 +60,7 @@ function SharePreviewCard({
   exerciseCount,
   durationLabel,
   photoUrl,
+  videoUrl,
   cardRef
 }: {
   programTitle: string;
@@ -46,6 +68,7 @@ function SharePreviewCard({
   exerciseCount: number;
   durationLabel: string;
   photoUrl: string | null;
+  videoUrl: string | null;
   cardRef: Ref<HTMLDivElement>;
 }) {
   return (
@@ -54,7 +77,11 @@ function SharePreviewCard({
       <h3>O TREINO DE HOJE ESTÁ PAGO!</h3>
       {photoUrl ? (
         <div className="runner-share-card-photo">
-          <img src={photoUrl} alt="Sua foto do treino" />
+          <img src={mediaUrl(photoUrl)} alt="Sua foto do treino" />
+        </div>
+      ) : videoUrl ? (
+        <div className="runner-share-card-photo">
+          <video src={mediaUrl(videoUrl)} playsInline muted controls />
         </div>
       ) : (
         <div className="runner-share-card-mark" aria-hidden="true">
@@ -84,31 +111,42 @@ function SharePreviewCard({
 }
 
 export function WorkoutShareFlow({
+  token,
   programTitle,
   blockTitle,
   exerciseCount,
   durationLabel,
   busy = false,
-  onDismiss
+  onPublish,
+  onFinishWithoutPublish
 }: WorkoutShareFlowProps) {
   const [step, setStep] = useState<ShareStep>("choose");
   const [model, setModel] = useState<ShareModel | null>(null);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [mediaItems, setMediaItems] = useState<WorkoutShareMediaItem[]>([]);
+  const [caption, setCaption] = useState("");
   const [sharing, setSharing] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraStarting, setCameraStarting] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const cameraFallbackInputRef = useRef<HTMLInputElement>(null);
   const finishingRef = useRef(false);
 
   const shareUrl = sharePageUrl();
   const shareTitle = "O TREINO DE HOJE ESTÁ PAGO!";
-  const shareText = `${shareTitle} Concluí ${blockTitle} (${programTitle}) em ${durationLabel} no App Treino Social.`;
+  const shareText = `${shareTitle} Concluí ${blockTitle} (${programTitle}) em ${durationLabel} no App Treino Social.${
+    caption.trim() ? `\n${caption.trim()}` : ""
+  }`;
   const showCardInline = step === "ready";
+  const photoUrl = mediaItems.find((item) => item.type === "IMAGE")?.url ?? null;
+  const videoUrl = mediaItems.find((item) => item.type === "VIDEO")?.url ?? null;
+  const ready = Boolean(model) && (model !== "photo" || mediaItems.length > 0);
+  const locked = busy || sharing || downloading || uploading;
 
   function releaseCamera() {
     stopMediaStream(streamRef.current);
@@ -121,9 +159,8 @@ export function WorkoutShareFlow({
   useEffect(() => {
     return () => {
       releaseCamera();
-      if (photoUrl) URL.revokeObjectURL(photoUrl);
     };
-  }, [photoUrl]);
+  }, []);
 
   useEffect(() => {
     if (step !== "camera") {
@@ -152,21 +189,38 @@ export function WorkoutShareFlow({
     setStep("ready");
   }
 
-  function applyPhotoUrl(nextUrl: string) {
-    if (photoUrl) URL.revokeObjectURL(photoUrl);
-    setPhotoUrl(nextUrl);
-    uiSounds.screenshot();
-    releaseCamera();
-    setStep("ready");
+  async function uploadFile(file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    const uploaded = await apiUpload<{ file: { url: string } }>("/student/social/uploads", form, token);
+    const type: "IMAGE" | "VIDEO" = isVideoFile(file) ? "VIDEO" : "IMAGE";
+    return {
+      url: uploaded.file.url,
+      type,
+      coverUrl: type === "IMAGE" ? uploaded.file.url : null
+    } satisfies WorkoutShareMediaItem;
   }
 
-  function handlePhotoFile(file: File | undefined) {
-    if (!file) return;
-    applyPhotoUrl(URL.createObjectURL(file));
+  async function addMediaFile(file: File | undefined) {
+    if (!file || uploading || busy) return;
+    setCameraError(null);
+    setUploading(true);
+    try {
+      const item = await uploadFile(file);
+      setMediaItems((current) => [...current, item].slice(0, 10));
+      uiSounds.screenshot();
+      releaseCamera();
+      setStep("ready");
+    } catch {
+      setCameraError("Não foi possível enviar a mídia. Tente de novo.");
+      uiSounds.error();
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function openLiveCamera() {
-    if (busy || cameraStarting) return;
+    if (busy || cameraStarting || uploading) return;
     setCameraError(null);
     setCameraStarting(true);
     uiSounds.itemSelect();
@@ -225,7 +279,7 @@ export function WorkoutShareFlow({
           uiSounds.error();
           return;
         }
-        applyPhotoUrl(URL.createObjectURL(blob));
+        void addMediaFile(new File([blob], `treino-${Date.now()}.jpg`, { type: "image/jpeg" }));
       },
       "image/jpeg",
       0.92
@@ -266,11 +320,25 @@ export function WorkoutShareFlow({
     });
   }
 
-  async function finishAndGoHome() {
-    if (finishingRef.current || busy) return;
+  function sharePayload(publish: boolean): WorkoutSharePayload {
+    return {
+      publish,
+      caption: caption.trim() || undefined,
+      photoUrl,
+      videoUrl,
+      mediaItems: mediaItems.length ? mediaItems : undefined,
+      exerciseCount
+    };
+  }
+
+  async function finish(publish: boolean) {
+    if (finishingRef.current || locked) return;
+    if (publish && !ready) return;
     finishingRef.current = true;
+    uiSounds.submit();
     try {
-      await onDismiss();
+      if (publish) await onPublish(sharePayload(true));
+      else await onFinishWithoutPublish();
     } finally {
       finishingRef.current = false;
     }
@@ -304,8 +372,8 @@ export function WorkoutShareFlow({
   }
 
   async function downloadCardImage() {
-    if (downloading || busy || sharing || !model || step !== "ready") return;
-    if (model === "photo" && !photoUrl) return;
+    if (locked || !model || step !== "ready") return;
+    if (model === "photo" && !mediaItems.length) return;
     setDownloading(true);
     uiSounds.submit();
     try {
@@ -323,8 +391,8 @@ export function WorkoutShareFlow({
   }
 
   async function shareNative() {
-    if (sharing || busy || downloading || !model || step !== "ready") return;
-    if (model === "photo" && !photoUrl) return;
+    if (locked || !model || step !== "ready") return;
+    if (model === "photo" && !mediaItems.length) return;
     setSharing(true);
     uiSounds.submit();
     try {
@@ -359,6 +427,7 @@ export function WorkoutShareFlow({
       await navigator.share({
         title: shareTitle,
         text: shareText,
+        url: shareUrl,
         files: [file]
       });
     } catch (error) {
@@ -375,8 +444,9 @@ export function WorkoutShareFlow({
       cardRef={cardRef}
       durationLabel={durationLabel}
       exerciseCount={exerciseCount}
-      photoUrl={model === "photo" ? photoUrl : null}
+      photoUrl={photoUrl}
       programTitle={programTitle}
+      videoUrl={videoUrl}
     />
   );
 
@@ -398,36 +468,23 @@ export function WorkoutShareFlow({
 
         {step === "choose" ? (
           <>
-            <h2 id="runner-share-title">É HORA DE COMPARTILHAR!</h2>
-            <p>Escolha um modelo para baixar ou compartilhar com seus amigos.</p>
+            <h2 id="runner-share-title">Treino concluído</h2>
+            <p>Escolha o modelo e publique. Tempo, exercícios e as demais métricas vão para o Feed.</p>
 
             <div className="runner-share-model-grid">
-              <button type="button" className="runner-share-model-card" onClick={() => selectModel("simple")} disabled={busy}>
+              <button type="button" className="runner-share-model-card" onClick={() => selectModel("simple")} disabled={locked}>
                 <span className="runner-share-model-circle" aria-hidden="true">
                   <Trophy size={32} />
                 </span>
-                <strong>Modelo Simples</strong>
+                <strong>Modelo simples</strong>
               </button>
-              <button type="button" className="runner-share-model-card" onClick={() => selectModel("photo")} disabled={busy}>
+              <button type="button" className="runner-share-model-card" onClick={() => selectModel("photo")} disabled={locked}>
                 <span className="runner-share-model-circle with-photo" aria-hidden="true">
                   <UserRound size={32} />
                 </span>
-                <strong>Modelo com sua foto</strong>
+                <strong>Com foto ou vídeo</strong>
               </button>
             </div>
-
-            <button
-              type="button"
-              className="runner-share-cancel"
-              data-testid="workout-share-close"
-              disabled={busy}
-              onClick={() => {
-                uiSounds.popupClose();
-                void finishAndGoHome();
-              }}
-            >
-              <X size={18} /> Fechar
-            </button>
           </>
         ) : null}
 
@@ -437,7 +494,7 @@ export function WorkoutShareFlow({
               <Camera size={48} />
             </div>
             <h2 id="runner-share-title">É HORA DE FOTO!</h2>
-            <p>Faça uma selfie bem divertida ou selecione uma imagem da sua galeria de fotos.</p>
+            <p>Tire uma selfie, escolha da galeria ou anexe um vídeo para o Feed.</p>
 
             <input
               ref={cameraFallbackInputRef}
@@ -445,14 +502,30 @@ export function WorkoutShareFlow({
               type="file"
               accept="image/*"
               capture="user"
-              onChange={(event) => handlePhotoFile(event.target.files?.[0])}
+              onChange={(event) => {
+                void addMediaFile(event.target.files?.[0]);
+                event.target.value = "";
+              }}
             />
             <input
               ref={galleryInputRef}
               className="runner-share-file-input"
               type="file"
               accept="image/*"
-              onChange={(event) => handlePhotoFile(event.target.files?.[0])}
+              onChange={(event) => {
+                void addMediaFile(event.target.files?.[0]);
+                event.target.value = "";
+              }}
+            />
+            <input
+              ref={videoInputRef}
+              className="runner-share-file-input"
+              type="file"
+              accept={VIDEO_FILE_ACCEPT}
+              onChange={(event) => {
+                void addMediaFile(event.target.files?.[0]);
+                event.target.value = "";
+              }}
             />
 
             {cameraError ? <p className="runner-share-error">{cameraError}</p> : null}
@@ -461,22 +534,30 @@ export function WorkoutShareFlow({
               <button
                 type="button"
                 className="runner-share-primary"
-                disabled={busy || cameraStarting}
+                disabled={locked || cameraStarting}
                 onClick={() => void openLiveCamera()}
               >
-                <Camera size={18} /> {cameraStarting ? "Abrindo câmera..." : "Tirar foto"}
+                <Camera size={18} /> {cameraStarting ? "Abrindo câmera..." : uploading ? "Enviando..." : "Tirar foto"}
               </button>
               <button
                 type="button"
                 className="runner-share-secondary"
-                disabled={busy || cameraStarting}
+                disabled={locked || cameraStarting}
                 onClick={() => galleryInputRef.current?.click()}
               >
-                <ImagePlus size={18} /> Abrir galeria
+                <ImagePlus size={18} /> Galeria
+              </button>
+              <button
+                type="button"
+                className="runner-share-secondary"
+                disabled={locked || cameraStarting}
+                onClick={() => videoInputRef.current?.click()}
+              >
+                <Video size={18} /> Vídeo
               </button>
             </div>
 
-            <button type="button" className="runner-share-cancel" disabled={busy || cameraStarting} onClick={goBack}>
+            <button type="button" className="runner-share-cancel" disabled={locked || cameraStarting} onClick={goBack}>
               Voltar
             </button>
           </>
@@ -494,10 +575,10 @@ export function WorkoutShareFlow({
             {cameraError ? <p className="runner-share-error">{cameraError}</p> : null}
 
             <div className="runner-share-photo-actions">
-              <button type="button" className="runner-share-primary" disabled={busy} onClick={snapPhotoFromCamera}>
-                <Camera size={18} /> Capturar
+              <button type="button" className="runner-share-primary" disabled={locked} onClick={snapPhotoFromCamera}>
+                <Camera size={18} /> {uploading ? "Enviando..." : "Capturar"}
               </button>
-              <button type="button" className="runner-share-cancel" disabled={busy} onClick={goBack}>
+              <button type="button" className="runner-share-cancel" disabled={locked} onClick={goBack}>
                 Voltar
               </button>
             </div>
@@ -506,47 +587,80 @@ export function WorkoutShareFlow({
 
         {step === "ready" ? (
           <>
-            <h2 id="runner-share-title">TUDO CERTO!</h2>
-            <p>Compartilhe ou baixe a imagem. O treino só é concluído quando você tocar em Fechar.</p>
+            <h2 id="runner-share-title">Percurso do treino pronto</h2>
+            <p>Publique no Feed com as métricas. Foto e vídeo entram na mesma publicação.</p>
 
-            <button
-              type="button"
-              className="runner-share-secondary"
-              data-testid="workout-share-download"
-              disabled={busy || downloading || sharing || (model === "photo" && !photoUrl)}
-              onClick={() => void downloadCardImage()}
-            >
-              <Download size={18} /> {downloading ? "Baixando..." : "Baixar imagem"}
-            </button>
+            <textarea
+              className="runner-share-caption"
+              value={caption}
+              onChange={(event) => setCaption(event.target.value)}
+              placeholder="Como foi o treino?"
+              rows={3}
+              maxLength={2000}
+              disabled={locked}
+            />
 
-            <button
-              type="button"
-              className="runner-share-primary"
-              data-testid="workout-share-share"
-              disabled={busy || sharing || downloading || (model === "photo" && !photoUrl)}
-              onClick={() => void shareNative()}
-            >
-              <Share2 size={18} /> {sharing ? "Abrindo..." : "COMPARTILHAR"}
-            </button>
+            {model === "photo" && !mediaItems.length ? (
+              <button type="button" className="runner-share-secondary" disabled={locked} onClick={() => setStep("photo")}>
+                <ImagePlus size={18} /> Adicionar foto ou vídeo
+              </button>
+            ) : (
+              <>
+                {model === "photo" && mediaItems.length < 10 ? (
+                  <button type="button" className="runner-share-secondary" disabled={locked} onClick={() => setStep("photo")}>
+                    <ImagePlus size={18} /> Adicionar outra mídia
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="runner-share-primary"
+                  data-testid="workout-share-publish"
+                  disabled={locked || !ready}
+                  onClick={() => void finish(true)}
+                >
+                  {busy ? "Publicando..." : "Publicar no Feed"}
+                </button>
+                <button
+                  type="button"
+                  className="runner-share-secondary"
+                  data-testid="workout-share-share"
+                  disabled={locked}
+                  onClick={() => void shareNative()}
+                >
+                  <Share2 size={18} /> {sharing ? "Abrindo..." : "Compartilhar"}
+                </button>
+                <button
+                  type="button"
+                  className="runner-share-secondary"
+                  data-testid="workout-share-download"
+                  disabled={locked}
+                  onClick={() => void downloadCardImage()}
+                >
+                  <Download size={18} /> {downloading ? "Baixando..." : "Baixar imagem"}
+                </button>
+              </>
+            )}
 
-            <button
-              type="button"
-              className="runner-share-cancel"
-              data-testid="workout-share-close"
-              disabled={busy || sharing || downloading}
-              onClick={() => {
-                uiSounds.popupClose();
-                void finishAndGoHome();
-              }}
-            >
-              <X size={18} /> Fechar
-            </button>
+            {cameraError ? <p className="runner-share-error">{cameraError}</p> : null}
 
-            <button type="button" className="runner-share-cancel" disabled={busy || sharing || downloading} onClick={goBack}>
+            <button type="button" className="runner-share-cancel" disabled={locked} onClick={goBack}>
               Voltar
             </button>
           </>
         ) : null}
+
+        <button
+          type="button"
+          className="runner-share-cancel"
+          data-testid="workout-share-close"
+          disabled={locked}
+          onClick={() => {
+            uiSounds.popupClose();
+            void finish(false);
+          }}
+        >
+          <X size={18} /> {busy ? "Salvando..." : "Finalizar sem publicar"}
+        </button>
       </section>
     </div>
   );

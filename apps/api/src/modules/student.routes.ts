@@ -23,9 +23,21 @@ const substituteSchema = z.object({
   exerciseId: z.string().min(1)
 });
 
+const workoutShareMediaSchema = z.object({
+  url: z.string().min(1),
+  type: z.enum(["IMAGE", "VIDEO"]),
+  coverUrl: z.string().optional().nullable()
+});
+
 const completeWorkoutSchema = z.object({
   assignmentId: z.string().min(1),
-  sessionId: z.string().min(1)
+  sessionId: z.string().min(1),
+  publish: z.boolean().optional().default(false),
+  caption: z.string().max(2000).nullish(),
+  photoUrl: z.string().nullish(),
+  videoUrl: z.string().nullish(),
+  mediaItems: z.array(workoutShareMediaSchema).max(10).optional(),
+  exerciseCount: z.coerce.number().int().min(0).max(500).optional()
 });
 
 const startWorkoutSessionSchema = z.object({
@@ -147,6 +159,35 @@ function httpError(statusCode: number, message: string) {
   error.statusCode = statusCode;
 
   return error;
+}
+
+function formatWorkoutDuration(totalSeconds: number) {
+  const sec = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(sec / 3600);
+  const minutes = Math.floor((sec % 3600) / 60);
+  const seconds = sec % 60;
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+  return hours > 0 ? `${String(hours).padStart(2, "0")}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+function workoutShareMediaItems(body: {
+  photoUrl?: string | null;
+  videoUrl?: string | null;
+  mediaItems?: Array<{ url: string; type: "IMAGE" | "VIDEO"; coverUrl?: string | null }>;
+}) {
+  const fromItems = (body.mediaItems ?? [])
+    .map((item) => ({
+      url: item.url,
+      type: item.type,
+      coverUrl: item.coverUrl?.trim() || (item.type === "IMAGE" ? item.url : null)
+    }))
+    .filter((item) => item.url);
+  if (fromItems.length) return fromItems.slice(0, 10);
+  const items: Array<{ url: string; type: "IMAGE" | "VIDEO"; coverUrl: string | null }> = [];
+  if (body.photoUrl) items.push({ url: body.photoUrl, type: "IMAGE", coverUrl: body.photoUrl });
+  if (body.videoUrl) items.push({ url: body.videoUrl, type: "VIDEO", coverUrl: null });
+  return items;
 }
 
 function addCycleDate(start: Date, cycle: string) {
@@ -1463,6 +1504,15 @@ export async function registerStudentRoutes(app: FastifyInstance) {
         userId: authUser.id,
         assignmentId: assignment.id,
         status: "IN_PROGRESS"
+      },
+      include: {
+        workoutBlock: {
+          select: {
+            title: true,
+            structureType: true,
+            _count: { select: { exercises: true } }
+          }
+        }
       }
     });
 
@@ -1563,11 +1613,58 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       }
     }
 
+    let post: { id: string } | null = null;
+    if (body.publish) {
+      const durationSeconds = completedSession.durationSeconds ?? 1;
+      const exerciseCount = Math.max(
+        0,
+        body.exerciseCount ?? session.workoutBlock?._count.exercises ?? 0
+      );
+      const programTitle = assignment.program.title;
+      const blockTitle = session.workoutBlock?.title || programTitle;
+      const caption =
+        body.caption?.trim() ||
+        `Concluí ${blockTitle} (${programTitle}) em ${formatWorkoutDuration(durationSeconds)} · ${exerciseCount} exercício${exerciseCount === 1 ? "" : "s"}`;
+      const mediaItems = workoutShareMediaItems(body);
+      const first = mediaItems[0];
+      const workoutSnapshot = {
+        programTitle,
+        blockTitle,
+        dayNumber: completedDayNumber,
+        exerciseCount,
+        durationSeconds,
+        structureType: session.workoutBlock?.structureType ?? null
+      };
+
+      try {
+        post = await prisma.socialPost.create({
+          data: {
+            authorId: authUser.id,
+            kind: "WORKOUT",
+            body: caption,
+            mediaUrl: first?.url ?? null,
+            mediaType: first?.type ?? null,
+            mediaItems: mediaItems.length ? mediaItems : undefined,
+            workoutSessionId: completedSession.id,
+            workout: workoutSnapshot
+          },
+          select: { id: true }
+        });
+      } catch (publishError) {
+        request.log.warn({ err: publishError }, "Falha ao publicar o treino no Feed.");
+        post = await prisma.socialPost.findUnique({
+          where: { workoutSessionId: completedSession.id },
+          select: { id: true }
+        });
+      }
+    }
+
     return {
       assignment: updatedAssignment,
       session: completedSession,
       completed: isLastWorkout,
-      nextDayNumber: isLastWorkout ? null : nextDayNumber
+      nextDayNumber: isLastWorkout ? null : nextDayNumber,
+      post
     };
   });
 

@@ -180,6 +180,31 @@ function ActivityMiniMap({ post }: { post: SocialPostRow }) {
   );
 }
 
+function WorkoutShareCard({ post }: { post: SocialPostRow }) {
+  const workout = post.workout;
+  if (!workout) return null;
+  return (
+    <div className="student-feed-workout">
+      <strong>{workout.blockTitle}</strong>
+      <small>{workout.programTitle}</small>
+      <div className="student-feed-activity-stats">
+        <span>
+          <strong>{formatClock(workout.durationSeconds)}</strong>
+          tempo
+        </span>
+        <span>
+          <strong>{workout.exerciseCount}</strong>
+          exercícios
+        </span>
+        <span>
+          <strong>{workout.dayNumber}</strong>
+          dia
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function MediaCarousel({ items }: { items: MediaItem[] }) {
   const [index, setIndex] = useState(0);
   const touchX = useRef<number | null>(null);
@@ -1209,6 +1234,7 @@ export function StudentFeedSection({
                   {liveByHostId.has(post.author.id) ? <em className="student-live-rail-badge">AO VIVO</em> : null}
                 </button>
                 {post.kind === "ACTIVITY" && post.activity && <em>{post.activity.sportLabel}</em>}
+                {post.kind === "WORKOUT" && post.workout && <em>Treino</em>}
                 <div className="student-feed-menu">
                   <button type="button" aria-label="Opções" onClick={() => setMenuPostId(menuPostId === post.id ? null : post.id)}>
                     <MoreHorizontal size={18} />
@@ -1260,6 +1286,7 @@ export function StudentFeedSection({
               </header>
               {post.body && !isLiveCard && <p>{renderPostBody(post.body)}</p>}
               {post.kind === "ACTIVITY" && <ActivityMiniMap post={post} />}
+              {post.kind === "WORKOUT" && <WorkoutShareCard post={post} />}
               {isLiveCard && liveId ? (
                 <button
                   type="button"

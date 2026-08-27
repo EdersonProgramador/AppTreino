@@ -204,7 +204,7 @@ export interface WorkoutConsistencyResponse {
 }
 
 export type OutdoorSport = "RUN" | "WALK" | "RIDE";
-export type SocialPostKind = "TEXT" | "PHOTO" | "VIDEO" | "ACTIVITY";
+export type SocialPostKind = "TEXT" | "PHOTO" | "VIDEO" | "ACTIVITY" | "WORKOUT";
 
 export interface SocialAuthor {
   id: string;
@@ -287,6 +287,15 @@ export interface OutdoorActivityRow {
   caption?: string | null;
 }
 
+export interface WorkoutShareRow {
+  programTitle: string;
+  blockTitle: string;
+  dayNumber: number;
+  exerciseCount: number;
+  durationSeconds: number;
+  structureType?: string | null;
+}
+
 export interface SocialPostRow {
   id: string;
   kind: SocialPostKind | string;
@@ -303,6 +312,7 @@ export interface SocialPostRow {
   commentsCount?: number;
   comments: SocialComment[];
   activity?: OutdoorActivityRow | null;
+  workout?: WorkoutShareRow | null;
   isMine?: boolean;
 }
 

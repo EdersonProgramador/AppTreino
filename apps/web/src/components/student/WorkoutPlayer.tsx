@@ -28,7 +28,7 @@ import {
 } from "../../lib/workout-runner-persist";
 import { isNativeAppShell } from "../../lib/native-bridge";
 import { flushShellStateToNative } from "../../lib/shell-persist";
-import { WorkoutShareFlow } from "./WorkoutShareFlow";
+import { WorkoutShareFlow, type WorkoutSharePayload } from "./WorkoutShareFlow";
 import { WorkoutMusicPlayer } from "./workout-music-player/WorkoutMusicPlayer";
 
 export type WorkoutStructureType =
@@ -94,6 +94,7 @@ interface WorkoutPlayerProps {
   timeCapSeconds?: number | null;
   instructions?: string | null;
   sessionId?: string | null;
+  token: string;
   onBack: () => void;
   onWorkoutStart?: () => Promise<{ id: string } | void> | { id: string } | void;
   onCancelSession?: () => Promise<void> | void;
@@ -112,7 +113,7 @@ interface WorkoutPlayerProps {
     perceivedExertion?: number;
     notes?: string;
   }) => Promise<void> | void;
-  onWorkoutComplete?: () => Promise<void> | void;
+  onWorkoutComplete?: (share?: WorkoutSharePayload) => Promise<void> | void;
 }
 
 const structureTypeLabels: Record<WorkoutStructureType, string> = {
@@ -309,6 +310,7 @@ export function WorkoutPlayer({
   timeCapSeconds,
   instructions,
   sessionId,
+  token,
   onBack,
   onWorkoutStart,
   onCancelSession,
@@ -896,13 +898,13 @@ export function WorkoutPlayer({
     setPanel("run");
   }
 
-  async function completeWorkout() {
+  async function completeWorkout(share?: WorkoutSharePayload) {
     if (!workoutReadyToComplete || !allCompleted || dayCompleted) return;
 
     uiSounds.submit();
     setDayCompleted(true);
     try {
-      await onWorkoutComplete?.();
+      await onWorkoutComplete?.(share);
       uiSounds.workoutComplete();
       clearWorkoutRunner();
       setIsRunning(false);
@@ -1584,12 +1586,14 @@ export function WorkoutPlayer({
 
       {shareOpen && (
         <WorkoutShareFlow
+          token={token}
           programTitle={programTitle}
           blockTitle={blockTitle}
           exerciseCount={exercises.length}
           durationLabel={formatElapsedTime(elapsedSeconds)}
           busy={dayCompleted}
-          onDismiss={completeWorkout}
+          onPublish={(payload) => completeWorkout(payload)}
+          onFinishWithoutPublish={() => completeWorkout({ publish: false, exerciseCount: exercises.length })}
         />
       )}
     </div>
