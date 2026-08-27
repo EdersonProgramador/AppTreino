@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeApiError } from "../auth/api";
-import { postCoachChat, transcribeCoachAudio } from "./coachApi";
+import { postCoachChat, fetchCoachStatus, transcribeCoachAudio } from "./coachApi";
 import { speakCoach, startCoachRecording, stopCoachRecording, stopCoachVoice } from "./coachVoice";
 import { fetchWeatherHere } from "../student/weather";
 import { useSt, type StudentTokens } from "../student/theme";
@@ -52,6 +52,7 @@ export function CoachChatPanel({
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
+  const [engineLabel, setEngineLabel] = useState("Especialista em treino e nutrição");
   const [messages, setMessages] = useState<ChatMsg[]>([
     {
       role: "coach",
@@ -67,6 +68,18 @@ export function CoachChatPanel({
     const timer = setTimeout(() => logRef.current?.scrollToEnd({ animated: true }), 50);
     return () => clearTimeout(timer);
   }, [messages, busy, listening]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchCoachStatus(token)
+      .then((status) => {
+        if (!cancelled && status.label) setEngineLabel(status.label);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   async function askCoach(text: string, speak = false) {
     const trimmed = text.trim();
@@ -157,7 +170,7 @@ export function CoachChatPanel({
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.brandTitle}>Coach AppTreino</Text>
-            <Text style={styles.brandSub}>Especialista em treino e nutrição</Text>
+            <Text style={styles.brandSub}>{engineLabel}</Text>
           </View>
         </View>
         <Pressable onPress={() => stopCoachVoice()} hitSlop={10} style={styles.iconBtn}>

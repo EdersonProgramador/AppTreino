@@ -1,18 +1,19 @@
-import { env } from "../../../env.js";
+import { llmRuntime } from "../llm.js";
 import { lexicalEmbed } from "./embeddings.js";
 
 export async function embedText(text: string): Promise<number[]> {
   const fallback = lexicalEmbed(text);
-  if (!env.OPENAI_API_KEY) return fallback;
+  const runtime = llmRuntime();
+  if (!runtime) return fallback;
   try {
-    const response = await fetch(`${env.OPENAI_BASE_URL.replace(/\/$/, "")}/embeddings`, {
+    const response = await fetch(`${runtime.baseUrl}/embeddings`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        ...(runtime.apiKey ? { Authorization: `Bearer ${runtime.apiKey}` } : {}),
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: env.OPENAI_EMBEDDING_MODEL,
+        model: runtime.embeddingModel,
         input: text.slice(0, 4000)
       })
     });

@@ -1,4 +1,4 @@
-import { apiPost, apiUploadFile, NativeApiError } from "../auth/api";
+import { apiGet, apiPost, apiUploadFile, NativeApiError } from "../auth/api";
 
 export type CoachChatResponse = {
   reply: string;
@@ -30,7 +30,31 @@ export type CoachChatResponse = {
 };
 
 export const COACH_CHAT_PATHS = ["/student/coach/chat", "/user/coach/chat"] as const;
+export const COACH_STATUS_PATHS = ["/student/coach/status", "/user/coach/status"] as const;
 export const COACH_TRANSCRIBE_PATHS = ["/student/coach/transcribe", "/user/coach/transcribe"] as const;
+
+export type CoachStatus = {
+  enabled?: boolean;
+  llm?: boolean;
+  voice?: boolean;
+  provider?: string;
+  model?: string;
+  label?: string;
+};
+
+export async function fetchCoachStatus(token: string) {
+  let lastError: unknown;
+  for (const path of COACH_STATUS_PATHS) {
+    try {
+      return await apiGet<CoachStatus>(path, token);
+    } catch (caught) {
+      lastError = caught;
+      if (caught instanceof NativeApiError && caught.status === 404) continue;
+      throw caught;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Coach IA indisponível.");
+}
 
 function lastUserText(body: unknown) {
   const messages = (body as { messages?: Array<{ role?: string; content?: string }> })?.messages ?? [];

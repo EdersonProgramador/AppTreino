@@ -124,6 +124,7 @@ async function postWhisper(buffer: Buffer, filename: string, mime: string) {
 
 export async function transcribeAudio(buffer: Buffer, filename: string, mimeType?: string) {
   if (!env.OPENAI_API_KEY) return null;
+  if (/ollama\.com|:11434/i.test(env.OPENAI_BASE_URL)) return null;
   if (buffer.byteLength < MIN_AUDIO_BYTES) return null;
 
   const mp3 = await convertToMp3(buffer, filename);

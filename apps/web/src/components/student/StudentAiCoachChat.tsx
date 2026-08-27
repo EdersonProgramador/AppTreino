@@ -50,6 +50,7 @@ export function StudentAiCoachChat({
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
   const [voiceReady, setVoiceReady] = useState(true);
+  const [engineLabel, setEngineLabel] = useState("Especialista em treino e nutrição");
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "coach",
@@ -69,8 +70,11 @@ export function StudentAiCoachChat({
     void (async () => {
       for (const path of ["/user/coach/status", "/student/coach/status"] as const) {
         try {
-          const status = await apiGet<{ voice?: boolean }>(path, token);
-          if (!cancelled) setVoiceReady(Boolean(status.voice));
+          const status = await apiGet<{ voice?: boolean; label?: string }>(path, token);
+          if (!cancelled) {
+            setVoiceReady(Boolean(status.voice));
+            if (status.label) setEngineLabel(status.label);
+          }
           return;
         } catch (caught) {
           if (caught instanceof ApiError && caught.status === 404) continue;
@@ -238,7 +242,7 @@ export function StudentAiCoachChat({
           </span>
           <div>
             <strong>Coach AppTreino</strong>
-            <small>Especialista em treino e nutrição</small>
+            <small>{engineLabel}</small>
           </div>
         </div>
         <button

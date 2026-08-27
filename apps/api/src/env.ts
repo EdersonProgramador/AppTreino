@@ -6,18 +6,17 @@ import { z } from "zod";
 
 const moduleDir = dirname(fileURLToPath(import.meta.url));
 const envCandidates = [
-  resolve(process.cwd(), ".env"),
+  resolve(moduleDir, "../../../../.env"),
+  resolve(moduleDir, "../../../.env"),
   resolve(process.cwd(), "../../.env"),
   resolve(process.cwd(), "../.env"),
-  resolve(moduleDir, "../../../.env"),
-  resolve(moduleDir, "../../../../.env")
+  resolve(process.cwd(), ".env")
 ];
 
 for (const envPath of [...new Set(envCandidates)]) {
   if (existsSync(envPath)) {
-    // Arquivo .env do projeto deve prevalecer sobre variáveis stale herdadas do shell.
+    // Carrega todos os .env: o da raiz entra primeiro, o mais próximo (apps/api) sobrescreve chaves repetidas.
     config({ path: envPath, override: true });
-    break;
   }
 }
 
@@ -47,7 +46,13 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.preprocess((value) => (value === "" ? undefined : value), z.string().optional()),
   OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
   OPENAI_MODEL: z.string().default("gpt-4o-mini"),
-  OPENAI_EMBEDDING_MODEL: z.string().default("text-embedding-3-small")
+  OPENAI_EMBEDDING_MODEL: z.string().default("text-embedding-3-small"),
+  LLM_PROVIDER: z.enum(["auto", "openai", "ollama"]).default("auto"),
+  OLLAMA_API_KEY: z.preprocess((value) => (value === "" ? undefined : value), z.string().optional()),
+  OLLAMA_BASE_URL: z.preprocess((value) => (value === "" ? undefined : value), z.string().url().optional()),
+  OLLAMA_HOST: z.preprocess((value) => (value === "" ? undefined : value), z.string().optional()),
+  OLLAMA_MODEL: z.preprocess((value) => (value === "" ? undefined : value), z.string().optional()),
+  OLLAMA_EMBEDDING_MODEL: z.string().default("nomic-embed-text")
 });
 
 export const env = envSchema.parse(process.env);

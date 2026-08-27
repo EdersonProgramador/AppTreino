@@ -1,6 +1,7 @@
 import { env } from "../../env.js";
 import { COACH_TOOLS } from "./agent/toolbox.js";
 import { isGenericCoachMenu } from "./engine.js";
+import { llmRuntimeLabel, resolveLlmRuntime, type LlmEnvSlice, type LlmRuntime } from "./provider.js";
 import type { CoachContext, CoachMessage } from "./types.js";
 
 function firstNameOf(ctx: CoachContext) {
@@ -46,46 +47,112 @@ type OpenAiMessage = {
   tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
 };
 
-export async function openaiCoach(messages: OpenAiMessage[], tools = true) {
-  if (!env.OPENAI_API_KEY) return null;
-  const url = `${env.OPENAI_BASE_URL.replace(/\/$/, "")}/chat/completions`;
+function envSlice(): LlmEnvSlice {
+  return {
+    LLM_PROVIDER: env.LLM_PROVIDER,
+    OPENAI_API_KEY: env.OPENAI_API_KEY,
+    OPENAI_BASE_URL: env.OPENAI_BASE_URL,
+    OPENAI_MODEL: env.OPENAI_MODEL,
+    OPENAI_EMBEDDING_MODEL: env.OPENAI_EMBEDDING_MODEL,
+    OLLAMA_API_KEY: env.OLLAMA_API_KEY,
+    OLLAMA_BASE_URL: env.OLLAMA_BASE_URL,
+    OLLAMA_HOST: env.OLLAMA_HOST,
+    OLLAMA_MODEL: env.OLLAMA_MODEL,
+    OLLAMA_EMBEDDING_MODEL: env.OLLAMA_EMBEDDING_MODEL
+  };
+}
+
+export function llmRuntime(): LlmRuntime | null {
+  return resolveLlmRuntime(envSlice());
+}
+
+export function llmConfigured() {
+  return Boolean(llmRuntime());
+}
+
+export function whisperConfigured() {
+  return Boolean(env.OPENAI_API_KEY) && !/ollama\.com|:11434/i.test(env.OPENAI_BASE_URL);
+}
+
+export function llmStatus() {
+  const runtime = llmRuntime();
+  return {
+    llm: Boolean(runtime),
+    voice: whisperConfigured(),
+    provider: runtime?.host ?? "local",
+    model: runtime?.model ?? null,
+    label: llmRuntimeLabel(runtime)
+  };
+}
+
+async function postChat(runtime: LlmRuntime, messages: OpenAiMessage[], tools: boolean) {
+  const url = `${runtime.baseUrl}/chat/completions`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 28_000);
+  const timer = setTimeout(() => controller.abort(), runtime.chatTimeoutMs);
   try {
     const response = await fetch(url, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        ...(runtime.apiKey ? { Authorization: `Bearer ${runtime.apiKey}` } : {}),
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: env.OPENAI_MODEL,
+        model: runtime.model,
         temperature: 0.45,
-        frequency_penalty: 0.25,
-        presence_penalty: 0.1,
+        stream: false,
         messages,
-        ...(tools ? { tools: COACH_TOOLS, tool_choice: "auto" } : {})
+        ...(runtime.sendOpenAiPenalties ? { frequency_penalty: 0.25, presence_penalty: 0.1 } : {}),
+        ...(tools && runtime.supportsTools ? { tools: COACH_TOOLS, tool_choice: "auto" } : {})
       }),
       signal: controller.signal
     });
     if (!response.ok) {
       const errBody = await response.text().catch(() => "");
-      console.warn("[coach/llm] OpenAI", response.status, errBody.slice(0, 300));
-      return null;
+      console.warn(`[coach/llm] ${runtime.host}`, response.status, errBody.slice(0, 300));
+      return { ok: false as const, status: response.status, body: errBody };
     }
-    return (await response.json()) as {
-      choices?: Array<{ message?: OpenAiMessage }>;
-    };
+    const data = (await response.json()) as { choices?: Array<{ message?: OpenAiMessage }> };
+    return { ok: true as const, data };
   } catch (caught) {
-    console.warn("[coach/llm] fetch failed", caught instanceof Error ? caught.message : caught);
-    return null;
+    console.warn(`[coach/llm] ${runtime.host} fetch failed`, caught instanceof Error ? caught.message : caught);
+    return { ok: false as const, status: 0, body: "" };
   } finally {
     clearTimeout(timer);
   }
 }
 
-export function llmConfigured() {
-  return Boolean(env.OPENAI_API_KEY);
+/** Chat completions via Ollama (Llama cloud/local) or OpenAI. */
+export async function openaiCoach(messages: OpenAiMessage[], tools = true) {
+  const runtime = llmRuntime();
+  if (!runtime) return null;
+
+  const first = await postChat(runtime, messages, tools);
+  if (first.ok) return first.data;
+
+  if (tools && runtime.supportsTools && (first.status === 400 || first.status === 422)) {
+    const retry = await postChat(runtime, messages, false);
+    if (retry.ok) return retry.data;
+  }
+
+  if (runtime.name === "ollama" && env.OPENAI_API_KEY && !looksLikeSameHost(runtime.baseUrl, env.OPENAI_BASE_URL)) {
+    const fallback = resolveLlmRuntime({ ...envSlice(), LLM_PROVIDER: "openai" });
+    if (fallback) {
+      console.warn("[coach/llm] Ollama falhou; tentando OpenAI");
+      const second = await postChat(fallback, messages, tools);
+      if (second.ok) return second.data;
+    }
+  }
+
+  return null;
+}
+
+function looksLikeSameHost(a: string, b: string) {
+  try {
+    return new URL(a).host === new URL(b).host;
+  } catch {
+    return a === b;
+  }
 }
 
 export { transcribeAudio } from "./whisper.js";
+export { llmRuntimeLabel } from "./provider.js";

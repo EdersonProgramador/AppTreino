@@ -4,7 +4,7 @@ import { requireAuth } from "../auth.js";
 import { prisma } from "../prisma.js";
 import { assertModuleEnabled, isModuleEnabled } from "./commerce.utils.js";
 import { loadCoachContext } from "./coach/context.js";
-import { llmConfigured, transcribeAudio } from "./coach/llm.js";
+import { llmStatus, transcribeAudio, whisperConfigured } from "./coach/llm.js";
 import { runCoachAgent } from "./coach/agent/loop.js";
 
 const coachWeatherSchema = z
@@ -36,7 +36,8 @@ export function attachCoachRoutes(app: FastifyInstance, prefix: string) {
   app.get(`${prefix}/status`, async (request) => {
     await requireAuth(app, request);
     const enabled = await isModuleEnabled("module_ai");
-    return { enabled, llm: enabled && llmConfigured(), voice: enabled && llmConfigured(), agent: true };
+    const status = llmStatus();
+    return { enabled, ...status, llm: enabled && status.llm, voice: enabled && status.voice, agent: true };
   });
 
   app.get(`${prefix}/runs`, async (request) => {
@@ -92,9 +93,12 @@ export function attachCoachRoutes(app: FastifyInstance, prefix: string) {
       savedPlanId = saved.id;
     }
 
+    const llm = llmStatus();
     return reply.send({
       reply: result.reply,
       source: result.source,
+      provider: llm.provider,
+      model: llm.model,
       plan: result.plan ?? null,
       diet: result.diet ?? null,
       savedPlanId: savedPlanId ?? null,
@@ -107,7 +111,7 @@ export function attachCoachRoutes(app: FastifyInstance, prefix: string) {
   app.post(`${prefix}/transcribe`, async (request, reply) => {
     await requireAuth(app, request);
     await assertModuleEnabled("module_ai", "Coach IA desativado.");
-    if (!llmConfigured()) {
+    if (!whisperConfigured()) {
       return reply.code(501).send({
         message:
           "Transcrição de voz precisa de OPENAI_API_KEY (Whisper). Enquanto isso, fale pelo teclado — o TTS já responde.",
