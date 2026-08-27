@@ -48,7 +48,6 @@ export class PointPipeline {
   process(sport: Sport, raw: RawFix, stepsDetected?: boolean | null): PipelineResult {
     this.seq += 1;
     const reject = noiseRejectReason(sport, raw, this.prevRaw);
-    this.prevRaw = raw;
 
     if (reject) {
       return {
@@ -68,6 +67,8 @@ export class PointPipeline {
         isAutoPaused: this.autoPause.isPaused()
       };
     }
+
+    this.prevRaw = raw;
 
     const filtered = this.kalman.update(raw);
     const dtSec = this.prevFiltered ? Math.max(0.05, (raw.t - this.prevFiltered.t) / 1000) : 1;

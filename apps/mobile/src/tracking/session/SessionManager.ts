@@ -154,6 +154,13 @@ export class SessionManager {
     await this.init();
     if (this.session?.status === "LIVE") throw new Error("Já existe uma sessão LIVE.");
 
+    // Após um crash `this.session` volta nulo, mas a linha LIVE/PAUSED/ORPHAN
+    // continua no SQLite — sem esta checagem criaríamos uma segunda sessão ativa.
+    const actives = await localStore.findActiveSessions();
+    if (actives.length) {
+      throw new Error("Existe uma sessão de treino não finalizada. Retome ou descarte antes de iniciar outra.");
+    }
+
     const perms = await this.bridge.requestPermissions();
     if (!perms.foreground) throw new Error("Permissão de localização negada.");
 

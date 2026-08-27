@@ -8,10 +8,14 @@ export function useTrackingEngine() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     let unsub: (() => void) | undefined;
     void (async () => {
       await trackingEngine.init();
       const recovered = await trackingEngine.recoverOrphan();
+      // init/recover são assíncronos: sem esta guarda o subscribe vazaria
+      // quando a tela é fechada antes de terminarem.
+      if (cancelled) return;
       setOrphan(
         recovered && ["ORPHAN", "LIVE", "PAUSED"].includes(recovered.status) ? recovered : null
       );
@@ -19,6 +23,7 @@ export function useTrackingEngine() {
       setReady(true);
     })();
     return () => {
+      cancelled = true;
       unsub?.();
     };
   }, []);

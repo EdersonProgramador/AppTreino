@@ -11,7 +11,7 @@ export function noiseRejectReason(sport: Sport, fix: RawFix, prev?: RawFix | nul
   if (Math.abs(fix.lat) > 90 || Math.abs(fix.lng) > 180) return "OUT_OF_BOUNDS";
   if (fix.accuracyM != null && fix.accuracyM > MAX_ACCURACY_M) return "BAD_ACCURACY";
   if (!prev) return null;
-  if (fix.t < prev.t) return "OUT_OF_ORDER";
+  if (fix.t <= prev.t) return "OUT_OF_ORDER";
 
   const dtSec = Math.max(0.001, (fix.t - prev.t) / 1000);
   const dist = haversineMeters(prev, fix);
