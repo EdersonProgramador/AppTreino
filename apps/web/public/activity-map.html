@@ -11,22 +11,24 @@
       .fab-stack {
         position: absolute;
         right: 12px;
-        bottom: 16px;
+        bottom: 176px;
         display: grid;
         gap: 10px;
         z-index: 4;
+        transition: bottom 180ms ease;
       }
       .fab, .fab-3d {
         width: 44px;
         height: 44px;
         border: 0;
         border-radius: 50%;
-        background: #fff;
+        background: rgba(255,255,255,.86);
         color: #15100b;
         box-shadow: 0 8px 18px rgba(0,0,0,.28);
         font-weight: 800;
         cursor: pointer;
         position: relative;
+        backdrop-filter: blur(10px);
       }
       .fab-3d { font-size: 12px; letter-spacing: .04em; }
       .fab.active, .fab-3d.active { background: #f2b461; color: #1a1208; }
@@ -130,8 +132,30 @@
       let mapsBooted = false;
       let currentStyle = "";
 
+      const LAST_GPS_KEY = "apptreino.lastGps";
+
+      function readCachedCenter() {
+        try {
+          const raw = sessionStorage.getItem(LAST_GPS_KEY);
+          if (!raw) return null;
+          const parsed = JSON.parse(raw);
+          const lat = Number(parsed.lat);
+          const lng = Number(parsed.lng);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+          return [lng, lat];
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function persistCachedCenter(lat, lng) {
+        try {
+          sessionStorage.setItem(LAST_GPS_KEY, JSON.stringify({ lat: lat, lng: lng, t: Date.now() }));
+        } catch (e) {}
+      }
+
       const state = {
-        mapType: "standard",
+        mapType: "hybrid",
         activityMap: "personal",
         layers: { pois: true, bikeLanes: false, avalanche: false, slope: false, aspect: false },
         is3d: false,
@@ -547,6 +571,7 @@
 
       function setLive(lat, lng, follow) {
         state.live = { lat: lat, lng: lng };
+        persistCachedCenter(lat, lng);
         if (!map) return;
         if (!liveMarker) {
           liveMarker = new mapboxgl.Marker({ element: makeDot("live-dot") }).setLngLat([lng, lat]).addTo(map);
@@ -656,12 +681,18 @@
           bootMapbox(msg.mapboxToken || msg.token || MAPBOX_TOKEN);
           return;
         }
+        if (msg.type === "setChromeInset") {
+          const bottom = Math.max(16, Number(msg.bottom) || 16);
+          document.getElementById("fabs").style.bottom = bottom + "px";
+        }
         if (!map) return;
         if (msg.type === "init" || msg.type === "setView") {
-          if (msg.lat && msg.lng) {
+          const lat = Number(msg.lat);
+          const lng = Number(msg.lng);
+          if (Number.isFinite(lat) && Number.isFinite(lng)) {
             state.userInteracting = false;
             map.jumpTo({
-              center: [msg.lng, msg.lat],
+              center: [lng, lat],
               zoom: msg.zoom || 18,
               pitch: cameraPitch(),
               bearing: cameraBearing()
@@ -674,9 +705,14 @@
         }
         if (msg.type === "setTrack") setTrack(msg.points || [], Boolean(msg.fit));
         if (msg.type === "setHeat") setHeat(msg.tracks || [], msg.cells || []);
-        if (msg.type === "setLive" && msg.lat && msg.lng) setLive(msg.lat, msg.lng, msg.follow);
+        if (msg.type === "resize") {
+          try { map.resize(); } catch (e) {}
+        }
+        if (msg.type === "setLive" && Number.isFinite(Number(msg.lat)) && Number.isFinite(Number(msg.lng))) {
+          setLive(Number(msg.lat), Number(msg.lng), msg.follow);
+        }
         if (msg.type === "setMapType") {
-          state.mapType = msg.mapType || "standard";
+          state.mapType = msg.mapType || "hybrid";
           applyBaseAppearance();
         }
         if (msg.type === "setActivityMap") {
@@ -724,7 +760,34 @@
         state.follow = true;
         state.userInteracting = false;
         emit({ type: "locate-request" });
+        bootUserLocation(true);
       };
+
+      function bootUserLocation(highAccuracy) {
+        if (!navigator.geolocation) return;
+        navigator.geolocation.getCurrentPosition(
+          function (pos) {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            persistCachedCenter(lat, lng);
+            state.follow = true;
+            state.userInteracting = false;
+            setLive(lat, lng, true);
+            try {
+              map.jumpTo({
+                center: [lng, lat],
+                zoom: 18,
+                pitch: cameraPitch(),
+                bearing: cameraBearing()
+              });
+            } catch (e) {}
+          },
+          function () {},
+          highAccuracy
+            ? { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            : { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+        );
+      }
 
       function initMap() {
         if (typeof mapboxgl === "undefined") {
@@ -738,11 +801,12 @@
         mapboxgl.accessToken = MAPBOX_TOKEN;
         currentStyle = resolveStyle();
         const config = basemapConfig();
+        const cachedCenter = readCachedCenter();
         map = new mapboxgl.Map({
           container: "map",
           style: currentStyle,
-          center: [-46.63, -23.55],
-          zoom: 16.8,
+          center: cachedCenter || [-46.63, -23.55],
+          zoom: cachedCenter ? 17.6 : 16.8,
           minZoom: 2,
           maxZoom: 20,
           pitch: 0,
@@ -784,6 +848,15 @@
             } catch (e) {}
           });
         }
+        if (typeof ResizeObserver !== "undefined") {
+          new ResizeObserver(function () {
+            try {
+              map.resize();
+            } catch (e) {}
+          }).observe(document.getElementById("map"));
+        }
+        if (cachedCenter) setLive(cachedCenter[1], cachedCenter[0], false);
+        bootUserLocation(false);
       }
 
       function bootMapbox(token) {

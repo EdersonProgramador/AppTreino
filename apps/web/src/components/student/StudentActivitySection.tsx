@@ -15,16 +15,13 @@ import {
   Play,
   Settings2,
   Share2,
-  Smartphone,
   Timer,
   Trophy,
   X
 } from "lucide-react";
-import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPost, apiUpload } from "../../api";
-import { paths } from "../../auth/session";
-import { fetchWeather, fetchWeatherHere, adviceForSport, type WeatherSnapshot } from "../../lib/weather";
+import { fetchWeather, fetchWeatherHere, type WeatherSnapshot } from "../../lib/weather";
 import { StudentWeatherChip } from "./StudentWeatherChip";
 import {
   estimateCalories,
@@ -41,7 +38,6 @@ import {
 } from "../../lib/activity-geo";
 import { activityMapSrc, mapsConfigMessage } from "../../lib/activity-map-src";
 import { WebGpsPipeline, fixFromGeolocation } from "../../lib/gps-filter";
-import { isNativeAppShell } from "../../lib/native-bridge";
 import type { OutdoorActivityRow, OutdoorSport, UploadResponse } from "../../types";
 import { RunnerIcon } from "../shared/RunnerIcon";
 
@@ -153,6 +149,32 @@ type LapMarker = { lat: number; lng: number; radiusMeters?: number };
 type LapRecord = { index: number; lat: number; lng: number; t: number; distanceMeters: number };
 
 const ACTIVITY_MAP_SRC = activityMapSrc();
+const LAST_GPS_KEY = "apptreino.lastGps";
+const LAST_GPS_MAX_AGE_MS = 30 * 60 * 1000;
+
+function readStoredFix(): { lat: number; lng: number } | null {
+  try {
+    const raw = sessionStorage.getItem(LAST_GPS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { lat?: number; lng?: number; t?: number };
+    const lat = Number(parsed.lat);
+    const lng = Number(parsed.lng);
+    const t = Number(parsed.t);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    if (Number.isFinite(t) && Date.now() - t > LAST_GPS_MAX_AGE_MS) return null;
+    return { lat, lng };
+  } catch {
+    return null;
+  }
+}
+
+function persistFix(lat: number, lng: number) {
+  try {
+    sessionStorage.setItem(LAST_GPS_KEY, JSON.stringify({ lat, lng, t: Date.now() }));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
 
 function durationSeconds(hours: string, minutes: string) {
   const h = Number(hours);
@@ -177,6 +199,7 @@ export function StudentActivitySection({
   athleteGender?: "MALE" | "FEMALE" | null;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
   const watchRef = useRef<number | null>(null);
   const bufferRef = useRef<GpsPoint[]>([]);
   const pipelineRef = useRef(new WebGpsPipeline());
@@ -189,10 +212,11 @@ export function StudentActivitySection({
   const finishingRef = useRef(false);
   const liveHydrateGen = useRef(0);
   const lastTrackRef = useRef<GpsPoint[]>([]);
+  const lastFixRef = useRef<{ lat: number; lng: number } | null>(readStoredFix());
   const [sport, setSport] = useState<OutdoorSport>(preferredSport);
   const sportRef = useRef(sport);
   sportRef.current = sport;
-  const [mapType, setMapType] = useState<MapType>("standard");
+  const [mapType, setMapType] = useState<MapType>("hybrid");
   const [activityMap, setActivityMap] = useState<ActivityMap>("personal");
   const [layers, setLayers] = useState<Record<LayerKey, boolean>>({
     pois: true,
@@ -343,6 +367,11 @@ export function StudentActivitySection({
         if (lapCounterOn && lapMarker) postToMap({ type: "setLapMarker", marker: lapMarker });
         if (laps.length) postToMap({ type: "setLaps", laps });
         postToMap({ type: "setPickMode", on: pickingLapStart });
+        const cached = lastFixRef.current ?? readStoredFix();
+        if (cached) {
+          postToMap({ type: "setLive", lat: cached.lat, lng: cached.lng, follow: true });
+          postToMap({ type: "setView", lat: cached.lat, lng: cached.lng, zoom: 18 });
+        }
         locate(true);
       }
       if (type === "open-layers") setLayersOpen(true);
@@ -419,6 +448,21 @@ export function StudentActivitySection({
     postToMap({ type: "setMapType", mapType });
   }, [mapType]);
   useEffect(() => {
+    const mapEl = iframeRef.current?.parentElement;
+    const dockEl = dockRef.current;
+    if (typeof ResizeObserver === "undefined") return;
+    const push = () => {
+      postToMap({ type: "resize" });
+      const bottom = dockEl ? Math.round(dockEl.getBoundingClientRect().height) : 0;
+      postToMap({ type: "setChromeInset", bottom: bottom + 16 });
+    };
+    const ro = new ResizeObserver(push);
+    if (mapEl) ro.observe(mapEl);
+    if (dockEl) ro.observe(dockEl);
+    push();
+    return () => ro.disconnect();
+  }, [running, paused]);
+  useEffect(() => {
     postToMap({ type: "setActivityMap", mode: activityMap });
     postToMap({ type: "setHeat", tracks: [], cells: [] });
   }, [activityMap]);
@@ -469,36 +513,60 @@ export function StudentActivitySection({
     return () => window.clearInterval(id);
   }, [running, paused, activity, locked]);
 
+  function applyUserFix(lat: number, lng: number, follow: boolean) {
+    lastFixRef.current = { lat, lng };
+    persistFix(lat, lng);
+    postToMap({ type: "setLive", lat, lng, follow: followMapRef.current });
+    if (follow) postToMap({ type: "setView", lat, lng, zoom: 18 });
+  }
+
+  function refreshAroundFix(lat: number, lng: number) {
+    void fetchWeather(lat, lng, sportRef.current).then((snap) => {
+      if (!snap) return;
+      weatherRef.current = snap;
+      setWeather(snap);
+    });
+    void apiGet<{
+      segments: Array<{ id: string; name: string; distanceMeters: number; sport: string }>;
+    }>(
+      `/student/activities/named-segments/nearby?lat=${lat}&lng=${lng}&sport=${sportRef.current}&limit=5`,
+      token
+    )
+      .then((data) => setNearbySegments(data.segments ?? []))
+      .catch(() => setNearbySegments([]));
+  }
+
   function locate(follow = false) {
-    if (!navigator.geolocation) {
-      setError("GPS indisponível neste dispositivo.");
-      return;
-    }
     if (follow) {
       followMapRef.current = true;
       postToMap({ type: "setFollow", on: true });
     }
+    const cached = lastFixRef.current ?? readStoredFix();
+    if (cached) applyUserFix(cached.lat, cached.lng, follow);
+
+    if (!navigator.geolocation) {
+      if (!cached) setError("GPS indisponível neste dispositivo.");
+      return;
+    }
+
+    const onOk = (pos: GeolocationPosition) => {
+      const fix = fixFromGeolocation(pos);
+      applyUserFix(fix.lat, fix.lng, follow);
+      refreshAroundFix(fix.lat, fix.lng);
+    };
+
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const fix = fixFromGeolocation(pos);
-        postToMap({ type: "setLive", lat: fix.lat, lng: fix.lng, follow: followMapRef.current });
-        if (follow) postToMap({ type: "setView", lat: fix.lat, lng: fix.lng, zoom: 18 });
-        void fetchWeather(fix.lat, fix.lng, sportRef.current).then((snap) => {
-          if (!snap) return;
-          weatherRef.current = snap;
-          setWeather(snap);
-        });
-        void apiGet<{
-          segments: Array<{ id: string; name: string; distanceMeters: number; sport: string }>;
-        }>(
-          `/student/activities/named-segments/nearby?lat=${fix.lat}&lng=${fix.lng}&sport=${sportRef.current}&limit=5`,
-          token
-        )
-          .then((data) => setNearbySegments(data.segments ?? []))
-          .catch(() => setNearbySegments([]));
+      onOk,
+      () => {
+        navigator.geolocation.getCurrentPosition(
+          onOk,
+          () => {
+            if (!lastFixRef.current) setError("Permita a localização para iniciar o GPS.");
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
       },
-      () => setError("Permita a localização para iniciar o GPS."),
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60_000 }
     );
   }
 
@@ -1112,17 +1180,7 @@ export function StudentActivitySection({
   const sportMeta = SPORTS.find((item) => item.id === sport) ?? SPORTS[0];
 
   return (
-    <section className="student-activity">
-      {!isNativeAppShell() ? (
-        <Link to={paths.download} className="student-activity-native-cta">
-          <Smartphone size={18} aria-hidden />
-          <span>
-            <strong>Melhor no app</strong>
-            <em>GPS nativo e mapa estáveis para outdoor</em>
-          </span>
-        </Link>
-      ) : null}
-
+    <section className={sessionActive ? "student-activity is-live" : "student-activity"}>
       <div className="student-activity-map">
         <div className="student-activity-tabs" role="tablist" aria-label="Modalidade">
           {SPORTS.map((item) => (
@@ -1167,119 +1225,116 @@ export function StudentActivitySection({
         ) : null}
       </div>
 
-      {!running && !paused ? (
-        <div className="student-activity-segments">
-          <div className="student-activity-segments-head">
-            <strong>Segmentos próximos</strong>
-            <button type="button" onClick={() => void createSegmentFromLastTrack()}>
-              Criar do trajeto
-            </button>
-          </div>
-          {nearbySegments.length === 0 ? (
-            <p>Nenhum segmento na área. Finalize uma atividade e crie um.</p>
-          ) : (
-            nearbySegments.slice(0, 3).map((seg) => (
-              <button key={seg.id} type="button" onClick={() => void openSegmentBoard(seg)}>
-                {seg.name} · {formatKm(seg.distanceMeters)} km · ranking
+      <div className="student-activity-dock" ref={dockRef}>
+        {!running && !paused ? (
+          <div className="student-activity-segments">
+            <div className="student-activity-segments-head">
+              <strong>Segmentos próximos</strong>
+              <button type="button" onClick={() => void createSegmentFromLastTrack()}>
+                Criar do trajeto
               </button>
-            ))
-          )}
-        </div>
-      ) : null}
-
-      <div className="student-activity-card">
-        <button type="button" className="student-activity-sport" onClick={() => setLayersOpen(true)}>
-          {sportMeta.label} <ChevronDown size={16} />
-        </button>
-        {weather ? (
-          <p className="student-activity-weather-line">
-            {weather.tempC}° · {weather.label} · {adviceForSport(sport, weather)}
-          </p>
+            </div>
+            {nearbySegments.length === 0 ? (
+              <p>Nenhum segmento na área. Finalize uma atividade e crie um.</p>
+            ) : (
+              nearbySegments.slice(0, 3).map((seg) => (
+                <button key={seg.id} type="button" onClick={() => void openSegmentBoard(seg)}>
+                  {seg.name} · {formatKm(seg.distanceMeters)} km · ranking
+                </button>
+              ))
+            )}
+          </div>
         ) : null}
-        <div className="student-activity-stats">
-          <div>
-            <small>Tempo</small>
-            <strong>{formatClock(shownElapsed)}</strong>
-          </div>
-          <div>
-            <small>{sport === "RIDE" ? "Velocidade" : "Ritmo"}</small>
-            <strong>
-              {sport === "RIDE" ? (speedKmh ? speedKmh.toFixed(1) : "0.0") : formatPace(pace)}
-            </strong>
-          </div>
-          <div>
-            <small>Distância</small>
-            <strong>{formatKm(distance)}</strong>
-          </div>
-        </div>
-        <div className="student-activity-stats student-activity-stats-live">
-          <div>
-            <small>{sport === "RIDE" ? "Ritmo" : "Velocidade"}</small>
-            <strong>{sport === "RIDE" ? formatPace(pace) : speedKmh ? speedKmh.toFixed(1) : "0.0"}</strong>
-          </div>
-          <div>
-            <small>{`Km ${shownKmIndex}`}</small>
-            <strong>{formatPace(shownKmPace)}</strong>
-          </div>
-          <div>
-            <small>Voltas</small>
-            <strong>{String(shownLaps)}</strong>
-          </div>
-        </div>
-        <div className="student-activity-stats student-activity-stats-live">
-          <div>
-            <small>kcal</small>
-            <strong>{String(calories)}</strong>
-          </div>
-          <div>
-            <small>Elevação</small>
-            <strong>{`${Math.round(shownElev)} m`}</strong>
-          </div>
-          <div>
-            <small>{sport === "WALK" || sport === "RUN" ? "Passos" : "Cadência"}</small>
-            <strong>—</strong>
-          </div>
-        </div>
-        <div className="student-activity-controls">
-          <button type="button" className="student-activity-side" onClick={() => setLayersOpen(true)} aria-label="Configurações do mapa">
-            <Settings2 size={20} />
+
+        <div className="student-activity-card">
+          <button type="button" className="student-activity-sport" onClick={() => setLayersOpen(true)}>
+            {sportMeta.label} <ChevronDown size={16} />
           </button>
-          <button
-            type="button"
-            className={running ? "student-activity-play is-pause" : "student-activity-play"}
-            onClick={() => {
-              if (shareOpen || finishing) return;
-              void (running ? pause() : startOrResume());
-            }}
-            disabled={busy && !running}
-            aria-label={running ? "Pausar" : "Iniciar"}
-          >
-            {busy && !running ? <Loader2 className="spin" size={28} /> : running ? <Pause size={28} /> : <Play size={28} />}
-          </button>
-          <button type="button" className="student-activity-side" onClick={onOpenPlay} aria-label="Música">
-            <Music2 size={20} />
-          </button>
-        </div>
-        {running || paused ? (
-          <div className="student-activity-finish-actions">
-            <button type="button" className="student-activity-distance" onClick={() => void beginFinish()} disabled={busy}>
-              Finalizar e compartilhar
+          <div className="student-activity-stats">
+            <div>
+              <small>Tempo</small>
+              <strong>{formatClock(shownElapsed)}</strong>
+            </div>
+            <div>
+              <small>{sport === "RIDE" ? "Velocidade" : "Ritmo"}</small>
+              <strong>
+                {sport === "RIDE" ? (speedKmh ? speedKmh.toFixed(1) : "0.0") : formatPace(pace)}
+              </strong>
+            </div>
+            <div>
+              <small>Distância</small>
+              <strong>{formatKm(distance)}</strong>
+            </div>
+          </div>
+          <div className="student-activity-stats student-activity-stats-live">
+            <div>
+              <small>{sport === "RIDE" ? "Ritmo" : "Velocidade"}</small>
+              <strong>{sport === "RIDE" ? formatPace(pace) : speedKmh ? speedKmh.toFixed(1) : "0.0"}</strong>
+            </div>
+            <div>
+              <small>{`Km ${shownKmIndex}`}</small>
+              <strong>{formatPace(shownKmPace)}</strong>
+            </div>
+            <div>
+              <small>Voltas</small>
+              <strong>{String(shownLaps)}</strong>
+            </div>
+          </div>
+          <div className="student-activity-stats student-activity-stats-live">
+            <div>
+              <small>kcal</small>
+              <strong>{String(calories)}</strong>
+            </div>
+            <div>
+              <small>Elevação</small>
+              <strong>{`${Math.round(shownElev)} m`}</strong>
+            </div>
+            <div>
+              <small>{sport === "WALK" || sport === "RUN" ? "Passos" : "Cadência"}</small>
+              <strong>—</strong>
+            </div>
+          </div>
+          <div className="student-activity-controls">
+            <button type="button" className="student-activity-side" onClick={() => setLayersOpen(true)} aria-label="Configurações do mapa">
+              <Settings2 size={20} />
             </button>
             <button
               type="button"
-              className="student-activity-distance is-quiet"
-              disabled={busy || finishing}
-              onClick={() => void finish(false)}
+              className={running ? "student-activity-play is-pause" : "student-activity-play"}
+              onClick={() => {
+                if (shareOpen || finishing) return;
+                void (running ? pause() : startOrResume());
+              }}
+              disabled={busy && !running}
+              aria-label={running ? "Pausar" : "Iniciar"}
             >
-              {finishing ? "Finalizando..." : "Finalizar sem publicar"}
+              {busy && !running ? <Loader2 className="spin" size={28} /> : running ? <Pause size={28} /> : <Play size={28} />}
+            </button>
+            <button type="button" className="student-activity-side" onClick={onOpenPlay} aria-label="Música">
+              <Music2 size={20} />
             </button>
           </div>
-        ) : (
-          <button type="button" className="student-activity-distance" onClick={() => setGoalsOpen(true)}>
-            Definir distância
-          </button>
-        )}
-        {error && <p className="student-activity-error">{error}</p>}
+          {running || paused ? (
+            <div className="student-activity-finish-actions">
+              <button type="button" className="student-activity-distance" onClick={() => void beginFinish()} disabled={busy}>
+                Finalizar e compartilhar
+              </button>
+              <button
+                type="button"
+                className="student-activity-distance is-quiet"
+                disabled={busy || finishing}
+                onClick={() => void finish(false)}
+              >
+                {finishing ? "Finalizando..." : "Finalizar sem publicar"}
+              </button>
+            </div>
+          ) : (
+            <button type="button" className="student-activity-distance" onClick={() => setGoalsOpen(true)}>
+              Definir distância
+            </button>
+          )}
+          {error && <p className="student-activity-error">{error}</p>}
+        </div>
       </div>
 
       {goalsOpen && (

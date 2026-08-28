@@ -127,8 +127,30 @@
         { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#e5e5e5" }] }
       ];
 
+      const LAST_GPS_KEY = "apptreino.lastGps";
+
+      function readCachedCenter() {
+        try {
+          const raw = sessionStorage.getItem(LAST_GPS_KEY);
+          if (!raw) return null;
+          const parsed = JSON.parse(raw);
+          const lat = Number(parsed.lat);
+          const lng = Number(parsed.lng);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+          return { lat: lat, lng: lng };
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function persistCachedCenter(lat, lng) {
+        try {
+          sessionStorage.setItem(LAST_GPS_KEY, JSON.stringify({ lat: lat, lng: lng, t: Date.now() }));
+        } catch (e) {}
+      }
+
       const state = {
-        mapType: "standard",
+        mapType: "hybrid",
         activityMap: "personal",
         layers: { pois: true, bikeLanes: false, avalanche: false, slope: false, aspect: false },
         is3d: false,
@@ -335,6 +357,7 @@
 
       function setLive(lat, lng, follow) {
         state.live = { lat, lng };
+        persistCachedCenter(lat, lng);
         const pos = { lat, lng };
         if (!liveMarker) {
           liveMarker = new google.maps.Marker({
@@ -462,9 +485,11 @@
         }
         if (!map) return;
         if (msg.type === "init" || msg.type === "setView") {
-          if (msg.lat && msg.lng) {
+          const lat = Number(msg.lat);
+          const lng = Number(msg.lng);
+          if (Number.isFinite(lat) && Number.isFinite(lng)) {
             state.userInteracting = false;
-            map.setCenter({ lat: msg.lat, lng: msg.lng });
+            map.setCenter({ lat: lat, lng: lng });
             if (msg.zoom) map.setZoom(msg.zoom);
           }
         }
@@ -474,9 +499,11 @@
         }
         if (msg.type === "setTrack") setTrack(msg.points || [], Boolean(msg.fit));
         if (msg.type === "setHeat") setHeat(msg.tracks || [], msg.cells || []);
-        if (msg.type === "setLive" && msg.lat && msg.lng) setLive(msg.lat, msg.lng, msg.follow);
+        if (msg.type === "setLive" && Number.isFinite(Number(msg.lat)) && Number.isFinite(Number(msg.lng))) {
+          setLive(Number(msg.lat), Number(msg.lng), msg.follow);
+        }
         if (msg.type === "setMapType") {
-          state.mapType = msg.mapType || "standard";
+          state.mapType = msg.mapType || "hybrid";
           applyBaseAppearance();
         }
         if (msg.type === "setActivityMap") {
@@ -521,12 +548,34 @@
         state.follow = true;
         state.userInteracting = false;
         emit({ type: "locate-request" });
+        bootUserLocation(true);
       };
 
+      function bootUserLocation(highAccuracy) {
+        if (!navigator.geolocation) return;
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            persistCachedCenter(lat, lng);
+            state.follow = true;
+            state.userInteracting = false;
+            setLive(lat, lng, true);
+            map.setCenter({ lat, lng });
+            map.setZoom(18);
+          },
+          () => undefined,
+          highAccuracy
+            ? { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            : { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+        );
+      }
+
       function initMap() {
+        const cached = readCachedCenter();
         const options = {
-          center: { lat: -23.55, lng: -46.63 },
-          zoom: 15,
+          center: cached || { lat: -23.55, lng: -46.63 },
+          zoom: cached ? 17.6 : 15,
           disableDefaultUI: true,
           clickableIcons: false,
           gestureHandling: "greedy",
@@ -537,7 +586,7 @@
           zoomControl: false,
           tilt: 0,
           heading: 0,
-          mapTypeId: google.maps.MapTypeId.ROADMAP
+          mapTypeId: google.maps.MapTypeId.HYBRID
         };
         if (MAP_ID) options.mapId = MAP_ID;
 
@@ -557,6 +606,8 @@
         });
 
         restoreOverlays();
+        if (cached) setLive(cached.lat, cached.lng, false);
+        bootUserLocation(false);
         if (!readyEmitted) {
           readyEmitted = true;
           emit({ type: "ready" });

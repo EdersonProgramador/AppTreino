@@ -5204,6 +5204,12 @@ html.light .finance-hub-tabs button {
   flex-direction: column;
 }
 
+.student-app-shell.is-activity .student-activity {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
 .student-app-shell.is-ai .student-app-scroll {
   overflow: hidden;
   display: flex;
@@ -23289,9 +23295,12 @@ html.is-native-app.keyboard-open .login-shell {
 .student-activity {
   flex: 1;
   min-height: 0;
+  height: 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow: hidden;
 }
 
 .student-activity-tabs {
@@ -23304,8 +23313,11 @@ html.is-native-app.keyboard-open .login-shell {
   gap: 4px;
   padding: 4px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+  background: rgba(12, 14, 18, 0.42);
+  border: 1px solid rgba(255, 247, 236, 0.14);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
   pointer-events: auto;
   max-width: calc(100% - 24px);
   flex-wrap: nowrap;
@@ -23317,17 +23329,18 @@ html.is-native-app.keyboard-open .login-shell {
   gap: 6px;
   border: 0;
   background: transparent;
-  color: #605a52;
+  color: rgba(255, 247, 236, 0.72);
   font-weight: 800;
   font-size: 12px;
   padding: 8px 12px;
   border-radius: 999px;
   cursor: pointer;
   pointer-events: auto;
+  white-space: nowrap;
 }
 
 .student-activity-tabs button.is-on {
-  background: #fff;
+  background: rgba(255, 247, 236, 0.94);
   color: #df663c;
 }
 
@@ -23338,43 +23351,23 @@ html.is-native-app.keyboard-open .login-shell {
 
 .student-activity-map {
   position: relative;
-  flex: 1;
-  min-height: 360px;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
-.student-activity-native-cta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 10px 8px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, rgba(223, 102, 60, 0.14), rgba(242, 180, 97, 0.18));
-  border: 1px solid rgba(223, 102, 60, 0.28);
-  color: #15100b;
-  text-decoration: none;
-}
-
-.student-activity-native-cta strong {
-  display: block;
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 1.2;
-}
-
-.student-activity-native-cta em {
-  display: block;
-  font-style: normal;
-  font-size: 11px;
-  font-weight: 600;
-  opacity: 0.72;
-  line-height: 1.25;
-}
-
-html.dark .student-activity-native-cta {
-  color: #f4ebe0;
-  background: linear-gradient(135deg, rgba(223, 102, 60, 0.22), rgba(242, 180, 97, 0.12));
-  border-color: rgba(242, 180, 97, 0.28);
+.student-activity-map::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: min(36%, 260px);
+  background: linear-gradient(180deg, rgba(8, 10, 14, 0) 0%, rgba(8, 10, 14, 0.1) 48%, rgba(8, 10, 14, 0.32) 100%);
+  pointer-events: none;
+  z-index: 2;
 }
 
 .student-activity-pick-banner {
@@ -23410,9 +23403,13 @@ html.dark .student-activity-native-cta {
 }
 
 .student-activity-map iframe {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
+  max-width: none;
+  max-height: none;
   border: 0;
   background: #0b1a12;
 }
@@ -23420,21 +23417,28 @@ html.dark .student-activity-native-cta {
 .student-activity-card {
   position: relative;
   z-index: 3;
-  margin: 0 10px 10px;
-  background: #fff;
-  color: #15100b;
-  border-radius: 28px;
+  margin: 0;
+  background: rgba(8, 10, 14, 0.08);
+  color: #fff7ec;
+  border: 1px solid rgba(255, 247, 236, 0.2);
+  border-radius: 26px;
   padding: 14px 16px 12px;
-  box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.22);
+  box-shadow: none;
+  backdrop-filter: blur(12px) saturate(1.1);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .student-activity-sport {
   justify-self: start;
   border: 0;
   background: transparent;
-  font-weight: 800;
+  color: #fff7ec;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -23448,22 +23452,29 @@ html.dark .student-activity-native-cta {
 }
 
 .student-activity-stats div + div {
-  border-left: 1px solid rgba(21, 16, 11, 0.12);
+  border-left: 1px solid rgba(255, 247, 236, 0.12);
 }
 
 .student-activity-stats small {
   display: block;
-  color: #605a52;
-  font-size: 11px;
+  color: rgba(255, 247, 236, 0.78);
+  font-size: 10px;
   font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .student-activity-stats strong {
-  font-size: 22px;
-  letter-spacing: -0.03em;
+  font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(1.5rem, 5.4vw, 2.05rem);
+  font-weight: 600;
+  letter-spacing: -0.05em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  color: #fff7ec;
   white-space: nowrap;
 }
 
@@ -23475,11 +23486,12 @@ html.dark .student-activity-native-cta {
 }
 
 .student-activity-side {
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
-  border: 1px solid rgba(21, 16, 11, 0.12);
-  background: #fff;
+  border: 1px solid rgba(255, 247, 236, 0.16);
+  background: rgba(255, 247, 236, 0.08);
+  color: #fff7ec;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -23493,29 +23505,33 @@ html.dark .student-activity-native-cta {
 }
 
 .student-activity-play {
-  width: 76px;
-  height: 76px;
+  width: 68px;
+  height: 68px;
   border: 0;
   border-radius: 50%;
   background: linear-gradient(180deg, #f2b461, #df663c);
   color: #fff;
   display: grid;
   place-items: center;
-  box-shadow: 0 10px 20px rgba(223, 102, 60, 0.35);
+  box-shadow: 0 12px 28px rgba(223, 102, 60, 0.42);
 }
 
 .student-activity-play.is-pause {
-  background: #15100b;
+  background: rgba(12, 14, 18, 0.88);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
 }
 
 .student-activity-distance {
   justify-self: center;
-  border: 1px solid rgba(21, 16, 11, 0.12);
-  background: #fff;
+  border: 1px solid rgba(255, 247, 236, 0.28);
+  background: rgba(255, 247, 236, 0.1);
+  color: #fff7ec;
   border-radius: 999px;
   padding: 6px 14px;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -23531,24 +23547,30 @@ html.dark .student-activity-native-cta {
 .student-activity-distance.is-quiet {
   border-color: transparent;
   background: transparent;
-  color: #605a52;
+  color: rgba(255, 247, 236, 0.62);
   font-weight: 700;
 }
 
 .student-activity-stats-live {
-  margin-top: -4px;
+  margin-top: -2px;
 }
 
 .student-activity-stats-live strong {
-  font-size: 16px;
+  font-size: 1.05rem;
+  letter-spacing: -0.03em;
+  color: rgba(255, 247, 236, 0.82);
 }
 
 .student-activity-stats-live em {
   display: block;
   font-style: normal;
   font-size: 10px;
-  color: #605a52;
+  color: rgba(255, 247, 236, 0.5);
   font-weight: 700;
+}
+
+.student-activity:not(.is-live) .student-activity-stats-live {
+  display: none;
 }
 
 .student-activity-field {
@@ -23602,31 +23624,53 @@ html.dark .student-activity-native-cta {
 }
 
 .student-activity-error {
-  color: #9b1c1c;
+  color: #ffb4a8;
   font-size: 13px;
   margin: 0;
+  text-align: center;
 }
 
 .student-activity-map-chip {
   position: absolute;
   left: 12px;
-  bottom: 12px;
+  top: 96px;
+  bottom: auto;
   z-index: 4;
   padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(21, 16, 11, 0.82);
+  background: rgba(21, 16, 11, 0.72);
   color: #fff7ec;
   font-size: 12px;
   font-weight: 800;
+  backdrop-filter: blur(12px);
+}
+
+.student-activity-dock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  display: grid;
+  gap: 8px;
+  padding: 0 12px 12px;
+  pointer-events: none;
+}
+
+.student-activity-dock > * {
+  pointer-events: auto;
 }
 
 .student-activity-segments {
-  margin: 0 10px 8px;
-  padding: 10px 12px;
+  margin: 0;
+  padding: 8px 12px;
   border-radius: 16px;
-  background: rgba(255, 247, 236, 0.92);
+  background: rgba(8, 10, 14, 0.06);
+  border: 1px solid rgba(255, 247, 236, 0.18);
+  backdrop-filter: blur(12px) saturate(1.1);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
   display: grid;
-  gap: 6px;
+  gap: 4px;
   z-index: 3;
 }
 
@@ -23638,14 +23682,18 @@ html.dark .student-activity-native-cta {
 }
 
 .student-activity-segments-head strong {
-  font-size: 13px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #fff7ec;
 }
 
 .student-activity-segments-head button,
 .student-activity-segments > button {
   border: 0;
   background: transparent;
-  color: #df663c;
+  color: #f2b461;
   font-weight: 800;
   font-size: 12px;
   text-align: left;
@@ -23654,8 +23702,40 @@ html.dark .student-activity-native-cta {
 
 .student-activity-segments p {
   margin: 0;
-  color: #605a52;
+  color: rgba(255, 247, 236, 0.9);
   font-size: 12px;
+}
+
+html.light .student-activity-dock,
+html.light .student-activity-dock strong,
+html.light .student-activity-sport,
+html.light .student-activity-stats strong,
+html.light .student-activity-distance {
+  color: #fff7ec !important;
+}
+
+html.light .student-activity-stats small,
+html.light .student-activity-stats-live small {
+  color: rgba(255, 247, 236, 0.78) !important;
+}
+
+html.light .student-activity-segments p {
+  color: rgba(255, 247, 236, 0.9) !important;
+}
+
+html.light .student-activity-segments-head strong {
+  color: #fff7ec !important;
+}
+
+html.light .student-activity-segments-head button,
+html.light .student-activity-segments > button {
+  color: #f2b461 !important;
+}
+
+html.light .student-activity-side {
+  color: #fff7ec !important;
+  background: rgba(255, 247, 236, 0.1);
+  border-color: rgba(255, 247, 236, 0.28);
 }
 
 .student-activity-share {
@@ -23825,7 +23905,7 @@ html.dark .student-activity-native-cta {
 .student-activity-sheet {
   position: absolute;
   inset: auto 0 0;
-  z-index: 5;
+  z-index: 12;
   background: var(--app-panel);
   border-radius: 24px 24px 0 0;
   padding: 16px;
@@ -24073,6 +24153,24 @@ body:has(.student-app-shell) {
   .student-workout-history-page {
     max-width: 100%;
   }
+
+  .student-activity-tabs {
+    top: 8px;
+    padding: 3px;
+    gap: 2px;
+    max-width: calc(100% - 16px);
+  }
+
+  .student-activity-tabs button {
+    padding: 7px 9px;
+    font-size: 11px;
+    gap: 4px;
+  }
+
+  .student-activity-weather {
+    top: 50px;
+    left: 8px;
+  }
 }
 
 @media (max-width: 360px) {
@@ -24086,6 +24184,55 @@ body:has(.student-app-shell) {
 
   .student-feed-people button {
     width: 76px;
+  }
+
+  .student-activity-tabs button {
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+}
+
+@media (max-height: 760px) {
+  .student-activity:not(.is-live) .student-activity-weather-line,
+  .student-activity:not(.is-live) .student-activity-stats-live {
+    display: none;
+  }
+
+  .student-activity-segments p {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .student-activity-card {
+    gap: 8px;
+    padding: 12px 14px 10px;
+  }
+
+  .student-activity-play {
+    width: 60px;
+    height: 60px;
+  }
+}
+
+@media (max-height: 640px) {
+  .student-activity-dock {
+    padding: 0 10px 10px;
+    gap: 6px;
+  }
+
+  .student-activity-segments {
+    padding: 6px 10px;
+  }
+
+  .student-activity-card {
+    padding: 10px 12px 8px;
+    gap: 6px;
+  }
+
+  .student-activity-sport {
+    font-size: 10px;
   }
 }
 
