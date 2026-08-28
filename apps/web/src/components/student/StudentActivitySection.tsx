@@ -39,6 +39,7 @@ import {
   LAP_RADIUS_M,
   updateLapCrossing
 } from "../../lib/activity-geo";
+import { activityMapSrc, mapsConfigMessage } from "../../lib/activity-map-src";
 import { WebGpsPipeline, fixFromGeolocation } from "../../lib/gps-filter";
 import { isNativeAppShell } from "../../lib/native-bridge";
 import type { OutdoorActivityRow, OutdoorSport, UploadResponse } from "../../types";
@@ -151,15 +152,7 @@ function mergeRoutePoints(
 type LapMarker = { lat: number; lng: number; radiusMeters?: number };
 type LapRecord = { index: number; lat: number; lng: number; t: number; distanceMeters: number };
 
-const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
-const GOOGLE_MAPS_MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || "";
-const ACTIVITY_MAP_SRC = (() => {
-  const qs = new URLSearchParams();
-  if (GOOGLE_MAPS_KEY) qs.set("key", GOOGLE_MAPS_KEY);
-  if (GOOGLE_MAPS_MAP_ID) qs.set("mapId", GOOGLE_MAPS_MAP_ID);
-  const query = qs.toString();
-  return query ? `/activity-map.html?${query}` : "/activity-map.html";
-})();
+const ACTIVITY_MAP_SRC = activityMapSrc();
 
 function durationSeconds(hours: string, minutes: string) {
   const h = Number(hours);
@@ -325,8 +318,9 @@ export function StudentActivitySection({
   }
 
   function pushMapsConfig() {
-    if (!GOOGLE_MAPS_KEY) return;
-    postToMap({ type: "setMapsConfig", key: GOOGLE_MAPS_KEY, mapId: GOOGLE_MAPS_MAP_ID || "" });
+    const config = mapsConfigMessage();
+    if (!config) return;
+    postToMap(config);
   }
 
   useEffect(() => {
@@ -340,7 +334,12 @@ export function StudentActivitySection({
         postToMap({ type: "setLayers", layers });
         postToMap({ type: "set3d", on: is3d });
         postToMap({ type: "setFollow", on: followMapRef.current });
-        if (points.length) postToMap({ type: "setTrack", points, fit: !running });
+        postToMap({ type: "setHeat", tracks: [], cells: [] });
+        if (running || paused) {
+          if (points.length) postToMap({ type: "setTrack", points, fit: !running });
+        } else {
+          postToMap({ type: "setTrack", points: [], fit: false });
+        }
         if (lapCounterOn && lapMarker) postToMap({ type: "setLapMarker", marker: lapMarker });
         if (laps.length) postToMap({ type: "setLaps", laps });
         postToMap({ type: "setPickMode", on: pickingLapStart });
@@ -364,7 +363,7 @@ export function StudentActivitySection({
         setPickingLapStart(false);
         lapAwayRef.current = false;
         postToMap({ type: "setLapMarker", marker });
-        postToMap({ type: "setView", lat: marker.lat, lng: marker.lng, zoom: 17 });
+        postToMap({ type: "setView", lat: marker.lat, lng: marker.lng, zoom: 18 });
       }
     };
     window.addEventListener("message", onMsg);
@@ -421,20 +420,8 @@ export function StudentActivitySection({
   }, [mapType]);
   useEffect(() => {
     postToMap({ type: "setActivityMap", mode: activityMap });
-    if (running || paused) {
-      postToMap({ type: "setHeat", tracks: [], cells: [] });
-      return;
-    }
-    void apiGet<{
-      tracks: Array<Array<{ lat: number; lng: number }>>;
-      cells?: Array<{ lat: number; lng: number; weight: number; activities: number; cell: string }>;
-    }>(
-      `/student/activities/heatmap?scope=${activityMap}`,
-      token
-    )
-      .then((data) => postToMap({ type: "setHeat", tracks: data.tracks, cells: data.cells ?? [] }))
-      .catch(() => undefined);
-  }, [activityMap, token, running, paused]);
+    postToMap({ type: "setHeat", tracks: [], cells: [] });
+  }, [activityMap]);
   useEffect(() => {
     postToMap({ type: "setLayers", layers });
   }, [layers]);
@@ -442,7 +429,11 @@ export function StudentActivitySection({
     postToMap({ type: "set3d", on: is3d });
   }, [is3d]);
   useEffect(() => {
-    postToMap({ type: "setTrack", points, fit: !running && !paused });
+    if (running || paused) {
+      postToMap({ type: "setTrack", points, fit: !running && !paused });
+      return;
+    }
+    postToMap({ type: "setTrack", points: [], fit: false });
   }, [points, running, paused]);
   useEffect(() => {
     postToMap({ type: "setLapMarker", marker: lapCounterOn ? lapMarker : null });
@@ -491,7 +482,7 @@ export function StudentActivitySection({
       (pos) => {
         const fix = fixFromGeolocation(pos);
         postToMap({ type: "setLive", lat: fix.lat, lng: fix.lng, follow: followMapRef.current });
-        if (follow) postToMap({ type: "setView", lat: fix.lat, lng: fix.lng, zoom: 17 });
+        if (follow) postToMap({ type: "setView", lat: fix.lat, lng: fix.lng, zoom: 18 });
         void fetchWeather(fix.lat, fix.lng, sportRef.current).then((snap) => {
           if (!snap) return;
           weatherRef.current = snap;

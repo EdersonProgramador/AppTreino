@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
     <title>Mapa de atividade</title>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.28.1/mapbox-gl.css" rel="stylesheet" />
     <style>
-      html, body, #map { margin: 0; height: 100%; width: 100%; background: #0b1a12; }
+      html, body { margin: 0; height: 100%; width: 100%; background: #0b1a12; overflow: hidden; }
+      #map { position: absolute; inset: 0; }
       .fab-stack {
         position: absolute;
         right: 12px;
         bottom: 16px;
-        top: auto;
-        transform: none;
         display: grid;
         gap: 10px;
         z-index: 4;
@@ -76,6 +76,29 @@
         font: 600 12px/1.4 system-ui, sans-serif;
       }
       .map-error.is-on { display: block; }
+      .live-dot, .lap-dot {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 3px solid #fff;
+        box-sizing: border-box;
+        box-shadow: 0 1px 4px rgba(0,0,0,.35);
+      }
+      .live-dot { background: #2f7dff; }
+      .lap-dot { background: #df663c; width: 18px; height: 18px; }
+      .lap-num {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: #f2b461;
+        color: #1a1208;
+        font: 700 11px/18px system-ui, sans-serif;
+        text-align: center;
+        border: 2px solid #fff;
+        box-sizing: border-box;
+      }
+      .mapboxgl-ctrl-logo { margin: 0 8px 8px; }
+      .mapboxgl-canvas { display: block; }
     </style>
   </head>
   <body>
@@ -92,40 +115,20 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
       </button>
     </div>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.28.1/mapbox-gl.js"></script>
     <script>
       const params = new URLSearchParams(location.search);
-      function readParentMapsConfig() {
+      function readParentToken() {
         try {
           if (window.parent && window.parent !== window) {
-            return {
-              key: window.parent.__GOOGLE_MAPS_KEY__ || "",
-              mapId: window.parent.__GOOGLE_MAPS_MAP_ID__ || ""
-            };
+            return window.parent.__MAPBOX_ACCESS_TOKEN__ || "";
           }
         } catch (e) {}
-        return { key: "", mapId: "" };
+        return "";
       }
-      const parentMaps = readParentMapsConfig();
-      let API_KEY = params.get("key") || parentMaps.key || "";
-      let MAP_ID = params.get("mapId") || parentMaps.mapId || "";
+      let MAPBOX_TOKEN = params.get("mb") || readParentToken();
       let mapsBooted = false;
-
-      const NIGHT_STYLES = [
-        { elementType: "geometry", stylers: [{ color: "#1d2c4d" }] },
-        { elementType: "labels.text.fill", stylers: [{ color: "#8ec3b9" }] },
-        { elementType: "labels.text.stroke", stylers: [{ color: "#1a3646" }] },
-        { featureType: "road", elementType: "geometry", stylers: [{ color: "#304a7d" }] },
-        { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
-        { featureType: "poi", stylers: [{ visibility: "off" }] },
-        { featureType: "transit", stylers: [{ visibility: "off" }] }
-      ];
-
-      const WINTER_STYLES = [
-        { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
-        { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
-        { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9c9c9" }] },
-        { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#e5e5e5" }] }
-      ];
+      let currentStyle = "";
 
       const state = {
         mapType: "standard",
@@ -144,15 +147,69 @@
       };
 
       let map = null;
-      let trackLine = null;
-      let trackGlow = null;
       let liveMarker = null;
-      let lapCircle = null;
       let lapStartMarker = null;
-      let heatLines = [];
-      let heatCircles = [];
       let lapMarkers = [];
       let readyEmitted = false;
+
+      function emptyFc() {
+        return { type: "FeatureCollection", features: [] };
+      }
+
+      function toLngLat(p) {
+        return [Number(p.lng), Number(p.lat)];
+      }
+
+      function validLngLat(pair) {
+        return Number.isFinite(pair[0]) && Number.isFinite(pair[1]);
+      }
+
+      function lineCollection(points) {
+        const coords = (points || []).map(toLngLat).filter(validLngLat);
+        if (coords.length < 2) return emptyFc();
+        return {
+          type: "FeatureCollection",
+          features: [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } }]
+        };
+      }
+
+      function multiLineCollection(tracks) {
+        const features = (tracks || [])
+          .map((track) => (track || []).map(toLngLat).filter(validLngLat))
+          .filter((coords) => coords.length > 1)
+          .map((coordinates) => ({
+            type: "Feature",
+            properties: {},
+            geometry: { type: "LineString", coordinates }
+          }));
+        return { type: "FeatureCollection", features };
+      }
+
+      function heatCellCollection(cells) {
+        const features = (cells || [])
+          .filter((c) => c && Number.isFinite(c.lat) && Number.isFinite(c.lng))
+          .map((c) => ({
+            type: "Feature",
+            properties: { weight: Number(c.weight) || 1 },
+            geometry: { type: "Point", coordinates: [c.lng, c.lat] }
+          }));
+        return { type: "FeatureCollection", features };
+      }
+
+      function circlePolygon(lng, lat, radiusMeters, steps) {
+        const n = steps || 64;
+        const coords = [];
+        const dLat = radiusMeters / 110540;
+        const dLng = radiusMeters / (111320 * Math.cos((lat * Math.PI) / 180) || 1);
+        for (let i = 0; i <= n; i++) {
+          const a = (i / n) * Math.PI * 2;
+          coords.push([lng + dLng * Math.sin(a), lat + dLat * Math.cos(a)]);
+        }
+        return {
+          type: "FeatureCollection",
+          features: [{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [coords] } }]
+        };
+      }
 
       function showError(msg) {
         const el = document.getElementById("mapError");
@@ -172,258 +229,376 @@
         } catch (e) {}
       }
 
-      function toLatLng(p) {
-        return { lat: Number(p.lat), lng: Number(p.lng) };
+      function isStandardStyle(url) {
+        return /mapbox:\/\/styles\/mapbox\/standard/.test(url);
       }
 
-      function resolveMapTypeId() {
-        if (state.mapType === "satellite") return google.maps.MapTypeId.SATELLITE;
-        if (state.mapType === "hybrid") return google.maps.MapTypeId.HYBRID;
-        return google.maps.MapTypeId.ROADMAP;
+      function lightPreset() {
+        if (state.activityMap === "night") return "night";
+        if (state.mapType === "winter") return "dawn";
+        const hour = new Date().getHours();
+        if (hour < 6 || hour >= 19) return "night";
+        if (hour < 8) return "dawn";
+        if (hour >= 17) return "dusk";
+        return "day";
       }
 
-      function resolveStyles() {
-        // Cloud mapId + styles conflict; skip styles when mapId is set.
-        if (MAP_ID) return null;
-        if (state.activityMap === "night") return NIGHT_STYLES;
-        if (state.mapType === "winter") return WINTER_STYLES;
-        return null;
+      function resolveStyle() {
+        if (state.mapType === "satellite" || state.mapType === "hybrid") {
+          return "mapbox://styles/mapbox/standard-satellite";
+        }
+        return "mapbox://styles/mapbox/standard";
+      }
+
+      function cameraPitch() {
+        return state.is3d ? 56 : 0;
+      }
+
+      function cameraBearing() {
+        return state.is3d ? -16 : 0;
+      }
+
+      function basemapConfig() {
+        if (!isStandardStyle(resolveStyle())) return undefined;
+        const satellite = state.mapType === "satellite" || state.mapType === "hybrid";
+        return {
+          basemap: {
+            lightPreset: lightPreset(),
+            showPointOfInterestLabels: state.mapType !== "satellite" && state.layers.pois !== false,
+            showPlaceLabels: state.mapType !== "satellite",
+            showRoadLabels: state.mapType !== "satellite",
+            showTransitLabels: false,
+            showPedestrianRoads: true,
+            show3dObjects: !satellite
+          }
+        };
+      }
+
+      function applyLanguage() {
+        if (!map) return;
+        try {
+          if (typeof map.setLanguage === "function") map.setLanguage("pt");
+        } catch (e) {}
+        try {
+          map.setConfigProperty("basemap", "language", "pt");
+        } catch (e) {}
+      }
+
+      function applyBasemapConfig() {
+        if (!map) return;
+        try {
+          if (isStandardStyle(currentStyle)) {
+            const cfg = basemapConfig();
+            if (cfg && cfg.basemap) {
+              Object.keys(cfg.basemap).forEach(function (key) {
+                try {
+                  map.setConfigProperty("basemap", key, cfg.basemap[key]);
+                } catch (err) {}
+              });
+            }
+            applyLanguage();
+            return;
+          }
+        } catch (e) {}
+        const vis = state.layers.pois ? "visible" : "none";
+        const style = map.getStyle();
+        (style && style.layers ? style.layers : []).forEach((layer) => {
+          if (/poi/i.test(layer.id)) {
+            try {
+              map.setLayoutProperty(layer.id, "visibility", vis);
+            } catch (err) {}
+          }
+        });
+      }
+
+      function ensureTerrain() {
+        if (!map || !map.isStyleLoaded()) return;
+        try {
+          if (!map.getSource("mapbox-dem")) {
+            map.addSource("mapbox-dem", {
+              type: "raster-dem",
+              url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+              tileSize: 512,
+              maxzoom: 14
+            });
+          }
+          map.setTerrain({ source: "mapbox-dem", exaggeration: state.is3d ? 1.35 : 0.85 });
+        } catch (e) {}
+        try {
+          const night = lightPreset() === "night";
+          map.setFog({
+            range: [0.5, 10],
+            color: night ? "#101826" : "#e8f0f7",
+            "horizon-blend": 0.06,
+            "high-color": night ? "#1a2740" : "#9ec3e6",
+            "space-color": night ? "#070b12" : "#d7e6f4",
+            "star-intensity": night ? 0.35 : 0
+          });
+        } catch (e) {}
       }
 
       function applyCamera3d() {
-        if (!map) return;
         document.getElementById("btn3d").classList.toggle("active", state.is3d);
-        map.setTilt(state.is3d ? 67.5 : 0);
-        map.setHeading(state.is3d ? -18 : 0);
+        if (!map || !map.isStyleLoaded()) return;
+        ensureTerrain();
+        try {
+          map.easeTo({
+            pitch: cameraPitch(),
+            bearing: cameraBearing(),
+            duration: 500
+          });
+        } catch (e) {}
+      }
+
+      function ensureSource(id, spec) {
+        if (!map.getSource(id)) map.addSource(id, spec);
+      }
+
+      function ensureLayer(layer, beforeId) {
+        if (map.getLayer(layer.id)) return;
+        if (beforeId && map.getLayer(beforeId)) map.addLayer(layer, beforeId);
+        else map.addLayer(layer);
+      }
+
+      function ensureCustomLayers() {
+        if (!map) return;
+        const night = state.activityMap === "night";
+        ensureSource("heat-lines", { type: "geojson", data: emptyFc() });
+        ensureSource("heat-cells", { type: "geojson", data: emptyFc() });
+        ensureSource("track", { type: "geojson", data: emptyFc() });
+        ensureSource("lap-area", { type: "geojson", data: emptyFc() });
+
+        ensureLayer({
+          id: "heat-lines-layer",
+          type: "line",
+          source: "heat-lines",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": night ? "#7ee0ff" : "#3d9bff",
+            "line-opacity": 0.5,
+            "line-blur": 0.4,
+            "line-width": ["interpolate", ["linear"], ["zoom"], 12, 2, 16, 3.5, 20, 6]
+          }
+        });
+        ensureLayer({
+          id: "heat-cells-layer",
+          type: "circle",
+          source: "heat-cells",
+          paint: {
+            "circle-color": night ? "#7ee0ff" : "#ff7a3d",
+            "circle-opacity": 0.22,
+            "circle-radius": [
+              "interpolate",
+              ["linear"],
+              ["coalesce", ["get", "weight"], 1],
+              1,
+              18,
+              50,
+              48,
+              200,
+              90
+            ]
+          }
+        });
+        ensureLayer({
+          id: "track-glow",
+          type: "line",
+          source: "track",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": "#E85D04",
+            "line-opacity": 0.28,
+            "line-blur": 0.6,
+            "line-width": ["interpolate", ["linear"], ["zoom"], 12, 6, 16, 12, 20, 18]
+          }
+        });
+        ensureLayer({
+          id: "track-line",
+          type: "line",
+          source: "track",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": "#E85D04",
+            "line-opacity": 0.96,
+            "line-width": ["interpolate", ["linear"], ["zoom"], 12, 3, 16, 5, 20, 8]
+          }
+        });
+        ensureLayer({
+          id: "lap-fill",
+          type: "fill",
+          source: "lap-area",
+          paint: { "fill-color": "#df663c", "fill-opacity": 0.18 }
+        });
+        ensureLayer({
+          id: "lap-stroke",
+          type: "line",
+          source: "lap-area",
+          paint: { "line-color": "#df663c", "line-width": 2, "line-opacity": 0.9 }
+        });
+
+        if (map.getLayer("heat-lines-layer")) {
+          map.setPaintProperty("heat-lines-layer", "line-color", night ? "#7ee0ff" : "#3d9bff");
+          map.setPaintProperty("heat-cells-layer", "circle-color", night ? "#7ee0ff" : "#ff7a3d");
+        }
+      }
+
+      function applyMapboxOverlays() {
+        if (!map || !map.isStyleLoaded()) return;
+        ["overlay-bike", "overlay-hillshade"].forEach(function (id) {
+          if (map.getLayer(id)) map.removeLayer(id);
+        });
+        const before = map.getLayer("heat-lines-layer") ? "heat-lines-layer" : undefined;
+        const wantTerrainOverlay = state.layers.slope || state.layers.avalanche || state.layers.aspect;
+        if (wantTerrainOverlay) {
+          ensureTerrain();
+          const hill = {
+            id: "overlay-hillshade",
+            type: "hillshade",
+            source: "mapbox-dem",
+            paint: {
+              "hillshade-exaggeration": state.layers.avalanche ? 0.85 : 0.55,
+              "hillshade-illumination-direction": state.layers.aspect ? 315 : 335,
+              "hillshade-shadow-color": "#2a2118",
+              "hillshade-highlight-color": "#fff6e8"
+            }
+          };
+          if (before) map.addLayer(hill, before);
+          else map.addLayer(hill);
+        }
+        if (state.layers.bikeLanes) {
+          if (!map.getSource("mapbox-streets")) {
+            map.addSource("mapbox-streets", {
+              type: "vector",
+              url: "mapbox://mapbox.mapbox-streets-v8"
+            });
+          }
+          const bike = {
+            id: "overlay-bike",
+            type: "line",
+            source: "mapbox-streets",
+            "source-layer": "road",
+            filter: [
+              "any",
+              ["==", ["get", "class"], "cycleway"],
+              ["==", ["get", "type"], "cycleway"],
+              ["==", ["get", "class"], "path"]
+            ],
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: {
+              "line-color": "#14b8a6",
+              "line-opacity": 0.9,
+              "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1.5, 16, 3, 20, 5]
+            }
+          };
+          if (before) map.addLayer(bike, before);
+          else map.addLayer(bike);
+        }
       }
 
       function applyBaseAppearance() {
         if (!map) return;
-        map.setMapTypeId(resolveMapTypeId());
-        const styles = resolveStyles();
-        map.setOptions({ styles: styles || [] });
+        const next = resolveStyle();
+        if (next !== currentStyle) {
+          currentStyle = next;
+          const config = basemapConfig();
+          map.setStyle(next, config ? { config: config } : undefined);
+          return;
+        }
+        applyBasemapConfig();
         applyCamera3d();
-        applyRasterOverlays();
+        applyMapboxOverlays();
         updateLayerBadge();
       }
 
-      function makeImageMapType(name, urlTemplate, opacity) {
-        return new google.maps.ImageMapType({
-          getTileUrl(coord, zoom) {
-            const n = Math.pow(2, zoom);
-            if (coord.y < 0 || coord.y >= n) return null;
-            const x = ((coord.x % n) + n) % n;
-            return urlTemplate
-              .replace("{z}", String(zoom))
-              .replace("{x}", String(x))
-              .replace("{y}", String(coord.y));
-          },
-          tileSize: new google.maps.Size(256, 256),
-          name,
-          opacity: opacity == null ? 0.65 : opacity,
-          maxZoom: 18
-        });
-      }
-
-      function applyRasterOverlays() {
-        if (!map) return;
-        while (map.overlayMapTypes.getLength()) map.overlayMapTypes.pop();
-        if (state.layers.bikeLanes) {
-          map.overlayMapTypes.push(
-            makeImageMapType("bike", "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png", 0.7)
-          );
-        }
-        if (state.layers.slope || state.layers.avalanche) {
-          map.overlayMapTypes.push(
-            makeImageMapType("topo", "https://a.tile.opentopomap.org/{z}/{x}/{y}.png", state.layers.avalanche ? 0.7 : 0.55)
-          );
-        }
-        if (state.layers.aspect) {
-          map.overlayMapTypes.push(
-            makeImageMapType(
-              "hill",
-              "https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
-              0.5
-            )
-          );
-        }
-      }
-
-      function clearHeat() {
-        heatLines.forEach((line) => line.setMap(null));
-        heatCircles.forEach((c) => c.setMap(null));
-        heatLines = [];
-        heatCircles = [];
-      }
-
-      function clearLapMarkers() {
-        lapMarkers.forEach((m) => m.setMap(null));
-        lapMarkers = [];
+      function setData(sourceId, data) {
+        const src = map && map.getSource(sourceId);
+        if (src) src.setData(data);
       }
 
       function setTrack(points, fit) {
         state.track = points || [];
-        const path = state.track.map(toLatLng).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
-        if (!trackGlow) {
-          trackGlow = new google.maps.Polyline({
-            map,
-            path: [],
-            strokeColor: "#E85D04",
-            strokeOpacity: 0.28,
-            strokeWeight: 12,
-            zIndex: 2
+        setData("track", lineCollection(state.track));
+        const coords = state.track.map(toLngLat).filter(validLngLat);
+        if (fit && coords.length > 1 && map) {
+          const bounds = coords.reduce(function (b, c) {
+            return b.extend(c);
+          }, new mapboxgl.LngLatBounds(coords[0], coords[0]));
+          map.fitBounds(bounds, {
+            padding: 48,
+            duration: 400,
+            pitch: cameraPitch(),
+            bearing: cameraBearing()
           });
-        }
-        if (!trackLine) {
-          trackLine = new google.maps.Polyline({
-            map,
-            path: [],
-            strokeColor: "#E85D04",
-            strokeOpacity: 0.95,
-            strokeWeight: 5,
-            zIndex: 3
-          });
-        }
-        trackGlow.setPath(path);
-        trackLine.setPath(path);
-        if (fit && path.length > 1) {
-          const bounds = new google.maps.LatLngBounds();
-          path.forEach((p) => bounds.extend(p));
-          map.fitBounds(bounds, 48);
-          if (state.is3d) {
-            google.maps.event.addListenerOnce(map, "idle", () => applyCamera3d());
-          }
         }
       }
 
       function setHeat(tracks, cells) {
         state.heatTracks = tracks || [];
         state.heatCells = cells || [];
-        clearHeat();
-        const night = state.activityMap === "night";
-        state.heatTracks
-          .filter((t) => t && t.length > 1)
-          .forEach((t) => {
-            heatLines.push(
-              new google.maps.Polyline({
-                map,
-                path: t.map(toLatLng),
-                strokeColor: night ? "#7ee0ff" : "#3d9bff",
-                strokeOpacity: 0.45,
-                strokeWeight: 3,
-                zIndex: 1
-              })
-            );
-          });
-        state.heatCells
-          .filter((c) => c && Number.isFinite(c.lat) && Number.isFinite(c.lng))
-          .forEach((c) => {
-            const weight = Number(c.weight) || 1;
-            const radius = Math.min(90, 18 + Math.log10(Math.max(weight, 1)) * 12);
-            heatCircles.push(
-              new google.maps.Circle({
-                map,
-                center: { lat: c.lat, lng: c.lng },
-                radius,
-                fillColor: night ? "#7ee0ff" : "#ff7a3d",
-                fillOpacity: 0.22,
-                strokeWeight: 0,
-                zIndex: 1
-              })
-            );
-          });
+        setData("heat-lines", multiLineCollection(state.heatTracks));
+        setData("heat-cells", heatCellCollection(state.heatCells));
+      }
+
+      function makeDot(className) {
+        const el = document.createElement("div");
+        el.className = className;
+        return el;
       }
 
       function setLive(lat, lng, follow) {
-        state.live = { lat, lng };
-        const pos = { lat, lng };
+        state.live = { lat: lat, lng: lng };
+        if (!map) return;
         if (!liveMarker) {
-          liveMarker = new google.maps.Marker({
-            map,
-            position: pos,
-            zIndex: 10,
-            icon: {
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 8,
-              fillColor: "#2f7dff",
-              fillOpacity: 1,
-              strokeColor: "#ffffff",
-              strokeWeight: 3
-            }
-          });
+          liveMarker = new mapboxgl.Marker({ element: makeDot("live-dot") }).setLngLat([lng, lat]).addTo(map);
         } else {
-          liveMarker.setPosition(pos);
+          liveMarker.setLngLat([lng, lat]);
         }
         const shouldFollow = follow !== false && state.follow && !state.userInteracting;
         if (shouldFollow) {
-          map.panTo(pos);
-          if (state.is3d) applyCamera3d();
+          map.easeTo({
+            center: [lng, lat],
+            duration: 280,
+            pitch: cameraPitch(),
+            bearing: state.is3d ? map.getBearing() : 0
+          });
         }
       }
 
       function setLapMarker(marker) {
         state.lapMarker = marker || null;
-        if (lapCircle) {
-          lapCircle.setMap(null);
-          lapCircle = null;
-        }
         if (lapStartMarker) {
-          lapStartMarker.setMap(null);
+          lapStartMarker.remove();
           lapStartMarker = null;
         }
-        if (!marker || !Number.isFinite(marker.lat) || !Number.isFinite(marker.lng)) return;
-        const center = { lat: marker.lat, lng: marker.lng };
-        lapCircle = new google.maps.Circle({
-          map,
-          center,
-          radius: marker.radiusMeters || 22,
-          fillColor: "#df663c",
-          fillOpacity: 0.18,
-          strokeColor: "#df663c",
-          strokeOpacity: 0.9,
-          strokeWeight: 2,
-          zIndex: 4
+        if (!marker || !Number.isFinite(marker.lat) || !Number.isFinite(marker.lng)) {
+          setData("lap-area", emptyFc());
+          return;
+        }
+        setData("lap-area", circlePolygon(marker.lng, marker.lat, marker.radiusMeters || 22));
+        if (map) {
+          lapStartMarker = new mapboxgl.Marker({ element: makeDot("lap-dot") })
+            .setLngLat([marker.lng, marker.lat])
+            .addTo(map);
+        }
+      }
+
+      function clearLapMarkers() {
+        lapMarkers.forEach(function (m) {
+          m.remove();
         });
-        lapStartMarker = new google.maps.Marker({
-          map,
-          position: center,
-          zIndex: 5,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 9,
-            fillColor: "#df663c",
-            fillOpacity: 1,
-            strokeColor: "#ffffff",
-            strokeWeight: 3
-          }
-        });
+        lapMarkers = [];
       }
 
       function setLaps(laps) {
         state.laps = laps || [];
         clearLapMarkers();
-        state.laps.forEach((lap, index) => {
-          lapMarkers.push(
-            new google.maps.Marker({
-              map,
-              position: { lat: lap.lat, lng: lap.lng },
-              label: {
-                text: String(index + 1),
-                color: "#1a1208",
-                fontWeight: "700",
-                fontSize: "11px"
-              },
-              icon: {
-                path: google.maps.SymbolPath.CIRCLE,
-                scale: 10,
-                fillColor: "#f2b461",
-                fillOpacity: 1,
-                strokeColor: "#ffffff",
-                strokeWeight: 2
-              },
-              zIndex: 6
-            })
-          );
+        if (!map) return;
+        state.laps.forEach(function (lap, index) {
+          if (!Number.isFinite(lap.lat) || !Number.isFinite(lap.lng)) return;
+          const el = document.createElement("div");
+          el.className = "lap-num";
+          el.textContent = String(index + 1);
+          lapMarkers.push(new mapboxgl.Marker({ element: el }).setLngLat([lap.lng, lap.lat]).addTo(map));
         });
       }
 
@@ -436,7 +611,9 @@
 
       function extraLayerCount() {
         const l = state.layers;
-        return ["bikeLanes", "avalanche", "slope", "aspect"].filter((k) => l[k]).length;
+        return ["bikeLanes", "avalanche", "slope", "aspect"].filter(function (k) {
+          return l[k];
+        }).length;
       }
 
       function updateLayerBadge() {
@@ -447,26 +624,48 @@
       }
 
       function restoreOverlays() {
-        if (state.track.length) setTrack(state.track, false);
+        setTrack(state.track, false);
         setHeat(state.heatTracks, state.heatCells);
         if (state.live) setLive(state.live.lat, state.live.lng, false);
         setLapMarker(state.lapMarker);
         setLaps(state.laps);
       }
 
+      function onStyleReady() {
+        try {
+          map.resize();
+        } catch (e) {}
+        applyLanguage();
+        ensureCustomLayers();
+        applyBasemapConfig();
+        applyMapboxOverlays();
+        restoreOverlays();
+        applyCamera3d();
+        updateLayerBadge();
+        if (!readyEmitted) {
+          readyEmitted = true;
+          emit({ type: "ready" });
+        }
+        showError("");
+      }
+
       window.applyMapCommand = function applyMapCommand(raw) {
         const msg = typeof raw === "string" ? JSON.parse(raw) : raw;
         if (!msg || !msg.type) return;
         if (msg.type === "setMapsConfig") {
-          bootGoogleMaps(msg.key || API_KEY, msg.mapId != null ? msg.mapId : MAP_ID);
+          bootMapbox(msg.mapboxToken || msg.token || MAPBOX_TOKEN);
           return;
         }
         if (!map) return;
         if (msg.type === "init" || msg.type === "setView") {
           if (msg.lat && msg.lng) {
             state.userInteracting = false;
-            map.setCenter({ lat: msg.lat, lng: msg.lng });
-            if (msg.zoom) map.setZoom(msg.zoom);
+            map.jumpTo({
+              center: [msg.lng, msg.lat],
+              zoom: msg.zoom || 18,
+              pitch: cameraPitch(),
+              bearing: cameraBearing()
+            });
           }
         }
         if (msg.type === "setFollow") {
@@ -486,7 +685,8 @@
         }
         if (msg.type === "setLayers") {
           state.layers = Object.assign(state.layers, msg.layers || {});
-          applyRasterOverlays();
+          applyBasemapConfig();
+          applyMapboxOverlays();
           updateLayerBadge();
         }
         if (msg.type === "set3d") {
@@ -512,108 +712,104 @@
       window.addEventListener("message", onMsg);
       document.addEventListener("message", onMsg);
 
-      document.getElementById("layersBtn").onclick = () => emit({ type: "open-layers" });
-      document.getElementById("btn3d").onclick = () => {
+      document.getElementById("layersBtn").onclick = function () {
+        emit({ type: "open-layers" });
+      };
+      document.getElementById("btn3d").onclick = function () {
         state.is3d = !state.is3d;
         applyCamera3d();
         emit({ type: "toggle-3d", on: state.is3d });
       };
-      document.getElementById("locateBtn").onclick = () => {
+      document.getElementById("locateBtn").onclick = function () {
         state.follow = true;
         state.userInteracting = false;
         emit({ type: "locate-request" });
       };
 
       function initMap() {
-        const options = {
-          center: { lat: -23.55, lng: -46.63 },
-          zoom: 15,
-          disableDefaultUI: true,
-          clickableIcons: false,
-          gestureHandling: "greedy",
-          keyboardShortcuts: false,
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: false,
-          zoomControl: false,
-          tilt: 0,
-          heading: 0,
-          mapTypeId: google.maps.MapTypeId.ROADMAP
-        };
-        if (MAP_ID) options.mapId = MAP_ID;
-
-        map = new google.maps.Map(document.getElementById("map"), options);
-        applyBaseAppearance();
-
-        map.addListener("dragstart", () => {
+        if (typeof mapboxgl === "undefined") {
+          showError("Mapbox GL JS não carregou. Verifique a rede.");
+          return;
+        }
+        if (!mapboxgl.supported()) {
+          showError("Este navegador não suporta Mapbox GL JS.");
+          return;
+        }
+        mapboxgl.accessToken = MAPBOX_TOKEN;
+        currentStyle = resolveStyle();
+        const config = basemapConfig();
+        map = new mapboxgl.Map({
+          container: "map",
+          style: currentStyle,
+          center: [-46.63, -23.55],
+          zoom: 16.8,
+          minZoom: 2,
+          maxZoom: 20,
+          pitch: 0,
+          bearing: 0,
+          antialias: true,
+          maxPitch: 85,
+          pixelRatio: Math.max(window.devicePixelRatio || 1, 2),
+          fadeDuration: 280,
+          attributionControl: false,
+          failIfMajorPerformanceCaveat: false,
+          config: config
+        });
+        map.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-left");
+        map.on("style.load", onStyleReady);
+        map.on("error", function (e) {
+          const message = (e && e.error && e.error.message) || "";
+          if (/access token|unauthorized|401|403|not authorized/i.test(message)) {
+            showError("Token Mapbox inválido. Configure VITE_MAPBOX_ACCESS_TOKEN (token público pk.).");
+          }
+        });
+        map.on("dragstart", function () {
           state.userInteracting = true;
           emit({ type: "user-pan" });
         });
-        map.addListener("click", (event) => {
-          if (!state.pickMode || !event.latLng) return;
-          const lat = event.latLng.lat();
-          const lng = event.latLng.lng();
-          emit({ type: "map-pick", kind: "lap-start", lat, lng });
+        map.on("click", function (event) {
+          if (!state.pickMode || !event.lngLat) return;
+          emit({ type: "map-pick", kind: "lap-start", lat: event.lngLat.lat, lng: event.lngLat.lng });
           setPickMode(false);
         });
-
-        restoreOverlays();
-        if (!readyEmitted) {
-          readyEmitted = true;
-          emit({ type: "ready" });
+        window.addEventListener("resize", function () {
+          try {
+            map.resize();
+          } catch (e) {}
+        });
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener("resize", function () {
+            try {
+              map.resize();
+            } catch (e) {}
+          });
         }
-        showError("");
       }
 
-      window.__onGoogleMapsReady = function __onGoogleMapsReady() {
-        try {
-          initMap();
-        } catch (err) {
-          showError(err && err.message ? err.message : "Falha ao iniciar Google Maps.");
-        }
-      };
-
-      window.gm_authFailure = function gm_authFailure() {
-        showError("Chave do Google Maps inválida ou API não habilitada. Configure VITE_GOOGLE_MAPS_API_KEY.");
-      };
-
-      function bootGoogleMaps(key, mapId) {
+      function bootMapbox(token) {
         if (mapsBooted) return;
-        if (key) API_KEY = String(key);
-        if (mapId != null) MAP_ID = String(mapId || "");
-        if (!API_KEY) {
-          showError("Configure VITE_GOOGLE_MAPS_API_KEY na Vercel (Maps JavaScript API) e faça um novo deploy.");
+        if (token) MAPBOX_TOKEN = String(token);
+        if (!MAPBOX_TOKEN) {
+          showError("Configure VITE_MAPBOX_ACCESS_TOKEN no .env (token público pk. em account.mapbox.com).");
           return;
         }
         mapsBooted = true;
         showError("");
-        const script = document.createElement("script");
-        script.async = true;
-        script.defer = true;
-        script.src =
-          "https://maps.googleapis.com/maps/api/js?key=" +
-          encodeURIComponent(API_KEY) +
-          "&v=weekly&callback=__onGoogleMapsReady";
-        script.onerror = () => showError("Não foi possível carregar o Google Maps.");
-        document.head.appendChild(script);
+        try {
+          initMap();
+        } catch (err) {
+          mapsBooted = false;
+          showError(err && err.message ? err.message : "Falha ao iniciar o Mapbox.");
+        }
       }
 
-      // Prefer parent SPA env (same-origin), then query string; wait briefly for setMapsConfig.
-      function resolveKeyFromParent() {
-        try {
-          if (window.parent && window.parent !== window) {
-            if (window.parent.__GOOGLE_MAPS_KEY__) API_KEY = window.parent.__GOOGLE_MAPS_KEY__;
-            if (window.parent.__GOOGLE_MAPS_MAP_ID__) MAP_ID = window.parent.__GOOGLE_MAPS_MAP_ID__;
-          }
-        } catch (e) {}
-      }
-      resolveKeyFromParent();
-      if (API_KEY) {
-        bootGoogleMaps(API_KEY, MAP_ID);
+      MAPBOX_TOKEN = MAPBOX_TOKEN || readParentToken();
+      if (MAPBOX_TOKEN) {
+        bootMapbox(MAPBOX_TOKEN);
       } else {
-        setTimeout(() => {
-          resolveKeyFromParent();
-          bootGoogleMaps(API_KEY, MAP_ID);
+        setTimeout(function () {
+          MAPBOX_TOKEN = MAPBOX_TOKEN || readParentToken();
+          bootMapbox(MAPBOX_TOKEN);
         }, 120);
       }
     </script>

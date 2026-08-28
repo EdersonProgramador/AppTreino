@@ -14,12 +14,16 @@ wireStudentSyncBus();
 wireEventBusBroadcast();
 useUiPrefsStore.getState().hydrate();
 
-/** Exposed for same-origin activity-map.html iframe (query string may be stripped by cache). */
+/** Exposed for same-origin activity-map iframe (query string may be stripped by cache). */
 if (typeof window !== "undefined") {
-  (window as Window & { __GOOGLE_MAPS_KEY__?: string; __GOOGLE_MAPS_MAP_ID__?: string }).__GOOGLE_MAPS_KEY__ =
-    (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) || "";
-  (window as Window & { __GOOGLE_MAPS_MAP_ID__?: string }).__GOOGLE_MAPS_MAP_ID__ =
-    (import.meta.env.VITE_GOOGLE_MAPS_MAP_ID as string | undefined) || "";
+  const mapsWindow = window as Window & {
+    __GOOGLE_MAPS_KEY__?: string;
+    __GOOGLE_MAPS_MAP_ID__?: string;
+    __MAPBOX_ACCESS_TOKEN__?: string;
+  };
+  mapsWindow.__GOOGLE_MAPS_KEY__ = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) || "";
+  mapsWindow.__GOOGLE_MAPS_MAP_ID__ = (import.meta.env.VITE_GOOGLE_MAPS_MAP_ID as string | undefined) || "";
+  mapsWindow.__MAPBOX_ACCESS_TOKEN__ = (import.meta.env.VITE_MAPBOX_ACCESS_TOKEN as string | undefined) || "";
 }
 
 if (typeof navigator !== "undefined") {

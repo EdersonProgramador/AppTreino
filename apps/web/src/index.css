@@ -23339,7 +23339,7 @@ html.is-native-app.keyboard-open .login-shell {
 .student-activity-map {
   position: relative;
   flex: 1;
-  min-height: 240px;
+  min-height: 360px;
 }
 
 .student-activity-native-cta {
@@ -23410,9 +23410,11 @@ html.dark .student-activity-native-cta {
 }
 
 .student-activity-map iframe {
+  display: block;
   width: 100%;
   height: 100%;
   border: 0;
+  background: #0b1a12;
 }
 
 .student-activity-card {
