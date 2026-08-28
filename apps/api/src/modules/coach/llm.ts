@@ -40,7 +40,7 @@ export function conversationForModel(history: CoachMessage[]): CoachMessage[] {
   return start.filter((item) => item.role !== "assistant" || !isGenericCoachMenu(item.content));
 }
 
-type OpenAiMessage = {
+export type CoachLlmMessage = {
   role: "system" | "user" | "assistant" | "tool";
   content?: string | null | Array<{ type?: string; text?: string; content?: string }>;
   reasoning?: string | null;
@@ -50,7 +50,7 @@ type OpenAiMessage = {
 };
 
 export function coachMessageText(message?: {
-  content?: OpenAiMessage["content"];
+  content?: CoachLlmMessage["content"];
   reasoning?: string | null;
   thinking?: string | null;
 }) {
@@ -104,7 +104,7 @@ export function llmStatus() {
   };
 }
 
-async function postChat(runtime: LlmRuntime, messages: OpenAiMessage[], tools: boolean) {
+async function postChat(runtime: LlmRuntime, messages: CoachLlmMessage[], tools: boolean) {
   const url = `${runtime.baseUrl}/chat/completions`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), runtime.chatTimeoutMs);
@@ -130,7 +130,7 @@ async function postChat(runtime: LlmRuntime, messages: OpenAiMessage[], tools: b
       console.warn(`[coach/llm] ${runtime.host}`, response.status, errBody.slice(0, 300));
       return { ok: false as const, status: response.status, body: errBody };
     }
-    const data = (await response.json()) as { choices?: Array<{ message?: OpenAiMessage }> };
+    const data = (await response.json()) as { choices?: Array<{ message?: CoachLlmMessage }> };
     return { ok: true as const, data };
   } catch (caught) {
     console.warn(`[coach/llm] ${runtime.host} fetch failed`, caught instanceof Error ? caught.message : caught);
@@ -141,7 +141,7 @@ async function postChat(runtime: LlmRuntime, messages: OpenAiMessage[], tools: b
 }
 
 /** Chat completions via Ollama (Llama cloud/local) or OpenAI. */
-export async function openaiCoach(messages: OpenAiMessage[], tools = true) {
+export async function openaiCoach(messages: CoachLlmMessage[], tools = true) {
   const runtime = llmRuntime();
   if (!runtime) return null;
 

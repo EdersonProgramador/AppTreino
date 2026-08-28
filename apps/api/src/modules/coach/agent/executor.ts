@@ -1,17 +1,10 @@
 import { localCoachChat } from "../engine.js";
-import { llmConfigured, openaiCoach, systemPrompt, coachMessageText } from "../llm.js";
+import { llmConfigured, openaiCoach, systemPrompt, coachMessageText, type CoachLlmMessage } from "../llm.js";
 import type { AgentPlan, AgentTrace, CoachChatResult, CoachContext, CoachMessage, DietPlan } from "../types.js";
 import { MAX_REACT_ITERATIONS, MAX_TOOL_CALLS } from "./guardrails.js";
 import { logTrace } from "./observability.js";
 import { type Perception, perceptionSystemBlock } from "./perceive.js";
 import { executeTool } from "./toolbox.js";
-
-type OpenAiMessage = {
-  role: "system" | "user" | "assistant" | "tool";
-  content?: string | null;
-  tool_call_id?: string;
-  tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
-};
 
 export type Execution = {
   result: CoachChatResult;
@@ -20,8 +13,8 @@ export type Execution = {
   toolCalls: number;
 };
 
-function historyForModel(history: CoachMessage[], perception: Perception): OpenAiMessage[] {
-  const mapped: OpenAiMessage[] = history.map((item) => ({
+function historyForModel(history: CoachMessage[], perception: Perception): CoachLlmMessage[] {
+  const mapped: CoachLlmMessage[] = history.map((item) => ({
     role: item.role === "assistant" ? ("assistant" as const) : ("user" as const),
     content: item.content
   }));
@@ -129,7 +122,7 @@ async function executeReact(
     return { result: local, traces, iterations: 1, toolCalls: 0 };
   }
 
-  const messages: OpenAiMessage[] = [
+  const messages: CoachLlmMessage[] = [
     { role: "system", content: systemPrompt(ctx, memoryBlock) },
     ...historyForModel(history, perception)
   ];
