@@ -108,12 +108,31 @@ function ActivityMiniMap({ post }: { post: SocialPostRow }) {
     const send = () => {
       const config = mapsConfigMessage();
       if (config) iframe.contentWindow?.postMessage(config, "*");
-      iframe.contentWindow?.postMessage({ type: "setTrack", points: activity.polyline, fit: true }, "*");
-      iframe.contentWindow?.postMessage({ type: "set3d", on: activity.is3d }, "*");
       iframe.contentWindow?.postMessage({ type: "showControls", on: false }, "*");
+      iframe.contentWindow?.postMessage({ type: "setFollow", on: false }, "*");
+      iframe.contentWindow?.postMessage(
+        { type: "setSport", sport: activity.sport, gender: "MALE" },
+        "*"
+      );
+      iframe.contentWindow?.postMessage({ type: "setTrack", points: activity.polyline, fit: true }, "*");
+      const last = Array.isArray(activity.polyline) ? activity.polyline[activity.polyline.length - 1] : null;
+      if (last && Number.isFinite(last.lat) && Number.isFinite(last.lng)) {
+        iframe.contentWindow?.postMessage(
+          {
+            type: "setLive",
+            lat: last.lat,
+            lng: last.lng,
+            follow: false,
+            sport: activity.sport,
+            gender: "MALE"
+          },
+          "*"
+        );
+      }
       if (activity.mapType) {
         iframe.contentWindow?.postMessage({ type: "setMapType", mapType: activity.mapType }, "*");
       }
+      iframe.contentWindow?.postMessage({ type: "set3d", on: Boolean(activity.is3d) }, "*");
     };
     iframe.addEventListener("load", send);
     const onMsg = (event: MessageEvent) => {
@@ -130,7 +149,7 @@ function ActivityMiniMap({ post }: { post: SocialPostRow }) {
   return (
     <div className="student-feed-map">
       <div className="student-feed-map-frame">
-        <iframe ref={iframeRef} title="Percurso" src={activityMapSrc()} />
+        <iframe ref={iframeRef} title="Percurso" src={activityMapSrc({ preview: true })} />
       </div>
       <div className="student-feed-activity-stats">
         <span>

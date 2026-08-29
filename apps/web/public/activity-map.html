@@ -117,6 +117,7 @@
         -webkit-mask-position: center;
         mask-position: center;
       }
+      html.is-hidelive .live-pin { visibility: hidden; }
       .lap-dot { background: #df663c; width: 18px; height: 18px; }
       .lap-num {
         width: 22px;
@@ -150,6 +151,10 @@
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.28.1/mapbox-gl.js"></script>
     <script>
       const params = new URLSearchParams(location.search);
+      const isPreview = params.get("preview") === "1";
+      const isHideLive = params.get("hidelive") === "1";
+      if (isPreview) document.documentElement.classList.add("is-preview");
+      if (isHideLive) document.documentElement.classList.add("is-hidelive");
       function readParentToken() {
         try {
           if (window.parent && window.parent !== window) {
@@ -182,6 +187,7 @@
       }
 
       function persistCachedCenter(lat, lng) {
+        if (isPreview) return;
         try {
           sessionStorage.setItem(LAST_GPS_KEY, JSON.stringify({ lat: lat, lng: lng, t: Date.now() }));
         } catch (e) {}
@@ -210,6 +216,7 @@
       let lapStartMarker = null;
       let lapMarkers = [];
       let readyEmitted = false;
+      let pendingFit = false;
 
       function emptyFc() {
         return { type: "FeatureCollection", features: [] };
@@ -607,6 +614,15 @@
         if (src) src.setData(data);
       }
 
+      function emitLiveProjected() {
+        if (!state.live || !map) return;
+        try {
+          const p = map.project([state.live.lng, state.live.lat]);
+          const c = map.getContainer();
+          emit({ type: "live-projected", x: p.x, y: p.y, w: c.clientWidth, h: c.clientHeight });
+        } catch (e) {}
+      }
+
       function setTrack(points, fit) {
         state.track = points || [];
         setData("track", lineCollection(state.track));
@@ -659,8 +675,9 @@
 
       function updateLivePin(el) {
         if (!el) return;
-        el.className = "live-pin";
-        el.innerHTML = sportIconHtml(state.sport, state.gender);
+        const pin = el.classList && el.classList.contains("live-pin") ? el : el.querySelector(".live-pin") || el;
+        pin.classList.add("live-pin");
+        pin.innerHTML = sportIconHtml(state.sport, state.gender);
       }
 
       function applySport(sport, gender) {
@@ -702,6 +719,7 @@
             bearing: state.is3d ? map.getBearing() : 0
           });
         }
+        emitLiveProjected();
       }
 
       function setLapMarker(marker) {
@@ -764,11 +782,14 @@
       }
 
       function restoreOverlays() {
-        setTrack(state.track, false);
+        const fit = pendingFit;
+        pendingFit = false;
+        setTrack(state.track, fit);
         setHeat(state.heatTracks, state.heatCells);
         if (state.live) setLive(state.live.lat, state.live.lng, false);
         setLapMarker(state.lapMarker);
         setLaps(state.laps);
+        emitLiveProjected();
       }
 
       function onStyleReady() {
@@ -807,6 +828,28 @@
         }
         if (msg.type === "setSport") {
           applySport(msg.sport, msg.gender);
+        }
+        if (msg.type === "setFollow") {
+          state.follow = msg.on !== false;
+          if (state.follow) state.userInteracting = false;
+        }
+        if (msg.type === "setTrack") {
+          state.track = msg.points || [];
+          if (!map) pendingFit = Boolean(msg.fit);
+        }
+        if (msg.type === "setHeat") {
+          state.heatTracks = msg.tracks || [];
+          state.heatCells = msg.cells || [];
+        }
+        if (msg.type === "setLive" && Number.isFinite(Number(msg.lat)) && Number.isFinite(Number(msg.lng))) {
+          state.live = { lat: Number(msg.lat), lng: Number(msg.lng) };
+          applySport(msg.sport, msg.gender);
+        }
+        if (msg.type === "setMapType") {
+          state.mapType = msg.mapType || "hybrid";
+        }
+        if (msg.type === "set3d") {
+          state.is3d = Boolean(msg.on);
         }
         if (!map) return;
         if (msg.type === "init" || msg.type === "setView") {
@@ -953,6 +996,7 @@
         });
         map.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-left");
         map.on("style.load", onStyleReady);
+        map.on("move", emitLiveProjected);
         map.on("error", function (e) {
           const message = (e && e.error && e.error.message) || "";
           if (/access token|unauthorized|401|403|not authorized/i.test(message)) {
@@ -987,8 +1031,10 @@
             } catch (e) {}
           }).observe(document.getElementById("map"));
         }
-        if (cachedCenter) setLive(cachedCenter[1], cachedCenter[0], false);
-        bootUserLocation(true);
+        if (!isPreview) {
+          if (cachedCenter) setLive(cachedCenter[1], cachedCenter[0], false);
+          bootUserLocation(true);
+        }
       }
 
       function bootMapbox(token) {

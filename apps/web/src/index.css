@@ -23893,30 +23893,6 @@ html.light .student-activity-side {
   position: relative;
 }
 
-.student-activity-share-sport-badge {
-  position: absolute;
-  z-index: 3;
-  top: 8px;
-  left: 8px;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: #2f7dff;
-  border: 2px solid #fff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-  display: grid;
-  place-items: center;
-  color: #fff;
-  pointer-events: none;
-}
-
-.student-activity-share-sport-badge svg,
-.student-activity-share-sport-badge .runner-gender-icon {
-  width: 16px;
-  height: 16px;
-  color: #fff;
-}
-
 .student-activity-share-map {
   position: relative;
   width: 100%;

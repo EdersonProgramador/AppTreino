@@ -172,12 +172,13 @@ function SharePreview({
         <strong>{title ?? stats.sportLabel}</strong>
       </div>
       <div className="student-activity-share-map-host">
-        <ActivityRoutePreview points={stats.points} mapType={stats.mapType} is3d={stats.is3d} />
-        {stats.points.length >= 2 ? (
-          <span className="student-activity-share-sport-badge" aria-hidden>
-            <ShareSportIcon sport={stats.sport} gender={stats.gender} size={16} />
-          </span>
-        ) : null}
+        <ActivityRoutePreview
+          points={stats.points}
+          mapType={stats.mapType}
+          is3d={stats.is3d}
+          sport={stats.sport}
+          gender={stats.gender}
+        />
       </div>
       <div className="student-activity-share-metrics">
         <span><em>Distância</em>{formatKm(stats.distanceMeters)} km</span>

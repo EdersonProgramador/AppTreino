@@ -96,6 +96,10 @@
     </div>
     <script>
       const params = new URLSearchParams(location.search);
+      const isPreview = params.get("preview") === "1";
+      const isHideLive = params.get("hidelive") === "1";
+      if (isPreview) document.documentElement.classList.add("is-preview");
+      if (isHideLive) document.documentElement.classList.add("is-hidelive");
       function readParentMapsConfig() {
         try {
           if (window.parent && window.parent !== window) {
@@ -149,6 +153,7 @@
       }
 
       function persistCachedCenter(lat, lng) {
+        if (isPreview) return;
         try {
           sessionStorage.setItem(LAST_GPS_KEY, JSON.stringify({ lat: lat, lng: lng, t: Date.now() }));
         } catch (e) {}
@@ -183,6 +188,8 @@
       let heatCircles = [];
       let lapMarkers = [];
       let readyEmitted = false;
+      let pendingFit = false;
+      let projectOverlay = null;
 
       function showError(msg) {
         const el = document.getElementById("mapError");
@@ -405,21 +412,36 @@
         if (liveMarker) liveMarker.setIcon(liveIcon(state.sport, state.gender));
       }
 
+      function emitLiveProjected() {
+        if (!state.live || !map) return;
+        try {
+          const proj = projectOverlay && projectOverlay.getProjection && projectOverlay.getProjection();
+          if (!proj) return;
+          const pt = proj.fromLatLngToContainerPixel(new google.maps.LatLng(state.live.lat, state.live.lng));
+          if (!pt) return;
+          const div = map.getDiv();
+          emit({ type: "live-projected", x: pt.x, y: pt.y, w: div.clientWidth, h: div.clientHeight });
+        } catch (e) {}
+      }
+
       function setLive(lat, lng, follow, sport, gender) {
         state.live = { lat, lng };
         persistCachedCenter(lat, lng);
         if (sport || gender) applySport(sport, gender);
+        if (!map) return;
         const pos = { lat, lng };
         if (!liveMarker) {
           liveMarker = new google.maps.Marker({
             map,
             position: pos,
             zIndex: 10,
-            icon: liveIcon(state.sport, state.gender)
+            icon: liveIcon(state.sport, state.gender),
+            visible: !isHideLive
           });
         } else {
           liveMarker.setPosition(pos);
           liveMarker.setIcon(liveIcon(state.sport, state.gender));
+          liveMarker.setVisible(!isHideLive);
         }
         if (follow) {
           state.follow = true;
@@ -431,6 +453,7 @@
           if (map.getZoom() < 16.5) map.setZoom(18);
           if (state.is3d) applyCamera3d();
         }
+        emitLiveProjected();
       }
 
       function setLapMarker(marker) {
@@ -519,11 +542,14 @@
       }
 
       function restoreOverlays() {
-        if (state.track.length) setTrack(state.track, false);
+        const fit = pendingFit;
+        pendingFit = false;
+        if (state.track.length) setTrack(state.track, fit);
         setHeat(state.heatTracks, state.heatCells);
         if (state.live) setLive(state.live.lat, state.live.lng, false);
         setLapMarker(state.lapMarker);
         setLaps(state.laps);
+        emitLiveProjected();
       }
 
       window.applyMapCommand = function applyMapCommand(raw) {
@@ -537,8 +563,33 @@
           const bottom = Math.max(16, Number(msg.bottom) || 16);
           document.getElementById("fabs").style.bottom = bottom + "px";
         }
+        if (msg.type === "showControls") {
+          document.getElementById("fabs").style.display = msg.on === false ? "none" : "grid";
+        }
         if (msg.type === "setSport") {
           applySport(msg.sport, msg.gender);
+        }
+        if (msg.type === "setFollow") {
+          state.follow = msg.on !== false;
+          if (state.follow) state.userInteracting = false;
+        }
+        if (msg.type === "setTrack") {
+          state.track = msg.points || [];
+          if (!map) pendingFit = Boolean(msg.fit);
+        }
+        if (msg.type === "setHeat") {
+          state.heatTracks = msg.tracks || [];
+          state.heatCells = msg.cells || [];
+        }
+        if (msg.type === "setLive" && Number.isFinite(Number(msg.lat)) && Number.isFinite(Number(msg.lng))) {
+          state.live = { lat: Number(msg.lat), lng: Number(msg.lng) };
+          applySport(msg.sport, msg.gender);
+        }
+        if (msg.type === "setMapType") {
+          state.mapType = msg.mapType || "hybrid";
+        }
+        if (msg.type === "set3d") {
+          state.is3d = Boolean(msg.on);
         }
         if (!map) return;
         if (msg.type === "init" || msg.type === "setView") {
@@ -671,9 +722,19 @@
           setPickMode(false);
         });
 
+        projectOverlay = new google.maps.OverlayView();
+        projectOverlay.onAdd = function () {};
+        projectOverlay.draw = function () {
+          emitLiveProjected();
+        };
+        projectOverlay.onRemove = function () {};
+        projectOverlay.setMap(map);
+        map.addListener("idle", emitLiveProjected);
         restoreOverlays();
-        if (cached) setLive(cached.lat, cached.lng, false);
-        bootUserLocation(true);
+        if (!isPreview) {
+          if (cached) setLive(cached.lat, cached.lng, false);
+          bootUserLocation(true);
+        }
         if (!readyEmitted) {
           readyEmitted = true;
           emit({ type: "ready" });

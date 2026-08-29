@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { activityMapSrc, mapsConfigMessage } from "../../lib/activity-map-src";
+import type { OutdoorSport } from "../../types";
 
 type Point = { lat: number; lng: number };
 
@@ -40,21 +41,26 @@ function routeSvgPath(points: Point[]) {
   };
   const d = sampled.map((point, index) => `${index === 0 ? "M" : "L"}${xy(point)}`).join(" ");
   const start = sampled[0];
-  const end = sampled[sampled.length - 1];
-  return { d, start: xy(start), end: xy(end), w, h };
+  return { d, start: xy(start), w, h };
 }
 
 export function ActivityRoutePreview({
   points,
   mapType = "hybrid",
-  is3d = false
+  is3d = false,
+  sport = "RUN",
+  gender
 }: {
   points: Point[];
   mapType?: "standard" | "satellite" | "hybrid" | "winter";
   is3d?: boolean;
+  sport?: OutdoorSport;
+  gender?: "MALE" | "FEMALE" | null;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const svg = routeSvgPath(points);
+  const last = points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng)).at(-1);
+  const pinGender = gender === "FEMALE" ? "FEMALE" : "MALE";
 
   function paint() {
     const win = iframeRef.current?.contentWindow;
@@ -66,7 +72,14 @@ export function ActivityRoutePreview({
     win.postMessage({ type: "setMapType", mapType }, "*");
     win.postMessage({ type: "set3d", on: is3d }, "*");
     win.postMessage({ type: "setChromeInset", bottom: 12 }, "*");
+    win.postMessage({ type: "setSport", sport, gender: pinGender }, "*");
     win.postMessage({ type: "setTrack", points, fit: points.length > 1 }, "*");
+    if (last) {
+      win.postMessage(
+        { type: "setLive", lat: last.lat, lng: last.lng, follow: false, sport, gender: pinGender },
+        "*"
+      );
+    }
   }
 
   useEffect(() => {
@@ -75,19 +88,18 @@ export function ActivityRoutePreview({
       if (event.data?.type === "ready") paint();
     };
     window.addEventListener("message", onMsg);
-    const retries = [120, 400, 900].map((ms) => window.setTimeout(paint, ms));
+    const retries = [120, 400, 900, 1800].map((ms) => window.setTimeout(paint, ms));
     return () => {
       window.removeEventListener("message", onMsg);
       retries.forEach((id) => window.clearTimeout(id));
     };
-  }, [points, mapType, is3d]);
+  }, [points, mapType, is3d, sport, gender]);
 
   if (!svg) {
     return <div className="student-activity-share-map is-empty">Percurso curto demais para a prévia do mapa.</div>;
   }
 
   const [sx, sy] = svg.start.split(",");
-  const [ex, ey] = svg.end.split(",");
 
   return (
     <div className="student-activity-share-map">
@@ -95,12 +107,11 @@ export function ActivityRoutePreview({
         <path d={svg.d} fill="none" stroke="#ffffff" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
         <path d={svg.d} fill="none" stroke="#2f7dff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
         <circle cx={sx} cy={sy} r="5" fill="#2f7dff" stroke="#fff" strokeWidth="1.5" />
-        <circle cx={ex} cy={ey} r="5" fill="#df663c" stroke="#fff" strokeWidth="1.5" />
       </svg>
       <iframe
         ref={iframeRef}
         title="Prévia do percurso"
-        src={activityMapSrc()}
+        src={activityMapSrc({ preview: true })}
         allow="fullscreen"
         onLoad={() => paint()}
       />
