@@ -49,13 +49,15 @@ export function ActivityRoutePreview({
   mapType = "hybrid",
   is3d = false,
   sport = "RUN",
-  gender
+  gender,
+  compact = false
 }: {
   points: Point[];
   mapType?: "standard" | "satellite" | "hybrid" | "winter";
   is3d?: boolean;
   sport?: OutdoorSport;
   gender?: "MALE" | "FEMALE" | null;
+  compact?: boolean;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const svg = routeSvgPath(points);
@@ -96,18 +98,30 @@ export function ActivityRoutePreview({
   }, [points, mapType, is3d, sport, gender]);
 
   if (!svg) {
-    return <div className="student-activity-share-map is-empty">Percurso curto demais para a prévia do mapa.</div>;
+    return (
+      <div className={`student-activity-share-map is-empty${compact ? " is-compact" : ""}`}>
+        {compact ? null : "Percurso curto demais para a prévia do mapa."}
+      </div>
+    );
   }
 
   const [sx, sy] = svg.start.split(",");
 
+  const routeSvg = (
+    <svg viewBox={`0 0 ${svg.w} ${svg.h}`} aria-hidden className="student-activity-share-map-svg">
+      <path d={svg.d} fill="none" stroke="#ffffff" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={svg.d} fill="none" stroke="#2f7dff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={sx} cy={sy} r="5" fill="#2f7dff" stroke="#fff" strokeWidth="1.5" />
+    </svg>
+  );
+
+  if (compact) {
+    return <div className="student-activity-share-map is-compact">{routeSvg}</div>;
+  }
+
   return (
     <div className="student-activity-share-map">
-      <svg viewBox={`0 0 ${svg.w} ${svg.h}`} aria-hidden className="student-activity-share-map-svg">
-        <path d={svg.d} fill="none" stroke="#ffffff" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
-        <path d={svg.d} fill="none" stroke="#2f7dff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx={sx} cy={sy} r="5" fill="#2f7dff" stroke="#fff" strokeWidth="1.5" />
-      </svg>
+      {routeSvg}
       <iframe
         ref={iframeRef}
         title="Prévia do percurso"

@@ -2,9 +2,10 @@ import { ArrowLeft, MessageCircle, Radio, UserPlus, UserRound, UserCheck } from 
 import { useEffect, useMemo, useState } from "react";
 import { ApiError, apiGet, apiPost } from "../../api";
 import { brand } from "../../lib/brand";
-import { mediaUrl, retryVideoAsCompatible } from "../../lib/urls";
+import { mediaUrl } from "../../lib/urls";
 import { uiSounds } from "../../lib/ui-sounds";
 import type { SocialPostRow } from "../../types";
+import { SocialPostFeedPreview } from "./SocialPostFeedPreview";
 
 const DEFAULT_COVER = "#c4783a";
 
@@ -220,30 +221,14 @@ export function StudentPeerProfileSection({ token, userId, onBack, onOpenDm, onO
             ) : posts.length === 0 ? (
               <p className="student-activity-hint">Nenhuma publicação ainda.</p>
             ) : (
-              <div className="student-athlete-grid">
-                {posts.map((post) => {
-                  const media = post.mediaItems?.[0] ?? (post.mediaUrl ? { url: post.mediaUrl, type: post.mediaType, coverUrl: null } : null);
-                  const isVideo = media?.type === "VIDEO";
-                  const thumb = (isVideo ? media?.coverUrl : null) || media?.url || null;
-                  return (
-                    <article key={post.id} className="student-athlete-grid-item">
-                      {thumb ? (
-                        isVideo && !media?.coverUrl ? (
-                          <video
-                            src={mediaUrl(thumb)}
-                            muted
-                            playsInline
-                            onError={(event) => retryVideoAsCompatible(event.currentTarget, thumb)}
-                          />
-                        ) : (
-                          <img src={mediaUrl(thumb)} alt="" />
-                        )
-                      ) : (
-                        <p>{post.body?.slice(0, 80) || brand.athlete}</p>
-                      )}
-                    </article>
-                  );
-                })}
+              <div className="student-athlete-posts-list">
+                {posts.map((post) => (
+                  <article key={post.id} className="student-athlete-post-list-item is-static">
+                    <div className="student-athlete-post-grid-fit">
+                      <SocialPostFeedPreview post={post} />
+                    </div>
+                  </article>
+                ))}
               </div>
             )}
           </section>

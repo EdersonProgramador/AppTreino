@@ -3,10 +3,11 @@ import { FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 
 import { createPortal } from "react-dom";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { brand } from "../../lib/brand";
-import { mediaUrl, retryVideoAsCompatible } from "../../lib/urls";
 import { shareSocialPost } from "../../lib/share-social-post";
+import { mediaUrl, retryVideoAsCompatible } from "../../lib/urls";
 import { uiSounds } from "../../lib/ui-sounds";
 import type { SocialPostRow, StudentProfile, UploadResponse } from "../../types";
+import { SocialPostFeedPreview } from "./SocialPostFeedPreview";
 import { ActivityShareCard, activitySharePhotoUrl, activityShareStatsFromRow, activityShareTitle } from "./ActivityShareCard";
 import { FeedWorkoutShareCard } from "./WorkoutSharePreview";
 
@@ -498,35 +499,19 @@ export function StudentAthleteProfileSection({
         {posts.length === 0 ? (
           <article className="student-athlete-posts-empty">Nenhuma publicação ainda :(</article>
         ) : (
-          <div className="student-athlete-posts-grid">
-            {posts.map((post, index) => {
-              const first = post.mediaItems?.[0];
-              const isVideo = post.mediaType === "VIDEO" || first?.type === "VIDEO";
-              const thumb = (isVideo ? first?.coverUrl : null) || first?.url || post.mediaUrl || null;
-              return (
-                <button
-                  key={post.id}
-                  type="button"
-                  className="student-athlete-post-card"
-                  onClick={() => openPostViewer(index)}
-                >
-                  {thumb ? (
-                    isVideo && !first?.coverUrl ? (
-                      <video
-                        src={mediaUrl(thumb)}
-                        muted
-                        playsInline
-                        onError={(event) => retryVideoAsCompatible(event.currentTarget, thumb)}
-                      />
-                    ) : (
-                      <img src={mediaUrl(thumb)} alt="" />
-                    )
-                  ) : (
-                    <p>{post.body || "Publicação"}</p>
-                  )}
-                </button>
-              );
-            })}
+          <div className="student-athlete-posts-list">
+            {posts.map((post, index) => (
+              <button
+                key={post.id}
+                type="button"
+                className="student-athlete-post-list-item"
+                onClick={() => openPostViewer(index)}
+              >
+                <div className="student-athlete-post-grid-fit">
+                  <SocialPostFeedPreview post={post} />
+                </div>
+              </button>
+            ))}
           </div>
         )}
       </div>

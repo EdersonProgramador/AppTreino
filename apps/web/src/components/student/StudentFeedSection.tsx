@@ -23,6 +23,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { apiDelete, apiGet, apiPost, apiUpload } from "../../api";
 import { mediaUrl, retryVideoAsCompatible } from "../../lib/urls";
+import { liveIdFromPost } from "../../lib/social-post-media";
 import { readFeedCache, writeFeedCache } from "../../lib/feed-cache";
 import { useFeedChromeStore } from "../../stores/feedChromeStore";
 import { brand } from "../../lib/brand";
@@ -86,17 +87,6 @@ function renderPostBody(content: string) {
     }
     return <span key={index}>{part}</span>;
   });
-}
-
-function liveIdFromPost(post: { mediaType?: string | null; mediaUrl?: string | null; body?: string | null }) {
-  const tagged = post.body?.match(/\[\[LIVE:([^\]]+)\]\]/);
-  if (tagged?.[1]) return tagged[1];
-  if (post.mediaType === "LIVE" && post.mediaUrl) return post.mediaUrl;
-  // Legacy broken posts stored the live cuid as an image URL.
-  if (post.mediaUrl && !/[./]/.test(post.mediaUrl.replace(/^\//, "")) && post.mediaType !== "VIDEO") {
-    return post.mediaUrl.replace(/^\//, "");
-  }
-  return null;
 }
 
 function FeedActivityCard({ post }: { post: SocialPostRow }) {

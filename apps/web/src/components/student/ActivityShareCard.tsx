@@ -53,14 +53,19 @@ function ShareSportIcon({
 
 export function activitySharePhotoUrl(post: SocialPostRow): string | null {
   const fromItems = post.mediaItems?.find((item) => item.type === "IMAGE")?.url;
-  const raw =
-    post.activity?.photoUrl ||
-    (post.mediaType === "VIDEO" ? null : post.mediaUrl) ||
-    fromItems ||
-    null;
-  if (!raw) return null;
-  const resolved = mediaUrl(raw);
-  return resolved || null;
+  const candidates = [
+    post.activity?.photoUrl,
+    post.mediaType === "VIDEO" ? null : post.mediaUrl,
+    fromItems
+  ];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    const cleaned = raw.trim().replace(/^\//, "");
+    if (!/[./]/.test(cleaned) && !/^https?:\/\//i.test(raw.trim()) && !/^(data:|blob:)/i.test(raw.trim())) continue;
+    const resolved = mediaUrl(raw);
+    if (resolved) return resolved;
+  }
+  return null;
 }
 
 export function activityShareTitle(activity: Pick<OutdoorActivityRow, "sport" | "sportLabel">) {
