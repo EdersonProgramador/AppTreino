@@ -2,6 +2,7 @@ import {
   Activity,
   Camera,
   ChevronDown,
+  ChevronUp,
   Flag,
   Flame,
   Footprints,
@@ -325,6 +326,7 @@ export function StudentActivitySection({
   });
   const [is3d, setIs3d] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(true);
   const [activity, setActivity] = useState<OutdoorActivityRow | null>(null);
   const [points, setPoints] = useState<GpsPoint[]>([]);
   const [elapsed, setElapsed] = useState(0);
@@ -1752,13 +1754,26 @@ export function StudentActivitySection({
           </div>
         ) : null}
 
-        <div className="student-activity-card">
+        <div className={`student-activity-card${!showMetrics ? " is-compact" : ""}`}>
           <div className="student-activity-card-top">
-            <button type="button" className="student-activity-sport" onClick={() => setLayersOpen(true)}>
-              {sportMeta.label} <ChevronDown size={16} />
+            <button
+              type="button"
+              className={`student-activity-sport${!showMetrics ? " is-collapsed" : ""}`}
+              aria-expanded={showMetrics}
+              aria-label={showMetrics ? "Esconder métricas" : "Mostrar métricas"}
+              onClick={() => setShowMetrics((visible) => !visible)}
+            >
+              Métricas
+              {showMetrics ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
             </button>
+            <strong className="student-activity-sport-name">{sportMeta.label}</strong>
             <div className="student-activity-card-tools">
-              <button type="button" className="student-activity-side" onClick={() => setLayersOpen(true)} aria-label="Configurações do mapa">
+              <button
+                type="button"
+                className="student-activity-side"
+                onClick={() => setLayersOpen(true)}
+                aria-label="Configurações do mapa"
+              >
                 <Settings2 size={18} />
               </button>
               <button type="button" className="student-activity-side" onClick={onOpenPlay} aria-label="Música">
@@ -1766,47 +1781,51 @@ export function StudentActivitySection({
               </button>
             </div>
           </div>
-          <div className="student-activity-stats student-activity-stats-hero">
-            <LiveMetric icon={Timer} label="Tempo" value={formatClock(shownElapsed)} />
-            <LiveMetric
-              icon={Route}
-              label="Distância"
-              value={`${Math.round(distance)} m`}
-              hint={`${formatKm(distance)} km`}
-            />
-            <LiveMetric
-              icon={Gauge}
-              label="Velocidade"
-              value={speedKmh ? speedKmh.toFixed(1) : "0.0"}
-              hint="km/h"
-            />
-          </div>
-          <div className="student-activity-stats student-activity-stats-live">
-            <LiveMetric icon={Activity} label="Ritmo médio" value={formatPace(pace)} hint={`/km`} />
-            <LiveMetric
-              icon={TrendingUp}
-              label="Inclinação"
-              value={formatGrade(shownGrade)}
-              hint={shownElev ? `↑ ${Math.round(shownElev)} m` : "desnível"}
-            />
-            <LiveMetric
-              icon={Heart}
-              label="F. Cardíaca"
-              value={shownHeart ? String(shownHeart) : "—"}
-              hint={heartConnected ? "b.p.m · sensor" : "b.p.m · toque"}
-              active={heartConnected}
-              onClick={() => void connectHeartRate()}
-            />
-          </div>
-          <div className="student-activity-stats student-activity-stats-live">
-            <LiveMetric icon={Flame} label="Calorias" value={String(calories)} hint="kcal" />
-            <LiveMetric icon={Repeat} label="Voltas" value={String(shownLaps)} />
-            <LiveMetric
-              icon={Footprints}
-              label={sport === "RIDE" ? "Pedaladas" : "Passos"}
-              value={String(shownSteps)}
-            />
-          </div>
+          {showMetrics ? (
+            <>
+              <div className="student-activity-stats student-activity-stats-hero">
+                <LiveMetric icon={Timer} label="Tempo" value={formatClock(shownElapsed)} />
+                <LiveMetric
+                  icon={Route}
+                  label="Distância"
+                  value={`${Math.round(distance)} m`}
+                  hint={`${formatKm(distance)} km`}
+                />
+                <LiveMetric
+                  icon={Gauge}
+                  label="Velocidade"
+                  value={speedKmh ? speedKmh.toFixed(1) : "0.0"}
+                  hint="km/h"
+                />
+              </div>
+              <div className="student-activity-stats student-activity-stats-live">
+                <LiveMetric icon={Activity} label="Ritmo médio" value={formatPace(pace)} hint={`/km`} />
+                <LiveMetric
+                  icon={TrendingUp}
+                  label="Inclinação"
+                  value={formatGrade(shownGrade)}
+                  hint={shownElev ? `↑ ${Math.round(shownElev)} m` : "desnível"}
+                />
+                <LiveMetric
+                  icon={Heart}
+                  label="F. Cardíaca"
+                  value={shownHeart ? String(shownHeart) : "—"}
+                  hint={heartConnected ? "b.p.m · sensor" : "b.p.m · toque"}
+                  active={heartConnected}
+                  onClick={() => void connectHeartRate()}
+                />
+              </div>
+              <div className="student-activity-stats student-activity-stats-live">
+                <LiveMetric icon={Flame} label="Calorias" value={String(calories)} hint="kcal" />
+                <LiveMetric icon={Repeat} label="Voltas" value={String(shownLaps)} />
+                <LiveMetric
+                  icon={Footprints}
+                  label={sport === "RIDE" ? "Pedaladas" : "Passos"}
+                  value={String(shownSteps)}
+                />
+              </div>
+            </>
+          ) : null}
           <div className={`student-activity-run-controls${running || paused ? " is-split" : " is-idle"}`}>
             {running || paused ? (
               <>

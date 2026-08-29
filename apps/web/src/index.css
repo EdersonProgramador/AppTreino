@@ -23477,16 +23477,22 @@ html.is-native-app.keyboard-open .login-shell {
   position: relative;
   z-index: 3;
   margin: 0;
+  min-width: 0;
   background: rgba(8, 10, 14, 0.08);
   color: #fff7ec;
   border: 1px solid rgba(255, 247, 236, 0.2);
   border-radius: 18px;
-  padding: 8px 10px 8px;
+  padding: 10px 12px 10px;
   box-shadow: none;
   backdrop-filter: blur(12px) saturate(1.1);
   -webkit-backdrop-filter: blur(12px) saturate(1.1);
   display: grid;
-  gap: 6px;
+  gap: 8px;
+}
+
+.student-activity-card.is-compact {
+  padding: 8px 12px 10px;
+  gap: 8px;
 }
 
 .student-activity-sport {
@@ -23495,23 +23501,64 @@ html.is-native-app.keyboard-open .login-shell {
   background: transparent;
   color: #fff7ec;
   font-weight: 700;
-  font-size: 10px;
+  font-size: clamp(9px, 2.6vw, 10px);
   text-transform: uppercase;
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
+  min-width: 0;
+  padding: 0;
+}
+
+.student-activity-sport-name {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  color: #fff7ec;
+  font-weight: 800;
+  font-size: clamp(9px, 2.6vw, 10px);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+  max-width: calc(100% - 140px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.student-activity-sport.is-collapsed {
+  color: #f2b461;
 }
 
 .student-activity-card-top {
-  display: flex;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+  min-height: 32px;
 }
 
 .student-activity-card-tools {
   display: flex;
+  justify-content: flex-end;
   gap: 6px;
+  flex-shrink: 0;
+}
+
+.student-activity-card.is-compact .student-activity-card-top {
+  min-height: 30px;
+}
+
+.student-activity-card.is-compact .student-activity-run-controls {
+  margin-top: 0;
+}
+
+.student-activity-card.is-compact .student-activity-distance {
+  margin-top: -2px;
 }
 
 .student-activity-stats {
@@ -23590,7 +23637,9 @@ button.student-activity-metric.is-on small {
 .student-activity-run-controls {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 6px;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
 }
 
 .student-activity-run-controls.is-idle {
@@ -23719,14 +23768,15 @@ button.student-activity-metric.is-on small {
   background: rgba(255, 247, 236, 0.1);
   color: #fff7ec;
   border-radius: 999px;
-  padding: 4px 12px;
-  font-size: 10px;
+  padding: 5px 14px;
+  font-size: clamp(9px, 2.5vw, 10px);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  max-width: 100%;
 }
 
 .student-activity-finish-actions {
@@ -24202,6 +24252,10 @@ html.light .student-activity-side {
   overflow: auto;
 }
 
+.student-app-shell.is-activity:not(.workout-immersive) .student-activity-sheet {
+  bottom: var(--student-nav-offset);
+}
+
 .student-activity-sheet header {
   display: flex;
   justify-content: space-between;
@@ -24478,6 +24532,54 @@ body:has(.student-app-shell) {
   }
 }
 
+@media (max-width: 420px) {
+  .student-activity-dock {
+    padding: 0 8px 8px;
+  }
+
+  .student-activity-card,
+  .student-activity-card.is-compact {
+    padding: 8px 10px 10px;
+    gap: 7px;
+    border-radius: 16px;
+  }
+
+  .student-activity-card-top {
+    gap: 6px;
+    min-height: 28px;
+  }
+
+  .student-activity-sport-name {
+    max-width: calc(100% - 120px);
+  }
+
+  .student-activity-side {
+    width: 28px;
+    height: 28px;
+  }
+
+  .student-activity-side svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .student-activity-run-btn.is-start.is-fit {
+    min-height: 34px;
+    padding: 5px 12px 5px 7px;
+    font-size: 10px;
+    gap: 6px;
+  }
+
+  .student-activity-run-playmark {
+    width: 20px;
+    height: 20px;
+  }
+
+  .student-activity-distance {
+    padding: 4px 12px;
+  }
+}
+
 @media (max-height: 760px) {
   .student-activity:not(.is-live) .student-activity-weather-line {
     display: none;
@@ -24491,8 +24593,13 @@ body:has(.student-app-shell) {
   }
 
   .student-activity-card {
-    gap: 6px;
+    gap: 7px;
     padding: 8px 10px;
+  }
+
+  .student-activity-card.is-compact {
+    gap: 6px;
+    padding: 7px 10px 9px;
   }
 
   .student-activity-play {
@@ -24513,11 +24620,17 @@ body:has(.student-app-shell) {
 
   .student-activity-card {
     padding: 6px 8px;
-    gap: 4px;
+    gap: 5px;
   }
 
-  .student-activity-sport {
-    font-size: 10px;
+  .student-activity-card.is-compact {
+    padding: 6px 8px 8px;
+    gap: 5px;
+  }
+
+  .student-activity-sport,
+  .student-activity-sport-name {
+    font-size: 9px;
   }
 }
 
