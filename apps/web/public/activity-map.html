@@ -11,11 +11,12 @@
       .fab-stack {
         position: absolute;
         right: 12px;
-        bottom: 176px;
+        bottom: clamp(220px, 34vh, 380px);
         display: grid;
         gap: 10px;
-        z-index: 4;
+        z-index: 8;
         transition: bottom 180ms ease;
+        pointer-events: auto;
       }
       .fab, .fab-3d {
         width: 44px;
@@ -133,6 +134,7 @@
       let currentStyle = "";
 
       const LAST_GPS_KEY = "apptreino.lastGps";
+      const LAST_GPS_MAX_AGE_MS = 30 * 60 * 1000;
 
       function readCachedCenter() {
         try {
@@ -141,7 +143,9 @@
           const parsed = JSON.parse(raw);
           const lat = Number(parsed.lat);
           const lng = Number(parsed.lng);
+          const t = Number(parsed.t);
           if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+          if (Number.isFinite(t) && Date.now() - t > LAST_GPS_MAX_AGE_MS) return null;
           return [lng, lat];
         } catch (e) {
           return null;
@@ -578,11 +582,17 @@
         } else {
           liveMarker.setLngLat([lng, lat]);
         }
+        if (follow) {
+          state.follow = true;
+          state.userInteracting = false;
+        }
         const shouldFollow = follow !== false && state.follow && !state.userInteracting;
         if (shouldFollow) {
+          const zoom = map.getZoom();
           map.easeTo({
             center: [lng, lat],
-            duration: 280,
+            zoom: zoom < 16.5 ? 18 : zoom,
+            duration: 400,
             pitch: cameraPitch(),
             bearing: state.is3d ? map.getBearing() : 0
           });
@@ -684,6 +694,8 @@
         if (msg.type === "setChromeInset") {
           const bottom = Math.max(16, Number(msg.bottom) || 16);
           document.getElementById("fabs").style.bottom = bottom + "px";
+          const attr = document.querySelector(".mapboxgl-ctrl-bottom-left");
+          if (attr) attr.style.bottom = Math.max(8, bottom - 8) + "px";
         }
         if (!map) return;
         if (msg.type === "init" || msg.type === "setView") {
@@ -764,7 +776,10 @@
       };
 
       function bootUserLocation(highAccuracy) {
-        if (!navigator.geolocation) return;
+        if (!navigator.geolocation) {
+          emit({ type: "geo-error", reason: "unsupported" });
+          return;
+        }
         navigator.geolocation.getCurrentPosition(
           function (pos) {
             const lat = pos.coords.latitude;
@@ -782,10 +797,16 @@
               });
             } catch (e) {}
           },
-          function () {},
+          function (err) {
+            if (highAccuracy) {
+              emit({ type: "geo-error", reason: err && err.code === 1 ? "denied" : "unavailable" });
+              return;
+            }
+            bootUserLocation(true);
+          },
           highAccuracy
             ? { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-            : { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+            : { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
         );
       }
 
@@ -856,7 +877,7 @@
           }).observe(document.getElementById("map"));
         }
         if (cachedCenter) setLive(cachedCenter[1], cachedCenter[0], false);
-        bootUserLocation(false);
+        bootUserLocation(true);
       }
 
       function bootMapbox(token) {

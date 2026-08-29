@@ -108,6 +108,9 @@ type FinishResult = {
     avgCadenceSpm?: number | null;
     estimatedPowerWatts?: number | null;
     calories?: number;
+    polyline?: Array<{ lat: number; lng: number; t?: number; ele?: number | null }>;
+    roadMatched?: boolean;
+    matchConfidence?: number | null;
     splits?: Array<{ km: number; paceSecPerKm: number; elapsedTime: number; partial?: boolean }>;
     splitsAnalysis?: {
       bestKm?: number | null;
@@ -183,13 +186,29 @@ function durationSeconds(hours: string, minutes: string) {
   return total > 0 ? total : undefined;
 }
 
+function sampleTrack(points: GpsPoint[], max = 96): GpsPoint[] {
+  if (points.length <= max) return points;
+  const out: GpsPoint[] = [];
+  const step = (points.length - 1) / (max - 1);
+  for (let i = 0; i < max; i += 1) out.push(points[Math.round(i * step)]);
+  return out;
+}
+
+function composeDisplay(matched: GpsPoint[] | null, raw: GpsPoint[]): GpsPoint[] {
+  if (!matched?.length) return raw;
+  const lastT = matched[matched.length - 1].t;
+  const extra = raw.filter((point) => point.t > lastT).slice(-5);
+  return extra.length ? [...matched, ...extra] : matched;
+}
+
 export function StudentActivitySection({
   token,
   onOpenPlay,
   onPublished,
   preferredSport = "RUN",
   preferredSportKey = 0,
-  athleteGender
+  athleteGender,
+  weightKg = 70
 }: {
   token: string;
   onOpenPlay: () => void;
@@ -197,10 +216,12 @@ export function StudentActivitySection({
   preferredSport?: OutdoorSport;
   preferredSportKey?: number;
   athleteGender?: "MALE" | "FEMALE" | null;
+  weightKg?: number | null;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const dockRef = useRef<HTMLDivElement>(null);
   const watchRef = useRef<number | null>(null);
+  const idleWatchRef = useRef<number | null>(null);
   const bufferRef = useRef<GpsPoint[]>([]);
   const pipelineRef = useRef(new WebGpsPipeline());
   const followMapRef = useRef(true);
@@ -213,6 +234,12 @@ export function StudentActivitySection({
   const liveHydrateGen = useRef(0);
   const lastTrackRef = useRef<GpsPoint[]>([]);
   const lastFixRef = useRef<{ lat: number; lng: number } | null>(readStoredFix());
+  const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
+  const lastMatchedRef = useRef<GpsPoint[] | null>(null);
+  const reviewTrackRef = useRef<GpsPoint[] | null>(null);
+  const matchBusyRef = useRef(false);
+  const pointsRef = useRef<GpsPoint[]>([]);
+  const activityIdRef = useRef<string | null>(null);
   const [sport, setSport] = useState<OutdoorSport>(preferredSport);
   const sportRef = useRef(sport);
   sportRef.current = sport;
@@ -268,6 +295,8 @@ export function StudentActivitySection({
   const [error, setError] = useState<string | null>(null);
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
   const weatherRef = useRef<WeatherSnapshot | null>(null);
+  const [roadMatched, setRoadMatched] = useState(false);
+  const athleteKg = weightKg && weightKg > 30 && weightKg < 250 ? weightKg : 70;
 
   const sessionActive = Boolean(
     !sessionClosed && activity && (activity.status === "LIVE" || activity.status === "PAUSED")
@@ -279,7 +308,7 @@ export function StudentActivitySection({
     sessionActive && liveDistanceM >= 20 && elapsed > 0 ? elapsed / (liveDistanceM / 1000) : null;
   const liveSpeed = sessionActive ? liveSpeedKmh(points) : 0;
   const elevation = sessionActive ? liveElevation(points) : { gain: 0, loss: 0 };
-  const liveCalories = sessionActive ? estimateCalories(sport, elapsed) : 0;
+  const liveCalories = sessionActive ? estimateCalories(sport, elapsed, athleteKg) : 0;
   const liveSplit = sessionActive
     ? liveKmSplit(points)
     : { kmIndex: 1, metersInSplit: 0, paceSecPerKm: null, completed: [] as Array<{ km: number; paceSecPerKm: number; elapsedTime: number }> };
@@ -294,6 +323,8 @@ export function StudentActivitySection({
   const shownKmPace = sessionActive ? locked?.kmPaceSecPerKm ?? liveSplit.paceSecPerKm : null;
   const targetDuration = durationSeconds(targetHours, targetMinutes);
   const parsedKm = Number(targetKm.replace(",", "."));
+  pointsRef.current = points;
+  activityIdRef.current = activity?.id ?? null;
   lapMarkerRef.current = lapCounterOn ? lapMarker : null;
   shareOpenRef.current = shareOpen;
   finishingRef.current = finishing;
@@ -311,7 +342,7 @@ export function StudentActivitySection({
   }
 
   useEffect(() => {
-    if (running || paused || sessionClosedRef.current) return;
+    if (running || paused) return;
     if (sport !== preferredSport) setSport(preferredSport);
     locate(true);
   }, [preferredSportKey, preferredSport]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -341,6 +372,25 @@ export function StudentActivitySection({
     iframeRef.current?.contentWindow?.postMessage(msg, "*");
   }
 
+  function pushChromeInset() {
+    postToMap({ type: "resize" });
+    const iframe = iframeRef.current;
+    const dock = dockRef.current;
+    let bottom = 240;
+    if (iframe && dock) {
+      const mapRect = iframe.getBoundingClientRect();
+      const dockRect = dock.getBoundingClientRect();
+      bottom = Math.max(120, Math.round(mapRect.bottom - dockRect.top) + 24);
+    } else if (dock) {
+      bottom = Math.round(dock.getBoundingClientRect().height) + 24;
+    }
+    postToMap({ type: "setChromeInset", bottom });
+  }
+
+  function paintTrack(route: GpsPoint[], fit = false) {
+    postToMap({ type: "setTrack", points: composeDisplay(lastMatchedRef.current, route), fit });
+  }
+
   function pushMapsConfig() {
     const config = mapsConfigMessage();
     if (!config) return;
@@ -359,25 +409,32 @@ export function StudentActivitySection({
         postToMap({ type: "set3d", on: is3d });
         postToMap({ type: "setFollow", on: followMapRef.current });
         postToMap({ type: "setHeat", tracks: [], cells: [] });
+        const review = reviewTrackRef.current;
         if (running || paused) {
-          if (points.length) postToMap({ type: "setTrack", points, fit: !running });
+          if (points.length) paintTrack(points, !running);
+        } else if (review && review.length > 1) {
+          postToMap({ type: "setFollow", on: false });
+          postToMap({ type: "setTrack", points: review, fit: true });
         } else {
           postToMap({ type: "setTrack", points: [], fit: false });
         }
         if (lapCounterOn && lapMarker) postToMap({ type: "setLapMarker", marker: lapMarker });
         if (laps.length) postToMap({ type: "setLaps", laps });
         postToMap({ type: "setPickMode", on: pickingLapStart });
-        const cached = lastFixRef.current ?? readStoredFix();
-        if (cached) {
-          postToMap({ type: "setLive", lat: cached.lat, lng: cached.lng, follow: true });
-          postToMap({ type: "setView", lat: cached.lat, lng: cached.lng, zoom: 18 });
+        pushChromeInset();
+        if (!(review && review.length > 1)) {
+          const cached = lastFixRef.current ?? readStoredFix();
+          if (cached) {
+            postToMap({ type: "setLive", lat: cached.lat, lng: cached.lng, follow: true });
+            postToMap({ type: "setView", lat: cached.lat, lng: cached.lng, zoom: 18 });
+          }
+          locate(true);
         }
-        locate(true);
       }
       if (type === "open-layers") setLayersOpen(true);
       if (type === "toggle-3d") setIs3d(Boolean(event.data.on));
       if (type === "user-pan") followMapRef.current = false;
-      if (type === "locate-request") {
+      if (type === "locate-request" || type === "geo-error") {
         followMapRef.current = true;
         locate(true);
       }
@@ -450,17 +507,20 @@ export function StudentActivitySection({
   useEffect(() => {
     const mapEl = iframeRef.current?.parentElement;
     const dockEl = dockRef.current;
-    if (typeof ResizeObserver === "undefined") return;
-    const push = () => {
-      postToMap({ type: "resize" });
-      const bottom = dockEl ? Math.round(dockEl.getBoundingClientRect().height) : 0;
-      postToMap({ type: "setChromeInset", bottom: bottom + 16 });
-    };
-    const ro = new ResizeObserver(push);
-    if (mapEl) ro.observe(mapEl);
-    if (dockEl) ro.observe(dockEl);
+    const push = () => pushChromeInset();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(push) : null;
+    if (ro && mapEl) ro.observe(mapEl);
+    if (ro && dockEl) ro.observe(dockEl);
+    window.addEventListener("resize", push);
+    window.visualViewport?.addEventListener("resize", push);
     push();
-    return () => ro.disconnect();
+    const raf = window.requestAnimationFrame(push);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", push);
+      window.visualViewport?.removeEventListener("resize", push);
+      window.cancelAnimationFrame(raf);
+    };
   }, [running, paused]);
   useEffect(() => {
     postToMap({ type: "setActivityMap", mode: activityMap });
@@ -474,7 +534,13 @@ export function StudentActivitySection({
   }, [is3d]);
   useEffect(() => {
     if (running || paused) {
-      postToMap({ type: "setTrack", points, fit: !running && !paused });
+      paintTrack(points, !running && !paused);
+      return;
+    }
+    const review = reviewTrackRef.current;
+    if (review && review.length > 1) {
+      postToMap({ type: "setFollow", on: false });
+      postToMap({ type: "setTrack", points: review, fit: true });
       return;
     }
     postToMap({ type: "setTrack", points: [], fit: false });
@@ -516,7 +582,11 @@ export function StudentActivitySection({
   function applyUserFix(lat: number, lng: number, follow: boolean) {
     lastFixRef.current = { lat, lng };
     persistFix(lat, lng);
-    postToMap({ type: "setLive", lat, lng, follow: followMapRef.current });
+    if (follow) {
+      followMapRef.current = true;
+      postToMap({ type: "setFollow", on: true });
+    }
+    postToMap({ type: "setLive", lat, lng, follow: follow || followMapRef.current });
     if (follow) postToMap({ type: "setView", lat, lng, zoom: 18 });
   }
 
@@ -550,23 +620,56 @@ export function StudentActivitySection({
     }
 
     const onOk = (pos: GeolocationPosition) => {
+      setError(null);
       const fix = fixFromGeolocation(pos);
       applyUserFix(fix.lat, fix.lng, follow);
       refreshAroundFix(fix.lat, fix.lng);
     };
 
-    navigator.geolocation.getCurrentPosition(
-      onOk,
-      () => {
-        navigator.geolocation.getCurrentPosition(
-          onOk,
-          () => {
-            if (!lastFixRef.current) setError("Permita a localização para iniciar o GPS.");
-          },
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-        );
+    const onErr = (err: GeolocationPositionError) => {
+      if (cached) return;
+      if (err.code === err.PERMISSION_DENIED) {
+        setError("Permita a localização para o mapa encontrar você.");
+        return;
+      }
+      setError("Não foi possível obter sua localização. Toque no botão de centralizar.");
+    };
+
+    navigator.geolocation.getCurrentPosition(onOk, () => {
+      navigator.geolocation.getCurrentPosition(onOk, onErr, {
+        enableHighAccuracy: true,
+        timeout: 20_000,
+        maximumAge: 0
+      });
+    }, {
+      enableHighAccuracy: true,
+      timeout: 12_000,
+      maximumAge: 0
+    });
+  }
+
+  function stopIdleWatch() {
+    if (idleWatchRef.current != null) {
+      navigator.geolocation.clearWatch(idleWatchRef.current);
+      idleWatchRef.current = null;
+    }
+  }
+
+  function startIdleWatch() {
+    if (!navigator.geolocation || idleWatchRef.current != null || watchRef.current != null) return;
+    idleWatchRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (watchRef.current != null) return;
+        if (reviewTrackRef.current && reviewTrackRef.current.length > 1) return;
+        const fix = fixFromGeolocation(pos);
+        applyUserFix(fix.lat, fix.lng, followMapRef.current);
       },
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60_000 }
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED && !lastFixRef.current) {
+          setError("Permita a localização para o mapa encontrar você.");
+        }
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20_000 }
     );
   }
 
@@ -605,20 +708,50 @@ export function StudentActivitySection({
     return batch;
   }
 
+  async function matchRoadsLive() {
+    if (matchBusyRef.current || pauseHoldRef.current || finishingRef.current || sessionClosedRef.current) return;
+    const route = pointsRef.current;
+    if (route.length < 8) return;
+    matchBusyRef.current = true;
+    try {
+      const data = await apiPost<{
+        matched?: boolean;
+        points?: Array<{ lat: number; lng: number; t?: number; ele?: number | null }>;
+      }>("/student/activities/match-roads", { sport: sportRef.current, points: sampleTrack(route, 96) }, token);
+      if (!data.matched || !Array.isArray(data.points) || data.points.length < 2) return;
+      lastMatchedRef.current = data.points.map((point) => ({
+        lat: point.lat,
+        lng: point.lng,
+        t: point.t ?? Date.now(),
+        ele: point.ele,
+        accuracy: 8
+      }));
+      setRoadMatched(true);
+      paintTrack(pointsRef.current, false);
+    } catch {
+      /* matching é best-effort — o finish ainda tenta de novo */
+    } finally {
+      matchBusyRef.current = false;
+    }
+  }
+
   function applyTrack(route: GpsPoint[], fit = false) {
     setPoints(route);
     if (!route.length) {
       pipelineRef.current.reset();
+      lastMatchedRef.current = null;
+      setRoadMatched(false);
       postToMap({ type: "setTrack", points: [], fit });
       return;
     }
     const last = route[route.length - 1];
     pipelineRef.current.warmStart(last.lat, last.lng, last.t);
-    postToMap({ type: "setTrack", points: route, fit });
+    paintTrack(route, fit);
     postToMap({ type: "setLive", lat: last.lat, lng: last.lng, follow: followMapRef.current });
   }
 
   function startWatch(id: string) {
+    stopIdleWatch();
     stopWatch();
     if (!navigator.geolocation) return;
     followMapRef.current = true;
@@ -646,7 +779,7 @@ export function StudentActivitySection({
             lng: point.lng,
             follow: followMapRef.current
           });
-          postToMap({ type: "setTrack", points: next, fit: false });
+          paintTrack(next, false);
           if (lapMarkerRef.current) {
             const crossing = updateLapCrossing(lapMarkerRef.current, point, { away: lapAwayRef.current, count: 0 });
             lapAwayRef.current = crossing.away;
@@ -689,7 +822,88 @@ export function StudentActivitySection({
     );
   }
 
-  useEffect(() => () => stopWatch(), []);
+  useEffect(() => () => {
+    stopWatch();
+    stopIdleWatch();
+  }, []);
+
+  useEffect(() => {
+    if (running || paused || finishStats) {
+      stopIdleWatch();
+      return;
+    }
+    locate(true);
+    startIdleWatch();
+    return () => stopIdleWatch();
+  }, [running, paused, finishStats]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    let cancelled = false;
+    async function requestWake() {
+      try {
+        const nav = navigator as Navigator & {
+          wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> };
+        };
+        if (!running || !nav.wakeLock) return;
+        const lock = await nav.wakeLock.request("screen");
+        if (cancelled) {
+          void lock.release();
+          return;
+        }
+        wakeLockRef.current = lock;
+      } catch {
+        /* sem permissão / desktop sem Wake Lock */
+      }
+    }
+    if (!running) {
+      void wakeLockRef.current?.release();
+      wakeLockRef.current = null;
+      return;
+    }
+    void requestWake();
+    const onVis = () => {
+      if (document.visibilityState === "visible") void requestWake();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVis);
+      void wakeLockRef.current?.release();
+      wakeLockRef.current = null;
+    };
+  }, [running]);
+
+  useEffect(() => {
+    if (!running || !activity) return;
+    const timer = window.setInterval(() => {
+      if (bufferRef.current.length) void flushPoints(activity.id);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [running, activity?.id]);
+
+  useEffect(() => {
+    const flushHidden = () => {
+      const id = activityIdRef.current;
+      if (!id || !bufferRef.current.length) return;
+      void flushPoints(id);
+    };
+    const onHide = () => flushHidden();
+    const onVis = () => {
+      if (document.visibilityState === "hidden") flushHidden();
+    };
+    window.addEventListener("pagehide", onHide);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [token]);
+
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => void matchRoadsLive(), 8000);
+    return () => window.clearInterval(timer);
+  }, [running, token]);
 
   function captureLockedMetrics(route: GpsPoint[]): ActivityShareStats {
     const dist = liveDistance(route);
@@ -715,7 +929,7 @@ export function StudentActivitySection({
       elapsedSeconds: timeSec,
       paceSecPerKm: paceSec,
       speedKmh: liveSpeedKmh(route),
-      calories: estimateCalories(sport, timeSec),
+      calories: estimateCalories(sport, timeSec, athleteKg),
       elevationGainMeters: elev.gain,
       elevationLossMeters: elev.loss,
       mapType,
@@ -727,8 +941,26 @@ export function StudentActivitySection({
     };
   }
 
+  function paintFinishedTrack(route: Array<{ lat: number; lng: number; t?: number; ele?: number | null }>) {
+    const review: GpsPoint[] = route
+      .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
+      .map((point, index) => ({
+        lat: point.lat,
+        lng: point.lng,
+        t: Number.isFinite(point.t) ? Number(point.t) : index,
+        ele: point.ele ?? null
+      }));
+    reviewTrackRef.current = review;
+    followMapRef.current = false;
+    postToMap({ type: "setFollow", on: false });
+    postToMap({ type: "setTrack", points: review, fit: review.length > 1 });
+  }
+
   function clearSessionRoute() {
     bufferRef.current = [];
+    lastMatchedRef.current = null;
+    reviewTrackRef.current = null;
+    setRoadMatched(false);
     setPoints([]);
     pipelineRef.current.reset();
     postToMap({ type: "setTrack", points: [], fit: false });
@@ -994,6 +1226,17 @@ export function StudentActivitySection({
     setFinishSplits(splits);
     setFinishAnalysis(result.activity?.splitsAnalysis ?? null);
     setBestEfforts(result.activity?.bestEfforts ?? []);
+    const matchedPoly = Array.isArray(result.activity?.polyline) ? result.activity.polyline : [];
+    const finishPoints =
+      result.activity?.roadMatched && matchedPoly.length
+        ? matchedPoly.map((point) => ({
+            lat: point.lat,
+            lng: point.lng,
+            t: point.t ?? Date.now(),
+            ele: point.ele
+          }))
+        : route;
+    if (result.activity?.roadMatched) setRoadMatched(true);
     setFinishStats({
       sportLabel: SPORTS.find((item) => item.id === sport)?.label ?? sport,
       sport,
@@ -1008,13 +1251,14 @@ export function StudentActivitySection({
       calories: result.activity?.calories ?? locked?.calories,
       mapType,
       is3d,
-      points: route,
+      points: finishPoints,
       lapsCount: laps.length,
       kmIndex: liveSplit.kmIndex,
       kmPaceSecPerKm: liveSplit.paceSecPerKm
     });
     setPendingFeedNav(Boolean(publish && result.moderation?.published !== false));
     await resetAfterFinish();
+    paintFinishedTrack(finishPoints);
   }
 
   async function resetAfterFinish() {
@@ -1042,7 +1286,7 @@ export function StudentActivitySection({
     setGoalsOpen(false);
     setLayersOpen(false);
     pipelineRef.current.reset();
-    clearSessionRoute();
+    /* mantém o traçado no mapa até Nova atividade */
   }
 
   function dismissFinishSplits(goToFeed = false) {
@@ -1148,6 +1392,7 @@ export function StudentActivitySection({
     if (next !== sport) {
       stopWatch();
       bufferRef.current = [];
+      reviewTrackRef.current = null;
       setPoints([]);
       setElapsed(0);
       setLaps([]);
@@ -1170,6 +1415,7 @@ export function StudentActivitySection({
       lapAwayRef.current = false;
       bufferRef.current = [];
       pipelineRef.current.reset();
+      reviewTrackRef.current = null;
       postToMap({ type: "setTrack", points: [], fit: false });
       postToMap({ type: "setLaps", laps: [] });
     }
@@ -1202,7 +1448,11 @@ export function StudentActivitySection({
           ref={iframeRef}
           title="Mapa da atividade"
           src={ACTIVITY_MAP_SRC}
-          onLoad={() => pushMapsConfig()}
+          allow="geolocation *; fullscreen *"
+          onLoad={() => {
+            pushMapsConfig();
+            pushChromeInset();
+          }}
         />
         {weather ? (
           <div className="student-activity-weather">
@@ -1222,6 +1472,9 @@ export function StudentActivitySection({
           <div className="student-activity-map-chip" aria-hidden>
             Pausado
           </div>
+        ) : null}
+        {roadMatched && (running || paused) ? (
+          <div className="student-activity-map-chip is-via">Na via</div>
         ) : null}
       </div>
 
@@ -1290,8 +1543,8 @@ export function StudentActivitySection({
               <strong>{`${Math.round(shownElev)} m`}</strong>
             </div>
             <div>
-              <small>{sport === "WALK" || sport === "RUN" ? "Passos" : "Cadência"}</small>
-              <strong>—</strong>
+              <small>Via</small>
+              <strong>{roadMatched ? "OK" : "GPS"}</strong>
             </div>
           </div>
           <div className="student-activity-controls">

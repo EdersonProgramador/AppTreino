@@ -9,12 +9,14 @@
       .fab-stack {
         position: absolute;
         right: 12px;
-        bottom: 16px;
+        bottom: clamp(220px, 34vh, 380px);
         top: auto;
         transform: none;
         display: grid;
         gap: 10px;
-        z-index: 4;
+        z-index: 8;
+        transition: bottom 180ms ease;
+        pointer-events: auto;
       }
       .fab, .fab-3d {
         width: 44px;
@@ -128,6 +130,7 @@
       ];
 
       const LAST_GPS_KEY = "apptreino.lastGps";
+      const LAST_GPS_MAX_AGE_MS = 30 * 60 * 1000;
 
       function readCachedCenter() {
         try {
@@ -136,7 +139,9 @@
           const parsed = JSON.parse(raw);
           const lat = Number(parsed.lat);
           const lng = Number(parsed.lng);
+          const t = Number(parsed.t);
           if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+          if (Number.isFinite(t) && Date.now() - t > LAST_GPS_MAX_AGE_MS) return null;
           return { lat: lat, lng: lng };
         } catch (e) {
           return null;
@@ -376,9 +381,14 @@
         } else {
           liveMarker.setPosition(pos);
         }
+        if (follow) {
+          state.follow = true;
+          state.userInteracting = false;
+        }
         const shouldFollow = follow !== false && state.follow && !state.userInteracting;
         if (shouldFollow) {
           map.panTo(pos);
+          if (map.getZoom() < 16.5) map.setZoom(18);
           if (state.is3d) applyCamera3d();
         }
       }
@@ -483,6 +493,10 @@
           bootGoogleMaps(msg.key || API_KEY, msg.mapId != null ? msg.mapId : MAP_ID);
           return;
         }
+        if (msg.type === "setChromeInset") {
+          const bottom = Math.max(16, Number(msg.bottom) || 16);
+          document.getElementById("fabs").style.bottom = bottom + "px";
+        }
         if (!map) return;
         if (msg.type === "init" || msg.type === "setView") {
           const lat = Number(msg.lat);
@@ -552,7 +566,10 @@
       };
 
       function bootUserLocation(highAccuracy) {
-        if (!navigator.geolocation) return;
+        if (!navigator.geolocation) {
+          emit({ type: "geo-error", reason: "unsupported" });
+          return;
+        }
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             const lat = pos.coords.latitude;
@@ -564,10 +581,16 @@
             map.setCenter({ lat, lng });
             map.setZoom(18);
           },
-          () => undefined,
+          (err) => {
+            if (highAccuracy) {
+              emit({ type: "geo-error", reason: err && err.code === 1 ? "denied" : "unavailable" });
+              return;
+            }
+            bootUserLocation(true);
+          },
           highAccuracy
             ? { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-            : { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+            : { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
         );
       }
 
@@ -607,7 +630,7 @@
 
         restoreOverlays();
         if (cached) setLive(cached.lat, cached.lng, false);
-        bootUserLocation(false);
+        bootUserLocation(true);
         if (!readyEmitted) {
           readyEmitted = true;
           emit({ type: "ready" });
