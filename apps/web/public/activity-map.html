@@ -460,15 +460,26 @@
           }
         });
         ensureLayer({
+          id: "track-case",
+          type: "line",
+          source: "track",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": "#ffffff",
+            "line-opacity": 0.95,
+            "line-width": ["interpolate", ["linear"], ["zoom"], 12, 6, 16, 10, 20, 14]
+          }
+        });
+        ensureLayer({
           id: "track-glow",
           type: "line",
           source: "track",
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
             "line-color": "#2f7dff",
-            "line-opacity": 0.28,
-            "line-blur": 0.6,
-            "line-width": ["interpolate", ["linear"], ["zoom"], 12, 6, 16, 12, 20, 18]
+            "line-opacity": 0.5,
+            "line-blur": 0.8,
+            "line-width": ["interpolate", ["linear"], ["zoom"], 12, 7, 16, 13, 20, 18]
           }
         });
         ensureLayer({
@@ -478,8 +489,8 @@
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
             "line-color": "#2f7dff",
-            "line-opacity": 0.96,
-            "line-width": ["interpolate", ["linear"], ["zoom"], 12, 3, 16, 5, 20, 8]
+            "line-opacity": 1,
+            "line-width": ["interpolate", ["linear"], ["zoom"], 12, 4, 16, 6.5, 20, 10]
           }
         });
         ensureLayer({
@@ -499,6 +510,28 @@
           map.setPaintProperty("heat-lines-layer", "line-color", night ? "#7ee0ff" : "#3d9bff");
           map.setPaintProperty("heat-cells-layer", "circle-color", night ? "#7ee0ff" : "#ff7a3d");
         }
+        paintTrackLine();
+      }
+
+      function paintTrackLine() {
+        if (!map) return;
+        if (map.getLayer("track-case")) {
+          map.setPaintProperty("track-case", "line-color", "#ffffff");
+          map.setPaintProperty("track-case", "line-opacity", 0.95);
+        }
+        if (map.getLayer("track-glow")) {
+          map.setPaintProperty("track-glow", "line-color", "#2f7dff");
+          map.setPaintProperty("track-glow", "line-opacity", 0.5);
+        }
+        if (map.getLayer("track-line")) {
+          map.setPaintProperty("track-line", "line-color", "#2f7dff");
+          map.setPaintProperty("track-line", "line-opacity", 1);
+        }
+        ["track-case", "track-glow", "track-line"].forEach(function (id) {
+          try {
+            if (map.getLayer(id)) map.setPaintProperty(id, "line-emissive-strength", 1);
+          } catch (e) {}
+        });
       }
 
       function applyMapboxOverlays() {
@@ -577,6 +610,7 @@
       function setTrack(points, fit) {
         state.track = points || [];
         setData("track", lineCollection(state.track));
+        paintTrackLine();
         const coords = state.track.map(toLngLat).filter(validLngLat);
         if (fit && coords.length > 1 && map) {
           const bounds = coords.reduce(function (b, c) {

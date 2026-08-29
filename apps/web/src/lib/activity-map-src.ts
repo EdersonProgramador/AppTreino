@@ -1,7 +1,7 @@
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || "";
 const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 const GOOGLE_MAPS_MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || "";
-const MAP_ASSET_VERSION = "sport-icons-5";
+const MAP_ASSET_VERSION = "track-blue-1";
 
 export function activityMapSrc() {
   if (MAPBOX_TOKEN) return `/activity-map.html?v=${MAP_ASSET_VERSION}`;

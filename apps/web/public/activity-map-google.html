@@ -175,6 +175,7 @@
       let map = null;
       let trackLine = null;
       let trackGlow = null;
+      let trackCase = null;
       let liveMarker = null;
       let lapCircle = null;
       let lapStartMarker = null;
@@ -292,14 +293,24 @@
       function setTrack(points, fit) {
         state.track = points || [];
         const path = state.track.map(toLatLng).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+        if (!trackCase) {
+          trackCase = new google.maps.Polyline({
+            map,
+            path: [],
+            strokeColor: "#ffffff",
+            strokeOpacity: 0.95,
+            strokeWeight: 10,
+            zIndex: 2
+          });
+        }
         if (!trackGlow) {
           trackGlow = new google.maps.Polyline({
             map,
             path: [],
             strokeColor: "#2f7dff",
-            strokeOpacity: 0.28,
+            strokeOpacity: 0.45,
             strokeWeight: 12,
-            zIndex: 2
+            zIndex: 3
           });
         }
         if (!trackLine) {
@@ -307,13 +318,15 @@
             map,
             path: [],
             strokeColor: "#2f7dff",
-            strokeOpacity: 0.95,
-            strokeWeight: 5,
-            zIndex: 3
+            strokeOpacity: 1,
+            strokeWeight: 6,
+            zIndex: 4
           });
         }
+        trackCase.setPath(path);
         trackGlow.setPath(path);
         trackLine.setPath(path);
+        trackLine.setOptions({ strokeColor: "#2f7dff", strokeOpacity: 1 });
         if (fit && path.length > 1) {
           const bounds = new google.maps.LatLngBounds();
           path.forEach((p) => bounds.extend(p));

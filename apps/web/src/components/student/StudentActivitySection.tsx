@@ -80,6 +80,7 @@ type GpsPoint = { lat: number; lng: number; t: number; ele?: number | null; accu
 type ActivityShareStats = {
   sportLabel: string;
   sport: OutdoorSport;
+  gender?: "MALE" | "FEMALE" | null;
   distanceMeters: number;
   elapsedSeconds: number;
   paceSecPerKm: number | null;
@@ -135,7 +136,29 @@ function compactRecord<T extends Record<string, unknown>>(value: T) {
   return next;
 }
 
-function SharePreview({ stats, photoUrl }: { stats: ActivityShareStats; photoUrl?: string | null }) {
+function ShareSportIcon({
+  sport,
+  gender,
+  size = 22
+}: {
+  sport: OutdoorSport;
+  gender?: "MALE" | "FEMALE" | null;
+  size?: number;
+}) {
+  if (sport === "RUN") return <RunnerIcon size={size} gender={gender} />;
+  if (sport === "RIDE") return <BikeIcon size={size} />;
+  return <Footprints size={size} />;
+}
+
+function SharePreview({
+  stats,
+  photoUrl,
+  title
+}: {
+  stats: ActivityShareStats;
+  photoUrl?: string | null;
+  title?: string;
+}) {
   const isRide = stats.sport === "RIDE";
   const speedLabel = stats.speedKmh && stats.speedKmh > 0 ? `${stats.speedKmh.toFixed(1)} km/h` : "—";
   const motionLabel = isRide ? "Pedaladas" : "Passos";
@@ -143,7 +166,18 @@ function SharePreview({ stats, photoUrl }: { stats: ActivityShareStats; photoUrl
   return (
     <>
       {photoUrl ? <img src={photoUrl} alt="" /> : null}
-      <ActivityRoutePreview points={stats.points} mapType={stats.mapType} is3d={stats.is3d} />
+      <div className="student-activity-share-sport">
+        <ShareSportIcon sport={stats.sport} gender={stats.gender} />
+        <strong>{title ?? stats.sportLabel}</strong>
+      </div>
+      <div className="student-activity-share-map-host">
+        <ActivityRoutePreview points={stats.points} mapType={stats.mapType} is3d={stats.is3d} />
+        {stats.points.length >= 2 ? (
+          <span className="student-activity-share-sport-badge" aria-hidden>
+            <ShareSportIcon sport={stats.sport} gender={stats.gender} size={16} />
+          </span>
+        ) : null}
+      </div>
       <div className="student-activity-share-metrics">
         <span><em>Distância</em>{formatKm(stats.distanceMeters)} km</span>
         <span><em>Tempo</em>{formatClock(stats.elapsedSeconds)}</span>
@@ -1013,6 +1047,7 @@ export function StudentActivitySection({
     return {
       sportLabel: SPORTS.find((item) => item.id === sport)?.label ?? sport,
       sport,
+      gender: athleteGender,
       distanceMeters: dist,
       elapsedSeconds: timeSec,
       paceSecPerKm: paceSec,
@@ -1342,6 +1377,7 @@ export function StudentActivitySection({
     setFinishStats({
       sportLabel: SPORTS.find((item) => item.id === sport)?.label ?? sport,
       sport,
+      gender: athleteGender,
       distanceMeters: result.activity?.distanceMeters ?? locked?.distanceMeters ?? distance,
       elapsedSeconds: result.activity?.durationSeconds ?? result.activity?.elapsedSeconds ?? shownElapsed,
       paceSecPerKm: result.activity?.avgPaceSecPerKm ?? locked?.paceSecPerKm ?? pace,
@@ -1851,8 +1887,11 @@ export function StudentActivitySection({
               <>
                 <div className="student-activity-share-card">
                   <small>App Treino Social</small>
-                  <strong>{shareStats.sportLabel.toUpperCase()} CONCLUÍDA</strong>
-                  <SharePreview stats={shareStats} photoUrl={photoUrl} />
+                  <SharePreview
+                    stats={shareStats}
+                    photoUrl={photoUrl}
+                    title={`${shareStats.sportLabel.toUpperCase()} CONCLUÍDA`}
+                  />
                 </div>
                 <textarea
                   value={caption}
@@ -1918,7 +1957,6 @@ export function StudentActivitySection({
           </header>
           <div className="student-activity-saved-card">
             <small>App Treino · Outdoor</small>
-            <h3>{finishStats.sportLabel}</h3>
             <SharePreview stats={finishStats} />
             <button type="button" className="student-green-button" onClick={() => void shareNative(finishStats)}>
               <Share2 size={16} /> Compartilhar

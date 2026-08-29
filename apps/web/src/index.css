@@ -23852,6 +23852,71 @@ html.light .student-activity-side {
   border-radius: 14px;
 }
 
+.student-activity-share-sport {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  justify-self: center;
+}
+
+.student-activity-share-sport strong,
+.student-activity-share-sport h3 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.student-activity-share-sport svg,
+.student-activity-share-sport .runner-gender-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  color: #df663c;
+}
+
+.student-activity-saved-card .student-activity-share-sport {
+  justify-self: start;
+}
+
+.student-activity-saved-card .student-activity-share-sport strong {
+  font-size: 22px;
+  color: #15100b;
+}
+
+.student-activity-saved-card .student-activity-share-sport svg,
+.student-activity-saved-card .student-activity-share-sport .runner-gender-icon {
+  color: #df663c;
+}
+
+.student-activity-share-map-host {
+  position: relative;
+}
+
+.student-activity-share-sport-badge {
+  position: absolute;
+  z-index: 3;
+  top: 8px;
+  left: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #2f7dff;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  pointer-events: none;
+}
+
+.student-activity-share-sport-badge svg,
+.student-activity-share-sport-badge .runner-gender-icon {
+  width: 16px;
+  height: 16px;
+  color: #fff;
+}
+
 .student-activity-share-map {
   position: relative;
   width: 100%;

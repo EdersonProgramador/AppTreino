@@ -92,7 +92,8 @@ export function ActivityRoutePreview({
   return (
     <div className="student-activity-share-map">
       <svg viewBox={`0 0 ${svg.w} ${svg.h}`} aria-hidden className="student-activity-share-map-svg">
-        <path d={svg.d} fill="none" stroke="#2f7dff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={svg.d} fill="none" stroke="#ffffff" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={svg.d} fill="none" stroke="#2f7dff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
         <circle cx={sx} cy={sy} r="5" fill="#2f7dff" stroke="#fff" strokeWidth="1.5" />
         <circle cx={ex} cy={ey} r="5" fill="#df663c" stroke="#fff" strokeWidth="1.5" />
       </svg>
