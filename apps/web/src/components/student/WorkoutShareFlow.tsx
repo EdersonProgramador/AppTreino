@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Ref } from "react";
+import { useEffect, useRef, useState } from "react";
 import html2canvas from "html2canvas";
 import {
   Camera,
@@ -12,9 +12,9 @@ import {
 } from "lucide-react";
 import { apiUpload } from "../../api";
 import { blobToBase64, isNativeAppShell, postNativeMessage } from "../../lib/native-bridge";
-import { mediaUrl } from "../../lib/urls";
 import { uiSounds } from "../../lib/ui-sounds";
 import { isVideoFile, VIDEO_FILE_ACCEPT } from "../../lib/video-formats";
+import { WorkoutSharePreview } from "./WorkoutSharePreview";
 
 type ShareStep = "choose" | "photo" | "camera" | "ready";
 type ShareModel = "simple" | "photo";
@@ -52,62 +52,6 @@ function sharePageUrl() {
 
 function stopMediaStream(stream: MediaStream | null) {
   stream?.getTracks().forEach((track) => track.stop());
-}
-
-function SharePreviewCard({
-  programTitle,
-  blockTitle,
-  exerciseCount,
-  durationLabel,
-  photoUrl,
-  videoUrl,
-  cardRef
-}: {
-  programTitle: string;
-  blockTitle: string;
-  exerciseCount: number;
-  durationLabel: string;
-  photoUrl: string | null;
-  videoUrl: string | null;
-  cardRef: Ref<HTMLDivElement>;
-}) {
-  return (
-    <div className="runner-share-card" data-testid="workout-share-card" ref={cardRef}>
-      <span className="runner-share-card-badge">App Treino Social</span>
-      <h3>O TREINO DE HOJE ESTÁ PAGO!</h3>
-      {photoUrl ? (
-        <div className="runner-share-card-photo">
-          <img src={mediaUrl(photoUrl)} alt="Sua foto do treino" />
-        </div>
-      ) : videoUrl ? (
-        <div className="runner-share-card-photo">
-          <video src={mediaUrl(videoUrl)} playsInline muted controls />
-        </div>
-      ) : (
-        <div className="runner-share-card-mark" aria-hidden="true">
-          <Trophy size={42} />
-        </div>
-      )}
-      <dl className="runner-share-card-stats">
-        <div>
-          <dt>Programa</dt>
-          <dd>{programTitle}</dd>
-        </div>
-        <div>
-          <dt>Treino</dt>
-          <dd>{blockTitle}</dd>
-        </div>
-        <div>
-          <dt>Exercícios</dt>
-          <dd>{exerciseCount}</dd>
-        </div>
-        <div>
-          <dt>Tempo</dt>
-          <dd>{durationLabel}</dd>
-        </div>
-      </dl>
-    </div>
-  );
 }
 
 export function WorkoutShareFlow({
@@ -439,7 +383,7 @@ export function WorkoutShareFlow({
   }
 
   const previewCard = (
-    <SharePreviewCard
+    <WorkoutSharePreview
       blockTitle={blockTitle}
       cardRef={cardRef}
       durationLabel={durationLabel}

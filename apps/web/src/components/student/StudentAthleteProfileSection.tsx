@@ -3,11 +3,12 @@ import { FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 
 import { createPortal } from "react-dom";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { brand } from "../../lib/brand";
-import { formatClock } from "../../lib/activity-geo";
 import { mediaUrl, retryVideoAsCompatible } from "../../lib/urls";
 import { shareSocialPost } from "../../lib/share-social-post";
 import { uiSounds } from "../../lib/ui-sounds";
 import type { SocialPostRow, StudentProfile, UploadResponse } from "../../types";
+import { ActivityShareCard, activitySharePhotoUrl, activityShareStatsFromRow, activityShareTitle } from "./ActivityShareCard";
+import { FeedWorkoutShareCard } from "./WorkoutSharePreview";
 
 const COVER_COLORS = [
   "#c4783a",
@@ -577,27 +578,18 @@ export function StudentAthleteProfileSection({
                     </div>
                   </header>
                   {post.body ? <p>{post.body}</p> : null}
-                  {post.workout ? (
-                    <div className="student-feed-workout">
-                      <strong>{post.workout.blockTitle}</strong>
-                      <small>{post.workout.programTitle}</small>
-                      <div className="student-feed-activity-stats">
-                        <span>
-                          <strong>{formatClock(post.workout.durationSeconds)}</strong>
-                          tempo
-                        </span>
-                        <span>
-                          <strong>{post.workout.exerciseCount}</strong>
-                          exercícios
-                        </span>
-                        <span>
-                          <strong>{post.workout.dayNumber}</strong>
-                          dia
-                        </span>
-                      </div>
+                  {post.activity ? (
+                    <div className="student-activity-share-card student-feed-activity-card">
+                      <small>App Treino Social</small>
+                      <ActivityShareCard
+                        stats={activityShareStatsFromRow(post.activity)}
+                        photoUrl={activitySharePhotoUrl(post)}
+                        title={activityShareTitle(post.activity)}
+                      />
                     </div>
                   ) : null}
-                  <ViewerCarousel key={post.id} items={mediaOf(post)} />
+                  {post.workout ? <FeedWorkoutShareCard post={post} /> : null}
+                  <ViewerCarousel key={post.id} items={post.activity || post.workout ? [] : mediaOf(post)} />
                   <footer>
                     <button
                       type="button"

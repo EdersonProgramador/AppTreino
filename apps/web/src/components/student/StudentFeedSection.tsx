@@ -23,8 +23,6 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { apiDelete, apiGet, apiPost, apiUpload } from "../../api";
 import { mediaUrl, retryVideoAsCompatible } from "../../lib/urls";
-import { formatClock, formatKm, formatPace } from "../../lib/activity-geo";
-import { activityMapSrc, mapsConfigMessage } from "../../lib/activity-map-src";
 import { readFeedCache, writeFeedCache } from "../../lib/feed-cache";
 import { useFeedChromeStore } from "../../stores/feedChromeStore";
 import { brand } from "../../lib/brand";
@@ -39,6 +37,8 @@ import type {
   UploadResponse
 } from "../../types";
 import { StudentCameraCapture } from "./StudentCameraCapture";
+import { ActivityShareCard, activitySharePhotoUrl, activityShareStatsFromRow, activityShareTitle } from "./ActivityShareCard";
+import { FeedWorkoutShareCard } from "./WorkoutSharePreview";
 import { VideoCoverPicker } from "./VideoCoverPicker";
 import { StoryViewer } from "./StoryViewer";
 import { assertStoryVideoWithinLimit } from "../../lib/video-cover";
@@ -99,120 +99,17 @@ function liveIdFromPost(post: { mediaType?: string | null; mediaUrl?: string | n
   return null;
 }
 
-function ActivityMiniMap({ post }: { post: SocialPostRow }) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+function FeedActivityCard({ post }: { post: SocialPostRow }) {
   const activity = post.activity;
-  useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe || !activity) return;
-    const send = () => {
-      const config = mapsConfigMessage();
-      if (config) iframe.contentWindow?.postMessage(config, "*");
-      iframe.contentWindow?.postMessage({ type: "showControls", on: false }, "*");
-      iframe.contentWindow?.postMessage({ type: "setFollow", on: false }, "*");
-      iframe.contentWindow?.postMessage(
-        { type: "setSport", sport: activity.sport, gender: "MALE" },
-        "*"
-      );
-      iframe.contentWindow?.postMessage({ type: "setTrack", points: activity.polyline, fit: true }, "*");
-      const last = Array.isArray(activity.polyline) ? activity.polyline[activity.polyline.length - 1] : null;
-      if (last && Number.isFinite(last.lat) && Number.isFinite(last.lng)) {
-        iframe.contentWindow?.postMessage(
-          {
-            type: "setLive",
-            lat: last.lat,
-            lng: last.lng,
-            follow: false,
-            sport: activity.sport,
-            gender: "MALE"
-          },
-          "*"
-        );
-      }
-      if (activity.mapType) {
-        iframe.contentWindow?.postMessage({ type: "setMapType", mapType: activity.mapType }, "*");
-      }
-      iframe.contentWindow?.postMessage({ type: "set3d", on: Boolean(activity.is3d) }, "*");
-    };
-    iframe.addEventListener("load", send);
-    const onMsg = (event: MessageEvent) => {
-      if (event.source !== iframe.contentWindow) return;
-      if (event.data?.type === "ready") send();
-    };
-    window.addEventListener("message", onMsg);
-    return () => {
-      iframe.removeEventListener("load", send);
-      window.removeEventListener("message", onMsg);
-    };
-  }, [activity]);
   if (!activity) return null;
   return (
-    <div className="student-feed-map">
-      <div className="student-feed-map-frame">
-        <iframe ref={iframeRef} title="Percurso" src={activityMapSrc({ preview: true })} />
-      </div>
-      <div className="student-feed-activity-stats">
-        <span>
-          <strong>{formatKm(activity.distanceMeters)}</strong>
-          km
-        </span>
-        <span>
-          <strong>{formatClock(activity.elapsedSeconds)}</strong>
-          tempo
-        </span>
-        <span>
-          <strong>
-            {activity.sport === "RIDE" && activity.avgSpeedMps
-              ? `${(activity.avgSpeedMps * 3.6).toFixed(1)}`
-              : formatPace(activity.avgPaceSecPerKm)}
-          </strong>
-          {activity.sport === "RIDE" && activity.avgSpeedMps ? "km/h" : "/km"}
-        </span>
-        <span>
-          <strong>{activity.calories}</strong>
-          kcal
-        </span>
-        <span>
-          <strong>{Math.round(activity.elevationGainMeters ?? 0)}</strong>
-          m ↑
-        </span>
-        {activity.estimatedPowerWatts != null ? (
-          <span>
-            <strong>{Math.round(activity.estimatedPowerWatts)}</strong>
-            W
-          </span>
-        ) : activity.stepsCount ? (
-          <span>
-            <strong>{activity.stepsCount}</strong>
-            passos
-          </span>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function WorkoutShareCard({ post }: { post: SocialPostRow }) {
-  const workout = post.workout;
-  if (!workout) return null;
-  return (
-    <div className="student-feed-workout">
-      <strong>{workout.blockTitle}</strong>
-      <small>{workout.programTitle}</small>
-      <div className="student-feed-activity-stats">
-        <span>
-          <strong>{formatClock(workout.durationSeconds)}</strong>
-          tempo
-        </span>
-        <span>
-          <strong>{workout.exerciseCount}</strong>
-          exercícios
-        </span>
-        <span>
-          <strong>{workout.dayNumber}</strong>
-          dia
-        </span>
-      </div>
+    <div className="student-activity-share-card student-feed-activity-card">
+      <small>App Treino Social</small>
+      <ActivityShareCard
+        stats={activityShareStatsFromRow(activity)}
+        photoUrl={activitySharePhotoUrl(post)}
+        title={activityShareTitle(activity)}
+      />
     </div>
   );
 }
@@ -1297,8 +1194,8 @@ export function StudentFeedSection({
                 </div>
               </header>
               {post.body && !isLiveCard && <p>{renderPostBody(post.body)}</p>}
-              {post.kind === "ACTIVITY" && <ActivityMiniMap post={post} />}
-              {post.kind === "WORKOUT" && <WorkoutShareCard post={post} />}
+              {post.kind === "ACTIVITY" && <FeedActivityCard post={post} />}
+              {post.kind === "WORKOUT" && <FeedWorkoutShareCard post={post} />}
               {isLiveCard && liveId ? (
                 <button
                   type="button"
@@ -1315,7 +1212,7 @@ export function StudentFeedSection({
                   </strong>
                   <small>Toque para assistir · também fica em Lives salvas</small>
                 </button>
-              ) : (
+              ) : post.kind === "ACTIVITY" || post.kind === "WORKOUT" ? null : (
                 <MediaCarousel items={items} />
               )}
               <footer>

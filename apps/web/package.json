@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/auth/session.test.ts src/lib/workout-runner-persist.test.ts src/lib/sandbox-checkout.test.ts src/lib/gps-filter.test.ts src/stores/authStore.test.ts src/stores/musicPlayerStore.test.ts",
+    "test": "tsx --test src/auth/session.test.ts src/lib/workout-runner-persist.test.ts src/lib/sandbox-checkout.test.ts src/lib/gps-filter.test.ts src/lib/activity-geo.test.ts src/stores/authStore.test.ts src/stores/musicPlayerStore.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },

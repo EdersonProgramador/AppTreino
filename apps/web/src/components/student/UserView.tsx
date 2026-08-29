@@ -170,6 +170,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const studentSectionRef = useRef(studentSection);
   studentSectionRef.current = studentSection;
   const [playerSessionActive, setPlayerSessionActive] = useState(Boolean(restoredPanel?.playerSessionActive));
+  const [activityLiveChrome, setActivityLiveChrome] = useState(false);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [athleteSocial, setAthleteSocial] = useState<{
     followersCount: number;
@@ -669,6 +670,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     if (studentSection !== "player") {
       setPlayerSessionActive(false);
     }
+    if (studentSection !== "activity") {
+      setActivityLiveChrome(false);
+    }
   }, [studentSection]);
 
   useEffect(() => {
@@ -679,9 +683,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     window.scrollTo(0, 0);
   }, [studentSection]);
 
-  /** Menu inferior some só com sessão de treino iniciada; ao sair, retorna. */
-  const hideStudentChrome =
+  /** Menu inferior some no treino iniciado e na corrida ao vivo. O header do aluno permanece na atividade outdoor. */
+  const hideStudentHeader =
     studentSection === "player" && (playerSessionActive || Boolean(workoutSession));
+  const hideStudentNav =
+    hideStudentHeader || (studentSection === "activity" && activityLiveChrome);
   const musicQueueLength = useMusicPlayerStore((state) => state.queue.length);
   const musicMiniHidden = useMusicPlayerStore((state) => state.miniHidden);
 
@@ -2403,15 +2409,15 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
   return (
     <main
-      className={`student-app-shell${hideStudentChrome ? " workout-immersive" : ""}${
+      className={`student-app-shell${hideStudentNav ? " workout-immersive" : ""}${
         musicQueueLength && !musicMiniHidden ? " has-music-dock" : ""
       }${studentSection === "play" ? " is-play" : ""}${studentSection === "activity" ? " is-activity" : ""}${
         studentSection === "ai" ? " is-ai" : ""
       }${isFeedFamilySection ? " is-feed" : ""}`}
     >
       {adminPreviewBanner}
-      {token && !hideStudentChrome ? <StudentDailyMotivation /> : null}
-      {!hideStudentChrome && (
+      {token && !hideStudentNav ? <StudentDailyMotivation /> : null}
+      {!hideStudentHeader && (
       <section className="student-app-header">
         <div className="student-header-brand">
           <button
@@ -2754,6 +2760,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             weightKg={latestAssessment?.weightKg ?? null}
             onOpenPlay={() => goToSection("play")}
             onPublished={() => goToSection("feed")}
+            onLiveChromeChange={setActivityLiveChrome}
           />
         )}
 
@@ -5101,11 +5108,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
       {token && (
         <StudentMusicPlayerHost
-          compact={hideStudentChrome}
+          compact={hideStudentNav}
           hideMini={studentSection === "player"}
         />
       )}
-      {!hideStudentChrome && (
+      {!hideStudentNav && (
       <nav className="student-bottom-nav" aria-label={brand.navAria}>
         <button className={isFeedFamilySection ? "active" : ""} onClick={() => goToSection("feed")}><Home size={22} />Feed</button>
         <button className={studentSection === "activity" ? "active" : ""} onClick={() => openCorrida()}><CorridaNavIcon size={22} />Corrida</button>

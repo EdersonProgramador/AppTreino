@@ -9,7 +9,7 @@ export function formatClock(totalSeconds: number) {
 }
 
 export function formatPace(secPerKm: number | null | undefined) {
-  if (!secPerKm || !Number.isFinite(secPerKm) || secPerKm <= 0 || secPerKm > 3600) return "--:--";
+  if (!secPerKm || !Number.isFinite(secPerKm) || secPerKm <= 0 || secPerKm > 5999) return "--:--";
   const m = Math.floor(secPerKm / 60);
   const s = Math.floor(secPerKm % 60);
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
@@ -17,6 +17,17 @@ export function formatPace(secPerKm: number | null | undefined) {
 
 export function formatKm(meters: number | null | undefined) {
   return ((meters ?? 0) / 1000).toFixed(2);
+}
+
+export function formatMeters(meters: number | null | undefined) {
+  return `${Math.round(Math.max(0, meters ?? 0))} m`;
+}
+
+export function formatGrade(percent: number | null | undefined) {
+  if (percent == null || !Number.isFinite(percent)) return "0.0%";
+  const clamped = Math.max(-45, Math.min(45, percent));
+  const sign = clamped > 0.05 ? "+" : "";
+  return `${sign}${clamped.toFixed(1)}%`;
 }
 
 const MET: Record<"RUN" | "WALK" | "RIDE", number> = {
@@ -123,7 +134,7 @@ export function liveKmSplit(points: Array<{ lat: number; lng: number; t?: number
   const lastT = points[points.length - 1].t ?? splitStartT;
   const splitMs = Math.max(0, lastT - splitStartT);
   const paceSecPerKm =
-    metersInSplit >= 30 && splitMs > 0 ? splitMs / 1000 / (metersInSplit / 1000) : null;
+    metersInSplit >= 15 && splitMs > 0 ? splitMs / 1000 / (metersInSplit / 1000) : null;
 
   return { kmIndex, metersInSplit, paceSecPerKm, completed };
 }
@@ -146,6 +157,27 @@ export function liveDistance(points: Array<{ lat: number; lng: number }>) {
   let distance = 0;
   for (let i = 1; i < points.length; i += 1) distance += haversineMeters(points[i - 1], points[i]);
   return distance;
+}
+
+/** Inclinação recente (%): desnível / distância no último trecho (~60 m). */
+export function liveGradePercent(
+  points: Array<{ lat: number; lng: number; ele?: number | null }>,
+  windowMeters = 60
+): number | null {
+  if (points.length < 2) return null;
+  let dist = 0;
+  let endEle: number | null = null;
+  let startEle: number | null = null;
+  for (let i = points.length - 1; i > 0; i -= 1) {
+    const cur = points[i];
+    const prev = points[i - 1];
+    if (endEle == null && typeof cur.ele === "number") endEle = cur.ele;
+    dist += haversineMeters(prev, cur);
+    if (typeof prev.ele === "number") startEle = prev.ele;
+    if (dist >= windowMeters && startEle != null && endEle != null) break;
+  }
+  if (endEle == null || startEle == null || dist < 12) return null;
+  return ((endEle - startEle) / dist) * 100;
 }
 
 export function liveSpeedKmh(points: Array<{ lat: number; lng: number; t?: number }>) {

@@ -1,9 +1,12 @@
 import {
+  Activity,
   Camera,
   ChevronDown,
   Flag,
+  Flame,
   Footprints,
   Gauge,
+  Heart,
   ImagePlus,
   Layers,
   Loader2,
@@ -12,9 +15,13 @@ import {
   Music2,
   Pause,
   Play,
+  Repeat,
+  Route,
   Settings2,
   Share2,
+  Square,
   Timer,
+  TrendingUp,
   Trophy,
   X
 } from "lucide-react";
@@ -26,11 +33,14 @@ import {
   estimateCalories,
   estimateMotionCount,
   formatClock,
+  formatGrade,
   formatKm,
+  formatMeters,
   formatPace,
   liveDistance,
   liveElapsedSeconds,
   liveElevation,
+  liveGradePercent,
   liveKmSplit,
   liveSpeedKmh,
   LAP_RADIUS_M,
@@ -39,10 +49,11 @@ import {
 import { activityMapSrc, mapsConfigMessage } from "../../lib/activity-map-src";
 import { WebGpsPipeline, fixFromGeolocation } from "../../lib/gps-filter";
 import { WebStepCounter } from "../../lib/step-counter";
+import { WebHeartRateMonitor } from "../../lib/web-heart-rate";
 import type { OutdoorActivityRow, OutdoorSport, UploadResponse } from "../../types";
 import { BikeIcon } from "../shared/BikeIcon";
 import { RunnerIcon } from "../shared/RunnerIcon";
-import { ActivityRoutePreview } from "./ActivityRoutePreview";
+import { ActivityShareCard, type ActivityShareStats } from "./ActivityShareCard";
 
 type MapType = "standard" | "satellite" | "hybrid" | "winter";
 type ActivityMap = "global" | "weekly" | "night" | "personal";
@@ -77,28 +88,6 @@ const LAYER_ITEMS: Array<{ id: LayerKey; group: string; label: string }> = [
 ];
 
 type GpsPoint = { lat: number; lng: number; t: number; ele?: number | null; accuracy?: number | null };
-
-type ActivityShareStats = {
-  sportLabel: string;
-  sport: OutdoorSport;
-  gender?: "MALE" | "FEMALE" | null;
-  distanceMeters: number;
-  elapsedSeconds: number;
-  paceSecPerKm: number | null;
-  speedKmh?: number | null;
-  calories?: number;
-  elevationGainMeters?: number;
-  elevationLossMeters?: number;
-  stepsCount?: number;
-  cadenceSpm?: number | null;
-  powerWatts?: number | null;
-  mapType?: MapType;
-  is3d?: boolean;
-  lapsCount?: number;
-  kmIndex?: number;
-  kmPaceSecPerKm?: number | null;
-  points: Array<{ lat: number; lng: number }>;
-};
 
 type FinishResult = {
   activity?: {
@@ -137,70 +126,41 @@ function compactRecord<T extends Record<string, unknown>>(value: T) {
   return next;
 }
 
-function ShareSportIcon({
-  sport,
-  gender,
-  size = 22
+function LiveMetric({
+  icon: Icon,
+  label,
+  value,
+  hint,
+  onClick,
+  active
 }: {
-  sport: OutdoorSport;
-  gender?: "MALE" | "FEMALE" | null;
-  size?: number;
+  icon: typeof Timer;
+  label: string;
+  value: string;
+  hint?: string;
+  onClick?: () => void;
+  active?: boolean;
 }) {
-  if (sport === "RUN") return <RunnerIcon size={size} gender={gender} />;
-  if (sport === "RIDE") return <BikeIcon size={size} />;
-  return <Footprints size={size} />;
-}
-
-function SharePreview({
-  stats,
-  photoUrl,
-  title
-}: {
-  stats: ActivityShareStats;
-  photoUrl?: string | null;
-  title?: string;
-}) {
-  const isRide = stats.sport === "RIDE";
-  const speedLabel = stats.speedKmh && stats.speedKmh > 0 ? `${stats.speedKmh.toFixed(1)} km/h` : "—";
-  const motionLabel = isRide ? "Pedaladas" : "Passos";
-  const motionValue = stats.stepsCount ? String(stats.stepsCount) : "0";
-  return (
+  const body = (
     <>
-      {photoUrl ? <img src={photoUrl} alt="" /> : null}
-      <div className="student-activity-share-sport">
-        <ShareSportIcon sport={stats.sport} gender={stats.gender} />
-        <strong>{title ?? stats.sportLabel}</strong>
-      </div>
-      <div className="student-activity-share-map-host">
-        <ActivityRoutePreview
-          points={stats.points}
-          mapType={stats.mapType}
-          is3d={stats.is3d}
-          sport={stats.sport}
-          gender={stats.gender}
-        />
-      </div>
-      <div className="student-activity-share-metrics">
-        <span><em>Distância</em>{formatKm(stats.distanceMeters)} km</span>
-        <span><em>Tempo</em>{formatClock(stats.elapsedSeconds)}</span>
-        <span>
-          <em>{isRide ? "Velocidade" : "Ritmo"}</em>
-          {isRide ? speedLabel : formatPace(stats.paceSecPerKm)}
-        </span>
-      </div>
-      <div className="student-activity-share-metrics">
-        <span><em>kcal</em>{String(stats.calories ?? 0)}</span>
-        <span><em>↑ Elev</em>{`${Math.round(stats.elevationGainMeters ?? 0)} m`}</span>
-        <span><em>{motionLabel}</em>{motionValue}</span>
-      </div>
-      <div className="student-activity-share-metrics">
-        <span><em>{isRide ? "Ritmo" : "Velocidade"}</em>{isRide ? formatPace(stats.paceSecPerKm) : speedLabel}</span>
-        <span><em>{`Km ${stats.kmIndex ?? 1}`}</em>{formatPace(stats.kmPaceSecPerKm ?? null)}</span>
-        <span><em>Voltas</em>{String(stats.lapsCount ?? 0)}</span>
-      </div>
+      <small>
+        <Icon size={11} strokeWidth={2.3} />
+        {label}
+      </small>
+      <strong>{value}</strong>
+      {hint ? <em>{hint}</em> : null}
     </>
   );
+  if (onClick) {
+    return (
+      <button type="button" className={`student-activity-metric${active ? " is-on" : ""}`} onClick={onClick}>
+        {body}
+      </button>
+    );
+  }
+  return <div className="student-activity-metric">{body}</div>;
 }
+
 
 function mergeRoutePoints(
   ...sources: Array<Array<{ lat: number; lng: number; t?: number; ele?: number | null; accuracy?: number | null }> | null | undefined>
@@ -308,6 +268,7 @@ export function StudentActivitySection({
   token,
   onOpenPlay,
   onPublished,
+  onLiveChromeChange,
   preferredSport = "RUN",
   preferredSportKey = 0,
   athleteGender,
@@ -316,6 +277,7 @@ export function StudentActivitySection({
   token: string;
   onOpenPlay: () => void;
   onPublished: () => void;
+  onLiveChromeChange?: (immersive: boolean) => void;
   preferredSport?: OutdoorSport;
   preferredSportKey?: number;
   athleteGender?: "MALE" | "FEMALE" | null;
@@ -328,6 +290,7 @@ export function StudentActivitySection({
   const bufferRef = useRef<GpsPoint[]>([]);
   const pipelineRef = useRef(new WebGpsPipeline());
   const stepCounterRef = useRef(new WebStepCounter());
+  const heartRateRef = useRef(new WebHeartRateMonitor());
   const followMapRef = useRef(true);
   const lapAwayRef = useRef(false);
   const lapMaxAwayRef = useRef(0);
@@ -406,6 +369,8 @@ export function StudentActivitySection({
   const [roadMatched, setRoadMatched] = useState(false);
   const [stepsCount, setStepsCount] = useState(0);
   const stepsCountRef = useRef(0);
+  const [heartBpm, setHeartBpm] = useState(0);
+  const [heartConnected, setHeartConnected] = useState(false);
   const athleteKg = weightKg && weightKg > 30 && weightKg < 250 ? weightKg : 70;
 
   const sessionActive = Boolean(
@@ -415,10 +380,11 @@ export function StudentActivitySection({
   const paused = sessionActive && (pauseHold || activity?.status === "PAUSED");
   const liveDistanceM = sessionActive ? liveDistance(points) : 0;
   const livePace =
-    sessionActive && liveDistanceM >= 20 && elapsed > 0 ? elapsed / (liveDistanceM / 1000) : null;
+    sessionActive && liveDistanceM >= 10 && elapsed > 0 ? elapsed / (liveDistanceM / 1000) : null;
   const liveSpeed = sessionActive ? liveSpeedKmh(points) : 0;
   const elevation = sessionActive ? liveElevation(points) : { gain: 0, loss: 0 };
   const liveCalories = sessionActive ? estimateCalories(sport, elapsed, athleteKg) : 0;
+  const liveGrade = sessionActive ? liveGradePercent(points) : null;
   const liveSplit = sessionActive
     ? liveKmSplit(points)
     : { kmIndex: 1, metersInSplit: 0, paceSecPerKm: null, completed: [] as Array<{ km: number; paceSecPerKm: number; elapsedTime: number }> };
@@ -428,13 +394,13 @@ export function StudentActivitySection({
   const calories = sessionActive ? locked?.calories ?? liveCalories : 0;
   const shownElapsed = sessionActive ? locked?.elapsedSeconds ?? elapsed : 0;
   const shownElev = sessionActive ? locked?.elevationGainMeters ?? elevation.gain : 0;
+  const shownGrade = sessionActive ? locked?.gradePercent ?? liveGrade : null;
+  const shownHeart = sessionActive ? locked?.heartRateBpm ?? heartBpm : heartBpm;
   const shownLaps = sessionActive ? locked?.lapsCount ?? laps.length : 0;
   const estimatedSteps = sessionActive ? estimateMotionCount(sport, distance) : 0;
   const shownSteps = sessionActive
     ? Math.max(locked?.stepsCount ?? 0, stepsCount, estimatedSteps)
     : 0;
-  const shownKmIndex = sessionActive ? locked?.kmIndex ?? liveSplit.kmIndex : 1;
-  const shownKmPace = sessionActive ? locked?.kmPaceSecPerKm ?? liveSplit.paceSecPerKm : null;
   const targetDuration = durationSeconds(targetHours, targetMinutes);
   const parsedKm = Number(targetKm.replace(",", "."));
   pointsRef.current = points;
@@ -457,6 +423,36 @@ export function StudentActivitySection({
     if (value !== stepsCount) setStepsCount(value);
     persistStoredSteps(activityId, value);
     return value;
+  }
+
+  useEffect(() => {
+    const monitor = heartRateRef.current;
+    monitor.onChange((bpm, connected) => {
+      setHeartBpm(bpm);
+      setHeartConnected(connected);
+    });
+    return () => {
+      monitor.onChange(null);
+      monitor.disconnect();
+    };
+  }, []);
+
+  async function connectHeartRate() {
+    if (heartRateRef.current.isConnected()) {
+      heartRateRef.current.disconnect();
+      setHeartConnected(false);
+      setHeartBpm(0);
+      return;
+    }
+    try {
+      setError(null);
+      await heartRateRef.current.connect();
+      setHeartConnected(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Não foi possível conectar o sensor cardíaco.";
+      if (/cancel|dismiss/i.test(message)) return;
+      setError(message);
+    }
   }
 
   function seedMotionFromRoute(
@@ -482,6 +478,14 @@ export function StudentActivitySection({
     sessionClosedRef.current = false;
     setSessionClosed(false);
   }
+
+  useEffect(() => {
+    onLiveChromeChange?.((running || paused) && !shareOpen);
+  }, [running, paused, shareOpen, onLiveChromeChange]);
+
+  useEffect(() => {
+    return () => onLiveChromeChange?.(false);
+  }, [onLiveChromeChange]);
 
   useEffect(() => {
     if (running || paused) return;
@@ -1143,7 +1147,9 @@ export function StudentActivitySection({
       points: route,
       lapsCount: laps.length,
       kmIndex: split.kmIndex,
-      kmPaceSecPerKm: split.paceSecPerKm
+      kmPaceSecPerKm: split.paceSecPerKm,
+      gradePercent: liveGradePercent(route),
+      heartRateBpm: heartRateRef.current.averageBpm() || heartBpm || null
     };
   }
 
@@ -1416,6 +1422,8 @@ export function StudentActivitySection({
         publish,
         trackingMeta: compactRecord({
           stepsCount: motion,
+          avgHeartRateBpm: heartRateRef.current.averageBpm() || undefined,
+          maxHeartRateBpm: heartBpm || undefined,
           avgCadenceSpm:
             sport === "RIDE" && shownElapsed > 0
               ? Math.round((motion / shownElapsed) * 60)
@@ -1745,88 +1753,123 @@ export function StudentActivitySection({
         ) : null}
 
         <div className="student-activity-card">
-          <button type="button" className="student-activity-sport" onClick={() => setLayersOpen(true)}>
-            {sportMeta.label} <ChevronDown size={16} />
-          </button>
-          <div className="student-activity-stats">
-            <div>
-              <small>Tempo</small>
-              <strong>{formatClock(shownElapsed)}</strong>
-            </div>
-            <div>
-              <small>{sport === "RIDE" ? "Velocidade" : "Ritmo"}</small>
-              <strong>
-                {sport === "RIDE" ? (speedKmh ? speedKmh.toFixed(1) : "0.0") : formatPace(pace)}
-              </strong>
-            </div>
-            <div>
-              <small>Distância</small>
-              <strong>{formatKm(distance)}</strong>
-            </div>
-          </div>
-          <div className="student-activity-stats student-activity-stats-live">
-            <div>
-              <small>{sport === "RIDE" ? "Ritmo" : "Velocidade"}</small>
-              <strong>{sport === "RIDE" ? formatPace(pace) : speedKmh ? speedKmh.toFixed(1) : "0.0"}</strong>
-            </div>
-            <div>
-              <small>{`Km ${shownKmIndex}`}</small>
-              <strong>{formatPace(shownKmPace)}</strong>
-            </div>
-            <div>
-              <small>Voltas</small>
-              <strong>{String(shownLaps)}</strong>
-            </div>
-          </div>
-          <div className="student-activity-stats student-activity-stats-live">
-            <div>
-              <small>kcal</small>
-              <strong>{String(calories)}</strong>
-            </div>
-            <div>
-              <small>Elevação</small>
-              <strong>{`${Math.round(shownElev)} m`}</strong>
-            </div>
-            <div>
-              <small>{sport === "RIDE" ? "Pedaladas" : "Passos"}</small>
-              <strong>{String(shownSteps)}</strong>
-            </div>
-          </div>
-          <div className="student-activity-controls">
-            <button type="button" className="student-activity-side" onClick={() => setLayersOpen(true)} aria-label="Configurações do mapa">
-              <Settings2 size={20} />
+          <div className="student-activity-card-top">
+            <button type="button" className="student-activity-sport" onClick={() => setLayersOpen(true)}>
+              {sportMeta.label} <ChevronDown size={16} />
             </button>
-            <button
-              type="button"
-              className={running ? "student-activity-play is-pause" : "student-activity-play"}
-              onClick={() => {
-                if (shareOpen || finishing) return;
-                void (running ? pause() : startOrResume());
-              }}
-              disabled={busy && !running}
-              aria-label={running ? "Pausar" : "Iniciar"}
-            >
-              {busy && !running ? <Loader2 className="spin" size={28} /> : running ? <Pause size={28} /> : <Play size={28} />}
-            </button>
-            <button type="button" className="student-activity-side" onClick={onOpenPlay} aria-label="Música">
-              <Music2 size={20} />
-            </button>
-          </div>
-          {running || paused ? (
-            <div className="student-activity-finish-actions">
-              <button type="button" className="student-activity-distance" onClick={() => void beginFinish()} disabled={busy}>
-                Finalizar e compartilhar
+            <div className="student-activity-card-tools">
+              <button type="button" className="student-activity-side" onClick={() => setLayersOpen(true)} aria-label="Configurações do mapa">
+                <Settings2 size={18} />
               </button>
+              <button type="button" className="student-activity-side" onClick={onOpenPlay} aria-label="Música">
+                <Music2 size={18} />
+              </button>
+            </div>
+          </div>
+          <div className="student-activity-stats student-activity-stats-hero">
+            <LiveMetric icon={Timer} label="Tempo" value={formatClock(shownElapsed)} />
+            <LiveMetric
+              icon={Route}
+              label="Distância"
+              value={`${Math.round(distance)} m`}
+              hint={`${formatKm(distance)} km`}
+            />
+            <LiveMetric
+              icon={Gauge}
+              label="Velocidade"
+              value={speedKmh ? speedKmh.toFixed(1) : "0.0"}
+              hint="km/h"
+            />
+          </div>
+          <div className="student-activity-stats student-activity-stats-live">
+            <LiveMetric icon={Activity} label="Ritmo médio" value={formatPace(pace)} hint={`/km`} />
+            <LiveMetric
+              icon={TrendingUp}
+              label="Inclinação"
+              value={formatGrade(shownGrade)}
+              hint={shownElev ? `↑ ${Math.round(shownElev)} m` : "desnível"}
+            />
+            <LiveMetric
+              icon={Heart}
+              label="F. Cardíaca"
+              value={shownHeart ? String(shownHeart) : "—"}
+              hint={heartConnected ? "b.p.m · sensor" : "b.p.m · toque"}
+              active={heartConnected}
+              onClick={() => void connectHeartRate()}
+            />
+          </div>
+          <div className="student-activity-stats student-activity-stats-live">
+            <LiveMetric icon={Flame} label="Calorias" value={String(calories)} hint="kcal" />
+            <LiveMetric icon={Repeat} label="Voltas" value={String(shownLaps)} />
+            <LiveMetric
+              icon={Footprints}
+              label={sport === "RIDE" ? "Pedaladas" : "Passos"}
+              value={String(shownSteps)}
+            />
+          </div>
+          <div className={`student-activity-run-controls${running || paused ? " is-split" : " is-idle"}`}>
+            {running || paused ? (
+              <>
+                {paused ? (
+                  <button
+                    type="button"
+                    className="student-activity-run-btn is-start"
+                    onClick={() => {
+                      if (shareOpen || finishing) return;
+                      void startOrResume();
+                    }}
+                    disabled={busy}
+                  >
+                    {busy ? <Loader2 className="spin" size={16} /> : <Play size={16} />}
+                    Retomar
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="student-activity-run-btn is-pause"
+                    onClick={() => {
+                      if (shareOpen || finishing) return;
+                      void pause();
+                    }}
+                  >
+                    <Pause size={16} />
+                    Pausar
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="student-activity-run-btn is-stop"
+                  onClick={() => void beginFinish()}
+                  disabled={busy || finishing}
+                >
+                  {finishing ? <Loader2 className="spin" size={16} /> : <Square size={14} />}
+                  Parar
+                </button>
+              </>
+            ) : (
               <button
                 type="button"
-                className="student-activity-distance is-quiet"
-                disabled={busy || finishing}
-                onClick={() => void finish(false)}
+                className="student-activity-run-btn is-start is-fit"
+                onClick={() => {
+                  if (shareOpen || finishing) return;
+                  void startOrResume();
+                }}
+                disabled={busy}
               >
-                {finishing ? "Finalizando..." : "Finalizar sem publicar"}
+                {busy ? (
+                  <Loader2 className="spin" size={16} />
+                ) : (
+                  <span className="student-activity-run-playmark" aria-hidden>
+                    <svg viewBox="0 0 24 24">
+                      <path d="M8.4 5.2c-.6-.4-1.4 0-1.4.8v12c0 .8.8 1.2 1.4.8l10-6c.6-.4.6-1.3 0-1.7l-10-5.9Z" />
+                    </svg>
+                  </span>
+                )}
+                Iniciar
               </button>
-            </div>
-          ) : (
+            )}
+          </div>
+          {running || paused ? null : (
             <button type="button" className="student-activity-distance" onClick={() => setGoalsOpen(true)}>
               Definir distância
             </button>
@@ -1982,10 +2025,10 @@ export function StudentActivitySection({
               <>
                 <div className="student-activity-share-card">
                   <small>App Treino Social</small>
-                  <SharePreview
+                  <ActivityShareCard
                     stats={shareStats}
                     photoUrl={photoUrl}
-                    title={`${shareStats.sportLabel.toUpperCase()} CONCLUÍDA`}
+                    title={`${shareStats.sportLabel.toUpperCase()} ${shareStats.sport === "RIDE" ? "CONCLUÍDO" : "CONCLUÍDA"}`}
                   />
                 </div>
                 <textarea
@@ -2052,7 +2095,7 @@ export function StudentActivitySection({
           </header>
           <div className="student-activity-saved-card">
             <small>App Treino · Outdoor</small>
-            <SharePreview stats={finishStats} />
+            <ActivityShareCard stats={finishStats} />
             <button type="button" className="student-green-button" onClick={() => void shareNative(finishStats)}>
               <Share2 size={16} /> Compartilhar
             </button>

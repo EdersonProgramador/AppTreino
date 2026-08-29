@@ -252,6 +252,8 @@ export interface OutdoorActivityRow {
   estimatedPowerWatts?: number | null;
   stepsCount?: number;
   avgCadenceSpm?: number | null;
+  avgHeartRateBpm?: number | null;
+  maxHeartRateBpm?: number | null;
   mapType: string;
   activityMap: string;
   layers?: {

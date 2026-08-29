@@ -3,6 +3,10 @@ import { describe, it } from "node:test";
 import {
   LAP_RADIUS_M,
   estimateMotionCount,
+  formatKm,
+  formatMeters,
+  formatPace,
+  liveGradePercent,
   updateLapCrossing,
   type LapMarker
 } from "./activity-geo.ts";
@@ -53,5 +57,24 @@ describe("estimativa de passos/pedaladas", () => {
     assert.equal(estimateMotionCount("RUN", 820), 1000);
     assert.ok(estimateMotionCount("RIDE", 5400) >= 900);
     assert.equal(estimateMotionCount("WALK", 0), 0);
+  });
+});
+
+describe("metros, ritmo e inclinação", () => {
+  it("formata metros e km", () => {
+    assert.equal(formatMeters(847.4), "847 m");
+    assert.equal(formatKm(847.4), "0.85");
+  });
+
+  it("mostra ritmo lento de caminhada em vez de esconder", () => {
+    assert.equal(formatPace(900), "15:00");
+    assert.equal(formatPace(null), "--:--");
+  });
+
+  it("calcula inclinação recente a partir da altitude", () => {
+    const start = { lat: -1.381, lng: -48.39, ele: 10 };
+    const up = offset(start.lat, start.lng, 40, 0);
+    const grade = liveGradePercent([start, { ...up, ele: 12 }]);
+    assert.ok(grade != null && grade > 3 && grade < 8);
   });
 });
