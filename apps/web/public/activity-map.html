@@ -88,6 +88,35 @@
         box-shadow: 0 1px 4px rgba(0,0,0,.35);
       }
       .live-dot { background: #2f7dff; }
+      .live-pin {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #2f7dff;
+        border: 2px solid #fff;
+        box-sizing: border-box;
+        box-shadow: 0 2px 6px rgba(0,0,0,.4);
+        display: grid;
+        place-items: center;
+        pointer-events: none;
+        color: #fff;
+      }
+      .live-pin svg {
+        width: 18px;
+        height: 18px;
+        display: block;
+      }
+      .live-pin .live-icon {
+        width: 18px;
+        height: 18px;
+        background: #fff;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+      }
       .lap-dot { background: #df663c; width: 18px; height: 18px; }
       .lap-num {
         width: 22px;
@@ -169,6 +198,8 @@
         heatTracks: [],
         heatCells: [],
         live: null,
+        sport: "RUN",
+        gender: "MALE",
         lapMarker: null,
         laps: [],
         userInteracting: false
@@ -434,7 +465,7 @@
           source: "track",
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
-            "line-color": "#E85D04",
+            "line-color": "#2f7dff",
             "line-opacity": 0.28,
             "line-blur": 0.6,
             "line-width": ["interpolate", ["linear"], ["zoom"], 12, 6, 16, 12, 20, 18]
@@ -446,7 +477,7 @@
           source: "track",
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
-            "line-color": "#E85D04",
+            "line-color": "#2f7dff",
             "line-opacity": 0.96,
             "line-width": ["interpolate", ["linear"], ["zoom"], 12, 3, 16, 5, 20, 8]
           }
@@ -573,14 +604,54 @@
         return el;
       }
 
-      function setLive(lat, lng, follow) {
+      function sportIconHtml(sport, gender) {
+        const kind = String(sport || "RUN").toUpperCase();
+        if (kind === "RIDE") {
+          return '<span class="live-icon" style="-webkit-mask-image:url(/assets/ciclismo-mask.svg?v=1);mask-image:url(/assets/ciclismo-mask.svg?v=1)"></span>';
+        }
+        if (kind === "WALK") {
+          return '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4"/><path d="M4 13h4"/></svg>';
+        }
+        const src = gender === "FEMALE" ? "/assets/corrida-mulher-mask.png" : "/assets/corrida-homem-mask.png";
+        return '<span class="live-icon" style="-webkit-mask-image:url(' + src + ');mask-image:url(' + src + ')"></span>';
+      }
+
+      function makeLivePin() {
+        const el = document.createElement("div");
+        el.className = "live-pin";
+        el.innerHTML = sportIconHtml(state.sport, state.gender);
+        return el;
+      }
+
+      function updateLivePin(el) {
+        if (!el) return;
+        el.className = "live-pin";
+        el.innerHTML = sportIconHtml(state.sport, state.gender);
+      }
+
+      function applySport(sport, gender) {
+        if (sport) state.sport = String(sport).toUpperCase();
+        if (gender) state.gender = gender === "FEMALE" ? "FEMALE" : "MALE";
+        if (liveMarker && liveMarker.getElement) {
+          updateLivePin(liveMarker.getElement());
+          return;
+        }
+        if (!map) return;
+        const pos = state.live || { lat: map.getCenter().lat, lng: map.getCenter().lng };
+        if (!Number.isFinite(pos.lat) || !Number.isFinite(pos.lng)) return;
+        liveMarker = new mapboxgl.Marker({ element: makeLivePin(), anchor: "center" }).setLngLat([pos.lng, pos.lat]).addTo(map);
+      }
+
+      function setLive(lat, lng, follow, sport, gender) {
         state.live = { lat: lat, lng: lng };
         persistCachedCenter(lat, lng);
+        applySport(sport, gender);
         if (!map) return;
         if (!liveMarker) {
-          liveMarker = new mapboxgl.Marker({ element: makeDot("live-dot") }).setLngLat([lng, lat]).addTo(map);
+          liveMarker = new mapboxgl.Marker({ element: makeLivePin(), anchor: "center" }).setLngLat([lng, lat]).addTo(map);
         } else {
           liveMarker.setLngLat([lng, lat]);
+          updateLivePin(liveMarker.getElement());
         }
         if (follow) {
           state.follow = true;
@@ -697,6 +768,12 @@
           const attr = document.querySelector(".mapboxgl-ctrl-bottom-left");
           if (attr) attr.style.bottom = Math.max(8, bottom - 8) + "px";
         }
+        if (msg.type === "showControls") {
+          document.getElementById("fabs").style.display = msg.on === false ? "none" : "grid";
+        }
+        if (msg.type === "setSport") {
+          applySport(msg.sport, msg.gender);
+        }
         if (!map) return;
         if (msg.type === "init" || msg.type === "setView") {
           const lat = Number(msg.lat);
@@ -721,7 +798,7 @@
           try { map.resize(); } catch (e) {}
         }
         if (msg.type === "setLive" && Number.isFinite(Number(msg.lat)) && Number.isFinite(Number(msg.lng))) {
-          setLive(Number(msg.lat), Number(msg.lng), msg.follow);
+          setLive(Number(msg.lat), Number(msg.lng), msg.follow, msg.sport, msg.gender);
         }
         if (msg.type === "setMapType") {
           state.mapType = msg.mapType || "hybrid";

@@ -1,16 +1,17 @@
 import { useMemo, useState } from "react";
-import { Bike, Dumbbell, Flame, Footprints } from "lucide-react";
+import { Dumbbell, Flame, Footprints } from "lucide-react";
+import { BikeIcon } from "../shared/BikeIcon";
 
 export type StreakKind = "WORKOUT" | "RUN" | "WALK" | "RIDE";
 
 export type SportTotals = Record<StreakKind, { count: number; km: number; minutes: number; calories?: number }>;
 export type WeeklyVolume = { weekStart: string; workouts: number; outdoorKm: number; minutes: number };
 
-const SPORT_META: Array<{ id: StreakKind; label: string; Icon: typeof Dumbbell }> = [
+const SPORT_META: Array<{ id: StreakKind; label: string; Icon: typeof Dumbbell | typeof BikeIcon }> = [
   { id: "WORKOUT", label: "Treino", Icon: Dumbbell },
   { id: "RUN", label: "Corrida", Icon: Footprints },
   { id: "WALK", label: "Caminhada", Icon: Footprints },
-  { id: "RIDE", label: "Pedal", Icon: Bike }
+  { id: "RIDE", label: "Pedal", Icon: BikeIcon }
 ];
 
 function weekLabel(iso: string) {

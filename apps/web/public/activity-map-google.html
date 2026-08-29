@@ -165,6 +165,8 @@
         heatTracks: [],
         heatCells: [],
         live: null,
+        sport: "RUN",
+        gender: "MALE",
         lapMarker: null,
         laps: [],
         userInteracting: false
@@ -294,7 +296,7 @@
           trackGlow = new google.maps.Polyline({
             map,
             path: [],
-            strokeColor: "#E85D04",
+            strokeColor: "#2f7dff",
             strokeOpacity: 0.28,
             strokeWeight: 12,
             zIndex: 2
@@ -304,7 +306,7 @@
           trackLine = new google.maps.Polyline({
             map,
             path: [],
-            strokeColor: "#E85D04",
+            strokeColor: "#2f7dff",
             strokeOpacity: 0.95,
             strokeWeight: 5,
             zIndex: 3
@@ -360,26 +362,51 @@
           });
       }
 
-      function setLive(lat, lng, follow) {
+      function sportGlyph(sport, gender) {
+        const kind = String(sport || "RUN").toUpperCase();
+        if (kind === "RIDE") {
+          return '<g fill="#fff" transform="translate(5 4.5) scale(0.58)"><path fill-rule="evenodd" d="M6 21.2A5.2 5.2 0 1 0 6 10.8a5.2 5.2 0 0 0 0 10.4zm0-3.3a1.9 1.9 0 1 0 0-3.8 1.9 1.9 0 0 0 0 3.8z"/><path fill-rule="evenodd" d="M18 21.2a5.2 5.2 0 1 0 0-10.4 5.2 5.2 0 0 0 0 10.4zm0-3.3a1.9 1.9 0 1 0 0-3.8 1.9 1.9 0 0 0 0 3.8z"/><rect x="8.9" y="4.8" width="5.6" height="2.2" rx="1.1"/><path d="M10.15 6.8 8.2 15.5h2.25l1.25-5.4h2.2L15.7 15.5h2.25L15.2 6.8h-2.15l-.35 1.45h-2.2z"/><path d="M15.35 3.7h5.3v2.15h-2.2V7.5h-2.15V3.7z"/><path d="M16.55 7.6 18.15 15.3h2.25L17.05 6.35h-2.2z"/></g>';
+        }
+        if (kind === "WALK") {
+          return '<g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" transform="translate(4 4) scale(0.667)"><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4"/><path d="M4 13h4"/></g>';
+        }
+        return '<g fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" transform="translate(4 4)"><circle cx="12.2" cy="3.4" r="1.7"/><path d="M7.5 17.8l2.2-5.2 2.2 2 2.6 3.4M6.8 9.2c1.6 1.1 3.4 1.8 5.4 1.1l2.6-2.2"/></g>';
+      }
+
+      function liveIcon(sport, gender) {
+        const svg =
+          '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">' +
+          '<circle cx="16" cy="16" r="14" fill="#2f7dff" stroke="#fff" stroke-width="2"/>' +
+          sportGlyph(sport, gender) +
+          "</svg>";
+        return {
+          url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
+          scaledSize: new google.maps.Size(32, 32),
+          anchor: new google.maps.Point(16, 16)
+        };
+      }
+
+      function applySport(sport, gender) {
+        if (sport) state.sport = String(sport).toUpperCase();
+        if (gender) state.gender = gender === "FEMALE" ? "FEMALE" : "MALE";
+        if (liveMarker) liveMarker.setIcon(liveIcon(state.sport, state.gender));
+      }
+
+      function setLive(lat, lng, follow, sport, gender) {
         state.live = { lat, lng };
         persistCachedCenter(lat, lng);
+        if (sport || gender) applySport(sport, gender);
         const pos = { lat, lng };
         if (!liveMarker) {
           liveMarker = new google.maps.Marker({
             map,
             position: pos,
             zIndex: 10,
-            icon: {
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 8,
-              fillColor: "#2f7dff",
-              fillOpacity: 1,
-              strokeColor: "#ffffff",
-              strokeWeight: 3
-            }
+            icon: liveIcon(state.sport, state.gender)
           });
         } else {
           liveMarker.setPosition(pos);
+          liveMarker.setIcon(liveIcon(state.sport, state.gender));
         }
         if (follow) {
           state.follow = true;
@@ -497,6 +524,9 @@
           const bottom = Math.max(16, Number(msg.bottom) || 16);
           document.getElementById("fabs").style.bottom = bottom + "px";
         }
+        if (msg.type === "setSport") {
+          applySport(msg.sport, msg.gender);
+        }
         if (!map) return;
         if (msg.type === "init" || msg.type === "setView") {
           const lat = Number(msg.lat);
@@ -514,7 +544,7 @@
         if (msg.type === "setTrack") setTrack(msg.points || [], Boolean(msg.fit));
         if (msg.type === "setHeat") setHeat(msg.tracks || [], msg.cells || []);
         if (msg.type === "setLive" && Number.isFinite(Number(msg.lat)) && Number.isFinite(Number(msg.lng))) {
-          setLive(Number(msg.lat), Number(msg.lng), msg.follow);
+          setLive(Number(msg.lat), Number(msg.lng), msg.follow, msg.sport, msg.gender);
         }
         if (msg.type === "setMapType") {
           state.mapType = msg.mapType || "hybrid";

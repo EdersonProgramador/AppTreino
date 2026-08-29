@@ -23339,6 +23339,13 @@ html.is-native-app.keyboard-open .login-shell {
   white-space: nowrap;
 }
 
+.student-activity-tabs button svg,
+.student-activity-tabs button .runner-gender-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
 .student-activity-tabs button.is-on {
   background: rgba(255, 247, 236, 0.94);
   color: #df663c;
@@ -23645,6 +23652,12 @@ html.is-native-app.keyboard-open .login-shell {
   backdrop-filter: blur(12px);
 }
 
+.student-activity-map-chip.is-via {
+  left: auto;
+  right: 12px;
+  background: rgba(34, 120, 80, 0.82);
+}
+
 .student-activity-dock {
   position: absolute;
   left: 0;
@@ -23837,6 +23850,48 @@ html.light .student-activity-side {
   height: 180px;
   object-fit: cover;
   border-radius: 14px;
+}
+
+.student-activity-share-map {
+  position: relative;
+  width: 100%;
+  height: 168px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #0b1a12;
+}
+
+.student-activity-share-map.is-empty {
+  display: grid;
+  place-items: center;
+  color: rgba(255, 247, 236, 0.72);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 12px;
+  text-align: center;
+}
+
+.student-activity-share-map-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.student-activity-share-map iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  z-index: 2;
+  background: transparent;
+}
+
+.student-activity-saved-card .student-activity-share-map.is-empty {
+  color: #605a52;
+  background: #efe8dc;
 }
 
 .student-activity-share-metrics {

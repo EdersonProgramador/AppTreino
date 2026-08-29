@@ -56,7 +56,9 @@ export function noiseRejectReason(
 ): string | null {
   if (!Number.isFinite(fix.lat) || !Number.isFinite(fix.lng)) return "INVALID_COORDS";
   if (Math.abs(fix.lat) > 90 || Math.abs(fix.lng) > 180) return "OUT_OF_BOUNDS";
-  if (fix.accuracyM != null && fix.accuracyM > GPS_CALIBRATION.maxAccuracyM) return "BAD_ACCURACY";
+  // Primeiro lock costuma vir com 20–40 m; o restante exige o teto de calibração.
+  const maxAccuracy = prev ? GPS_CALIBRATION.maxAccuracyM : GPS_CALIBRATION.maxAccuracyM * 2.5;
+  if (fix.accuracyM != null && fix.accuracyM > maxAccuracy) return "BAD_ACCURACY";
   if (!prev) return null;
   if (fix.t < prev.t) return "OUT_OF_ORDER";
 
@@ -172,8 +174,8 @@ export class WebGpsPipeline {
 
   process(sport: OutdoorSportKind, raw: RawGpsFix): PipelineResult {
     const reject = noiseRejectReason(sport, raw, this.prevRaw);
-    this.prevRaw = raw;
     if (reject) return { accepted: false, reason: reject };
+    this.prevRaw = raw;
 
     const filtered = this.kalman.update(raw);
     let distanceDeltaM = 0;

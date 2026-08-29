@@ -22,7 +22,7 @@ type Props = {
  */
 export function TrackingMap({
   followUser = true,
-  strokeColor = "#E85D04",
+  strokeColor = "#2f7dff",
   onMapPress,
   pickMode = false,
   lapMarker = null,

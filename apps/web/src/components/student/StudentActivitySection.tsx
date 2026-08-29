@@ -1,5 +1,4 @@
 import {
-  Bike,
   Camera,
   ChevronDown,
   Flag,
@@ -38,17 +37,20 @@ import {
 } from "../../lib/activity-geo";
 import { activityMapSrc, mapsConfigMessage } from "../../lib/activity-map-src";
 import { WebGpsPipeline, fixFromGeolocation } from "../../lib/gps-filter";
+import { WebStepCounter } from "../../lib/step-counter";
 import type { OutdoorActivityRow, OutdoorSport, UploadResponse } from "../../types";
+import { BikeIcon } from "../shared/BikeIcon";
 import { RunnerIcon } from "../shared/RunnerIcon";
+import { ActivityRoutePreview } from "./ActivityRoutePreview";
 
 type MapType = "standard" | "satellite" | "hybrid" | "winter";
 type ActivityMap = "global" | "weekly" | "night" | "personal";
 type LayerKey = "pois" | "bikeLanes" | "avalanche" | "slope" | "aspect";
 
-const SPORTS: Array<{ id: OutdoorSport; label: string; Icon: typeof Footprints }> = [
+const SPORTS: Array<{ id: OutdoorSport; label: string; Icon: typeof Footprints | typeof BikeIcon }> = [
   { id: "RUN", label: "Corrida", Icon: Footprints },
   { id: "WALK", label: "Caminhada", Icon: Footprints },
-  { id: "RIDE", label: "Ciclismo", Icon: Bike }
+  { id: "RIDE", label: "Ciclismo", Icon: BikeIcon }
 ];
 
 const MAP_TYPES: Array<{ id: MapType; label: string }> = [
@@ -109,6 +111,7 @@ type FinishResult = {
     estimatedPowerWatts?: number | null;
     calories?: number;
     polyline?: Array<{ lat: number; lng: number; t?: number; ele?: number | null }>;
+    avgSpeedMps?: number | null;
     roadMatched?: boolean;
     matchConfidence?: number | null;
     splits?: Array<{ km: number; paceSecPerKm: number; elapsedTime: number; partial?: boolean }>;
@@ -130,6 +133,37 @@ function compactRecord<T extends Record<string, unknown>>(value: T) {
     next[key] = item;
   }
   return next;
+}
+
+function SharePreview({ stats, photoUrl }: { stats: ActivityShareStats; photoUrl?: string | null }) {
+  const isRide = stats.sport === "RIDE";
+  const speedLabel = stats.speedKmh && stats.speedKmh > 0 ? `${stats.speedKmh.toFixed(1)} km/h` : "—";
+  const motionLabel = isRide ? "Pedaladas" : "Passos";
+  const motionValue = stats.stepsCount ? String(stats.stepsCount) : "0";
+  return (
+    <>
+      {photoUrl ? <img src={photoUrl} alt="" /> : null}
+      <ActivityRoutePreview points={stats.points} mapType={stats.mapType} is3d={stats.is3d} />
+      <div className="student-activity-share-metrics">
+        <span><em>Distância</em>{formatKm(stats.distanceMeters)} km</span>
+        <span><em>Tempo</em>{formatClock(stats.elapsedSeconds)}</span>
+        <span>
+          <em>{isRide ? "Velocidade" : "Ritmo"}</em>
+          {isRide ? speedLabel : formatPace(stats.paceSecPerKm)}
+        </span>
+      </div>
+      <div className="student-activity-share-metrics">
+        <span><em>kcal</em>{String(stats.calories ?? 0)}</span>
+        <span><em>↑ Elev</em>{`${Math.round(stats.elevationGainMeters ?? 0)} m`}</span>
+        <span><em>{motionLabel}</em>{motionValue}</span>
+      </div>
+      <div className="student-activity-share-metrics">
+        <span><em>{isRide ? "Ritmo" : "Velocidade"}</em>{isRide ? formatPace(stats.paceSecPerKm) : speedLabel}</span>
+        <span><em>{`Km ${stats.kmIndex ?? 1}`}</em>{formatPace(stats.kmPaceSecPerKm ?? null)}</span>
+        <span><em>Voltas</em>{String(stats.lapsCount ?? 0)}</span>
+      </div>
+    </>
+  );
 }
 
 function mergeRoutePoints(
@@ -224,8 +258,11 @@ export function StudentActivitySection({
   const idleWatchRef = useRef<number | null>(null);
   const bufferRef = useRef<GpsPoint[]>([]);
   const pipelineRef = useRef(new WebGpsPipeline());
+  const stepCounterRef = useRef(new WebStepCounter());
   const followMapRef = useRef(true);
   const lapAwayRef = useRef(false);
+  const lapMaxAwayRef = useRef(0);
+  const autoArmLapRef = useRef(true);
   const lapMarkerRef = useRef<LapMarker | null>(null);
   const pauseHoldRef = useRef(false);
   const sessionClosedRef = useRef(false);
@@ -243,6 +280,8 @@ export function StudentActivitySection({
   const [sport, setSport] = useState<OutdoorSport>(preferredSport);
   const sportRef = useRef(sport);
   sportRef.current = sport;
+  const genderRef = useRef(athleteGender);
+  genderRef.current = athleteGender;
   const [mapType, setMapType] = useState<MapType>("hybrid");
   const [activityMap, setActivityMap] = useState<ActivityMap>("personal");
   const [layers, setLayers] = useState<Record<LayerKey, boolean>>({
@@ -296,6 +335,7 @@ export function StudentActivitySection({
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
   const weatherRef = useRef<WeatherSnapshot | null>(null);
   const [roadMatched, setRoadMatched] = useState(false);
+  const [stepsCount, setStepsCount] = useState(0);
   const athleteKg = weightKg && weightKg > 30 && weightKg < 250 ? weightKg : 70;
 
   const sessionActive = Boolean(
@@ -319,13 +359,16 @@ export function StudentActivitySection({
   const shownElapsed = sessionActive ? locked?.elapsedSeconds ?? elapsed : 0;
   const shownElev = sessionActive ? locked?.elevationGainMeters ?? elevation.gain : 0;
   const shownLaps = sessionActive ? locked?.lapsCount ?? laps.length : 0;
+  const shownSteps = sessionActive
+    ? locked?.stepsCount ?? stepsCount
+    : 0;
   const shownKmIndex = sessionActive ? locked?.kmIndex ?? liveSplit.kmIndex : 1;
   const shownKmPace = sessionActive ? locked?.kmPaceSecPerKm ?? liveSplit.paceSecPerKm : null;
   const targetDuration = durationSeconds(targetHours, targetMinutes);
   const parsedKm = Number(targetKm.replace(",", "."));
   pointsRef.current = points;
   activityIdRef.current = activity?.id ?? null;
-  lapMarkerRef.current = lapCounterOn ? lapMarker : null;
+  lapMarkerRef.current = lapMarker;
   shareOpenRef.current = shareOpen;
   finishingRef.current = finishing;
   pauseHoldRef.current = pauseHold;
@@ -362,9 +405,13 @@ export function StudentActivitySection({
       durationSeconds: targetDuration,
       speedKmh: Number.isFinite(parsedSpeed) && parsedSpeed > 0 ? Math.min(parsedSpeed, 80) : undefined,
       lapRadiusMeters: LAP_RADIUS_M,
-      lapCounterOn,
-      lapMarker: lapCounterOn ? lapMarker : null,
-      laps: lapCounterOn ? laps : []
+      lapCounterOn: true,
+      lapMarker:
+        lapMarker ??
+        (lastFixRef.current
+          ? { lat: lastFixRef.current.lat, lng: lastFixRef.current.lng, radiusMeters: LAP_RADIUS_M }
+          : null),
+      laps
     };
   }
 
@@ -408,6 +455,7 @@ export function StudentActivitySection({
         postToMap({ type: "setLayers", layers });
         postToMap({ type: "set3d", on: is3d });
         postToMap({ type: "setFollow", on: followMapRef.current });
+        postToMap({ type: "setSport", sport, gender: athleteGender === "FEMALE" ? "FEMALE" : "MALE" });
         postToMap({ type: "setHeat", tracks: [], cells: [] });
         const review = reviewTrackRef.current;
         if (running || paused) {
@@ -425,7 +473,9 @@ export function StudentActivitySection({
         if (!(review && review.length > 1)) {
           const cached = lastFixRef.current ?? readStoredFix();
           if (cached) {
-            postToMap({ type: "setLive", lat: cached.lat, lng: cached.lng, follow: true });
+            postToMap(
+              liveFixMessage(cached.lat, cached.lng, true)
+            );
             postToMap({ type: "setView", lat: cached.lat, lng: cached.lng, zoom: 18 });
           }
           locate(true);
@@ -533,6 +583,13 @@ export function StudentActivitySection({
     postToMap({ type: "set3d", on: is3d });
   }, [is3d]);
   useEffect(() => {
+    postToMap({
+      type: "setSport",
+      sport,
+      gender: athleteGender === "FEMALE" ? "FEMALE" : "MALE"
+    });
+  }, [sport, athleteGender]);
+  useEffect(() => {
     if (running || paused) {
       paintTrack(points, !running && !paused);
       return;
@@ -579,6 +636,17 @@ export function StudentActivitySection({
     return () => window.clearInterval(id);
   }, [running, paused, activity, locked]);
 
+  function liveFixMessage(lat: number, lng: number, follow: boolean) {
+    return {
+      type: "setLive",
+      lat,
+      lng,
+      follow,
+      sport: sportRef.current,
+      gender: genderRef.current === "FEMALE" ? "FEMALE" : "MALE"
+    };
+  }
+
   function applyUserFix(lat: number, lng: number, follow: boolean) {
     lastFixRef.current = { lat, lng };
     persistFix(lat, lng);
@@ -586,7 +654,7 @@ export function StudentActivitySection({
       followMapRef.current = true;
       postToMap({ type: "setFollow", on: true });
     }
-    postToMap({ type: "setLive", lat, lng, follow: follow || followMapRef.current });
+    postToMap(liveFixMessage(lat, lng, follow || followMapRef.current));
     if (follow) postToMap({ type: "setView", lat, lng, zoom: 18 });
   }
 
@@ -678,6 +746,19 @@ export function StudentActivitySection({
       navigator.geolocation.clearWatch(watchRef.current);
       watchRef.current = null;
     }
+    stepCounterRef.current.stop();
+  }
+
+  function armLapStart(lat: number, lng: number) {
+    if (lapMarkerRef.current || !autoArmLapRef.current) return;
+    const marker = { lat, lng, radiusMeters: LAP_RADIUS_M };
+    autoArmLapRef.current = false;
+    lapAwayRef.current = false;
+    lapMaxAwayRef.current = 0;
+    lapMarkerRef.current = marker;
+    setLapMarker(marker);
+    setLapCounterOn(true);
+    postToMap({ type: "setLapMarker", marker });
   }
 
   async function flushPoints(id: string, extra: GpsPoint[] = []) {
@@ -747,7 +828,7 @@ export function StudentActivitySection({
     const last = route[route.length - 1];
     pipelineRef.current.warmStart(last.lat, last.lng, last.t);
     paintTrack(route, fit);
-    postToMap({ type: "setLive", lat: last.lat, lng: last.lng, follow: followMapRef.current });
+    postToMap(liveFixMessage(last.lat, last.lng, followMapRef.current));
   }
 
   function startWatch(id: string) {
@@ -756,6 +837,8 @@ export function StudentActivitySection({
     if (!navigator.geolocation) return;
     followMapRef.current = true;
     postToMap({ type: "setFollow", on: true });
+    autoArmLapRef.current = !lapMarkerRef.current;
+    void stepCounterRef.current.start(sportRef.current);
     watchRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         if (pauseHoldRef.current || sessionClosedRef.current || shareOpenRef.current || finishingRef.current) return;
@@ -773,16 +856,18 @@ export function StudentActivitySection({
         bufferRef.current.push(point);
         setPoints((current) => {
           const next = [...current, point];
-          postToMap({
-            type: "setLive",
-            lat: point.lat,
-            lng: point.lng,
-            follow: followMapRef.current
-          });
+          postToMap(liveFixMessage(point.lat, point.lng, followMapRef.current));
           paintTrack(next, false);
-          if (lapMarkerRef.current) {
-            const crossing = updateLapCrossing(lapMarkerRef.current, point, { away: lapAwayRef.current, count: 0 });
+          armLapStart(point.lat, point.lng);
+          const marker = lapMarkerRef.current;
+          if (marker) {
+            const crossing = updateLapCrossing(marker, point, {
+              away: lapAwayRef.current,
+              count: 0,
+              maxAwayMeters: lapMaxAwayRef.current
+            });
             lapAwayRef.current = crossing.away;
+            lapMaxAwayRef.current = crossing.maxAwayMeters ?? 0;
             if (crossing.completed) {
               const dist = liveDistance(next);
               setLaps((currentLaps) => {
@@ -803,7 +888,8 @@ export function StudentActivitySection({
                       durationSeconds: targetDuration,
                       speedKmh: Number(targetSpeed.replace(",", ".")) || undefined,
                       lapRadiusMeters: LAP_RADIUS_M,
-                      lapMarker: lapMarkerRef.current,
+                      lapCounterOn: true,
+                      lapMarker: marker,
                       laps: nextLaps
                     }
                   },
@@ -813,6 +899,8 @@ export function StudentActivitySection({
               });
             }
           }
+          const motion = stepCounterRef.current.getCount(liveDistance(next), sportRef.current);
+          setStepsCount(motion);
           return next;
         });
         if (bufferRef.current.length >= 8) void flushPoints(id);
@@ -932,6 +1020,7 @@ export function StudentActivitySection({
       calories: estimateCalories(sport, timeSec, athleteKg),
       elevationGainMeters: elev.gain,
       elevationLossMeters: elev.loss,
+      stepsCount: stepCounterRef.current.getCount(dist, sport),
       mapType,
       is3d,
       points: route,
@@ -1033,6 +1122,14 @@ export function StudentActivitySection({
       );
       markSessionOpen();
       setActivity(data.activity);
+      if (startFresh || !data.resumed) {
+        stepCounterRef.current.reset();
+        setStepsCount(0);
+        autoArmLapRef.current = !lapMarkerRef.current;
+        lapMaxAwayRef.current = 0;
+        lapAwayRef.current = false;
+      }
+      if (lastFixRef.current) armLapStart(lastFixRef.current.lat, lastFixRef.current.lng);
       const recovered = Array.isArray(data.activity.polyline)
         ? data.activity.polyline.map((p) => ({
             lat: p.lat,
@@ -1193,9 +1290,14 @@ export function StudentActivitySection({
         points: route,
         goals: currentGoals(),
         publish,
-        trackingMeta: weatherRef.current
-          ? {
-              weather: {
+        trackingMeta: compactRecord({
+          stepsCount: stepCounterRef.current.getCount(liveDistance(route), sport),
+          avgCadenceSpm:
+            sport === "RIDE" && shownElapsed > 0
+              ? Math.round((stepCounterRef.current.getCount(liveDistance(route), sport) / shownElapsed) * 60)
+              : undefined,
+          weather: weatherRef.current
+            ? {
                 tempC: weatherRef.current.tempC,
                 code: weatherRef.current.code,
                 label: weatherRef.current.label,
@@ -1203,8 +1305,8 @@ export function StudentActivitySection({
                 humidity: weatherRef.current.humidity,
                 capturedAt: weatherRef.current.capturedAt
               }
-            }
-          : undefined
+            : undefined
+        }),
       }),
       token
     );
@@ -1245,10 +1347,11 @@ export function StudentActivitySection({
       paceSecPerKm: result.activity?.avgPaceSecPerKm ?? locked?.paceSecPerKm ?? pace,
       elevationGainMeters: result.activity?.elevationGainMeters ?? locked?.elevationGainMeters ?? 0,
       elevationLossMeters: result.activity?.elevationLossMeters ?? locked?.elevationLossMeters ?? 0,
-      stepsCount: result.activity?.stepsCount,
+      stepsCount: result.activity?.stepsCount || locked?.stepsCount || stepsCount,
       cadenceSpm: result.activity?.avgCadenceSpm,
       powerWatts: result.activity?.estimatedPowerWatts ?? null,
       calories: result.activity?.calories ?? locked?.calories,
+      speedKmh: result.activity?.avgSpeedMps != null ? result.activity.avgSpeedMps * 3.6 : locked?.speedKmh ?? liveSpeed,
       mapType,
       is3d,
       points: finishPoints,
@@ -1279,6 +1382,10 @@ export function StudentActivitySection({
     setPoints([]);
     setElapsed(0);
     setLaps([]);
+    setStepsCount(0);
+    stepCounterRef.current.reset();
+    autoArmLapRef.current = true;
+    lapMaxAwayRef.current = 0;
     lapAwayRef.current = false;
     setPickingLapStart(false);
     setPhotoUrl(null);
@@ -1304,6 +1411,10 @@ export function StudentActivitySection({
     setElapsed(0);
     markSessionClosed();
     clearSessionRoute();
+    setStepsCount(0);
+    stepCounterRef.current.reset();
+    autoArmLapRef.current = true;
+    lapMaxAwayRef.current = 0;
     if (goFeed) onPublished();
   }
 
@@ -1381,6 +1492,8 @@ export function StudentActivitySection({
     setLapCounterOn(false);
     setPickingLapStart(false);
     lapAwayRef.current = false;
+    lapMaxAwayRef.current = 0;
+    autoArmLapRef.current = true;
     postToMap({ type: "setLapMarker", marker: null });
     postToMap({ type: "setLaps", laps: [] });
     postToMap({ type: "setPickMode", on: false });
@@ -1446,6 +1559,7 @@ export function StudentActivitySection({
         </div>
         <iframe
           ref={iframeRef}
+          key={ACTIVITY_MAP_SRC}
           title="Mapa da atividade"
           src={ACTIVITY_MAP_SRC}
           allow="geolocation *; fullscreen *"
@@ -1543,8 +1657,8 @@ export function StudentActivitySection({
               <strong>{`${Math.round(shownElev)} m`}</strong>
             </div>
             <div>
-              <small>Via</small>
-              <strong>{roadMatched ? "OK" : "GPS"}</strong>
+              <small>{sport === "RIDE" ? "Pedaladas" : "Passos"}</small>
+              <strong>{String(shownSteps)}</strong>
             </div>
           </div>
           <div className="student-activity-controls">
@@ -1633,7 +1747,7 @@ export function StudentActivitySection({
           <div className="student-activity-field">
             <span><Flag size={16} /> Voltas</span>
             <p className="student-activity-hint">
-              1. Acione o contador. 2. Selecione no mapa o ponto de partida. 3. Ao voltar nesse ponto, conta 1 volta.
+              A partida é o GPS do início da sessão. Cada retorno (ou passagem no raio de {LAP_RADIUS_M} m) conta 1 volta.
             </p>
             <button
               type="button"
@@ -1738,24 +1852,7 @@ export function StudentActivitySection({
                 <div className="student-activity-share-card">
                   <small>App Treino Social</small>
                   <strong>{shareStats.sportLabel.toUpperCase()} CONCLUÍDA</strong>
-                  {photoUrl ? <img src={photoUrl} alt="" /> : null}
-                  <div className="student-activity-share-metrics">
-                    <span><em>Distância</em>{formatKm(shareStats.distanceMeters)} km</span>
-                    <span><em>Tempo</em>{formatClock(shareStats.elapsedSeconds)}</span>
-                    <span>
-                      <em>{shareStats.sport === "RIDE" ? "Velocidade" : "Ritmo"}</em>
-                      {shareStats.sport === "RIDE"
-                        ? shareStats.speedKmh && shareStats.speedKmh > 0
-                          ? `${shareStats.speedKmh.toFixed(1)} km/h`
-                          : "—"
-                        : formatPace(shareStats.paceSecPerKm)}
-                    </span>
-                  </div>
-                  <div className="student-activity-share-metrics">
-                    <span><em>kcal</em>{String(shareStats.calories ?? 0)}</span>
-                    <span><em>↑ Elev</em>{`${Math.round(shareStats.elevationGainMeters ?? 0)} m`}</span>
-                    <span><em>Voltas</em>{String(shareStats.lapsCount ?? 0)}</span>
-                  </div>
+                  <SharePreview stats={shareStats} photoUrl={photoUrl} />
                 </div>
                 <textarea
                   value={caption}
@@ -1822,16 +1919,7 @@ export function StudentActivitySection({
           <div className="student-activity-saved-card">
             <small>App Treino · Outdoor</small>
             <h3>{finishStats.sportLabel}</h3>
-            <div className="student-activity-share-metrics">
-              <span><em>Distância</em>{formatKm(finishStats.distanceMeters)} km</span>
-              <span><em>Tempo</em>{formatClock(finishStats.elapsedSeconds)}</span>
-              <span><em>Ritmo</em>{formatPace(finishStats.paceSecPerKm)}</span>
-            </div>
-            <div className="student-activity-share-metrics">
-              <span><em>↑ Elev</em>{`${Math.round(finishStats.elevationGainMeters ?? 0)} m`}</span>
-              <span><em>↓ Elev</em>{`${Math.round(finishStats.elevationLossMeters ?? 0)} m`}</span>
-              <span><em>kcal</em>{String(finishStats.calories ?? 0)}</span>
-            </div>
+            <SharePreview stats={finishStats} />
             <button type="button" className="student-green-button" onClick={() => void shareNative(finishStats)}>
               <Share2 size={16} /> Compartilhar
             </button>

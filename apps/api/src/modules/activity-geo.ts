@@ -12,6 +12,14 @@ const EARTH_M = 6371000;
 const MOVING_MIN_MPS = 0.4;
 const GAP_MS = 8000;
 const DEFAULT_KG = 70;
+const ELE_MIN_M = 0.8;
+const ELE_SPIKE_M = 8;
+
+export function clampWeightKg(weightKg?: number | null) {
+  if (typeof weightKg !== "number" || !Number.isFinite(weightKg)) return DEFAULT_KG;
+  if (weightKg <= 30 || weightKg >= 250) return DEFAULT_KG;
+  return weightKg;
+}
 
 const MET: Record<OutdoorSportKind, number> = {
   RUN: 9.8,
@@ -279,7 +287,7 @@ export function estimateBikePowerWatts(speedMps: number, grade: number, massKg =
   return Math.round(watts);
 }
 
-export function summarizeTrack(sport: OutdoorSportKind, points: GpsPoint[], pauseMs = 0) {
+export function summarizeTrack(sport: OutdoorSportKind, points: GpsPoint[], pauseMs = 0, weightKg?: number | null) {
   if (points.length === 0) {
     return {
       distanceMeters: 0,
@@ -323,9 +331,12 @@ export function summarizeTrack(sport: OutdoorSportKind, points: GpsPoint[], paus
     if (dt > 0 && dt < GAP_MS && speed >= MOVING_MIN_MPS) movingMs += dt;
     if (typeof cur.ele === "number" && typeof prev.ele === "number") {
       const climb = cur.ele - prev.ele;
-      if (climb > 0.4) elevationGain += climb;
-      if (climb < -0.4) elevationLoss += -climb;
-      if (sport === "RIDE" && d > 0.5 && dt > 0) {
+      const spike = Math.abs(climb) > ELE_SPIKE_M;
+      if (!spike) {
+        if (climb > ELE_MIN_M) elevationGain += climb;
+        if (climb < -ELE_MIN_M) elevationLoss += -climb;
+      }
+      if (!spike && sport === "RIDE" && d > 0.5 && dt > 0) {
         const grade = climb / d;
         const watts = estimateBikePowerWatts(speed, grade);
         if (watts != null) {
@@ -344,7 +355,7 @@ export function summarizeTrack(sport: OutdoorSportKind, points: GpsPoint[], paus
   const avgSpeed = elapsedSeconds > 0 ? distance / elapsedSeconds : null;
   const avgPace = distance >= 20 ? elapsedSeconds / (distance / 1000) : null;
   const hours = Math.max(elapsedSeconds, movingSeconds) / 3600;
-  const calories = Math.round(MET[sport] * DEFAULT_KG * Math.max(hours, 0));
+  const calories = Math.round(MET[sport] * clampWeightKg(weightKg) * Math.max(hours, 0));
 
   return {
     distanceMeters: distance,
@@ -370,12 +381,21 @@ export function buildStravaSummary(
   startedAt: Date,
   points: GpsPoint[],
   pauseMs: number,
-  extras?: { is3d?: boolean; mapType?: string; caption?: string | null }
+  extras?: {
+    is3d?: boolean;
+    mapType?: string;
+    caption?: string | null;
+    weightKg?: number | null;
+    roadMatched?: boolean;
+    matchConfidence?: number | null;
+  }
 ) {
-  const stats = summarizeTrack(sport, points, pauseMs);
+  const stats = summarizeTrack(sport, points, pauseMs, extras?.weightKg);
   const type = sport === "WALK" ? "Walk" : sport === "RIDE" ? "Ride" : "Run";
   return {
     ...stats,
+    roadMatched: Boolean(extras?.roadMatched),
+    matchConfidence: extras?.matchConfidence ?? null,
     name: activityTitle(sport, startedAt),
     type,
     sport_type: type,

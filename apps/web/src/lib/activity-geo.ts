@@ -25,11 +25,19 @@ const MET: Record<"RUN" | "WALK" | "RIDE", number> = {
   RIDE: 7.5
 };
 
-/** Estimativa local (70 kg) — o servidor recalcula no finish. */
-export function estimateCalories(sport: "RUN" | "WALK" | "RIDE", elapsedSeconds: number) {
+/** Estimativa local — o servidor recalcula no finish com o peso da avaliação. */
+export function estimateCalories(
+  sport: "RUN" | "WALK" | "RIDE",
+  elapsedSeconds: number,
+  weightKg = 70
+) {
+  const kg = weightKg > 30 && weightKg < 250 ? weightKg : 70;
   const hours = Math.max(0, elapsedSeconds) / 3600;
-  return Math.round(MET[sport] * 70 * hours);
+  return Math.round(MET[sport] * kg * hours);
 }
+
+const ELE_MIN_M = 0.8;
+const ELE_SPIKE_M = 8;
 
 export function liveElevation(points: Array<{ ele?: number | null }>) {
   let gain = 0;
@@ -39,8 +47,9 @@ export function liveElevation(points: Array<{ ele?: number | null }>) {
     const cur = points[i]?.ele;
     if (typeof prev !== "number" || typeof cur !== "number") continue;
     const delta = cur - prev;
-    if (delta > 0.4) gain += delta;
-    else if (delta < -0.4) loss += -delta;
+    if (Math.abs(delta) > ELE_SPIKE_M) continue;
+    if (delta > ELE_MIN_M) gain += delta;
+    else if (delta < -ELE_MIN_M) loss += -delta;
   }
   return { gain, loss };
 }
@@ -149,10 +158,13 @@ export function liveSpeedKmh(points: Array<{ lat: number; lng: number; t?: numbe
   return (meters / dt) * 3.6;
 }
 
-export const LAP_RADIUS_M = 22;
+export const LAP_RADIUS_M = 32;
+
+/** Distância mínima do ponto de partida antes de uma reentrada contar volta. */
+export const LAP_MIN_EXIT_M = 48;
 
 export type LapMarker = { lat: number; lng: number; radiusMeters?: number };
-export type LapState = { away: boolean; count: number };
+export type LapState = { away: boolean; count: number; maxAwayMeters?: number };
 
 export function updateLapCrossing(
   marker: LapMarker,
@@ -160,12 +172,24 @@ export function updateLapCrossing(
   state: LapState
 ): LapState & { completed: boolean } {
   const radius = marker.radiusMeters && marker.radiusMeters > 0 ? marker.radiusMeters : LAP_RADIUS_M;
-  const inside = haversineMeters(marker, point) <= radius;
-  if (inside && state.away) {
-    return { away: false, count: state.count + 1, completed: true };
+  const dist = haversineMeters(marker, point);
+  const inside = dist <= radius;
+  const maxAway = Math.max(state.maxAwayMeters ?? 0, dist);
+  const minExit = Math.max(radius * 1.5, LAP_MIN_EXIT_M);
+  if (inside && maxAway >= minExit) {
+    return { away: false, count: state.count + 1, completed: true, maxAwayMeters: 0 };
   }
-  if (!inside && !state.away) {
-    return { away: true, count: state.count, completed: false };
-  }
-  return { away: state.away, count: state.count, completed: false };
+  return { away: !inside, count: state.count, completed: false, maxAwayMeters: maxAway };
+}
+
+const STRIDE_M: Record<"RUN" | "WALK" | "RIDE", number> = {
+  RUN: 0.82,
+  WALK: 0.72,
+  RIDE: 5.4
+};
+
+/** Passos (corrida/caminhada) ou pedaladas (ciclismo) a partir da distância. */
+export function estimateMotionCount(sport: "RUN" | "WALK" | "RIDE", distanceMeters: number) {
+  if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) return 0;
+  return Math.max(0, Math.round(distanceMeters / STRIDE_M[sport]));
 }

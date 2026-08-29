@@ -150,10 +150,12 @@ export function liveKmSplit(points: Array<{ lat: number; lng: number; t?: number
   return { kmIndex, metersInSplit, paceSecPerKm, completed };
 }
 
-export const LAP_RADIUS_M = 22;
+export const LAP_RADIUS_M = 32;
+
+export const LAP_MIN_EXIT_M = 48;
 
 export type LapMarker = { lat: number; lng: number; radiusMeters?: number };
-export type LapState = { away: boolean; count: number };
+export type LapState = { away: boolean; count: number; maxAwayMeters?: number };
 
 export function updateLapCrossing(
   marker: LapMarker,
@@ -161,12 +163,12 @@ export function updateLapCrossing(
   state: LapState
 ): LapState & { completed: boolean } {
   const radius = marker.radiusMeters && marker.radiusMeters > 0 ? marker.radiusMeters : LAP_RADIUS_M;
-  const inside = haversineMeters(marker, point) <= radius;
-  if (inside && state.away) {
-    return { away: false, count: state.count + 1, completed: true };
+  const dist = haversineMeters(marker, point);
+  const inside = dist <= radius;
+  const maxAway = Math.max(state.maxAwayMeters ?? 0, dist);
+  const minExit = Math.max(radius * 1.5, LAP_MIN_EXIT_M);
+  if (inside && maxAway >= minExit) {
+    return { away: false, count: state.count + 1, completed: true, maxAwayMeters: 0 };
   }
-  if (!inside && !state.away) {
-    return { away: true, count: state.count, completed: false };
-  }
-  return { away: state.away, count: state.count, completed: false };
+  return { away: !inside, count: state.count, completed: false, maxAwayMeters: maxAway };
 }

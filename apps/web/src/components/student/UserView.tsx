@@ -2751,6 +2751,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             preferredSport="RUN"
             preferredSportKey={corridaOpenKey}
             athleteGender={profile?.gender}
+            weightKg={latestAssessment?.weightKg ?? null}
             onOpenPlay={() => goToSection("play")}
             onPublished={() => goToSection("feed")}
           />

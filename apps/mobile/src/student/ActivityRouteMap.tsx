@@ -41,7 +41,7 @@ export function ActivityRouteMap({
   height = 180,
   mapType = "standard",
   is3d = false,
-  strokeColor = "#E85D04"
+  strokeColor = "#2f7dff"
 }: {
   points: Point[];
   height?: number;

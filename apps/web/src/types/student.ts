@@ -290,6 +290,8 @@ export interface OutdoorActivityRow {
   photoUrl?: string | null;
   videoUrl?: string | null;
   caption?: string | null;
+  roadMatched?: boolean;
+  matchConfidence?: number | null;
 }
 
 export interface WorkoutShareRow {

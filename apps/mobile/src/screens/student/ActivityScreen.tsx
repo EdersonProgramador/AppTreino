@@ -113,6 +113,8 @@ export function ActivityScreen() {
   const sessionClosedRef = useRef(false);
   const liveHydrateGen = useRef(0);
   const lapAwayRef = useRef(false);
+  const lapMaxAwayRef = useRef(0);
+  const autoArmLapRef = useRef(true);
   const lapMarkerRef = useRef<LapMarker | null>(null);
   const [sport, setSport] = useState<OutdoorSport>("RUN");
   const [mapType, setMapType] = useState<MapType>("standard");
@@ -217,7 +219,7 @@ export function ActivityScreen() {
   const shownKmPace = sessionActive ? locked?.kmPaceSecPerKm ?? liveSplit.paceSecPerKm : null;
   const parsedKm = Number(targetKm.replace(",", "."));
   const durationSec = (Number(targetHours) || 0) * 3600 + (Number(targetMinutes) || 0) * 60;
-  lapMarkerRef.current = lapCounterOn ? lapMarker : null;
+  lapMarkerRef.current = lapMarker;
   pointsRef.current = points;
   shareOpenRef.current = shareOpen;
   finishingRef.current = finishing;
@@ -287,9 +289,9 @@ export function ActivityScreen() {
       durationSeconds,
       speedKmh,
       lapRadiusMeters: LAP_RADIUS_M,
-      lapCounterOn,
-      lapMarker: lapCounterOn ? lapMarker : null,
-      laps: lapCounterOn ? laps : []
+      lapCounterOn: true,
+      lapMarker,
+      laps
     };
   }
 
@@ -564,9 +566,23 @@ export function ActivityScreen() {
       bufferRef.current.push(point);
       setPoints((current) => {
         const next = [...current, point];
+        if (autoArmLapRef.current && !lapMarkerRef.current) {
+          const marker = { lat: point.lat, lng: point.lng, radiusMeters: LAP_RADIUS_M };
+          autoArmLapRef.current = false;
+          lapAwayRef.current = false;
+          lapMaxAwayRef.current = 0;
+          lapMarkerRef.current = marker;
+          setLapMarker(marker);
+          setLapCounterOn(true);
+        }
         if (lapMarkerRef.current) {
-          const crossing = updateLapCrossing(lapMarkerRef.current, point, { away: lapAwayRef.current, count: 0 });
+          const crossing = updateLapCrossing(lapMarkerRef.current, point, {
+            away: lapAwayRef.current,
+            count: 0,
+            maxAwayMeters: lapMaxAwayRef.current
+          });
           lapAwayRef.current = crossing.away;
+          lapMaxAwayRef.current = crossing.maxAwayMeters ?? 0;
           if (crossing.completed) {
             const dist = liveDistance(next);
             setLaps((currentLaps) => {
@@ -1276,6 +1292,8 @@ export function ActivityScreen() {
     setLapCounterOn(false);
     setPickingLapStart(false);
     lapAwayRef.current = false;
+    lapMaxAwayRef.current = 0;
+    autoArmLapRef.current = true;
   }
 
   return (

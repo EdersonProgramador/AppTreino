@@ -1,4 +1,5 @@
-import { Bike, Dumbbell, Footprints } from "lucide-react";
+import { Dumbbell, Footprints } from "lucide-react";
+import { BikeIcon } from "../shared/BikeIcon";
 
 export type StreakKind = "WORKOUT" | "RUN" | "WALK" | "RIDE";
 
@@ -8,7 +9,7 @@ export function StudentStreakDayIcons({ kinds }: { kinds: StreakKind[] }) {
     <span className="student-streak-kinds">
       {kinds.slice(0, 2).map((kind) =>
         kind === "RIDE" ? (
-          <Bike key={kind} size={11} />
+          <BikeIcon key={kind} size={11} />
         ) : kind === "WALK" || kind === "RUN" ? (
           <Footprints key={kind} size={11} />
         ) : (
