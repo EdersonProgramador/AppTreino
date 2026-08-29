@@ -33,6 +33,11 @@ export class WebStepCounter {
     this.lastMag = 0;
   }
 
+  hydrate(count: number) {
+    if (!Number.isFinite(count) || count <= 0) return;
+    this.sensorCount = Math.max(this.sensorCount, Math.round(count));
+  }
+
   async start(sport: OutdoorSport) {
     this.sport = sport;
     if (this.listening || typeof window === "undefined") return;

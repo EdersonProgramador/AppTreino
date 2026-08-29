@@ -24,6 +24,7 @@ import { fetchWeather, fetchWeatherHere, type WeatherSnapshot } from "../../lib/
 import { StudentWeatherChip } from "./StudentWeatherChip";
 import {
   estimateCalories,
+  estimateMotionCount,
   formatClock,
   formatKm,
   formatPace,
@@ -222,6 +223,39 @@ type LapRecord = { index: number; lat: number; lng: number; t: number; distanceM
 const ACTIVITY_MAP_SRC = activityMapSrc();
 const LAST_GPS_KEY = "apptreino.lastGps";
 const LAST_GPS_MAX_AGE_MS = 30 * 60 * 1000;
+const STEPS_KEY_PREFIX = "apptreino.steps.";
+
+function stepsStorageKey(activityId: string) {
+  return `${STEPS_KEY_PREFIX}${activityId}`;
+}
+
+function readStoredSteps(activityId: string | null | undefined): number {
+  if (!activityId) return 0;
+  try {
+    const n = Number(sessionStorage.getItem(stepsStorageKey(activityId)));
+    return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function persistStoredSteps(activityId: string | null | undefined, count: number) {
+  if (!activityId || !Number.isFinite(count) || count <= 0) return;
+  try {
+    sessionStorage.setItem(stepsStorageKey(activityId), String(Math.round(count)));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function clearStoredSteps(activityId: string | null | undefined) {
+  if (!activityId) return;
+  try {
+    sessionStorage.removeItem(stepsStorageKey(activityId));
+  } catch {
+    /* ignore */
+  }
+}
 
 function readStoredFix(): { lat: number; lng: number } | null {
   try {
@@ -370,6 +404,7 @@ export function StudentActivitySection({
   const weatherRef = useRef<WeatherSnapshot | null>(null);
   const [roadMatched, setRoadMatched] = useState(false);
   const [stepsCount, setStepsCount] = useState(0);
+  const stepsCountRef = useRef(0);
   const athleteKg = weightKg && weightKg > 30 && weightKg < 250 ? weightKg : 70;
 
   const sessionActive = Boolean(
@@ -393,8 +428,9 @@ export function StudentActivitySection({
   const shownElapsed = sessionActive ? locked?.elapsedSeconds ?? elapsed : 0;
   const shownElev = sessionActive ? locked?.elevationGainMeters ?? elevation.gain : 0;
   const shownLaps = sessionActive ? locked?.lapsCount ?? laps.length : 0;
+  const estimatedSteps = sessionActive ? estimateMotionCount(sport, distance) : 0;
   const shownSteps = sessionActive
-    ? locked?.stepsCount ?? stepsCount
+    ? Math.max(locked?.stepsCount ?? 0, stepsCount, estimatedSteps)
     : 0;
   const shownKmIndex = sessionActive ? locked?.kmIndex ?? liveSplit.kmIndex : 1;
   const shownKmPace = sessionActive ? locked?.kmPaceSecPerKm ?? liveSplit.paceSecPerKm : null;
@@ -406,6 +442,34 @@ export function StudentActivitySection({
   shareOpenRef.current = shareOpen;
   finishingRef.current = finishing;
   pauseHoldRef.current = pauseHold;
+  stepsCountRef.current = stepsCount;
+
+  function applyMotionCount(next: number, activityId = activityIdRef.current) {
+    const value = Math.max(
+      0,
+      Math.round(Number.isFinite(next) ? next : 0),
+      stepsCountRef.current,
+      readStoredSteps(activityId)
+    );
+    stepsCountRef.current = value;
+    stepCounterRef.current.hydrate(value);
+    if (value !== stepsCount) setStepsCount(value);
+    persistStoredSteps(activityId, value);
+    return value;
+  }
+
+  function seedMotionFromRoute(
+    route: Array<{ lat: number; lng: number }>,
+    sportKind: OutdoorSport,
+    activityId?: string | null,
+    saved?: number | null
+  ) {
+    const dist = liveDistance(route);
+    return applyMotionCount(
+      Math.max(saved ?? 0, stepCounterRef.current.getCount(dist, sportKind)),
+      activityId ?? activityIdRef.current
+    );
+  }
 
   function markSessionClosed() {
     sessionClosedRef.current = true;
@@ -578,6 +642,12 @@ export function StudentActivitySection({
           lapAwayRef.current = false;
         }
         if (goals?.laps) setLaps(goals.laps);
+        seedMotionFromRoute(
+          recovered,
+          data.activity.sport,
+          data.activity.id,
+          data.activity.stepsCount
+        );
         if (data.activity.status === "LIVE") {
           startWatch(data.activity.id);
         }
@@ -873,6 +943,10 @@ export function StudentActivitySection({
     postToMap({ type: "setFollow", on: true });
     autoArmLapRef.current = !lapMarkerRef.current;
     void stepCounterRef.current.start(sportRef.current);
+    applyMotionCount(
+      stepCounterRef.current.getCount(liveDistance(pointsRef.current), sportRef.current),
+      id
+    );
     watchRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         if (pauseHoldRef.current || sessionClosedRef.current || shareOpenRef.current || finishingRef.current) return;
@@ -934,7 +1008,7 @@ export function StudentActivitySection({
             }
           }
           const motion = stepCounterRef.current.getCount(liveDistance(next), sportRef.current);
-          setStepsCount(motion);
+          applyMotionCount(motion, id);
           return next;
         });
         if (bufferRef.current.length >= 8) void flushPoints(id);
@@ -1044,6 +1118,13 @@ export function StudentActivitySection({
     const elev = liveElevation(route);
     const split = liveKmSplit(route);
     const paceSec = dist >= 20 && timeSec > 0 ? timeSec / (dist / 1000) : livePace;
+    const motion = applyMotionCount(
+      Math.max(
+        stepCounterRef.current.getCount(dist, sport),
+        locked?.stepsCount ?? 0,
+        activity?.stepsCount ?? 0
+      )
+    );
     return {
       sportLabel: SPORTS.find((item) => item.id === sport)?.label ?? sport,
       sport,
@@ -1055,7 +1136,7 @@ export function StudentActivitySection({
       calories: estimateCalories(sport, timeSec, athleteKg),
       elevationGainMeters: elev.gain,
       elevationLossMeters: elev.loss,
-      stepsCount: stepCounterRef.current.getCount(dist, sport),
+      stepsCount: motion,
       mapType,
       is3d,
       points: route,
@@ -1108,6 +1189,7 @@ export function StudentActivitySection({
           } catch {
             /* já finalizada */
           }
+          clearStoredSteps(leftover.id);
           setActivity(null);
         }
         clearSessionRoute();
@@ -1136,6 +1218,7 @@ export function StudentActivitySection({
         } else {
           pipelineRef.current.reset();
         }
+        seedMotionFromRoute(points, sport, activity.id, activity.stepsCount);
         startWatch(activity.id);
         return;
       }
@@ -1157,14 +1240,6 @@ export function StudentActivitySection({
       );
       markSessionOpen();
       setActivity(data.activity);
-      if (startFresh || !data.resumed) {
-        stepCounterRef.current.reset();
-        setStepsCount(0);
-        autoArmLapRef.current = !lapMarkerRef.current;
-        lapMaxAwayRef.current = 0;
-        lapAwayRef.current = false;
-      }
-      if (lastFixRef.current) armLapStart(lastFixRef.current.lat, lastFixRef.current.lng);
       const recovered = Array.isArray(data.activity.polyline)
         ? data.activity.polyline.map((p) => ({
             lat: p.lat,
@@ -1175,6 +1250,18 @@ export function StudentActivitySection({
           }))
         : [];
       const isResume = !startFresh && Boolean(data.resumed) && data.activity.sport === sport;
+      if (startFresh) {
+        stepCounterRef.current.reset();
+        stepsCountRef.current = 0;
+        setStepsCount(0);
+        clearStoredSteps(data.activity.id);
+        autoArmLapRef.current = !lapMarkerRef.current;
+        lapMaxAwayRef.current = 0;
+        lapAwayRef.current = false;
+      } else {
+        seedMotionFromRoute(isResume ? recovered : [], data.activity.sport, data.activity.id, data.activity.stepsCount);
+      }
+      if (lastFixRef.current) armLapStart(lastFixRef.current.lat, lastFixRef.current.lng);
       applyTrack(isResume ? recovered : [], false);
       startWatch(data.activity.id);
       locate(true);
@@ -1312,6 +1399,7 @@ export function StudentActivitySection({
     lastTrackRef.current = route;
     if (route.length) applyTrack(route, false);
     await persistRoute(activity.id).catch(() => undefined);
+    const motion = applyMotionCount(stepCounterRef.current.getCount(liveDistance(route), sport));
     const result = await apiPost<FinishResult>(
       `/student/activities/${activity.id}/finish`,
       compactRecord({
@@ -1326,10 +1414,10 @@ export function StudentActivitySection({
         goals: currentGoals(),
         publish,
         trackingMeta: compactRecord({
-          stepsCount: stepCounterRef.current.getCount(liveDistance(route), sport),
+          stepsCount: motion,
           avgCadenceSpm:
             sport === "RIDE" && shownElapsed > 0
-              ? Math.round((stepCounterRef.current.getCount(liveDistance(route), sport) / shownElapsed) * 60)
+              ? Math.round((motion / shownElapsed) * 60)
               : undefined,
           weather: weatherRef.current
             ? {
@@ -1383,7 +1471,7 @@ export function StudentActivitySection({
       paceSecPerKm: result.activity?.avgPaceSecPerKm ?? locked?.paceSecPerKm ?? pace,
       elevationGainMeters: result.activity?.elevationGainMeters ?? locked?.elevationGainMeters ?? 0,
       elevationLossMeters: result.activity?.elevationLossMeters ?? locked?.elevationLossMeters ?? 0,
-      stepsCount: result.activity?.stepsCount || locked?.stepsCount || stepsCount,
+      stepsCount: Math.max(result.activity?.stepsCount ?? 0, locked?.stepsCount ?? 0, motion, stepsCountRef.current),
       cadenceSpm: result.activity?.avgCadenceSpm,
       powerWatts: result.activity?.estimatedPowerWatts ?? null,
       calories: result.activity?.calories ?? locked?.calories,
@@ -1402,6 +1490,7 @@ export function StudentActivitySection({
 
   async function resetAfterFinish() {
     stopWatch();
+    const closedId = activityIdRef.current;
     bufferRef.current = [];
     lastTrackRef.current = mergeRoutePoints(lastTrackRef.current, points);
     setShareOpen(false);
@@ -1419,7 +1508,9 @@ export function StudentActivitySection({
     setElapsed(0);
     setLaps([]);
     setStepsCount(0);
+    stepsCountRef.current = 0;
     stepCounterRef.current.reset();
+    clearStoredSteps(closedId);
     autoArmLapRef.current = true;
     lapMaxAwayRef.current = 0;
     lapAwayRef.current = false;
@@ -1446,9 +1537,12 @@ export function StudentActivitySection({
     setLocked(null);
     setElapsed(0);
     markSessionClosed();
+    const closedId = activityIdRef.current;
     clearSessionRoute();
     setStepsCount(0);
+    stepsCountRef.current = 0;
     stepCounterRef.current.reset();
+    clearStoredSteps(closedId);
     autoArmLapRef.current = true;
     lapMaxAwayRef.current = 0;
     if (goFeed) onPublished();
