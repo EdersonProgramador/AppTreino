@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS "shipping_zones" (
 
 CREATE INDEX IF NOT EXISTS "shipping_zones_is_active_priority_idx" ON "shipping_zones"("is_active", "priority");
 
-ALTER TABLE "carts" ADD COLUMN IF NOT EXISTS "fulfillment_method" "ShippingMethod";
+ALTER TABLE "carts" ADD COLUMN IF NOT EXISTS "fulfillment_method" "shipping_method";
 ALTER TABLE "carts" ADD COLUMN IF NOT EXISTS "destination_postal_code" TEXT;
 ALTER TABLE "carts" ADD COLUMN IF NOT EXISTS "destination_street" TEXT;
 ALTER TABLE "carts" ADD COLUMN IF NOT EXISTS "destination_number" TEXT;
@@ -60,13 +60,13 @@ ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "shipping_service_name" TEXT;
 ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "shipping_quote_source" TEXT;
 
 ALTER TABLE "order_items" ADD COLUMN IF NOT EXISTS "shipping_in_cents" INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE "order_items" ADD COLUMN IF NOT EXISTS "shipping_method" "ShippingMethod" NOT NULL DEFAULT 'PICKUP';
+ALTER TABLE "order_items" ADD COLUMN IF NOT EXISTS "shipping_method" "shipping_method" NOT NULL DEFAULT 'PICKUP';
 ALTER TABLE "order_items" ADD COLUMN IF NOT EXISTS "shipping_carrier" TEXT;
 ALTER TABLE "order_items" ADD COLUMN IF NOT EXISTS "shipping_service_id" TEXT;
 ALTER TABLE "order_items" ADD COLUMN IF NOT EXISTS "shipping_service_name" TEXT;
 
 ALTER TABLE "purchases" ADD COLUMN IF NOT EXISTS "shipping_in_cents" INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE "purchases" ADD COLUMN IF NOT EXISTS "shipping_method" "ShippingMethod" NOT NULL DEFAULT 'PICKUP';
+ALTER TABLE "purchases" ADD COLUMN IF NOT EXISTS "shipping_method" "shipping_method" NOT NULL DEFAULT 'PICKUP';
 ALTER TABLE "purchases" ADD COLUMN IF NOT EXISTS "shipping_address" TEXT;
 ALTER TABLE "purchases" ADD COLUMN IF NOT EXISTS "destination_postal_code" TEXT;
 ALTER TABLE "purchases" ADD COLUMN IF NOT EXISTS "destination_street" TEXT;
