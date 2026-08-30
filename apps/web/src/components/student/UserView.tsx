@@ -774,8 +774,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       setStorePaymentNotice("Pagamento recebido. Seu pedido será atualizado em instantes.");
       setStoreTab("orders");
     } else if (paymentParam === "cancel") {
-      setStorePaymentNotice("Pagamento cancelado. Seu carrinho continua salvo.");
-      setStoreTab("cart");
+      setStorePaymentNotice(
+        "Pagamento cancelado. Seu pedido continua em Meus pedidos — você pode pagar quando quiser."
+      );
+      setStoreTab("orders");
     }
     if (!raw && !storeTabParam && !paymentParam) return;
     const next = (raw === "home" ? "feed" : raw === "favorites" ? "ratings" : raw) as StudentPanelSection;
@@ -4211,7 +4213,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           >
             <StudentProfileStorePanel
               token={token}
-              enabled={publicConfig["module_products"] !== "false" || publicConfig["module_purchases"] !== "false"}
+              enabled={publicConfig["module_purchases"] !== "false"}
               onOpenStore={openStore}
             />
             <section className="student-athlete-offensive">

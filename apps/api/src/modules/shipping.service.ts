@@ -392,9 +392,24 @@ export async function quoteShipping(input: {
 
   const postalCode = normalizePostalCode(input.destination?.postalCode);
   if (!isValidPostalCode(postalCode)) {
-    const error = new Error("Informe um CEP válido para calcular o frete.") as Error & { statusCode: number };
-    error.statusCode = 400;
-    throw error;
+    const itemLines: ItemShippingLine[] = input.items.map((item) => ({
+      productId: item.productId,
+      productName: item.name,
+      quantity: item.quantity,
+      shippingMethod: item.kind === "DIGITAL" ? "DIGITAL" : "DELIVERY",
+      shippingInCents: 0
+    }));
+    return {
+      fulfillmentMethod: "DELIVERY" as ShippingMethod,
+      shippingMethod: "DELIVERY" as ShippingMethod,
+      shippingInCents: 0,
+      itemLines,
+      services: [] as ShippingServiceOption[],
+      quoteSource: "pending_address",
+      canPickup,
+      canDeliver,
+      formattedAddress: formatShippingAddress(input.destination ?? {})
+    } satisfies ShippingQuoteResult;
   }
 
   const deliverableItems = input.items.filter(

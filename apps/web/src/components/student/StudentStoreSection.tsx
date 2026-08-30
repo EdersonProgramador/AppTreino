@@ -113,6 +113,10 @@ export function StudentStoreSection({
 
   useEffect(() => {
     if (!directProduct || directProduct.kind === "DIGITAL") return;
+    if (directFulfillmentMethod === "DELIVERY") {
+      const cep = directDestination.postalCode?.replace(/\D/g, "") ?? "";
+      if (cep.length !== 8) return;
+    }
     void refreshDirectQuote();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- recalcular ao abrir o modal
   }, [directProduct?.id]);
@@ -310,6 +314,13 @@ export function StudentStoreSection({
 
   async function handleDirectPurchaseSubmit() {
     if (!directProduct || !purchasesEnabled) return;
+    if (directProduct.kind !== "DIGITAL" && directFulfillmentMethod === "DELIVERY") {
+      const cep = directDestination.postalCode?.replace(/\D/g, "") ?? "";
+      if (cep.length !== 8 || !directDestination.street?.trim() || !directDestination.number?.trim()) {
+        onFlashError?.("Informe CEP, rua e número para entrega.");
+        return;
+      }
+    }
     setDirectSubmitting(true);
     try {
       const selected = directQuote?.services.find((service) => service.id === directServiceId);
@@ -412,28 +423,30 @@ export function StudentStoreSection({
         token
       );
       setOrders((current) => [response.order, ...current]);
-      syncCart({
-        id: cart?.id ?? "empty",
-        items: [],
-        subtotalInCents: 0,
-        discountInCents: 0,
-        shippingInCents: 0,
-        shippingMethod: "PICKUP",
-        amountInCents: 0,
-        itemCount: 0,
-        couponCode: null
-      });
-      setCartCouponInput("");
-      setDestination(emptyDestination());
-      setSelectedServiceId(null);
       if (response.order.paymentUrl) {
+        syncCart({
+          id: cart?.id ?? "empty",
+          items: [],
+          subtotalInCents: 0,
+          discountInCents: 0,
+          shippingInCents: 0,
+          shippingMethod: "PICKUP",
+          amountInCents: 0,
+          itemCount: 0,
+          couponCode: null
+        });
+        setCartCouponInput("");
+        setDestination(emptyDestination());
+        setSelectedServiceId(null);
         openCheckoutUrl(response.order.paymentUrl);
         return;
       }
+      await refreshAll();
       onFlashSuccess?.("Pedido criado. Aguardando confirmação de pagamento.");
       onTabChange("orders");
     } catch (error) {
       onFlashError?.(error instanceof ApiError ? error.message : "Não foi possível finalizar o pedido.");
+      await refreshAll();
     } finally {
       setCartCheckingOut(false);
     }

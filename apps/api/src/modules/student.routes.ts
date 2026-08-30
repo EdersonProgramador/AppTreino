@@ -2147,14 +2147,24 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       }
     });
 
-    const asaasCheckout = await createAsaasCheckout({
-      externalReference: purchaseExternalReference(purchase.id),
-      itemName: asaasCheckoutItemName(product.name),
-      itemDescription: `Pedido vitrine - ${authUser.name}`,
-      amountInCents: purchase.amountInCents,
-      billingType: body.billingType as AsaasBillingType,
-      callbacks: vitrineCheckoutCallbacks({ purchaseId: purchase.id })
-    });
+    let asaasCheckout: Awaited<ReturnType<typeof createAsaasCheckout>> = null;
+    try {
+      asaasCheckout = await createAsaasCheckout({
+        externalReference: purchaseExternalReference(purchase.id),
+        itemName: asaasCheckoutItemName(product.name),
+        itemDescription: `Pedido vitrine - ${authUser.name}`,
+        amountInCents: purchase.amountInCents,
+        billingType: body.billingType as AsaasBillingType,
+        callbacks: vitrineCheckoutCallbacks({ purchaseId: purchase.id })
+      });
+    } catch {
+      await prisma.purchase.delete({ where: { id: purchase.id } });
+      const error = new Error("Pagamento online indisponível no momento. Tente novamente.") as Error & {
+        statusCode: number;
+      };
+      error.statusCode = 503;
+      throw error;
+    }
 
     const updatedPurchase = asaasCheckout
       ? await prisma.purchase.update({

@@ -44,7 +44,7 @@ export function vitrineCheckoutCallbacks(input: { orderId?: string; purchaseId?:
 
   const cancelParams = new URLSearchParams();
   cancelParams.set("section", "products");
-  cancelParams.set("storeTab", "cart");
+  cancelParams.set("storeTab", "orders");
   cancelParams.set("payment", "cancel");
 
   return {

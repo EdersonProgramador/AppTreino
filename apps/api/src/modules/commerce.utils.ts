@@ -259,6 +259,53 @@ export async function getOrCreateCart(userId: string) {
 
 type CartWithItems = Awaited<ReturnType<typeof getOrCreateCart>>;
 
+export async function clearCartAfterCheckout(cartId: string) {
+  await prisma.$transaction([
+    prisma.cartItem.deleteMany({ where: { cartId } }),
+    prisma.cart.update({
+      where: { id: cartId },
+      data: {
+        couponCode: null,
+        fulfillmentMethod: null,
+        destinationPostalCode: null,
+        destinationStreet: null,
+        destinationNumber: null,
+        destinationComplement: null,
+        destinationNeighborhood: null,
+        destinationCity: null,
+        destinationState: null,
+        shippingCarrier: null,
+        shippingServiceId: null,
+        shippingServiceName: null
+      }
+    })
+  ]);
+}
+
+export async function applyOrderPaymentSideEffects(
+  order: {
+    couponId: string | null;
+    items: Array<{ productId: string; quantity: number }>;
+  },
+  previousStatus: OrderStatus,
+  nextStatus: OrderStatus
+) {
+  if (!ORDER_PAID_STATUSES.includes(nextStatus) || ORDER_PAID_STATUSES.includes(previousStatus)) {
+    return;
+  }
+
+  for (const item of order.items) {
+    await decrementProductStock(item.productId, item.quantity);
+  }
+
+  if (order.couponId) {
+    await prisma.coupon.update({
+      where: { id: order.couponId },
+      data: { usedCount: { increment: 1 } }
+    });
+  }
+}
+
 export async function buildCartTotals(cart: CartWithItems) {
   const activeItems = cart.items.filter((item) => item.product.isActive && !item.product.deletedAt);
   const subtotalInCents = activeItems.reduce(

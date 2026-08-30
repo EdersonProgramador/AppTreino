@@ -388,7 +388,7 @@ export async function registerPublicRoutes(app: FastifyInstance) {
       })
       .parse(request.query ?? {});
 
-    const apiBase = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+    const apiBase = (env.PUBLIC_BASE_URL ?? "").replace(/\/$/, "");
     const sandbox = env.MELHOR_ENVIO_SANDBOX !== false;
     const tokenUrl = sandbox
       ? "https://sandbox.melhorenvio.com.br/oauth/token"

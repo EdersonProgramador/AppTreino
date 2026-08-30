@@ -8,8 +8,9 @@ import { asaasCheckoutItemName } from "./checkout.utils.js";
 import { buildPaginationMeta, parsePagination } from "./pagination.js";
 import {
   assertModuleEnabled,
+  applyOrderPaymentSideEffects,
   buildCartTotals,
-  decrementProductStock,
+  clearCartAfterCheckout,
   findValidCoupon,
   getOrCreateCart,
   ORDER_PAID_STATUSES,
@@ -473,43 +474,25 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
         include: { items: true, user: true }
       });
 
-      if (totals.couponId) {
-        await tx.coupon.update({
-          where: { id: totals.couponId },
-          data: { usedCount: { increment: 1 } }
-        });
-      }
-
-      await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
-      await tx.cart.update({
-        where: { id: cart.id },
-        data: {
-          couponCode: null,
-          fulfillmentMethod: null,
-          destinationPostalCode: null,
-          destinationStreet: null,
-          destinationNumber: null,
-          destinationComplement: null,
-          destinationNeighborhood: null,
-          destinationCity: null,
-          destinationState: null,
-          shippingCarrier: null,
-          shippingServiceId: null,
-          shippingServiceName: null
-        }
-      });
-
       return created;
     });
 
-    const asaasCheckout = await createAsaasCheckout({
-      externalReference: orderExternalReference(order.id),
-      itemName: asaasCheckoutItemName(`Pedido (${order.items.length} item(ns))`),
-      itemDescription: `Pedido vitrine - ${authUser.name}`,
-      amountInCents: order.amountInCents,
-      billingType: body.billingType as AsaasBillingType,
-      callbacks: vitrineCheckoutCallbacks({ orderId: order.id })
-    });
+    let asaasCheckout: Awaited<ReturnType<typeof createAsaasCheckout>> = null;
+    try {
+      asaasCheckout = await createAsaasCheckout({
+        externalReference: orderExternalReference(order.id),
+        itemName: asaasCheckoutItemName(`Pedido (${order.items.length} item(ns))`),
+        itemDescription: `Pedido vitrine - ${authUser.name}`,
+        amountInCents: order.amountInCents,
+        billingType: body.billingType as AsaasBillingType,
+        callbacks: vitrineCheckoutCallbacks({ orderId: order.id })
+      });
+    } catch {
+      await prisma.order.delete({ where: { id: order.id } });
+      throw httpError(503, "Pagamento online indisponível no momento. Tente novamente.");
+    }
+
+    await clearCartAfterCheckout(cart.id);
 
     const updatedOrder = asaasCheckout
       ? await prisma.order.update({
@@ -803,9 +786,7 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
     });
 
     if (ORDER_PAID_STATUSES.includes(body.status) && !ORDER_PAID_STATUSES.includes(current.status)) {
-      for (const item of current.items) {
-        await decrementProductStock(item.productId, item.quantity);
-      }
+      await applyOrderPaymentSideEffects(current, current.status, body.status);
     }
 
     return { order };

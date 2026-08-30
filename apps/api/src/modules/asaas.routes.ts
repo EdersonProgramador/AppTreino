@@ -5,6 +5,7 @@ import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { parseOrderExternalReference, parsePurchaseExternalReference } from "./asaas.client.js";
 import {
+  applyOrderPaymentSideEffects,
   decrementProductStock,
   ORDER_PAID_STATUSES,
   PURCHASE_PAID_STATUSES,
@@ -226,9 +227,7 @@ export async function registerAsaasRoutes(app: FastifyInstance) {
         ORDER_PAID_STATUSES.includes(nextOrderStatus) &&
         !ORDER_PAID_STATUSES.includes(order.status)
       ) {
-        for (const item of order.items) {
-          await decrementProductStock(item.productId, item.quantity);
-        }
+        await applyOrderPaymentSideEffects(order, order.status, nextOrderStatus);
       }
       return reply.code(200).send({ received: true, orderId: updatedOrder.id });
     }
