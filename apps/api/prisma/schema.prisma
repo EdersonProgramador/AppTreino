@@ -129,6 +129,10 @@ model Profile {
   coverColor     String?   @map("cover_color")
   /// Imagem de capa do perfil social (URL).
   coverUrl       String?   @map("cover_url")
+  /// Aceite dos Termos de Uso (LGPD / contrato).
+  termsAcceptedAt   DateTime? @map("terms_accepted_at")
+  /// Aceite da Política de Privacidade.
+  privacyAcceptedAt DateTime? @map("privacy_accepted_at")
   locationId     String?   @map("location_id")
   location       Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
   createdAt      DateTime  @default(now()) @map("created_at")

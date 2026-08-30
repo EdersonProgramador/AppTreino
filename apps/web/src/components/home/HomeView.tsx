@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   ArrowRight,
   Check,
@@ -12,6 +13,8 @@ import {
 } from "lucide-react";
 import { formatPriceInBRL, initialPlans } from "@app-treino/shared";
 import { brand } from "../../lib/brand";
+import { legalMeta } from "../../lib/legal-content";
+import { paths } from "../../auth/paths";
 import { assetUrl } from "../../lib/urls";
 import {
   annualPlanPerks,
@@ -547,13 +550,13 @@ export function HomeView({
             <a className="text-sand-muted hover:text-brand-gold" href="#faq">
               Central de Ajuda
             </a>
-            <a className="text-sand-muted hover:text-brand-gold" href="#termos">
+            <Link className="text-sand-muted hover:text-brand-gold" to={paths.terms}>
               Termos de Uso
-            </a>
-            <a className="text-sand-muted hover:text-brand-gold" href="#privacidade">
+            </Link>
+            <Link className="text-sand-muted hover:text-brand-gold" to={paths.privacy}>
               Política de Privacidade
-            </a>
-            <a className="text-sand-muted hover:text-brand-gold" href="mailto:contato@apptreino.com">
+            </Link>
+            <a className="text-sand-muted hover:text-brand-gold" href={`mailto:${legalMeta.contactEmail}`}>
               Fale Conosco
             </a>
           </nav>
@@ -571,8 +574,8 @@ export function HomeView({
           </nav>
         </div>
         <div className="mx-auto mt-10 flex max-w-6xl flex-col gap-2 border-t border-[color:var(--app-border)] pt-6 text-xs text-sand-faint sm:flex-row sm:justify-between">
-          <span>© 2026 {brand.legalName} Todos os direitos reservados.</span>
-          <span>CNPJ: 00.000.000/0001-00</span>
+          <span>© 2026 {legalMeta.companyName}. Todos os direitos reservados.</span>
+          <span>CNPJ: {legalMeta.cnpj}</span>
         </div>
       </footer>
 

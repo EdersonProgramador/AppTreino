@@ -25,7 +25,11 @@ export const DEFAULT_SYSTEM_SETTINGS: Record<string, string> = {
   qr_checkin_enabled: "true",
   commerce_delivery_fee_cents: "1500",
   commerce_origin_postal_code: "01310100",
-  commerce_shipping_provider: "auto"
+  commerce_shipping_provider: "auto",
+  legal_company_name: "App Treino Social Ltda.",
+  legal_cnpj: "00.000.000/0001-00",
+  legal_contact_email: "contato@apptreino.com",
+  legal_dpo_email: "privacidade@apptreino.com"
 };
 
 export async function ensureDefaultSystemSettings() {
@@ -141,6 +145,96 @@ export async function decrementProductStock(productId: string, quantity: number)
     where: { id: productId },
     data: { stock: Math.max(0, product.stock - quantity) }
   });
+}
+
+export async function incrementProductStock(productId: string, quantity: number) {
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { stock: true }
+  });
+  if (product?.stock == null) return;
+  await prisma.product.update({
+    where: { id: productId },
+    data: { stock: product.stock + quantity }
+  });
+}
+
+const ORDER_RESTOCK_STATUSES: OrderStatus[] = ["REFUNDED", "CANCELED"];
+const PURCHASE_RESTOCK_STATUSES: PurchaseStatus[] = ["REFUNDED", "CANCELED"];
+
+export async function applyOrderStatusSideEffects(
+  order: {
+    couponId: string | null;
+    items: Array<{ productId: string; quantity: number }>;
+  },
+  previousStatus: OrderStatus,
+  nextStatus: OrderStatus
+) {
+  const wasPaid = ORDER_PAID_STATUSES.includes(previousStatus);
+  const isPaid = ORDER_PAID_STATUSES.includes(nextStatus);
+  const shouldRestock = wasPaid && ORDER_RESTOCK_STATUSES.includes(nextStatus) && !isPaid;
+
+  if (!wasPaid && isPaid) {
+    for (const item of order.items) {
+      await decrementProductStock(item.productId, item.quantity);
+    }
+    if (order.couponId) {
+      await prisma.coupon.update({
+        where: { id: order.couponId },
+        data: { usedCount: { increment: 1 } }
+      });
+    }
+    return;
+  }
+
+  if (shouldRestock) {
+    for (const item of order.items) {
+      await incrementProductStock(item.productId, item.quantity);
+    }
+    if (order.couponId) {
+      const coupon = await prisma.coupon.findUnique({
+        where: { id: order.couponId },
+        select: { usedCount: true }
+      });
+      if (coupon && coupon.usedCount > 0) {
+        await prisma.coupon.update({
+          where: { id: order.couponId },
+          data: { usedCount: { decrement: 1 } }
+        });
+      }
+    }
+  }
+}
+
+/** @deprecated Use applyOrderStatusSideEffects */
+export async function applyOrderPaymentSideEffects(
+  order: {
+    couponId: string | null;
+    items: Array<{ productId: string; quantity: number }>;
+  },
+  previousStatus: OrderStatus,
+  nextStatus: OrderStatus
+) {
+  return applyOrderStatusSideEffects(order, previousStatus, nextStatus);
+}
+
+export async function applyPurchaseStatusSideEffects(
+  purchase: { productId: string; quantity: number },
+  previousStatus: PurchaseStatus,
+  nextStatus: PurchaseStatus
+) {
+  const wasPaid = PURCHASE_PAID_STATUSES.includes(previousStatus);
+  const isPaid = PURCHASE_PAID_STATUSES.includes(nextStatus);
+  const shouldRestock = wasPaid && PURCHASE_RESTOCK_STATUSES.includes(nextStatus) && !isPaid;
+
+  if (!wasPaid && isPaid) {
+    await decrementProductStock(purchase.productId, purchase.quantity);
+    return;
+  }
+
+  if (shouldRestock) {
+    await incrementProductStock(purchase.productId, purchase.quantity);
+  }
 }
 
 export async function getDeliveryFeeCents() {
@@ -280,30 +374,6 @@ export async function clearCartAfterCheckout(cartId: string) {
       }
     })
   ]);
-}
-
-export async function applyOrderPaymentSideEffects(
-  order: {
-    couponId: string | null;
-    items: Array<{ productId: string; quantity: number }>;
-  },
-  previousStatus: OrderStatus,
-  nextStatus: OrderStatus
-) {
-  if (!ORDER_PAID_STATUSES.includes(nextStatus) || ORDER_PAID_STATUSES.includes(previousStatus)) {
-    return;
-  }
-
-  for (const item of order.items) {
-    await decrementProductStock(item.productId, item.quantity);
-  }
-
-  if (order.couponId) {
-    await prisma.coupon.update({
-      where: { id: order.couponId },
-      data: { usedCount: { increment: 1 } }
-    });
-  }
 }
 
 export async function buildCartTotals(cart: CartWithItems) {

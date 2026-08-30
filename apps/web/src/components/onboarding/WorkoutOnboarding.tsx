@@ -1,6 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { useEffect, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import {
   EQUIPMENT_OPTIONS,
@@ -16,6 +17,7 @@ import {
   type OnboardingFormValues
 } from "./onboarding.schema";
 import { useOnboardingStore } from "../../stores/onboardingStore";
+import { paths } from "../../auth/paths";
 
 export type WorkoutOnboardingMode = "register" | "complete";
 
@@ -67,6 +69,8 @@ export function WorkoutOnboarding({
       level: "beginner",
       equipment: ["gym"],
       billingType: "UNDEFINED",
+      acceptTerms: false,
+      acceptPrivacy: false,
       ...draft,
       ...initialValues
     }),
@@ -352,6 +356,46 @@ export function WorkoutOnboarding({
                   <option value="CREDIT_CARD">Cartão</option>
                 </select>
               </label>
+            )}
+
+            {mode === "register" && (
+              <div className="grid gap-3 rounded-2xl border border-[color:var(--app-border)] p-4">
+                <span className="text-sm font-extrabold text-sand">Consentimento (LGPD)</span>
+                <label className="flex items-start gap-2 text-sm text-sand-muted">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    {...register("acceptTerms")}
+                  />
+                  <span>
+                    Li e aceito os{" "}
+                    <Link className="text-brand-gold underline" to={paths.terms} target="_blank">
+                      Termos de Uso
+                    </Link>
+                    .
+                  </span>
+                </label>
+                {errors.acceptTerms && (
+                  <span className="text-xs font-bold text-[#ff8f7a]">{errors.acceptTerms.message}</span>
+                )}
+                <label className="flex items-start gap-2 text-sm text-sand-muted">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    {...register("acceptPrivacy")}
+                  />
+                  <span>
+                    Li e aceito a{" "}
+                    <Link className="text-brand-gold underline" to={paths.privacy} target="_blank">
+                      Política de Privacidade
+                    </Link>
+                    .
+                  </span>
+                </label>
+                {errors.acceptPrivacy && (
+                  <span className="text-xs font-bold text-[#ff8f7a]">{errors.acceptPrivacy.message}</span>
+                )}
+              </div>
             )}
           </div>
         )}

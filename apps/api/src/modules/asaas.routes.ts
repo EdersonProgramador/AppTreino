@@ -5,10 +5,8 @@ import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { parseOrderExternalReference, parsePurchaseExternalReference } from "./asaas.client.js";
 import {
-  applyOrderPaymentSideEffects,
-  decrementProductStock,
-  ORDER_PAID_STATUSES,
-  PURCHASE_PAID_STATUSES,
+  applyOrderStatusSideEffects,
+  applyPurchaseStatusSideEffects,
   resolveOrderTimestamps,
   resolvePurchaseTimestamps
 } from "./commerce.utils.js";
@@ -222,12 +220,8 @@ export async function registerAsaasRoutes(app: FastifyInstance) {
           ...(nextOrderStatus ? { status: nextOrderStatus, ...timestamps } : {})
         }
       });
-      if (
-        nextOrderStatus &&
-        ORDER_PAID_STATUSES.includes(nextOrderStatus) &&
-        !ORDER_PAID_STATUSES.includes(order.status)
-      ) {
-        await applyOrderPaymentSideEffects(order, order.status, nextOrderStatus);
+      if (nextOrderStatus && nextOrderStatus !== order.status) {
+        await applyOrderStatusSideEffects(order, order.status, nextOrderStatus);
       }
       return reply.code(200).send({ received: true, orderId: updatedOrder.id });
     }
@@ -271,12 +265,8 @@ export async function registerAsaasRoutes(app: FastifyInstance) {
           }
         });
 
-        if (
-          nextPurchaseStatus &&
-          PURCHASE_PAID_STATUSES.includes(nextPurchaseStatus) &&
-          !PURCHASE_PAID_STATUSES.includes(purchase.status)
-        ) {
-          await decrementProductStock(purchase.productId, purchase.quantity);
+        if (nextPurchaseStatus && nextPurchaseStatus !== purchase.status) {
+          await applyPurchaseStatusSideEffects(purchase, purchase.status, nextPurchaseStatus);
         }
 
         return reply.code(200).send({

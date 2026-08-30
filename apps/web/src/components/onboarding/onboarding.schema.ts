@@ -52,7 +52,9 @@ export const onboardingSchema = z
       required_error: "Selecione seu nível"
     }),
     equipment: z.array(z.enum(["gym", "dumbbells", "bodyweight", "bands"])).min(1, "Selecione ao menos um equipamento"),
-    billingType: z.enum(["UNDEFINED", "PIX", "CREDIT_CARD"]).optional().default("UNDEFINED")
+    billingType: z.enum(["UNDEFINED", "PIX", "CREDIT_CARD"]).optional().default("UNDEFINED"),
+    acceptTerms: z.boolean().optional(),
+    acceptPrivacy: z.boolean().optional()
   })
   .superRefine((data, ctx) => {
     if (!data.email && !data.phone) {
@@ -72,14 +74,29 @@ export const registerOnboardingSchema = onboardingSchema.superRefine((data, ctx)
       path: ["password"]
     });
   }
+  if (!data.acceptTerms) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Aceite os Termos de Uso para continuar.",
+      path: ["acceptTerms"]
+    });
+  }
+  if (!data.acceptPrivacy) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Aceite a Política de Privacidade para continuar.",
+      path: ["acceptPrivacy"]
+    });
+  }
 });
 
 export type OnboardingFormValues = z.infer<typeof onboardingSchema>;
 
-export const ONBOARDING_STEP_FIELDS: Record<1 | 2 | 3, Array<keyof OnboardingFormValues>> = {
+export const ONBOARDING_STEP_FIELDS: Record<1 | 2 | 3 | 4, Array<keyof OnboardingFormValues>> = {
   1: ["name", "email", "phone", "password"],
   2: ["gender", "birthYear", "goal", "daysPerWeek"],
-  3: ["level", "equipment"]
+  3: ["level", "equipment"],
+  4: ["acceptTerms", "acceptPrivacy"]
 };
 
 export function goalLabel(goal: TrainingGoal) {

@@ -5,6 +5,7 @@ import { LoginView } from "../components/auth/LoginView";
 import { AppDownloadSoonView } from "../components/home/AppDownloadSoonView";
 import { HomeView } from "../components/home/HomeView";
 import { SharedPostPage } from "../components/shared/SharedPostPage";
+import { PrivacyPage, RefundPolicyPage, TermsPage } from "../components/legal/LegalPages";
 import { assetUrl } from "../lib/urls";
 import { brand } from "../lib/brand";
 import { useAuth } from "./AuthContext";
@@ -55,6 +56,27 @@ export function DownloadPage() {
 
 export function SharedPostRoute() {
   return <SharedPostPage />;
+}
+
+export function TermsPageRoute() {
+  const { user, token, isTransitioning, transitionMessage } = useAuth();
+  if (isTransitioning) return <TransitionScreen message={transitionMessage} />;
+  if (user && token) return <Navigate to={homePathForRole(user.role)} replace />;
+  return <TermsPage />;
+}
+
+export function PrivacyPageRoute() {
+  const { user, token, isTransitioning, transitionMessage } = useAuth();
+  if (isTransitioning) return <TransitionScreen message={transitionMessage} />;
+  if (user && token) return <Navigate to={homePathForRole(user.role)} replace />;
+  return <PrivacyPage />;
+}
+
+export function RefundPolicyPageRoute() {
+  const { user, token, isTransitioning, transitionMessage } = useAuth();
+  if (isTransitioning) return <TransitionScreen message={transitionMessage} />;
+  if (user && token) return <Navigate to={homePathForRole(user.role)} replace />;
+  return <RefundPolicyPage />;
 }
 
 export function LoginPage() {
@@ -129,7 +151,7 @@ export function LoginPage() {
   );
 }
 
-function GuestChrome({ variant = "default" }: { variant?: "default" | "login" }) {
+export function GuestChrome({ variant = "default" }: { variant?: "default" | "login" }) {
   return (
     <header className="guest-chrome sticky top-0 z-20 flex min-h-[56px] items-center justify-between gap-3 border-b px-4 backdrop-blur-md sm:min-h-[64px] sm:px-8 md:px-12">
       <Link className="inline-flex min-w-0 shrink items-center border-0 bg-transparent p-0" to={paths.home} aria-label="Ir para início">

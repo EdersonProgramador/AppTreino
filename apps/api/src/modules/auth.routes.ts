@@ -67,7 +67,13 @@ const registerSchema = z
     level: z.string().min(3).optional(),
     daysPerWeek: z.coerce.number().int().min(2).max(7).optional(),
     equipmentTags: z.array(z.string().min(1)).optional(),
-    provider: z.enum(["EMAIL", "GOOGLE"]).default("EMAIL")
+    provider: z.enum(["EMAIL", "GOOGLE"]).default("EMAIL"),
+    acceptTerms: z.literal(true, {
+      errorMap: () => ({ message: "Aceite os Termos de Uso para continuar." })
+    }),
+    acceptPrivacy: z.literal(true, {
+      errorMap: () => ({ message: "Aceite a Política de Privacidade para continuar." })
+    })
   })
   .superRefine((data, ctx) => {
     const hasIdentifier = Boolean(data.email || data.phone);
@@ -307,6 +313,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     const fallbackEmail = email ?? (phone ? buildSyntheticEmail(phone) : null);
 
     const birthDate = body.birthDate ? new Date(body.birthDate) : null;
+    const consentAt = new Date();
 
     const user = await prisma.user.create({
       data: {
@@ -324,7 +331,9 @@ export async function registerAuthRoutes(app: FastifyInstance) {
             objective: body.objective ?? null,
             level: body.level ?? null,
             daysPerWeek: body.daysPerWeek ?? null,
-            equipmentTags: body.equipmentTags ?? []
+            equipmentTags: body.equipmentTags ?? [],
+            termsAcceptedAt: consentAt,
+            privacyAcceptedAt: consentAt
           }
         }
       }

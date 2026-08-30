@@ -180,7 +180,11 @@ export async function registerPublicRoutes(app: FastifyInstance) {
       "module_social_nota",
       "commerce_delivery_fee_cents",
       "commerce_origin_postal_code",
-      "commerce_shipping_provider"
+      "commerce_shipping_provider",
+      "legal_company_name",
+      "legal_cnpj",
+      "legal_contact_email",
+      "legal_dpo_email"
     ];
 
     const records = await prisma.systemSetting.findMany({

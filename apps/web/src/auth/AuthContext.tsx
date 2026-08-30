@@ -313,6 +313,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const identifier = String(formData.get("identifier") ?? "").trim();
       const password = String(formData.get("password") ?? "");
       const billingType = String(formData.get("billingType") ?? "UNDEFINED");
+      const acceptTermsRaw = formData.get("acceptTerms");
+      const acceptPrivacyRaw = formData.get("acceptPrivacy");
+      const acceptTerms = acceptTermsRaw === "true" || acceptTermsRaw === "on";
+      const acceptPrivacy = acceptPrivacyRaw === "true" || acceptPrivacyRaw === "on";
       const idToken = String(formData.get("idToken") ?? "").trim();
       const credential = String(formData.get("credential") ?? "").trim();
       const planCode = store.selectedPlanCode ?? (mode === "register" ? "monthly" : null);
@@ -364,7 +368,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   equipmentTags,
                   password,
                   planCode,
-                  billingType
+                  billingType,
+                  acceptTerms: acceptTerms ? true : undefined,
+                  acceptPrivacy: acceptPrivacy ? true : undefined
                 }
               : {
                   name,
@@ -377,7 +383,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   daysPerWeek,
                   equipmentTags,
                   password,
-                  provider
+                  provider,
+                  acceptTerms: acceptTerms ? true : undefined,
+                  acceptPrivacy: acceptPrivacy ? true : undefined
                 };
 
       try {
@@ -429,6 +437,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       formData.set("daysPerWeek", String(payload.daysPerWeekNumber));
       formData.set("equipmentTags", payload.equipment.join(","));
       formData.set("billingType", payload.billingType ?? "UNDEFINED");
+      formData.set("acceptTerms", payload.acceptTerms ? "true" : "");
+      formData.set("acceptPrivacy", payload.acceptPrivacy ? "true" : "");
       await submitAuth("register", formData, "EMAIL");
     },
     [submitAuth]

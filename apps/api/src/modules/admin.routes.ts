@@ -27,7 +27,8 @@ import {
   activateSystemModules,
   assertModuleEnabled,
   DEFAULT_SYSTEM_SETTINGS,
-  decrementProductStock,
+  applyOrderStatusSideEffects,
+  applyPurchaseStatusSideEffects,
   ensureDefaultSystemSettings,
   normalizeProductShippingMethod,
   PURCHASE_PAID_STATUSES,
@@ -4550,7 +4551,11 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     });
 
     if (body.status && PURCHASE_PAID_STATUSES.includes(body.status)) {
-      await decrementProductStock(body.productId, quantity);
+      await applyPurchaseStatusSideEffects(
+        { productId: body.productId, quantity },
+        "PENDING",
+        body.status
+      );
     }
 
     return reply.code(201).send({ purchase });
@@ -4575,12 +4580,8 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       include: { user: true, product: true }
     });
 
-    if (
-      body.status &&
-      PURCHASE_PAID_STATUSES.includes(body.status) &&
-      !PURCHASE_PAID_STATUSES.includes(current.status)
-    ) {
-      await decrementProductStock(current.productId, current.quantity);
+    if (body.status && body.status !== current.status) {
+      await applyPurchaseStatusSideEffects(current, current.status, body.status);
     }
 
     return { purchase };

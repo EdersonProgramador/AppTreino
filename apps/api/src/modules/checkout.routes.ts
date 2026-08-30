@@ -29,7 +29,13 @@ const checkoutRegisterSchema = z
     planCode: z.enum(["monthly", "annual"], {
       required_error: "Escolha um plano para continuar."
     }),
-    billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED")
+    billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED"),
+    acceptTerms: z.literal(true, {
+      errorMap: () => ({ message: "Aceite os Termos de Uso para continuar." })
+    }),
+    acceptPrivacy: z.literal(true, {
+      errorMap: () => ({ message: "Aceite a Política de Privacidade para continuar." })
+    })
   })
   .superRefine((data, ctx) => {
     if (!data.email && !data.phone) {
@@ -350,6 +356,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     });
 
     const birthDate = body.birthDate ? new Date(body.birthDate) : null;
+    const consentAt = new Date();
 
     const { user, payment } = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -367,7 +374,9 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
                 objective: body.objective ?? null,
                 level: body.level ?? null,
                 daysPerWeek: body.daysPerWeek ?? null,
-                equipmentTags: body.equipmentTags ?? []
+                equipmentTags: body.equipmentTags ?? [],
+                termsAcceptedAt: consentAt,
+                privacyAcceptedAt: consentAt
               }
             }
           }

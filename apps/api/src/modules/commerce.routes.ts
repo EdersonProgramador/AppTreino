@@ -8,7 +8,7 @@ import { asaasCheckoutItemName } from "./checkout.utils.js";
 import { buildPaginationMeta, parsePagination } from "./pagination.js";
 import {
   assertModuleEnabled,
-  applyOrderPaymentSideEffects,
+  applyOrderStatusSideEffects,
   buildCartTotals,
   clearCartAfterCheckout,
   findValidCoupon,
@@ -785,8 +785,8 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
       include: { user: true, items: true, coupon: true }
     });
 
-    if (ORDER_PAID_STATUSES.includes(body.status) && !ORDER_PAID_STATUSES.includes(current.status)) {
-      await applyOrderPaymentSideEffects(current, current.status, body.status);
+    if (body.status !== current.status) {
+      await applyOrderStatusSideEffects(current, current.status, body.status);
     }
 
     return { order };

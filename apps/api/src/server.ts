@@ -23,6 +23,7 @@ import { registerSocialRoutes } from "./modules/social.routes.js";
 import { registerSocialInfraRoutes } from "./modules/social-infra.routes.js";
 import { registerSocialSockets } from "./modules/social-socket.js";
 import { registerCommerceRoutes } from "./modules/commerce.routes.js";
+import { startMembershipMaintenanceJobs } from "./modules/membership-jobs.js";
 import { registerMusicRoutes } from "./modules/music.routes.js";
 import { registerUserRoutes } from "./modules/user.routes.js";
 import type { Server as HttpServer } from "node:http";
@@ -252,6 +253,7 @@ try {
   });
   const httpServer = app.server as HttpServer;
   registerSocialSockets(app, httpServer);
+  startMembershipMaintenanceJobs(app.log);
 } catch (error) {
   app.log.error(error);
   process.exit(1);

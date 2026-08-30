@@ -13,6 +13,9 @@ export const paths = {
   home: "/",
   login: "/login",
   download: "/baixar-app",
+  terms: "/termos",
+  privacy: "/privacidade",
+  refundPolicy: "/politica-reembolso",
   admin: "/admin",
   student: "/aluno",
   app: "/app",
@@ -43,6 +46,9 @@ export function isGuestPath(pathname: string) {
     pathname === paths.home ||
     pathname === paths.login ||
     pathname === paths.download ||
+    pathname === paths.terms ||
+    pathname === paths.privacy ||
+    pathname === paths.refundPolicy ||
     pathname.startsWith("/p/") ||
     pathname === "" ||
     pathname === "/"
