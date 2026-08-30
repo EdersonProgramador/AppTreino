@@ -39,6 +39,7 @@ type Props = {
   athleteSocial: AthleteSocial | null;
   onOpenSettings: () => void;
   onProfileUpdated: (profile: StudentProfile) => void;
+  onPostsCountUpdated?: (count: number) => void;
   children?: ReactNode;
 };
 
@@ -145,9 +146,11 @@ export function StudentAthleteProfileSection({
   athleteSocial,
   onOpenSettings,
   onProfileUpdated,
+  onPostsCountUpdated,
   children
 }: Props) {
   const [posts, setPosts] = useState<SocialPostRow[]>([]);
+  const [postsLoading, setPostsLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -211,23 +214,41 @@ export function StudentAthleteProfileSection({
 
   useEffect(() => {
     let cancelled = false;
+    setPostsLoading(true);
     void (async () => {
       try {
         const me = await apiGet<{ id: string }>("/student/social/me", token);
-        const data = await apiGet<{ posts: SocialPostRow[] }>(
-          `/student/social/posts?authorId=${encodeURIComponent(me.id)}&mode=for-you`,
-          token
-        );
-        if (!cancelled) setPosts(data.posts);
+        const collected: SocialPostRow[] = [];
+        let page = 0;
+        let hasMore = true;
+        while (hasMore && !cancelled) {
+          const data = await apiGet<{ posts: SocialPostRow[]; hasMore: boolean }>(
+            `/student/social/posts?authorId=${encodeURIComponent(me.id)}&mode=for-you&page=${page}`,
+            token
+          );
+          collected.push(...data.posts);
+          hasMore = data.hasMore;
+          page += 1;
+          if (!data.posts.length) break;
+        }
+        if (!cancelled) {
+          setPosts(collected);
+          onPostsCountUpdated?.(collected.length);
+        }
       } catch {
-        if (!cancelled) setPosts([]);
+        if (!cancelled) {
+          setPosts([]);
+          onPostsCountUpdated?.(0);
+        }
+      } finally {
+        if (!cancelled) setPostsLoading(false);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [token, athleteSocial?.postsCount]);
+  }, [token, onPostsCountUpdated]);
 
   useEffect(() => {
     if (viewerIndex == null) return;
@@ -495,8 +516,10 @@ export function StudentAthleteProfileSection({
       {children}
 
       <div className="student-athlete-posts">
-        <h2>Minhas publicações ({athleteSocial?.postsCount ?? posts.length})</h2>
-        {posts.length === 0 ? (
+        <h2>
+          Minhas publicações ({postsLoading ? "…" : posts.length})
+        </h2>
+        {!postsLoading && posts.length === 0 ? (
           <article className="student-athlete-posts-empty">Nenhuma publicação ainda :(</article>
         ) : (
           <div className="student-athlete-posts-list">

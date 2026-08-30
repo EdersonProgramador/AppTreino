@@ -48,7 +48,7 @@ import {
   Video,
   X
 } from "lucide-react";
-import { lazy, Suspense, type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { formatPriceInBRL, initialPlans } from "@app-treino/shared";
@@ -178,6 +178,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     postsCount: number;
     isPrivate: boolean;
   } | null>(null);
+  const handleAthletePostsCountUpdated = useCallback((count: number) => {
+    setAthleteSocial((current) => (current ? { ...current, postsCount: count } : current));
+  }, []);
   const [messagePeerId, setMessagePeerId] = useState<string | null>(null);
   const [peerProfileId, setPeerProfileId] = useState<string | null>(null);
   const [joinLiveId, setJoinLiveId] = useState<string | null>(null);
@@ -4414,6 +4417,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             token={token}
             profile={profile}
             athleteSocial={athleteSocial}
+            onPostsCountUpdated={handleAthletePostsCountUpdated}
             onOpenSettings={() => goToSection("profile-settings")}
             onProfileUpdated={(next) => {
               setProfile((current) => ({
