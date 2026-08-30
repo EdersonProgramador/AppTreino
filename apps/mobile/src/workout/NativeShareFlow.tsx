@@ -248,7 +248,7 @@ export function NativeShareFlow({
           ) : (
             <>
               <View style={styles.card}>
-                <Text style={styles.badge}>App Treino Social</Text>
+                <Text style={styles.badge}>ATLLY</Text>
                 <Text style={styles.cardTitle}>O TREINO DE HOJE ESTÁ PAGO!</Text>
                 {previewUri && video && !photo ? (
                   <AppVideo uri={previewUri} style={styles.photo} contentFit="cover" nativeControls muted />
@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 20,
-    backgroundColor: "rgba(242,180,97,0.22)",
+    backgroundColor: "rgba(212,175,55,0.22)",
     alignItems: "center",
     justifyContent: "center"
   },
@@ -403,7 +403,7 @@ const styles = StyleSheet.create({
     width: 86,
     height: 86,
     borderRadius: 24,
-    backgroundColor: "rgba(242,180,97,0.22)",
+    backgroundColor: "rgba(212,175,55,0.22)",
     alignItems: "center",
     justifyContent: "center"
   },

@@ -4,7 +4,7 @@ import { initialPlans } from "@app-treino/shared";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { buildPublicUploadUrl } from "../upload-security.js";
-import { DEFAULT_SYSTEM_SETTINGS, ensureDefaultSystemSettings } from "./commerce.utils.js";
+import { DEFAULT_SYSTEM_SETTINGS, ensureDefaultSystemSettings, sanitizePublicSystemSettings } from "./commerce.utils.js";
 
 function getWebAppOrigin() {
   const origins = env.WEB_ORIGIN.split(",")
@@ -196,7 +196,7 @@ export async function registerPublicRoutes(app: FastifyInstance) {
       config[record.key] = record.value;
     }
 
-    return { config };
+    return { config: sanitizePublicSystemSettings(config) };
   });
 
   app.get("/public/posts/:id", async (request, reply) => {

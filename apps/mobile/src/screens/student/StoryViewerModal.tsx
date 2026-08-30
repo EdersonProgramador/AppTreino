@@ -362,6 +362,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.14)"
   },
-  saveBtnOn: { backgroundColor: "rgba(242,180,97,0.35)" },
+  saveBtnOn: { backgroundColor: "rgba(212,175,55,0.35)" },
   saveText: { color: "#fff", fontWeight: "800", fontSize: 13 }
 });

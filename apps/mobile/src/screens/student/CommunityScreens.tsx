@@ -211,7 +211,7 @@ export function SupportScreen() {
             <Text style={styles.badge}>{labelTicketStatus(selected.status)}</Text>
             {(selected.messages ?? []).map((message) => (
               <View key={message.id} style={[styles.card, message.senderType === "STUDENT" ? styles.chatMe : styles.chatThem, { marginHorizontal: 0 }]}>
-                <Text style={styles.gold}>{message.senderType === "STUDENT" ? "Você" : "Equipe App Treino Social"}</Text>
+                <Text style={styles.gold}>{message.senderType === "STUDENT" ? "Você" : "Equipe ATLLY"}</Text>
                 <Text style={styles.muted}>{message.body}</Text>
                 <Text style={styles.faint}>{formatDateTime(message.createdAt)}</Text>
               </View>

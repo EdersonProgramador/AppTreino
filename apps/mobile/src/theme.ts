@@ -2,7 +2,7 @@ export const colors = {
   bg: "#08090b",
   panel: "#121318",
   card: "#17181e",
-  gold: "#f2b461",
+  gold: "#d4af37",
   sand: "#fff7ec",
   muted: "#c9c0b5",
   faint: "#8f887f",

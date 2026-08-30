@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,6 +16,7 @@ import * as Linking from "expo-linking";
 import { API_URL, WEB_URL } from "../config";
 import { loginWithPassword, NativeApiError, requestPasswordReset } from "../auth/api";
 import type { NativeSession } from "../auth/types";
+import { brand } from "../student/brand";
 import { useSt } from "../student/theme";
 import { uiSounds } from "../student/uiSounds";
 
@@ -73,22 +75,20 @@ export function LoginScreen({
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: st.bg }]} edges={["top", "right", "bottom", "left"]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.flex}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-        >
-          <View style={styles.panel}>
-            <Text style={[styles.eyebrow, { color: st.gold }]}>Área de acesso</Text>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+          <View style={styles.hero}>
+            <Image source={require("../../assets/atlly-logo.png")} style={styles.logo} accessibilityIgnoresInvertColors />
+            <Text style={[styles.category, { color: st.muted }]}>{brand.tagline}</Text>
+          </View>
+
+          <View style={[styles.panel, { borderColor: st.line, backgroundColor: st.cardSoft }]}>
+            <Text style={[styles.eyebrow, { color: st.gold }]}>{brand.name}</Text>
             <Text style={[styles.title, { color: st.text }]}>{mode === "forgot" ? "Recuperar acesso" : "Entrar"}</Text>
             <Text style={[styles.copy, { color: st.muted }]}>
               {mode === "forgot"
                 ? "Informe o e-mail ou telefone cadastrado."
-                : "Acesse com e-mail ou telefone. O painel continua o mesmo; o login agora é nativo."}
+                : "Comande sua mente. Evolua seu corpo. Acesse sua jornada de performance."}
             </Text>
 
             <Text style={[styles.label, { color: st.muted }]}>E-mail ou telefone</Text>
@@ -122,9 +122,7 @@ export function LoginScreen({
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
             {success ? <Text style={styles.ok}>{success}</Text> : null}
-            {__DEV__ || error ? (
-              <Text style={[styles.debug, { color: st.faint }]}>API: {API_URL}</Text>
-            ) : null}
+            {__DEV__ || error ? <Text style={[styles.debug, { color: st.faint }]}>API: {API_URL}</Text> : null}
 
             <Pressable
               accessibilityRole="button"
@@ -140,7 +138,9 @@ export function LoginScreen({
               {submitting ? (
                 <ActivityIndicator color={st.ink} />
               ) : (
-                <Text style={[styles.buttonText, { color: st.ink }]}>{mode === "forgot" ? "Enviar link" : "Entrar"}</Text>
+                <Text style={[styles.buttonText, { color: "#0a0a0a" }]}>
+                  {mode === "forgot" ? "Enviar link" : "Entrar na ATLLY"}
+                </Text>
               )}
             </Pressable>
 
@@ -158,7 +158,7 @@ export function LoginScreen({
             </Pressable>
 
             <Pressable onPress={() => void Linking.openURL(`${WEB_URL}/login`)} style={styles.linkWrap}>
-              <Text style={[styles.muted, { color: st.faint }]}>Criar conta no site</Text>
+              <Text style={[styles.muted, { color: st.faint }]}>Criar conta em atlly.com.br</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -168,19 +168,36 @@ export function LoginScreen({
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1
-  },
-  flex: {
-    flex: 1
-  },
+  safe: { flex: 1 },
+  flex: { flex: 1 },
   scroll: {
     flexGrow: 1,
-    justifyContent: "center"
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    paddingBottom: 32,
+    gap: 20
+  },
+  hero: {
+    alignItems: "center",
+    gap: 8
+  },
+  logo: {
+    width: 220,
+    height: 56,
+    resizeMode: "contain"
+  },
+  category: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1.6,
+    textTransform: "uppercase",
+    textAlign: "center"
   },
   panel: {
-    paddingHorizontal: 24,
-    paddingBottom: 32,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 22,
     gap: 8
   },
   eyebrow: {
@@ -190,7 +207,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase"
   },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: "800"
   },
   copy: {
@@ -229,12 +246,8 @@ const styles = StyleSheet.create({
     marginTop: 18,
     minHeight: 52
   },
-  buttonPressed: {
-    opacity: 0.86
-  },
-  buttonDisabled: {
-    opacity: 0.7
-  },
+  buttonPressed: { opacity: 0.86 },
+  buttonDisabled: { opacity: 0.7 },
   buttonText: {
     fontSize: 16,
     fontWeight: "800"

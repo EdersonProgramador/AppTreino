@@ -1,6 +1,6 @@
-# App Treino Social
+# ATLLY — Human Performance System
 
-Monorepo do **App Treino Social** (web, API, mobile): rede social de atletas focada em treino e corrida, no mesmo stack (Vite + Fastify + Expo). O shell do aluno virou produto social Feed-first (`student-app-header`, bottom nav Feed/Clube/Atividade/Treino/Menu) — sem segundo app.
+Monorepo da **ATLLY** (web, API, mobile): plataforma de performance humana — treino, corrida, dados, evolução e comunidade de atletas.
 
 ## Estrutura
 

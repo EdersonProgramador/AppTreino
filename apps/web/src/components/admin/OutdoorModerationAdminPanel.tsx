@@ -68,7 +68,7 @@ function ReplaySvg({ points }: { points: Array<{ lat: number; lng: number }> }) 
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="h-56 w-full" role="img" aria-label="Replay da polyline">
       <rect width={w} height={h} fill="rgba(0,0,0,0.25)" rx="12" />
-      <path d={path} fill="none" stroke="#f2b461" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={path} fill="none" stroke="#d4af37" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
       <circle
         cx={pad + ((points[0]!.lng - minLng) / dx) * (w - pad * 2)}
         cy={pad + ((maxLat - points[0]!.lat) / dy) * (h - pad * 2)}

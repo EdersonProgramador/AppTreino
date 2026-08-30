@@ -185,7 +185,7 @@ export function NativeCameraModal({
       <View style={styles.root}>
         {permission === "checking" ? (
           <View style={styles.center}>
-            <ActivityIndicator color="#f2b461" size="large" />
+            <ActivityIndicator color="#d4af37" size="large" />
             <Text style={styles.hint}>Abrindo câmera…</Text>
           </View>
         ) : permission === "denied" ? (
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.12)"
   },
-  modeChipOn: { backgroundColor: "rgba(242,180,97,0.9)" },
+  modeChipOn: { backgroundColor: "rgba(212,175,55,0.9)" },
   modeText: { color: "#fff", fontWeight: "700", fontSize: 13 },
   shutter: {
     width: 74,

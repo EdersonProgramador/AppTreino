@@ -247,7 +247,7 @@ export function StudentChrome({ play = false }: { play?: boolean }) {
             style={styles.brandMark}
             accessibilityLabel={brand.name}
           >
-            <Text style={styles.brandMarkText}>TS</Text>
+            <Image source={require("../../assets/atlly-mark.png")} style={styles.brandMarkImg} accessibilityIgnoresInvertColors />
           </Pressable>
           <Pressable
             style={styles.identity}
@@ -256,6 +256,9 @@ export function StudentChrome({ play = false }: { play?: boolean }) {
           >
             <Text style={styles.brandName} numberOfLines={1}>
               {brand.name}
+            </Text>
+            <Text style={styles.category} numberOfLines={1}>
+              {brand.tagline}
             </Text>
             <Text style={styles.code} numberOfLines={1}>
               {profile?.name ?? brand.athlete} · {brand.codeLabel} {code}
@@ -298,7 +301,7 @@ export function StudentChrome({ play = false }: { play?: boolean }) {
               >
                 <Ionicons name="flame" size={16} color={st.gold} />
                 <Text style={styles.streakLabel}>Ofensiva</Text>
-                <LinearGradient colors={["#f2b461", "#df663c"]} style={styles.streakCount}>
+                <LinearGradient colors={["#d4af37", "#df663c"]} style={styles.streakCount}>
                   <Text style={styles.streakCountText}>{streak}</Text>
                 </LinearGradient>
               </Pressable>
@@ -611,8 +614,12 @@ function createChromeStyles(st: StudentTokens) {
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#c4783a"
+    backgroundColor: "#0a0a0a",
+    borderWidth: 1,
+    borderColor: "rgba(212,175,55,0.35)",
+    overflow: "hidden"
   },
+  brandMarkImg: { width: "100%", height: "100%" },
   brandMarkText: { color: "#fff", fontSize: 13, fontWeight: "900", letterSpacing: 0.5 },
   avatar: {
     width: 38,
@@ -623,11 +630,19 @@ function createChromeStyles(st: StudentTokens) {
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(242,180,97,0.16)"
+    backgroundColor: "rgba(212,175,55,0.16)"
   },
   avatarImg: { width: "100%", height: "100%" },
   identity: { flex: 1, minWidth: 0 },
   brandName: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  category: {
+    color: "rgba(192,192,192,0.92)",
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    marginTop: 1,
+    textTransform: "uppercase"
+  },
   code: { color: "rgba(255,255,255,0.88)", fontSize: 11, marginTop: 2, fontWeight: "600" },
   actions: { flexDirection: "row", alignItems: "center", gap: 6 },
   streak: {
@@ -636,10 +651,10 @@ function createChromeStyles(st: StudentTokens) {
     gap: 5,
     minHeight: 34,
     borderWidth: 1,
-    borderColor: "rgba(242,180,97,0.34)",
+    borderColor: "rgba(212,175,55,0.34)",
     borderRadius: 999,
     paddingHorizontal: 9,
-    backgroundColor: "rgba(242,180,97,0.14)"
+    backgroundColor: "rgba(212,175,55,0.14)"
   },
   streakLabel: { color: "#fff", fontSize: 11, fontWeight: "800" },
   streakCount: {
@@ -792,7 +807,7 @@ function createChromeStyles(st: StudentTokens) {
     gap: 4,
     marginBottom: 8
   },
-  noteUnread: { borderWidth: 1, borderColor: "rgba(242,180,97,0.35)" },
+  noteUnread: { borderWidth: 1, borderColor: "rgba(212,175,55,0.35)" },
   noteTitle: { color: st.text, fontWeight: "800" },
   noteMsg: { color: st.muted, fontSize: 13, lineHeight: 18 },
   noteTime: { color: st.faint, fontSize: 11 },
@@ -809,7 +824,7 @@ function createChromeStyles(st: StudentTokens) {
     alignSelf: "center",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(242,180,97,0.28)",
+    borderColor: "rgba(212,175,55,0.28)",
     backgroundColor: st.bgSoft,
     overflow: "hidden"
   },
@@ -834,8 +849,8 @@ function createChromeStyles(st: StudentTokens) {
     height: 38,
     borderRadius: 19,
     borderWidth: 1,
-    borderColor: "rgba(242,180,97,0.24)",
-    backgroundColor: "rgba(242,180,97,0.08)",
+    borderColor: "rgba(212,175,55,0.24)",
+    backgroundColor: "rgba(212,175,55,0.08)",
     alignItems: "center",
     justifyContent: "center"
   },
@@ -843,7 +858,7 @@ function createChromeStyles(st: StudentTokens) {
   calGrid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 12, paddingBottom: 12 },
   calDow: { width: "14.28%", textAlign: "center", color: st.goldUi, fontSize: 11, fontWeight: "800", marginBottom: 6 },
   calCell: { width: "14.28%", aspectRatio: 1, alignItems: "center", justifyContent: "center" },
-  calDone: { backgroundColor: "rgba(242,180,97,0.22)", borderRadius: 999 },
+  calDone: { backgroundColor: "rgba(212,175,55,0.22)", borderRadius: 999 },
   calDay: { color: st.text, fontWeight: "700", fontSize: 12 },
   calDayDone: { color: "#15100b" },
   qrLink: {

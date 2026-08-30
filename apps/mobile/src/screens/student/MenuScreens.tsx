@@ -527,7 +527,7 @@ function createSettingsStyles(st: ReturnType<typeof useSt>["st"]) {
       borderRadius: 16,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: "rgba(242,180,97,0.15)"
+      backgroundColor: "rgba(212,175,55,0.15)"
     },
     kicker: {
       color: st.gold,
@@ -586,8 +586,8 @@ function createSettingsStyles(st: ReturnType<typeof useSt>["st"]) {
       backgroundColor: st.fill
     },
     soundRowOn: {
-      borderColor: "rgba(242,180,97,0.4)",
-      backgroundColor: "rgba(242,180,97,0.12)"
+      borderColor: "rgba(212,175,55,0.4)",
+      backgroundColor: "rgba(212,175,55,0.12)"
     },
     soundIcon: {
       width: 44,
@@ -597,7 +597,7 @@ function createSettingsStyles(st: ReturnType<typeof useSt>["st"]) {
       justifyContent: "center",
       backgroundColor: st.fill
     },
-    soundIconOn: { backgroundColor: "rgba(242,180,97,0.2)" },
+    soundIconOn: { backgroundColor: "rgba(212,175,55,0.2)" },
     soundTitle: { color: st.text, fontSize: 16, fontWeight: "800" },
     homeMeta: { color: st.muted, fontSize: 13, marginTop: 8 },
     homeError: { color: "#e07a5f", fontSize: 13, marginTop: 6, fontWeight: "700" },

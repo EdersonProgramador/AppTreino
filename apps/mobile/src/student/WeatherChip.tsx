@@ -18,7 +18,7 @@ export function WeatherChip({ weather, sport = null, compact = false, onPress }:
   if (compact) {
     return (
       <Pressable onPress={onPress} style={[styles.chip, { backgroundColor: "rgba(12,14,18,0.78)" }]}>
-        <Ionicons name={weather.icon} size={16} color="#f2b461" />
+        <Ionicons name={weather.icon} size={16} color="#d4af37" />
         <Text style={styles.chipTemp}>{weather.tempC}°</Text>
         <Text style={styles.chipLabel} numberOfLines={1}>
           {weather.label}

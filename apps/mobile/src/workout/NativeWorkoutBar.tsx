@@ -15,6 +15,7 @@ import { mediaUrl } from "../lib/media";
 import { emptyMusicSnapshot, musicPlayback, type MusicPlaybackSnapshot, type NativeTrack } from "../musicPlayback";
 import { uiSounds } from "../student/uiSounds";
 import { readLikedIds, writeLikedIds } from "../student/likes";
+import { brand } from "../student/brand";
 import { useStudent } from "../student/StudentContext";
 import type { MusicAlbum, MusicTrack } from "../types";
 import { runner } from "./runnerTheme";
@@ -30,7 +31,7 @@ function toNative(track: MusicTrack, album?: MusicAlbum): NativeTrack | null {
   return {
     id: track.id,
     title: track.title,
-    artist: track.artist || album?.title || "App Treino",
+    artist: track.artist || album?.title || brand.name,
     artwork: mediaUrl(track.coverUrl || album?.coverUrl),
     url
   };
@@ -161,7 +162,7 @@ export function NativeWorkoutBar({
                   {music.current?.title || "Escolher álbum"}
                 </Text>
                 <Text numberOfLines={1} style={styles.trackArtist}>
-                  {music.current?.artist || (hasTrack ? "App Treino" : "Toque para ver álbuns")}
+                  {music.current?.artist || (hasTrack ? brand.name : "Toque para ver álbuns")}
                 </Text>
               </View>
             </Pressable>

@@ -91,7 +91,7 @@ export function createMenuStyles(st: StudentTokens) {
     },
     calendarToday: { borderWidth: 1.5, borderColor: st.gold, borderRadius: 14 },
     starRow: { flexDirection: "row", gap: 4 },
-    chatMe: { alignSelf: "flex-end", backgroundColor: "rgba(242,180,97,0.16)", maxWidth: "86%" },
+    chatMe: { alignSelf: "flex-end", backgroundColor: "rgba(212,175,55,0.16)", maxWidth: "86%" },
     chatThem: { alignSelf: "flex-start", backgroundColor: st.chatThem, maxWidth: "86%" }
   });
 }

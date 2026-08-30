@@ -18,8 +18,10 @@ export default {
           faint: "rgb(var(--sand-faint-rgb) / <alpha-value>)"
         },
         brand: {
-          gold: "#f0b45a",
-          amber: "#e89a3a",
+          gold: "#d4af37",
+          amber: "#ff9d00",
+          silver: "#c0c0c0",
+          chrome: "#e8e8ec",
           coral: "#e06a3c",
           ember: "#c73d2e",
           mint: "#4fd6a0",
@@ -31,7 +33,7 @@ export default {
         sans: ["\"Manrope\"", "ui-sans-serif", "system-ui", "sans-serif"]
       },
       boxShadow: {
-        glow: "0 24px 80px rgba(224, 106, 60, 0.22)",
+        glow: "0 24px 80px rgba(212, 175, 55, 0.22)",
         panel: "var(--shadow-panel)",
         soft: "var(--shadow-soft)"
       },

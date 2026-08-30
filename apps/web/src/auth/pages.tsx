@@ -157,7 +157,7 @@ export function GuestChrome({ variant = "default" }: { variant?: "default" | "lo
       <Link className="inline-flex min-w-0 shrink items-center border-0 bg-transparent p-0" to={paths.home} aria-label="Ir para início">
         <img
           className="block h-auto w-[clamp(124px,38vw,200px)] max-w-full rounded-lg drop-shadow-lg"
-          src={assetUrl("assets/app-treino-logo.svg")}
+          src={assetUrl("assets/atlly-logo.png")}
           alt={brand.name}
         />
       </Link>

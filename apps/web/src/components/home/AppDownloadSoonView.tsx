@@ -13,7 +13,7 @@ export function AppDownloadSoonView() {
         <Link className="inline-flex items-center border-0 bg-transparent p-0" to={paths.home} aria-label="Ir para início">
           <img
             className="block h-auto w-[clamp(140px,14vw,190px)]"
-            src={assetUrl("assets/app-treino-logo.svg")}
+            src={assetUrl("assets/atlly-logo.png")}
             alt={brand.name}
           />
         </Link>

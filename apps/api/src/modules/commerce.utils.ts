@@ -26,11 +26,31 @@ export const DEFAULT_SYSTEM_SETTINGS: Record<string, string> = {
   commerce_delivery_fee_cents: "1500",
   commerce_origin_postal_code: "01310100",
   commerce_shipping_provider: "auto",
-  legal_company_name: "App Treino Social Ltda.",
-  legal_cnpj: "00.000.000/0001-00",
-  legal_contact_email: "contato@apptreino.com",
-  legal_dpo_email: "privacidade@apptreino.com"
+  legal_company_name: "ATLLY",
+  legal_cnpj: "",
+  legal_contact_email: "contato@atlly.com.br",
+  legal_dpo_email: "privacidade@atlly.com.br"
 };
+
+const PLACEHOLDER_LEGAL_CNPJ_DIGITS = "00000000000100";
+
+export function isPublicLegalCnpj(cnpj: string | undefined) {
+  const digits = (cnpj ?? "").replace(/\D/g, "");
+  return digits.length > 0 && digits !== PLACEHOLDER_LEGAL_CNPJ_DIGITS;
+}
+
+/** Oculta CNPJ/razão social fictícios na config pública até regularização. */
+export function sanitizePublicSystemSettings(config: Record<string, string>) {
+  if (isPublicLegalCnpj(config.legal_cnpj)) {
+    return config;
+  }
+
+  return {
+    ...config,
+    legal_cnpj: "",
+    legal_company_name: "ATLLY"
+  };
+}
 
 export async function ensureDefaultSystemSettings() {
   const keys = Object.keys(DEFAULT_SYSTEM_SETTINGS);

@@ -174,7 +174,7 @@ function createStyles(st: StudentTokens) {
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: st.line
     },
-    rankMe: { backgroundColor: "rgba(242,180,97,0.12)", marginHorizontal: -8, paddingHorizontal: 8, borderRadius: 10 },
+    rankMe: { backgroundColor: "rgba(212,175,55,0.12)", marginHorizontal: -8, paddingHorizontal: 8, borderRadius: 10 },
     rank: { color: st.gold, fontWeight: "900", width: 36 }
   });
 }

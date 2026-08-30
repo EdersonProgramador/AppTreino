@@ -1897,7 +1897,7 @@ function createStyles(st: StudentTokens) {
     sheetTitle: { color: st.text, fontWeight: "800" },
     chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     chip: { borderWidth: 1, borderColor: st.line, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: st.fill },
-    chipOn: { backgroundColor: "#f2b461" },
+    chipOn: { backgroundColor: "#d4af37" },
     chipText: { color: st.text, fontWeight: "800", fontSize: 12 },
     rowText: { color: st.text, paddingVertical: 6 },
     input: { borderWidth: 1, borderColor: st.line, borderRadius: 12, padding: 10, color: st.text, minHeight: 70 },

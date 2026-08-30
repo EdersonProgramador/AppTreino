@@ -155,7 +155,7 @@ export function LockedContentsScreen() {
 
   return (
     <StudentPage chrome={false}>
-      <SheetHeading kicker="App Treino Social" title="Este treino está bloqueado" subtitle="Finalize a assinatura pendente para liberar o player e as funcionalidades do atleta." />
+      <SheetHeading kicker="ATLLY" title="Este treino está bloqueado" subtitle="Finalize a assinatura pendente para liberar o player e as funcionalidades do atleta." />
       <View style={styles.lockCard}>
         <Ionicons name="lock-closed" size={34} color={st.gold} />
         <Text style={styles.lockTitle}>Este treino está bloqueado</Text>
@@ -208,7 +208,7 @@ function createLockedStyles(st: StudentTokens) {
     chipOn: { backgroundColor: st.coral, borderColor: st.coral },
     chipText: { color: st.text, fontWeight: "800", fontSize: 12 },
     chipTextOn: { color: "#fff" },
-    note: { marginHorizontal: 16, padding: 14, borderRadius: 14, backgroundColor: "rgba(242,180,97,0.16)", gap: 4 },
+    note: { marginHorizontal: 16, padding: 14, borderRadius: 14, backgroundColor: "rgba(212,175,55,0.16)", gap: 4 },
     noteTitle: { color: st.text, fontWeight: "800" },
     copy: { color: st.muted, fontSize: 13, lineHeight: 18, paddingHorizontal: 12 },
     lockCard: { margin: 16, alignItems: "center", gap: 10, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: st.line, backgroundColor: st.card },

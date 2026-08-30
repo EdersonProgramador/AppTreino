@@ -1248,7 +1248,7 @@ function createStyles(st: StudentTokens) {
     actionText: { color: st.muted, fontWeight: "700", fontSize: 13 },
     actionTextOn: { color: "#df663c" },
     chip: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: st.line, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: st.fill },
-    chipOn: { backgroundColor: "#f2b461", borderColor: "transparent" },
+    chipOn: { backgroundColor: "#d4af37", borderColor: "transparent" },
     chipText: { color: st.text, fontWeight: "800", fontSize: 12 },
     thumbWrap: { width: 84, height: 84, borderRadius: 12, overflow: "hidden" },
     thumb: { width: "100%", height: "100%" },

@@ -39,24 +39,26 @@
     --shadow-soft: 0 12px 40px rgba(0, 0, 0, 0.22);
     --hero-grid: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.08) 1px, transparent 0);
     --panel-shine: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 42%);
-    --shell-bg: radial-gradient(circle at 20% 20%, rgba(240, 180, 90, 0.18), transparent 38%),
-      radial-gradient(circle at 80% 0%, rgba(224, 106, 60, 0.16), transparent 42%),
-      linear-gradient(160deg, #07080a 0%, #10131a 48%, #0b0f14 100%);
+    --shell-bg: radial-gradient(circle at 20% 20%, rgba(212, 175, 55, 0.14), transparent 38%),
+      radial-gradient(circle at 80% 0%, rgba(255, 157, 0, 0.1), transparent 42%),
+      linear-gradient(160deg, #000000 0%, #07080a 48%, #0a0a0c 100%);
     --body-bg: radial-gradient(circle at top right, rgba(240, 180, 90, 0.08), transparent 28%);
-    /* Brand triad — sales + portal + workout player */
-    --brand-gold: #f0b45a;
-    --brand-gold-soft: #f2b461;
-    --brand-amber: #e89a3a;
+    /* ATLLY — gold / silver / performance black */
+    --brand-gold: #d4af37;
+    --brand-gold-soft: #e8c547;
+    --brand-amber: #ff9d00;
+    --brand-silver: #c0c0c0;
+    --brand-chrome: #e8e8ec;
     --brand-coral: #e06a3c;
     --brand-coral-mid: #df663c;
     --brand-ember: #c73d2e;
     --brand-ember-deep: #a83224;
-    /* Same portal CTA triad — visible gold → coral → ember */
     --cinema-chrome-base: linear-gradient(
       135deg,
-      #f2b461 0%,
-      #df663c 48%,
-      #c73d2e 100%
+      #e8c547 0%,
+      #d4af37 28%,
+      #c0c0c0 62%,
+      #a8a8a8 100%
     );
     --cinema-chrome-veil: linear-gradient(
       180deg,
@@ -116,23 +118,26 @@
     --shadow-soft: 0 10px 28px rgba(45, 36, 24, 0.08);
     --hero-grid: radial-gradient(circle at 1px 1px, rgba(21, 26, 34, 0.06) 1px, transparent 0);
     --panel-shine: linear-gradient(180deg, rgba(255, 255, 255, 0.7), transparent 42%);
-    --shell-bg: radial-gradient(circle at 18% 12%, rgba(240, 180, 90, 0.22), transparent 36%),
-      radial-gradient(circle at 86% 0%, rgba(224, 106, 60, 0.14), transparent 40%),
+    --shell-bg: radial-gradient(circle at 18% 12%, rgba(212, 175, 55, 0.16), transparent 36%),
+      radial-gradient(circle at 86% 0%, rgba(255, 157, 0, 0.08), transparent 40%),
       linear-gradient(160deg, #f7f2ea 0%, #ebe4d8 48%, #e5ddd0 100%);
-    --body-bg: radial-gradient(circle at top right, rgba(224, 106, 60, 0.12), transparent 32%),
+    --body-bg: radial-gradient(circle at top right, rgba(212, 175, 55, 0.1), transparent 32%),
       linear-gradient(180deg, #f7f2ea 0%, #ebe4d8 100%);
-    --brand-gold: #f0b45a;
-    --brand-gold-soft: #f2b461;
-    --brand-amber: #e89a3a;
+    --brand-gold: #d4af37;
+    --brand-gold-soft: #e8c547;
+    --brand-amber: #ff9d00;
+    --brand-silver: #c0c0c0;
+    --brand-chrome: #e8e8ec;
     --brand-coral: #e06a3c;
     --brand-coral-mid: #df663c;
     --brand-ember: #c73d2e;
     --brand-ember-deep: #a83224;
     --cinema-chrome-base: linear-gradient(
       135deg,
-      #f2b461 0%,
-      #df663c 48%,
-      #c73d2e 100%
+      #e8c547 0%,
+      #d4af37 28%,
+      #c0c0c0 62%,
+      #a8a8a8 100%
     );
     --cinema-chrome-veil: linear-gradient(
       180deg,
@@ -353,6 +358,10 @@
 
   .guest-chrome-link {
     color: var(--app-text-muted);
+  }
+
+  .guest-chrome-link:hover {
+    color: var(--brand-gold);
   }
 
   .guest-chrome-link:hover {
@@ -654,8 +663,8 @@
   }
 
   .ui-input:focus {
-    border-color: rgba(240, 180, 90, 0.7);
-    box-shadow: 0 0 0 2px rgba(240, 180, 90, 0.2);
+    border-color: rgba(212, 175, 55, 0.7);
+    box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.2);
   }
 
   .ui-label {
@@ -677,14 +686,15 @@
     padding: 0 1.25rem;
     font-size: 0.875rem;
     font-weight: 800;
-    background: #f0b45a;
-    color: var(--on-accent);
+    background: linear-gradient(135deg, var(--brand-gold) 0%, var(--brand-amber) 100%);
+    color: #0a0a0a;
+    box-shadow: 0 10px 28px rgba(212, 175, 55, 0.22);
     transition: background-color 180ms ease, transform 160ms ease, box-shadow 180ms ease;
   }
 
   .ui-btn-primary:hover,
   .primary-button:hover {
-    background: #e89a3a;
+    background: linear-gradient(135deg, var(--brand-gold-soft) 0%, var(--brand-gold) 100%);
   }
 
   .ui-btn-secondary,
@@ -986,7 +996,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 summary:focus-visible {
-  outline: 3px solid rgba(242, 180, 97, 0.34);
+  outline: 3px solid rgba(212, 175, 55, 0.34);
   outline-offset: 3px;
 }
 
@@ -1069,11 +1079,11 @@ summary:focus-visible {
 .area-badge,
 .plan-badge,
 .panel-title span {
-  border: 1px solid rgba(242, 180, 97, 0.34);
+  border: 1px solid rgba(212, 175, 55, 0.34);
   border-radius: 999px;
   padding: 8px 12px;
-  background: rgba(242, 180, 97, 0.1);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.1);
+  color: var(--brand-gold);
   font-size: 13px;
   font-weight: 800;
   box-shadow: inset 0 1px 0 var(--app-border);
@@ -1138,7 +1148,7 @@ summary:focus-visible {
 }
 
 .eyebrow {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 12px;
   font-weight: 900;
   letter-spacing: 0;
@@ -1172,8 +1182,8 @@ summary:focus-visible {
 
 .primary-button,
 .price-card button {
-  border: 1px solid #f2b461;
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  border: 1px solid var(--brand-gold);
+  background: linear-gradient(135deg, var(--brand-gold), #df663c);
   color: #15100b;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.34),
@@ -1214,7 +1224,7 @@ summary:focus-visible {
 }
 
 .secondary-link:hover {
-  color: #f2b461;
+  color: var(--brand-gold);
   transform: translateX(2px);
 }
 
@@ -1263,7 +1273,7 @@ summary:focus-visible {
   position: absolute;
   inset: 18px;
   z-index: 1;
-  border: 1px solid rgba(242, 180, 97, 0.16);
+  border: 1px solid rgba(212, 175, 55, 0.16);
   border-radius: 8px;
   content: "";
 }
@@ -1275,7 +1285,7 @@ summary:focus-visible {
   border-radius: 30px;
   padding: 18px;
   background:
-    linear-gradient(180deg, rgba(242, 180, 97, 0.1), transparent 34%),
+    linear-gradient(180deg, rgba(212, 175, 55, 0.1), transparent 34%),
     #f9f2e7;
   box-shadow:
     0 34px 80px rgba(0, 0, 0, 0.5),
@@ -1344,7 +1354,7 @@ summary:focus-visible {
   border-radius: 8px;
   padding: 12px;
   background: #15100b;
-  color: #f2b461;
+  color: var(--brand-gold);
   font-weight: 900;
 }
 
@@ -1427,7 +1437,7 @@ summary:focus-visible {
 .resource-card:hover,
 .price-card:hover,
 .stat-card:hover {
-  border-color: rgba(242, 180, 97, 0.28);
+  border-color: rgba(212, 175, 55, 0.28);
   box-shadow: 0 28px 72px rgba(0, 0, 0, 0.3);
   transform: translateY(-3px);
 }
@@ -1435,7 +1445,7 @@ summary:focus-visible {
 .audience-grid svg,
 .resource-card svg,
 .stat-card svg {
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .audience-grid h3,
@@ -1528,9 +1538,9 @@ summary:focus-visible {
 }
 
 .price-card.featured {
-  border-color: rgba(242, 180, 97, 0.52);
+  border-color: rgba(212, 175, 55, 0.52);
   background:
-    linear-gradient(180deg, rgba(242, 180, 97, 0.16), var(--app-fill)),
+    linear-gradient(180deg, rgba(212, 175, 55, 0.16), var(--app-fill)),
     var(--app-panel);
   box-shadow:
     0 24px 64px rgba(223, 102, 60, 0.18),
@@ -1544,7 +1554,7 @@ summary:focus-visible {
 }
 
 .price-card strong {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 40px;
   line-height: 1.05;
 }
@@ -1595,7 +1605,7 @@ summary:focus-visible {
 }
 
 .faq-card:hover {
-  border-color: rgba(242, 180, 97, 0.26);
+  border-color: rgba(212, 175, 55, 0.26);
   box-shadow: 0 28px 72px rgba(0, 0, 0, 0.28);
   transform: translateY(-2px);
 }
@@ -1615,7 +1625,7 @@ summary:focus-visible {
 
 .faq-card summary svg {
   flex: 0 0 auto;
-  color: #f2b461;
+  color: var(--brand-gold);
   transition: transform 180ms ease;
 }
 
@@ -1678,7 +1688,7 @@ summary:focus-visible {
   height: 44px;
   flex: 0 0 auto;
   border-radius: 8px;
-  background: rgba(242, 180, 97, 0.1);
+  background: rgba(212, 175, 55, 0.1);
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24);
 }
 
@@ -1714,7 +1724,7 @@ summary:focus-visible {
 }
 
 .footer-links a:hover {
-  color: #f2b461;
+  color: var(--brand-gold);
   transform: translateX(2px);
 }
 
@@ -1751,10 +1761,10 @@ summary:focus-visible {
   height: 58px;
   place-items: center;
   margin-bottom: 20px;
-  border: 1px solid rgba(242, 180, 97, 0.32);
+  border: 1px solid rgba(212, 175, 55, 0.32);
   border-radius: 8px;
-  background: rgba(242, 180, 97, 0.12);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.12);
+  color: var(--brand-gold);
 }
 
 .auth-panel h1 {
@@ -1782,7 +1792,7 @@ summary:focus-visible {
 }
 
 .auth-tabs button.active {
-  background: #f2b461;
+  background: var(--brand-gold);
   color: #15100b;
 }
 
@@ -1790,10 +1800,10 @@ summary:focus-visible {
   display: grid;
   gap: 6px;
   margin-top: 20px;
-  border: 1px solid rgba(242, 180, 97, 0.32);
+  border: 1px solid rgba(212, 175, 55, 0.32);
   border-radius: 8px;
   padding: 14px;
-  background: rgba(242, 180, 97, 0.1);
+  background: rgba(212, 175, 55, 0.1);
   color: var(--app-text);
 }
 
@@ -1835,8 +1845,8 @@ summary:focus-visible {
 
 .auth-form input:focus,
 .auth-form select:focus {
-  border-color: rgba(242, 180, 97, 0.78);
-  box-shadow: 0 0 0 3px rgba(242, 180, 97, 0.14);
+  border-color: rgba(212, 175, 55, 0.78);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.14);
 }
 
 .google-signin-button {
@@ -1877,7 +1887,7 @@ summary:focus-visible {
   border: 0;
   padding: 0;
   background: transparent;
-  color: #f2b461;
+  color: var(--brand-gold);
   font-weight: 900;
   text-align: left;
 }
@@ -1892,14 +1902,14 @@ summary:focus-visible {
   display: grid;
   gap: 4px;
   margin-top: 16px;
-  border: 1px solid rgba(242, 180, 97, 0.4);
+  border: 1px solid rgba(212, 175, 55, 0.4);
   border-radius: 8px;
   padding: 12px 14px;
-  background: rgba(242, 180, 97, 0.1);
+  background: rgba(212, 175, 55, 0.1);
 }
 
 .pending-payment-note strong {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 14px;
 }
 
@@ -1973,7 +1983,7 @@ summary:focus-visible {
   border-radius: 8px;
   padding: 16px;
   background: var(--app-fill);
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .checkout-plan-option strong {
@@ -1982,8 +1992,8 @@ summary:focus-visible {
 }
 
 .checkout-plan-option input:checked + span {
-  border-color: rgba(242, 180, 97, 0.62);
-  background: rgba(242, 180, 97, 0.13);
+  border-color: rgba(212, 175, 55, 0.62);
+  background: rgba(212, 175, 55, 0.13);
 }
 
 .locked-content {
@@ -1996,11 +2006,11 @@ summary:focus-visible {
   justify-items: center;
   gap: 12px;
   margin-bottom: 18px;
-  border: 1px solid rgba(242, 180, 97, 0.24);
+  border: 1px solid rgba(212, 175, 55, 0.24);
   border-radius: 8px;
   padding: clamp(24px, 5vw, 38px);
   background:
-    linear-gradient(180deg, rgba(242, 180, 97, 0.12), rgba(255, 255, 255, 0.035)),
+    linear-gradient(180deg, rgba(212, 175, 55, 0.12), rgba(255, 255, 255, 0.035)),
     var(--app-panel);
   text-align: center;
 }
@@ -2010,10 +2020,10 @@ summary:focus-visible {
   width: 72px;
   height: 72px;
   place-items: center;
-  border: 1px solid rgba(242, 180, 97, 0.34);
+  border: 1px solid rgba(212, 175, 55, 0.34);
   border-radius: 50%;
-  background: rgba(242, 180, 97, 0.11);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.11);
+  color: var(--brand-gold);
 }
 
 .locked-overlay h2 {
@@ -2135,7 +2145,7 @@ html.light .student-modality-lock-badge {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .locked-card-header svg:last-child {
@@ -2160,7 +2170,7 @@ html.light .student-modality-lock-badge {
 .dashboard {
   min-height: calc(100vh - 76px);
   background:
-    radial-gradient(circle at 70% 0%, rgba(242, 180, 97, 0.12), transparent 26rem),
+    radial-gradient(circle at 70% 0%, rgba(212, 175, 55, 0.12), transparent 26rem),
     var(--app-bg);
 }
 
@@ -2199,7 +2209,7 @@ html.light .student-modality-lock-badge {
   width: 42px;
   height: 42px;
   border-radius: 8px;
-  background: rgba(242, 180, 97, 0.12);
+  background: rgba(212, 175, 55, 0.12);
 }
 
 .workspace-sidebar-brand div {
@@ -2254,20 +2264,20 @@ html.light .student-modality-lock-badge {
 .workspace-nav a:hover,
 .workspace-nav button:hover,
 .workspace-nav button.active {
-  border-color: rgba(242, 180, 97, 0.26);
-  background: rgba(242, 180, 97, 0.1);
+  border-color: rgba(212, 175, 55, 0.26);
+  background: rgba(212, 175, 55, 0.1);
   color: var(--app-text);
   transform: translateX(2px);
 }
 
 .workspace-nav button.active {
-  border-color: rgba(242, 180, 97, 0.46);
-  background: rgba(242, 180, 97, 0.16);
+  border-color: rgba(212, 175, 55, 0.46);
+  background: rgba(212, 175, 55, 0.16);
 }
 
 .workspace-nav svg {
   flex: 0 0 auto;
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .workspace-logout {
@@ -2329,7 +2339,7 @@ html.light .admin-workspace-shell .workspace-logout:hover svg {
   min-width: 0;
   padding: clamp(28px, 4vw, 48px);
   background:
-    radial-gradient(circle at 72% 0%, rgba(242, 180, 97, 0.1), transparent 26rem),
+    radial-gradient(circle at 72% 0%, rgba(212, 175, 55, 0.1), transparent 26rem),
     var(--app-bg);
 }
 
@@ -2409,7 +2419,7 @@ html.light .admin-workspace-shell .workspace-logout:hover svg {
   border-radius: 8px;
   padding: clamp(18px, 3vw, 26px);
   background:
-    linear-gradient(135deg, rgba(242, 180, 97, 0.12), rgba(48, 180, 129, 0.08)),
+    linear-gradient(135deg, rgba(212, 175, 55, 0.12), rgba(48, 180, 129, 0.08)),
     rgba(255, 255, 255, 0.045);
 }
 
@@ -2467,7 +2477,7 @@ html.light .admin-workspace-shell .workspace-logout:hover svg {
   display: grid;
   min-height: 118px;
   gap: 6px;
-  border: 1px solid rgba(242, 180, 97, 0.18);
+  border: 1px solid rgba(212, 175, 55, 0.18);
   border-radius: 8px;
   padding: 14px;
   background: rgba(255, 255, 255, 0.045);
@@ -2480,8 +2490,8 @@ html.light .admin-workspace-shell .workspace-logout:hover svg {
 
 .cms-workflow button:hover,
 .cms-workflow button.active {
-  border-color: rgba(242, 180, 97, 0.46);
-  background: rgba(242, 180, 97, 0.12);
+  border-color: rgba(212, 175, 55, 0.46);
+  background: rgba(212, 175, 55, 0.12);
   transform: translateY(-1px);
 }
 
@@ -2491,8 +2501,8 @@ html.light .admin-workspace-shell .workspace-logout:hover svg {
   height: 30px;
   place-items: center;
   border-radius: 50%;
-  background: rgba(242, 180, 97, 0.14);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.14);
+  color: var(--brand-gold);
 }
 
 .cms-workflow span {
@@ -2513,7 +2523,7 @@ html.light .admin-workspace-shell .workspace-logout:hover svg {
   border-radius: 999px;
   padding: 5px 8px;
   background: var(--app-input);
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .cms-admin-grid {
@@ -2593,12 +2603,12 @@ html.light .admin-workspace-shell .workspace-logout:hover svg {
 
 .cms-data-row.cms-sortable-row.is-dragging {
   opacity: 0.4;
-  border-color: rgba(242, 180, 97, 0.5);
+  border-color: rgba(212, 175, 55, 0.5);
 }
 
 .cms-data-row.cms-sortable-row.is-drag-over {
-  border-color: #f2b461;
-  box-shadow: 0 0 0 1px rgba(242, 180, 97, 0.55);
+  border-color: var(--brand-gold);
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.55);
 }
 
 .cms-sort-toggle {
@@ -2627,16 +2637,16 @@ html.light .admin-workspace-shell .workspace-logout:hover svg {
 }
 
 .cms-sort-toggle button.active {
-  border-color: #f2b461;
-  color: #f2b461;
-  background: rgba(242, 180, 97, 0.12);
+  border-color: var(--brand-gold);
+  color: var(--brand-gold);
+  background: rgba(212, 175, 55, 0.12);
 }
 
 .admin-users-pagination button.is-nav-target {
-  border-color: #f2b461;
-  color: #f2b461;
-  background: rgba(242, 180, 97, 0.16);
-  box-shadow: 0 0 0 1px rgba(242, 180, 97, 0.55);
+  border-color: var(--brand-gold);
+  color: var(--brand-gold);
+  background: rgba(212, 175, 55, 0.16);
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.55);
 }
 
 .cms-data-row.with-thumb {
@@ -3031,7 +3041,7 @@ button.delete-action-button:hover,
 }
 
 .cms-builder-row span {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 13px;
   font-weight: 900;
 }
@@ -3135,8 +3145,8 @@ button.delete-action-button:hover,
   right: 18px;
   width: 10px;
   height: 10px;
-  border-right: 2px solid #f2b461;
-  border-bottom: 2px solid #f2b461;
+  border-right: 2px solid var(--brand-gold);
+  border-bottom: 2px solid var(--brand-gold);
   transform: rotate(45deg);
   transition: transform 0.18s ease;
 }
@@ -3183,7 +3193,7 @@ button.delete-action-button:hover,
 }
 
 .cms-editing-banner {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 13px;
   font-weight: 800;
 }
@@ -3207,7 +3217,7 @@ button.delete-action-button:hover,
 }
 
 .cms-program-summary-grid strong {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.04em;
@@ -3251,7 +3261,7 @@ button.delete-action-button:hover,
 }
 
 .cms-program-sessions em {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-style: normal;
   font-size: 12px;
   font-weight: 900;
@@ -3305,8 +3315,8 @@ button.delete-action-button:hover,
 }
 
 .cms-program-card.is-drag-over {
-  border-color: rgba(242, 180, 97, 0.62);
-  box-shadow: 0 0 0 1px rgba(242, 180, 97, 0.24);
+  border-color: rgba(212, 175, 55, 0.62);
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.24);
 }
 
 .cms-program-card.is-not-sortable {
@@ -3347,8 +3357,8 @@ button.delete-action-button:hover,
 }
 
 .cms-status.draft {
-  background: rgba(242, 180, 97, 0.12);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.12);
+  color: var(--brand-gold);
 }
 
 .cms-status.archived {
@@ -3432,13 +3442,13 @@ button.delete-action-button:hover,
 .cms-upload-field {
   align-content: center;
   min-height: 152px;
-  border: 1px dashed rgba(242, 180, 97, 0.44);
+  border: 1px dashed rgba(212, 175, 55, 0.44);
   border-radius: 8px;
   padding: 18px;
   background:
-    linear-gradient(180deg, rgba(242, 180, 97, 0.08), rgba(255, 255, 255, 0.035)),
+    linear-gradient(180deg, rgba(212, 175, 55, 0.08), rgba(255, 255, 255, 0.035)),
     var(--app-input);
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .cms-upload-field strong {
@@ -3499,7 +3509,7 @@ button.delete-action-button:hover,
 
 .cms-file-preview-label a {
   overflow: hidden;
-  color: #f2b461;
+  color: var(--brand-gold);
   text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3571,13 +3581,13 @@ button.delete-action-button:hover,
 }
 
 .cms-chip input:checked + span {
-  border-color: #f2b461;
-  background: rgba(242, 180, 97, 0.14);
-  color: #f2b461;
+  border-color: var(--brand-gold);
+  background: rgba(212, 175, 55, 0.14);
+  color: var(--brand-gold);
 }
 
 .cms-chip input:focus-visible + span {
-  outline: 2px solid #f2b461;
+  outline: 2px solid var(--brand-gold);
   outline-offset: 2px;
 }
 
@@ -3592,10 +3602,10 @@ button.delete-action-button:hover,
   display: inline-flex;
   align-items: center;
   padding: 2px 10px;
-  border: 1px solid rgba(242, 180, 97, 0.35);
+  border: 1px solid rgba(212, 175, 55, 0.35);
   border-radius: 999px;
-  background: rgba(242, 180, 97, 0.12);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.12);
+  color: var(--brand-gold);
   font-size: 12px;
   font-style: normal;
   white-space: nowrap;
@@ -3648,7 +3658,7 @@ button.delete-action-button:hover,
 
 .cms-trash-panel .cms-trash-group h3 {
   margin: 0;
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 14px;
   font-weight: 900;
 }
@@ -3813,7 +3823,7 @@ button.delete-action-button:hover,
   border-radius: 8px;
   padding: 0 12px;
   background: transparent;
-  color: #f2b461;
+  color: var(--brand-gold);
   cursor: pointer;
 }
 
@@ -3843,7 +3853,7 @@ button.delete-action-button:hover,
 .checkbox-field input {
   width: 18px;
   height: 18px;
-  accent-color: #f2b461;
+  accent-color: var(--brand-gold);
 }
 
 .panel-title {
@@ -3872,7 +3882,7 @@ button.delete-action-button:hover,
 
 .task-row svg {
   flex: 0 0 auto;
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .crud-form {
@@ -3907,9 +3917,9 @@ button.delete-action-button:hover,
 .crud-form select:focus,
 .crud-form textarea:focus,
 .data-row select:focus {
-  border-color: rgba(242, 180, 97, 0.74);
+  border-color: rgba(212, 175, 55, 0.74);
   background: var(--app-input);
-  box-shadow: 0 0 0 3px rgba(242, 180, 97, 0.12);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.12);
 }
 
 .crud-form textarea {
@@ -3945,7 +3955,7 @@ button.delete-action-button:hover,
 }
 
 .data-row:hover {
-  border-color: rgba(242, 180, 97, 0.22);
+  border-color: rgba(212, 175, 55, 0.22);
   background: rgba(255, 255, 255, 0.075);
   transform: translateY(-1px);
 }
@@ -3968,7 +3978,7 @@ button.delete-action-button:hover,
 
 .data-row small,
 .data-row a {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-weight: 900;
   text-decoration: none;
 }
@@ -3990,8 +4000,8 @@ button.delete-action-button:hover,
 }
 
 .data-row button:hover {
-  border-color: rgba(242, 180, 97, 0.35);
-  background: rgba(242, 180, 97, 0.1);
+  border-color: rgba(212, 175, 55, 0.35);
+  background: rgba(212, 175, 55, 0.1);
   color: var(--app-text);
   transform: translateY(-1px);
 }
@@ -4054,7 +4064,7 @@ button.delete-action-button:hover,
 .admin-user-gender-actions button {
   width: 32px;
   height: 32px;
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 12px;
   font-weight: 900;
 }
@@ -4808,7 +4818,7 @@ html.light .finance-hub-tabs button {
 }
 
 .workout-panel .exercise-row small {
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .student-player-section {
@@ -4874,7 +4884,7 @@ html.light .finance-hub-tabs button {
 .player-video-placeholder {
   display: grid;
   place-items: center;
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .player-video span {
@@ -4901,11 +4911,11 @@ html.light .finance-hub-tabs button {
   grid-template-columns: auto auto auto;
   align-items: center;
   gap: 8px;
-  border: 1px solid rgba(242, 180, 97, 0.24);
+  border: 1px solid rgba(212, 175, 55, 0.24);
   border-radius: 999px;
   padding: 9px 12px;
-  background: rgba(242, 180, 97, 0.08);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.08);
+  color: var(--brand-gold);
   font-weight: 900;
 }
 
@@ -5095,7 +5105,7 @@ html.light .finance-hub-tabs button {
   overflow: hidden;
   touch-action: manipulation;
   background:
-    radial-gradient(circle at 78% 0%, rgba(242, 180, 97, 0.13), transparent 26rem),
+    radial-gradient(circle at 78% 0%, rgba(212, 175, 55, 0.1), transparent 26rem),
     var(--app-bg);
   color: var(--app-text);
   font-size: var(--st-body);
@@ -5346,8 +5356,9 @@ html.light .finance-hub-tabs button {
   padding: calc(12px + var(--safe-top)) clamp(16px, 5vw, 22px) 16px;
   transform: none;
   background:
-    linear-gradient(135deg, rgba(190, 48, 39, 0.94), rgba(22, 95, 71, 0.96)),
-    var(--app-panel);
+    linear-gradient(135deg, rgba(0, 0, 0, 0.97) 0%, rgba(20, 14, 6, 0.98) 55%, rgba(212, 175, 55, 0.18) 100%),
+    #000;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.22);
   color: #fff;
 }
 
@@ -5365,12 +5376,19 @@ html.light .finance-hub-tabs button {
   place-items: center;
   width: 40px;
   height: 40px;
-  border: 0;
+  padding: 0;
+  border: 1px solid rgba(212, 175, 55, 0.35);
   border-radius: 12px;
-  background: linear-gradient(145deg, #e06a3c 0%, #c4783a 42%, #0c5a47 100%);
-  color: #fff;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+  background: #0a0a0a;
+  overflow: hidden;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
   cursor: pointer;
+}
+
+.student-brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .student-brand-mark span {
@@ -5406,6 +5424,19 @@ html.light .finance-hub-tabs button {
   color: #fff;
 }
 
+.student-brand-category {
+  display: block;
+  overflow: hidden;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(192, 192, 192, 0.92);
+}
+
 .student-brand-athlete {
   display: block;
   overflow: hidden;
@@ -5437,7 +5468,7 @@ html.light .finance-hub-tabs button {
   padding: 0;
   border: 3px solid rgba(255, 255, 255, 0.82);
   border-radius: 50%;
-  background: rgba(242, 180, 97, 0.16);
+  background: rgba(212, 175, 55, 0.16);
   color: inherit;
   cursor: pointer;
 }
@@ -5604,8 +5635,8 @@ html.light .finance-hub-tabs button {
   place-items: center;
   border: 2px solid rgba(255, 255, 255, 0.92);
   border-radius: 999px;
-  background: #f2b461;
-  color: #15100b;
+  background: var(--brand-gold);
+  color: #0a0a0a;
   font-size: 10px;
   font-weight: 900;
 }
@@ -5624,7 +5655,7 @@ html.light .finance-hub-tabs button {
   gap: 0;
   overflow: hidden;
   box-sizing: border-box;
-  border: 1px solid rgba(242, 180, 97, 0.28);
+  border: 1px solid rgba(212, 175, 55, 0.28);
   border-radius: 16px;
   padding: 0;
   background: var(--app-bg-soft);
@@ -5660,8 +5691,8 @@ html.light .finance-hub-tabs button {
   height: 24px;
   place-items: center;
   border-radius: 50%;
-  background: rgba(242, 180, 97, 0.16);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.16);
+  color: var(--brand-gold);
   font-size: 12px;
   font-weight: 900;
 }
@@ -5738,17 +5769,17 @@ html.light .finance-hub-tabs button {
   align-items: center;
   gap: 5px;
   min-height: 34px;
-  border: 1px solid rgba(242, 180, 97, 0.34);
+  border: 1px solid rgba(212, 175, 55, 0.34);
   border-radius: 999px;
   padding: 0 9px;
-  background: rgba(242, 180, 97, 0.14);
+  background: rgba(212, 175, 55, 0.12);
   color: #fff;
   font-size: 11px;
   font-weight: 900;
 }
 
 .student-streak-button svg {
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .student-streak-button span {
@@ -5763,7 +5794,7 @@ html.light .finance-hub-tabs button {
   height: 20px;
   place-items: center;
   border-radius: 50%;
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  background: linear-gradient(135deg, var(--brand-gold), #df663c);
   color: #15100b;
   font-size: 12px;
 }
@@ -5787,7 +5818,7 @@ html.light .finance-hub-tabs button {
   margin-top: 6px;
   gap: 0;
   overflow: hidden;
-  border: 1px solid rgba(242, 180, 97, 0.28);
+  border: 1px solid rgba(212, 175, 55, 0.28);
   border-radius: 16px;
   padding: 0;
   background: var(--app-bg-soft);
@@ -5829,7 +5860,7 @@ html.light .finance-hub-tabs button {
 }
 
 .student-streak-modal-header span {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 0.6875rem;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -5868,7 +5899,7 @@ html.light .finance-hub-tabs button {
   width: min(100%, 430px);
   gap: 14px;
   overflow: hidden;
-  border: 1px solid rgba(242, 180, 97, 0.18);
+  border: 1px solid rgba(212, 175, 55, 0.18);
   border-radius: 18px;
   padding: 18px;
   background: var(--app-bg-soft);
@@ -5899,8 +5930,8 @@ html.light .finance-hub-tabs button {
   height: 54px;
   place-items: center;
   border-radius: 16px;
-  background: rgba(242, 180, 97, 0.14);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.14);
+  color: var(--brand-gold);
 }
 
 .student-workout-history-header h2 {
@@ -5946,7 +5977,7 @@ html.light .finance-hub-tabs button {
 }
 
 .student-history-card-heading span {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
@@ -5977,7 +6008,7 @@ html.light .finance-hub-tabs button {
 }
 
 .student-history-muscles svg {
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .student-history-metrics {
@@ -6019,7 +6050,7 @@ html.light .finance-hub-tabs button {
 
 .student-history-share-button svg,
 .student-history-back-button svg {
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .student-history-back-button {
@@ -6051,7 +6082,7 @@ html.light .finance-hub-tabs button {
   display: grid;
   gap: 12px;
   margin-bottom: 18px;
-  border: 1px solid rgba(242, 180, 97, 0.18);
+  border: 1px solid rgba(212, 175, 55, 0.2);
   border-radius: 16px;
   padding: 18px;
   background: var(--app-card-bg);
@@ -6081,10 +6112,10 @@ html.light .finance-hub-tabs button {
   width: 38px;
   height: 38px;
   place-items: center;
-  border: 1px solid rgba(242, 180, 97, 0.24);
+  border: 1px solid rgba(212, 175, 55, 0.24);
   border-radius: 50%;
-  background: rgba(242, 180, 97, 0.08);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.08);
+  color: var(--brand-gold);
 }
 
 .student-calendar-arrow:disabled {
@@ -6094,7 +6125,7 @@ html.light .finance-hub-tabs button {
 
 .student-consistency-heading span,
 .student-consistency-heading small {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: var(--st-xs);
   font-weight: var(--st-weight-label);
   letter-spacing: var(--st-tracking-label);
@@ -6146,13 +6177,13 @@ html.light .finance-hub-tabs button {
 }
 
 .student-calendar-grid span.today {
-  border-color: #f2b461;
+  border-color: var(--brand-gold);
   color: var(--app-text);
 }
 
 .student-calendar-grid span.completed {
-  border-color: rgba(242, 180, 97, 0.8);
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  border-color: rgba(212, 175, 55, 0.8);
+  background: linear-gradient(135deg, var(--brand-gold), #df663c);
   color: #15100b;
 }
 
@@ -6195,8 +6226,9 @@ html.light .finance-hub-tabs button {
   height: 58px;
   place-items: center;
   border-radius: 50%;
-  background: #f3f3f3;
-  color: #df663c;
+  border: 1px solid rgba(212, 175, 55, 0.22);
+  background: rgba(212, 175, 55, 0.08);
+  color: var(--brand-gold);
 }
 
 .student-workout-summary h2,
@@ -6236,7 +6268,7 @@ html.light .finance-hub-tabs button {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  background: linear-gradient(135deg, var(--brand-gold), var(--brand-amber));
 }
 
 .student-exercise-preview {
@@ -6265,7 +6297,7 @@ html.light .finance-hub-tabs button {
   padding: 0.6rem 1.15rem;
   border: 0;
   border-radius: 12px;
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  background: linear-gradient(135deg, var(--brand-gold), #df663c);
   color: #fff;
   font-size: var(--st-body);
   font-weight: var(--st-weight-title);
@@ -6330,9 +6362,9 @@ html.light .finance-hub-tabs button {
 }
 
 .student-feature-card.student-feature-synced {
-  border-color: rgba(242, 180, 97, 0.45);
+  border-color: rgba(212, 175, 55, 0.45);
   box-shadow:
-    0 0 0 1px rgba(242, 180, 97, 0.12),
+    0 0 0 1px rgba(212, 175, 55, 0.12),
     0 14px 30px rgba(0, 0, 0, 0.08);
 }
 
@@ -6343,7 +6375,7 @@ html.light .finance-hub-tabs button {
   margin: 0;
   border-radius: 999px;
   padding: 3px 8px;
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  background: linear-gradient(135deg, var(--brand-gold), #df663c);
   color: #15100b;
   font-size: 10px;
   font-style: normal;
@@ -6353,14 +6385,14 @@ html.light .finance-hub-tabs button {
 }
 
 .student-sync-notification {
-  border-color: rgba(242, 180, 97, 0.28) !important;
-  background: rgba(242, 180, 97, 0.08);
+  border-color: rgba(212, 175, 55, 0.28) !important;
+  background: rgba(212, 175, 55, 0.08);
 }
 
 .student-sync-origin {
   display: block;
   margin: 2px 0 6px;
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 11px;
   font-style: normal;
   font-weight: 800;
@@ -6374,10 +6406,10 @@ html.light .finance-hub-tabs button {
   min-height: 34px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(242, 180, 97, 0.35);
+  border: 1px solid rgba(212, 175, 55, 0.35);
   border-radius: 10px;
   padding: 0 12px;
-  background: rgba(242, 180, 97, 0.12);
+  background: rgba(212, 175, 55, 0.12);
   color: var(--app-text);
   font-size: 12px;
   font-weight: 800;
@@ -6390,8 +6422,8 @@ html.light .finance-hub-tabs button {
   place-items: center;
   margin-bottom: 20px;
   border-radius: 50%;
-  background: rgba(242, 180, 97, 0.12);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.12);
+  color: var(--brand-gold);
 }
 
 .student-feature-card strong {
@@ -6429,7 +6461,7 @@ html.light .finance-hub-tabs button {
 }
 
 .student-sheet-heading span {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: var(--st-xs);
   font-weight: var(--st-weight-label);
   letter-spacing: var(--st-tracking-label);
@@ -6520,12 +6552,12 @@ html.light .finance-hub-tabs button {
 }
 
 .student-training-card.active {
-  border-color: rgba(242, 180, 97, 0.42);
+  border-color: rgba(212, 175, 55, 0.42);
   background:
-    linear-gradient(180deg, rgba(242, 180, 97, 0.14), var(--app-fill)),
+    linear-gradient(180deg, rgba(212, 175, 55, 0.12), var(--app-fill)),
     var(--app-panel);
   box-shadow:
-    0 0 0 1px rgba(242, 180, 97, 0.12),
+    0 0 0 1px rgba(212, 175, 55, 0.14),
     0 12px 26px rgba(0, 0, 0, 0.12);
 }
 
@@ -6550,9 +6582,9 @@ html.light .finance-hub-tabs button {
 
 .student-training-card.active > button,
 .student-training-card.active > .student-card-actions > button {
-  border-color: #f2b461;
-  background: linear-gradient(135deg, #f2b461, #df663c);
-  color: #15100b;
+  border-color: var(--brand-gold);
+  background: linear-gradient(135deg, var(--brand-gold), var(--brand-amber));
+  color: #0a0a0a;
 }
 
 .student-exercise-list,
@@ -6594,7 +6626,7 @@ html.light .finance-hub-tabs button {
 }
 
 .student-training-card.completed {
-  border-color: rgba(242, 180, 97, 0.5);
+  border-color: rgba(212, 175, 55, 0.5);
 }
 
 .student-completed-seal {
@@ -6608,7 +6640,7 @@ html.light .finance-hub-tabs button {
   margin: 0 !important;
   border-radius: 999px;
   padding: 4px 8px;
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  background: linear-gradient(135deg, var(--brand-gold), #df663c);
   color: #1a1208 !important;
   font-size: 10px !important;
   font-weight: 800 !important;
@@ -6632,7 +6664,7 @@ html.light .finance-hub-tabs button {
   border: 0;
   border-radius: 12px;
   padding: 0 14px;
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  background: linear-gradient(135deg, var(--brand-gold), #df663c);
   color: #1a1208;
   font-size: 13px;
   font-weight: 800;
@@ -6673,8 +6705,8 @@ html.light .finance-hub-tabs button {
 }
 
 .student-modality-filter button.active {
-  border-color: rgba(242, 180, 97, 0.45);
-  background: linear-gradient(135deg, rgba(242, 180, 97, 0.22), rgba(223, 102, 60, 0.16));
+  border-color: rgba(212, 175, 55, 0.45);
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.22), rgba(223, 102, 60, 0.16));
   color: var(--app-text);
 }
 
@@ -6694,7 +6726,7 @@ html.light .finance-hub-tabs button {
 .student-modality-card {
   display: grid;
   gap: 14px;
-  border: 1px solid rgba(242, 180, 97, 0.2);
+  border: 1px solid rgba(212, 175, 55, 0.2);
   border-radius: 14px;
   overflow: hidden;
   padding: 0;
@@ -6711,9 +6743,9 @@ html.light .finance-hub-tabs button {
   place-items: center;
   overflow: hidden;
   background:
-    linear-gradient(135deg, rgba(242, 180, 97, 0.16), rgba(105, 225, 172, 0.08)),
+    linear-gradient(135deg, rgba(212, 175, 55, 0.16), rgba(105, 225, 172, 0.08)),
     #090b0d;
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .student-modality-media:not(.with-image) {
@@ -6760,18 +6792,18 @@ html.light .finance-hub-tabs button {
   border-radius: 999px;
   padding: 8px 12px;
   background: var(--app-fill);
-  color: #f2b461;
+  color: var(--brand-gold);
   font-weight: 900;
 }
 
 .student-training-sheet-card {
   display: grid;
   gap: 18px;
-  border: 1px solid rgba(242, 180, 97, 0.18);
+  border: 1px solid rgba(212, 175, 55, 0.18);
   border-radius: 18px;
   padding: 20px 16px;
   background:
-    linear-gradient(180deg, rgba(242, 180, 97, 0.12), rgba(255, 255, 255, 0.035)),
+    linear-gradient(180deg, rgba(212, 175, 55, 0.12), rgba(255, 255, 255, 0.035)),
     var(--app-panel);
   color: var(--app-text);
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.18);
@@ -6785,7 +6817,7 @@ html.light .finance-hub-tabs button {
 }
 
 .student-training-sheet-header span {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 13px;
   font-weight: 900;
   text-transform: uppercase;
@@ -6814,7 +6846,7 @@ html.light .finance-hub-tabs button {
   height: 92px;
   place-items: center;
   border-radius: 28px;
-  background: linear-gradient(135deg, rgba(242, 180, 97, 0.22), rgba(223, 102, 60, 0.14));
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.22), rgba(223, 102, 60, 0.14));
   color: #df663c;
 }
 
@@ -6837,7 +6869,7 @@ html.light .finance-hub-tabs button {
 
 .student-training-sheet-meta small {
   grid-column: 1 / -1;
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
@@ -6859,9 +6891,9 @@ html.light .finance-hub-tabs button {
 }
 
 .student-training-sheet-card .student-training-card.active {
-  border-color: rgba(242, 180, 97, 0.42);
+  border-color: rgba(212, 175, 55, 0.42);
   background:
-    linear-gradient(180deg, rgba(242, 180, 97, 0.14), var(--app-fill)),
+    linear-gradient(180deg, rgba(212, 175, 55, 0.14), var(--app-fill)),
     var(--app-panel);
 }
 
@@ -6924,7 +6956,7 @@ html.light .finance-hub-tabs button {
 .student-training-card span {
   display: block;
   margin-bottom: 4px;
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: var(--st-xs);
   font-weight: var(--st-weight-label);
   letter-spacing: var(--st-tracking-label);
@@ -6951,8 +6983,8 @@ html.light .finance-hub-tabs button {
   height: 58px;
   place-items: center;
   border-radius: 12px;
-  background: rgba(242, 180, 97, 0.12);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.12);
+  color: var(--brand-gold);
 }
 
 .student-exercise-card strong,
@@ -6977,7 +7009,7 @@ html.light .finance-hub-tabs button {
 .student-exercise-card small {
   display: block;
   margin-top: 5px;
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: var(--st-sm);
   font-weight: var(--st-weight-label);
 }
@@ -7052,7 +7084,7 @@ html.light .finance-hub-tabs button {
   border-radius: 0 0 20px 20px;
   background:
     var(--cinema-chrome-veil),
-    linear-gradient(135deg, #f2b461 0%, #df663c 48%, #c73d2e 100%);
+    linear-gradient(135deg, var(--brand-gold) 0%, #df663c 48%, #c73d2e 100%);
   color: #fff;
   box-shadow:
     0 10px 22px rgba(199, 61, 46, 0.26),
@@ -7185,7 +7217,7 @@ html.light .finance-hub-tabs button {
 }
 
 .workout-runner-card.completed {
-  outline: 2px solid rgba(242, 180, 97, 0.36);
+  outline: 2px solid rgba(212, 175, 55, 0.36);
 }
 
 .runner-exercise-main {
@@ -9125,7 +9157,7 @@ html.is-native-app .workout-album-picker {
 
 .runner-confirm-modal .confirm-yes {
   border-color: #df663c;
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  background: linear-gradient(135deg, var(--brand-gold), #df663c);
   color: #fff;
 }
 
@@ -9220,7 +9252,7 @@ html.is-native-app .workout-album-picker {
   place-items: center;
   justify-self: center;
   border-radius: 24px;
-  background: linear-gradient(135deg, rgba(242, 180, 97, 0.22), rgba(223, 102, 60, 0.14));
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.22), rgba(223, 102, 60, 0.14));
   color: #df663c;
 }
 
@@ -9272,7 +9304,7 @@ html.is-native-app .workout-album-picker {
 
 .runner-finish-primary {
   border: 0;
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  background: linear-gradient(135deg, var(--brand-gold), #df663c);
   color: #15100b;
 }
 
@@ -9347,8 +9379,8 @@ html.is-native-app .workout-album-picker {
   justify-self: center;
   border-radius: 26px;
   background:
-    radial-gradient(circle at 24% 28%, rgba(242, 180, 97, 0.3), transparent 32px),
-    linear-gradient(135deg, rgba(242, 180, 97, 0.2), rgba(223, 102, 60, 0.14));
+    radial-gradient(circle at 24% 28%, rgba(212, 175, 55, 0.3), transparent 32px),
+    linear-gradient(135deg, rgba(212, 175, 55, 0.2), rgba(223, 102, 60, 0.14));
   color: #df663c;
 }
 
@@ -9383,7 +9415,7 @@ html.is-native-app .workout-album-picker {
   border: 1px solid rgba(223, 102, 60, 0.22);
   border-radius: 16px;
   padding: 16px 10px;
-  background: linear-gradient(180deg, rgba(242, 180, 97, 0.1), #fff 56%);
+  background: linear-gradient(180deg, rgba(212, 175, 55, 0.1), #fff 56%);
   color: #303136;
   cursor: pointer;
   transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
@@ -9408,7 +9440,7 @@ html.is-native-app .workout-album-picker {
   overflow: hidden;
   border-radius: 50%;
   border: 3px solid rgba(255, 255, 255, 0.9);
-  background: linear-gradient(145deg, #f2b461, #df663c 58%, #c73d2e);
+  background: linear-gradient(145deg, var(--brand-gold), #df663c 58%, #c73d2e);
   color: #fff;
   box-shadow: 0 10px 20px rgba(199, 61, 46, 0.28);
 }
@@ -9468,8 +9500,8 @@ html.is-native-app .workout-album-picker {
   border-radius: 18px;
   padding: 20px 16px 18px;
   background:
-    radial-gradient(circle at 18% 12%, rgba(242, 180, 97, 0.28), transparent 42%),
-    linear-gradient(145deg, #c73d2e 0%, #e06a3c 48%, #f2b461 100%);
+    radial-gradient(circle at 18% 12%, rgba(212, 175, 55, 0.28), transparent 42%),
+    linear-gradient(145deg, #c73d2e 0%, #e06a3c 48%, var(--brand-gold) 100%);
   color: #fff;
   text-align: center;
   box-shadow: 0 16px 32px rgba(199, 61, 46, 0.28);
@@ -9567,13 +9599,13 @@ html.is-native-app .workout-album-picker {
 
 .runner-share-primary {
   border: 0;
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  background: linear-gradient(135deg, var(--brand-gold), #df663c);
   color: #15100b;
 }
 
 .runner-share-secondary {
   border: 1px solid rgba(223, 102, 60, 0.35);
-  background: rgba(242, 180, 97, 0.12);
+  background: rgba(212, 175, 55, 0.12);
   color: #c73d2e;
 }
 
@@ -9751,7 +9783,7 @@ label.runner-share-secondary {
   padding: 6px 12px 8px;
   background:
     var(--cinema-chrome-veil),
-    linear-gradient(135deg, #f2b461 0%, #df663c 48%, #c73d2e 100%);
+    linear-gradient(135deg, var(--brand-gold) 0%, #df663c 48%, #c73d2e 100%);
 }
 
 .workout-runner-header span {
@@ -9949,7 +9981,7 @@ label.runner-share-secondary {
 }
 
 .workout-runner-card.selected {
-  outline: 2px solid rgba(242, 180, 97, 0.44);
+  outline: 2px solid rgba(212, 175, 55, 0.44);
 }
 
 .runner-sequence-card-button {
@@ -10512,7 +10544,7 @@ label.runner-share-secondary {
 
 .runner-save-load {
   border-color: #df663c;
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  background: linear-gradient(135deg, var(--brand-gold), #df663c);
   color: #fff;
 }
 
@@ -10797,7 +10829,7 @@ label.runner-share-secondary {
   gap: 8px;
   border: 0;
   background: transparent;
-  color: #f2b461;
+  color: var(--brand-gold);
   font-weight: 900;
 }
 
@@ -10936,7 +10968,7 @@ label.runner-share-secondary {
 
 .student-assessment-summary strong,
 .student-assessment-summary-item strong {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -11032,9 +11064,9 @@ label.runner-share-secondary {
   gap: 14px;
   margin: 10px 0 14px;
   padding: 16px;
-  border: 1px solid rgba(242, 180, 97, 0.25);
+  border: 1px solid rgba(212, 175, 55, 0.25);
   border-radius: 12px;
-  background: rgba(242, 180, 97, 0.05);
+  background: rgba(212, 175, 55, 0.05);
 }
 
 .assessment-detail .student-assessment-section h2 {
@@ -11091,7 +11123,7 @@ label.runner-share-secondary {
 .student-product-fallback {
   display: grid;
   place-items: center;
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .student-product-body {
@@ -11104,7 +11136,7 @@ label.runner-share-secondary {
 }
 
 .student-product-body small {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
@@ -11137,7 +11169,7 @@ label.runner-share-secondary {
 
 .student-product-price {
   margin-top: auto;
-  color: #f2b461 !important;
+  color: var(--brand-gold) !important;
   font-size: 17px !important;
   font-weight: 900 !important;
   line-height: 1.2;
@@ -11378,8 +11410,8 @@ label.runner-share-secondary {
 }
 
 .student-store-tabs button.is-active {
-  border-color: rgba(242, 180, 97, 0.55);
-  background: rgba(242, 180, 97, 0.14);
+  border-color: rgba(212, 175, 55, 0.55);
+  background: rgba(212, 175, 55, 0.14);
 }
 
 .student-store-loading {
@@ -11430,8 +11462,8 @@ label.runner-share-secondary {
 }
 
 .student-store-billing-options label.is-active {
-  border-color: rgba(242, 180, 97, 0.5);
-  background: rgba(242, 180, 97, 0.08);
+  border-color: rgba(212, 175, 55, 0.5);
+  background: rgba(212, 175, 55, 0.08);
 }
 
 .student-store-billing-options input {
@@ -11472,8 +11504,8 @@ label.runner-share-secondary {
 }
 
 .student-store-fulfillment-options button.is-active {
-  border-color: rgba(242, 180, 97, 0.55);
-  background: rgba(242, 180, 97, 0.12);
+  border-color: rgba(212, 175, 55, 0.55);
+  background: rgba(212, 175, 55, 0.12);
 }
 
 .student-store-address-grid {
@@ -11724,17 +11756,17 @@ label.runner-share-secondary {
   justify-content: center;
   gap: 6px;
   min-height: 42px;
-  border: 1px solid rgba(242, 180, 97, 0.35);
+  border: 1px solid rgba(212, 175, 55, 0.35);
   border-radius: 10px;
   padding: 0 10px;
-  background: rgba(242, 180, 97, 0.08);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.08);
+  color: var(--brand-gold);
   font-size: 13px;
   font-weight: 900;
 }
 
 .student-favorite-button.active {
-  background: rgba(242, 180, 97, 0.2);
+  background: rgba(212, 175, 55, 0.2);
 }
 
 .student-favorite-button:disabled {
@@ -11848,14 +11880,14 @@ html.dark .student-rating-done {
 }
 
 .student-rating-card .student-rating-stars button:hover {
-  border-color: rgba(242, 180, 97, 0.45);
-  color: #f2b461;
+  border-color: rgba(212, 175, 55, 0.45);
+  color: var(--brand-gold);
 }
 
 .student-rating-card .student-rating-stars button.active {
-  border-color: rgba(242, 180, 97, 0.55);
-  background: rgba(242, 180, 97, 0.16);
-  color: #f2b461;
+  border-color: rgba(212, 175, 55, 0.55);
+  background: rgba(212, 175, 55, 0.16);
+  color: var(--brand-gold);
 }
 
 .student-rating-form .ui-input {
@@ -11897,7 +11929,7 @@ html.dark .student-rating-done {
   overflow: hidden;
   border-radius: 10px;
   background: var(--app-fill-strong);
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .student-favorite-media img {
@@ -11942,11 +11974,11 @@ html.dark .student-rating-done {
   justify-content: center;
   gap: 6px;
   align-self: center;
-  border: 1px solid rgba(242, 180, 97, 0.35);
+  border: 1px solid rgba(212, 175, 55, 0.35);
   border-radius: 999px;
   padding: 8px 14px;
-  background: rgba(242, 180, 97, 0.16);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.16);
+  color: var(--brand-gold);
   font-size: 13px;
   font-weight: 900;
 }
@@ -11973,7 +12005,7 @@ html.dark .student-rating-done {
 }
 
 .student-header-rating .student-rating-stars button.active {
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .student-header-rating .student-rating-stars button:disabled {
@@ -12002,7 +12034,7 @@ html.dark .student-rating-done {
 }
 
 .student-empty-state svg {
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .student-empty-state strong {
@@ -12023,7 +12055,7 @@ html.dark .student-rating-done {
 }
 
 .student-menu-item svg:first-child {
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .student-menu-item svg:last-child {
@@ -12111,7 +12143,7 @@ html.dark .student-rating-done {
 }
 
 .student-bottom-nav button.active {
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .runner-gender-icon {
@@ -13476,8 +13508,8 @@ html.light .dash-b2b-goal.is-complete .dash-b2b-goal-count small {
 }
 
 .admin-sync-indicator.syncing {
-  background: rgba(242, 180, 97, 0.16);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.16);
+  color: var(--brand-gold);
 }
 
 .admin-sync-label {
@@ -13504,7 +13536,7 @@ html.light .dash-b2b-goal.is-complete .dash-b2b-goal-count small {
 
 .dash-revenue-panel {
   background:
-    linear-gradient(135deg, rgba(242, 180, 97, 0.11), rgba(48, 180, 129, 0.06)),
+    linear-gradient(135deg, rgba(212, 175, 55, 0.11), rgba(48, 180, 129, 0.06)),
     rgba(255, 255, 255, 0.045);
 }
 
@@ -13574,7 +13606,7 @@ html.light .dash-b2b-goal.is-complete .dash-b2b-goal-count small {
 
 .dash-metric-strip svg {
   grid-row: 1 / 3;
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .dash-metric-strip strong {
@@ -13626,8 +13658,8 @@ html.light .dash-quick-actions button {
 }
 
 .dash-quick-actions button:hover {
-  border-color: rgba(242, 180, 97, 0.42);
-  background: rgba(242, 180, 97, 0.1);
+  border-color: rgba(212, 175, 55, 0.42);
+  background: rgba(212, 175, 55, 0.1);
   transform: translateY(-1px);
 }
 
@@ -13655,8 +13687,8 @@ html.light .dash-quick-actions button {
   width: fit-content;
   border-radius: 999px;
   padding: 5px 9px;
-  background: rgba(242, 180, 97, 0.14);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.14);
+  color: var(--brand-gold);
   font-size: 11px;
   font-weight: 900;
   text-transform: capitalize;
@@ -13694,7 +13726,7 @@ html.light .dash-quick-actions button {
   border: 0;
   padding: 0;
   background: transparent;
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 13px;
   font-weight: 900;
 }
@@ -13777,7 +13809,7 @@ html.light .dash-quick-actions button {
 }
 
 .reports-dist-row > span {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 13px;
   font-weight: 900;
 }
@@ -13799,7 +13831,7 @@ html.light .dash-quick-actions button {
 .reports-dist-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #f2b461, #35d45f);
+  background: linear-gradient(90deg, var(--brand-gold), #35d45f);
   min-width: 4px;
   transition: width 400ms ease;
 }
@@ -14451,7 +14483,7 @@ html.light .admin-profile-function-card {
   border-radius: 12px;
   padding: 24px;
   background:
-    radial-gradient(circle at 50% 40%, rgba(242, 180, 97, 0.1), transparent 16rem),
+    radial-gradient(circle at 50% 40%, rgba(212, 175, 55, 0.1), transparent 16rem),
     var(--app-fill);
 }
 
@@ -14497,10 +14529,10 @@ html.light .admin-profile-function-card {
   justify-items: center;
   gap: 14px;
   margin-top: 4px;
-  border: 1px solid rgba(242, 180, 97, 0.18);
+  border: 1px solid rgba(212, 175, 55, 0.18);
   border-radius: 14px;
   padding: 18px;
-  background: rgba(242, 180, 97, 0.05);
+  background: rgba(212, 175, 55, 0.05);
 }
 
 .student-qr-panel .dash-qr-box {
@@ -14540,17 +14572,17 @@ html.light .admin-profile-function-card {
   display: grid;
   gap: 14px;
   margin: 0 16px 16px;
-  border: 1px solid rgba(242, 180, 97, 0.24);
+  border: 1px solid rgba(212, 175, 55, 0.24);
   border-radius: 16px;
   padding: 20px 18px;
   background:
-    linear-gradient(180deg, rgba(242, 180, 97, 0.1), var(--app-fill)),
+    linear-gradient(180deg, rgba(212, 175, 55, 0.1), var(--app-fill)),
     var(--app-panel);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.24);
 }
 
 .student-rating-panel > span {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 13px;
   font-weight: 950;
   letter-spacing: 0.06em;
@@ -15655,10 +15687,10 @@ html.athlete-post-viewer-open body {
   display: grid;
   justify-items: center;
   gap: 6px;
-  border: 1px solid rgba(242, 180, 97, 0.35);
+  border: 1px solid rgba(212, 175, 55, 0.35);
   border-radius: 16px;
   padding: 14px 10px 12px;
-  background: linear-gradient(180deg, rgba(242, 180, 97, 0.16), rgba(223, 102, 60, 0.08));
+  background: linear-gradient(180deg, rgba(212, 175, 55, 0.16), rgba(223, 102, 60, 0.08));
   text-align: center;
 }
 
@@ -15668,11 +15700,11 @@ html.athlete-post-viewer-open body {
   height: 56px;
   place-items: center;
   overflow: hidden;
-  border: 2px solid rgba(242, 180, 97, 0.7);
+  border: 2px solid rgba(212, 175, 55, 0.7);
   border-radius: 50%;
   background: #1a1208;
-  color: #f2b461;
-  box-shadow: 0 0 0 3px rgba(242, 180, 97, 0.18);
+  color: var(--brand-gold);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.18);
 }
 
 .student-achievement-medal img {
@@ -15973,8 +16005,8 @@ html.light .student-profile-identity-copy strong {
 }
 
 .admin-chat-item.active {
-  background: rgba(242, 180, 97, 0.12);
-  box-shadow: inset 3px 0 0 #f2b461;
+  background: rgba(212, 175, 55, 0.12);
+  box-shadow: inset 3px 0 0 var(--brand-gold);
 }
 
 .admin-chat-item-head {
@@ -16060,14 +16092,14 @@ html.light .student-profile-identity-copy strong {
 .admin-chat-msg--admin {
   align-self: flex-end;
   border-color: rgba(48, 180, 129, 0.35);
-  background: linear-gradient(135deg, rgba(48, 180, 129, 0.16), rgba(242, 180, 97, 0.1));
+  background: linear-gradient(135deg, rgba(48, 180, 129, 0.16), rgba(212, 175, 55, 0.1));
 }
 
 .admin-chat-msg strong {
   display: block;
   font-size: 12px;
   margin-bottom: 3px;
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .admin-chat-msg--admin strong {
@@ -16121,8 +16153,8 @@ html.light .student-profile-identity-copy strong {
 .admin-chat-hint {
   margin: 0;
   padding: 10px 16px;
-  border-top: 1px solid rgba(242, 180, 97, 0.2);
-  background: rgba(242, 180, 97, 0.08);
+  border-top: 1px solid rgba(212, 175, 55, 0.2);
+  background: rgba(212, 175, 55, 0.08);
   color: #f2d4a8;
   font-size: 12.5px;
   line-height: 1.5;
@@ -16150,8 +16182,8 @@ html.light .student-profile-identity-copy strong {
   align-self: flex-start;
   border-radius: 999px;
   padding: 2px 9px;
-  background: rgba(242, 180, 97, 0.16);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.16);
+  color: var(--brand-gold);
   font-size: 11px;
   font-style: normal;
   font-weight: 800;
@@ -16219,8 +16251,8 @@ html.light .student-profile-identity-copy strong {
 }
 
 .student-chat-item.active {
-  border-color: rgba(242, 180, 97, 0.6);
-  background: rgba(242, 180, 97, 0.14);
+  border-color: rgba(212, 175, 55, 0.6);
+  background: rgba(212, 175, 55, 0.14);
 }
 
 .student-chat {
@@ -16267,8 +16299,8 @@ html.light .student-profile-identity-copy strong {
 
 .student-chat-msg--me {
   align-self: flex-end;
-  border-color: rgba(242, 180, 97, 0.4);
-  background: linear-gradient(135deg, rgba(242, 180, 97, 0.2), rgba(223, 102, 60, 0.16));
+  border-color: rgba(212, 175, 55, 0.4);
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.2), rgba(223, 102, 60, 0.16));
 }
 
 .student-chat-msg strong {
@@ -16279,7 +16311,7 @@ html.light .student-profile-identity-copy strong {
 }
 
 .student-chat-msg--me strong {
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .student-chat-msg p {
@@ -16329,8 +16361,8 @@ html.light .student-profile-identity-copy strong {
 .student-chat-hint {
   margin: 0;
   padding: 12px 16px;
-  border-top: 1px solid rgba(242, 180, 97, 0.2);
-  background: rgba(242, 180, 97, 0.08);
+  border-top: 1px solid rgba(212, 175, 55, 0.2);
+  background: rgba(212, 175, 55, 0.08);
   color: #f2d4a8;
   font-size: 13px;
   line-height: 1.5;
@@ -16359,7 +16391,7 @@ html.light .student-profile-identity-copy strong {
   display: grid;
   width: min(100%, 460px);
   gap: 16px;
-  border: 1px solid rgba(242, 180, 97, 0.18);
+  border: 1px solid rgba(212, 175, 55, 0.18);
   border-radius: 18px;
   padding: 20px;
   background: var(--app-bg-soft);
@@ -16375,7 +16407,7 @@ html.light .student-profile-identity-copy strong {
 }
 
 .admin-finalize-modal-header span {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
@@ -16397,10 +16429,10 @@ html.light .student-profile-identity-copy strong {
 .admin-finalize-modal-bubble {
   align-self: flex-end;
   max-width: 88%;
-  border: 1px solid rgba(242, 180, 97, 0.4);
+  border: 1px solid rgba(212, 175, 55, 0.4);
   border-radius: 12px;
   padding: 12px 14px;
-  background: linear-gradient(135deg, rgba(242, 180, 97, 0.18), rgba(223, 102, 60, 0.14));
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.18), rgba(223, 102, 60, 0.14));
 }
 
 .admin-finalize-modal-bubble strong {
@@ -16438,7 +16470,7 @@ html.light .student-profile-identity-copy strong {
   border: 0;
   border-radius: 10px;
   padding: 10px 16px;
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  background: linear-gradient(135deg, var(--brand-gold), #df663c);
   color: #fff;
   font-size: 14px;
   font-weight: 900;
@@ -16462,7 +16494,7 @@ html.light .student-profile-identity-copy strong {
   place-items: center;
   border-radius: 999px;
   padding: 0 5px;
-  background: #f2b461;
+  background: var(--brand-gold);
   color: #15100b;
   font-size: 11px;
   font-weight: 900;
@@ -16473,10 +16505,10 @@ html.light .student-profile-identity-copy strong {
 @keyframes admin-badge-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 2px var(--app-input), 0 0 0 0 rgba(242, 180, 97, 0.45);
+    box-shadow: 0 0 0 2px var(--app-input), 0 0 0 0 rgba(212, 175, 55, 0.45);
   }
   50% {
-    box-shadow: 0 0 0 2px var(--app-input), 0 0 0 6px rgba(242, 180, 97, 0);
+    box-shadow: 0 0 0 2px var(--app-input), 0 0 0 6px rgba(212, 175, 55, 0);
   }
 }
 
@@ -16487,7 +16519,7 @@ html.light .student-profile-identity-copy strong {
   gap: 6px;
   border-radius: 999px;
   padding: 4px 10px;
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  background: linear-gradient(135deg, var(--brand-gold), #df663c);
   color: #15100b;
   font-size: 12px;
   font-weight: 900;
@@ -16576,7 +16608,7 @@ html.light .student-profile-identity-copy strong {
   min-height: 42px;
   border: 1px solid rgba(223, 102, 60, 0.4);
   border-radius: 999px;
-  background: rgba(242, 180, 97, 0.14);
+  background: rgba(212, 175, 55, 0.14);
   color: #c24c28;
   font-weight: 900;
 }
@@ -16626,8 +16658,8 @@ html.light .student-profile-identity-copy strong {
 }
 
 .assessment-source-badge.admin {
-  background: rgba(242, 180, 97, 0.16);
-  color: #f2b461;
+  background: rgba(212, 175, 55, 0.16);
+  color: var(--brand-gold);
 }
 
 .cms-filter-bar .cms-filter-select {
@@ -17013,7 +17045,7 @@ html.light .admin-workspace-shell textarea {
 
 html.light .student-app-shell {
   background:
-    radial-gradient(circle at 78% 0%, rgba(242, 180, 97, 0.16), transparent 26rem),
+    radial-gradient(circle at 78% 0%, rgba(212, 175, 55, 0.16), transparent 26rem),
     linear-gradient(180deg, #f7f2ea 0%, #ebe4d8 100%);
   color: var(--app-text);
   box-shadow: 0 0 0 1px var(--app-border), var(--shadow-soft);
@@ -17337,8 +17369,8 @@ html.light .student-calendar-grid span.empty {
 
 html.light .student-calendar-grid span.completed {
   color: #15100b !important;
-  border-color: rgba(242, 180, 97, 0.8);
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  border-color: rgba(212, 175, 55, 0.8);
+  background: linear-gradient(135deg, var(--brand-gold), #df663c);
 }
 
 
@@ -17880,7 +17912,7 @@ html.light {
 html.light .student-app-shell,
 html.light .ui-shell .student-app-shell {
   background: #f7f2ea !important;
-  background-image: radial-gradient(circle at 78% 0%, rgba(242, 180, 97, 0.14), transparent 26rem) !important;
+  background-image: radial-gradient(circle at 78% 0%, rgba(212, 175, 55, 0.14), transparent 26rem) !important;
   color: #0e1116 !important;
 }
 
@@ -18138,7 +18170,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 20% 18%, rgba(242, 180, 97, 0.28), transparent 46%),
+    radial-gradient(circle at 20% 18%, rgba(212, 175, 55, 0.28), transparent 46%),
     radial-gradient(circle at 82% 0%, rgba(224, 106, 60, 0.22), transparent 48%),
     linear-gradient(160deg, #1a1210 0%, #0a0b0e 100%);
   background-size: cover;
@@ -18304,7 +18336,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   border-radius: 16px;
   color: rgba(255, 247, 236, 0.4);
   background:
-    linear-gradient(145deg, rgba(242, 180, 97, 0.28), rgba(199, 61, 46, 0.32)),
+    linear-gradient(145deg, rgba(212, 175, 55, 0.28), rgba(199, 61, 46, 0.32)),
     #171311;
   background-size: cover;
   background-position: center;
@@ -18354,7 +18386,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   height: 100%;
   border-radius: 18px;
   background:
-    linear-gradient(145deg, rgba(242, 180, 97, 0.35), rgba(199, 61, 46, 0.45)),
+    linear-gradient(145deg, rgba(212, 175, 55, 0.35), rgba(199, 61, 46, 0.45)),
     #1b1512;
   background-size: cover;
   background-position: center;
@@ -18365,7 +18397,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   position: absolute;
   inset: 18% -8% -18%;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(242, 180, 97, 0.45), transparent 68%);
+  background: radial-gradient(circle, rgba(212, 175, 55, 0.45), transparent 68%);
   filter: blur(18px);
   z-index: -1;
 }
@@ -18457,7 +18489,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
 
 .student-play-album.is-active .student-play-album-hit,
 .student-play-album-hit:hover {
-  border-color: rgba(242, 180, 97, 0.35);
+  border-color: rgba(212, 175, 55, 0.35);
   background: rgba(255, 255, 255, 0.08);
   transform: translateY(-2px);
 }
@@ -18474,7 +18506,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   border-radius: 12px;
   color: rgba(255, 247, 236, 0.35);
   background:
-    linear-gradient(145deg, rgba(242, 180, 97, 0.22), rgba(199, 61, 46, 0.28)),
+    linear-gradient(145deg, rgba(212, 175, 55, 0.22), rgba(199, 61, 46, 0.28)),
     #171311;
   background-size: cover;
   background-position: center;
@@ -18573,7 +18605,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
 
 .student-play-track:hover,
 .student-play-track.is-active {
-  background: rgba(242, 180, 97, 0.1);
+  background: rgba(212, 175, 55, 0.1);
 }
 
 .student-play-like {
@@ -18624,7 +18656,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   border-radius: 10px;
   color: rgba(255, 247, 236, 0.35);
   background:
-    linear-gradient(145deg, rgba(242, 180, 97, 0.18), rgba(199, 61, 46, 0.22)),
+    linear-gradient(145deg, rgba(212, 175, 55, 0.18), rgba(199, 61, 46, 0.22)),
     #171311;
   background-size: cover;
   background-position: center;
@@ -18703,9 +18735,9 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   flex: 0 0 auto;
   align-self: center;
   border-radius: 14px;
-  border: 1px solid rgba(242, 180, 97, 0.28);
+  border: 1px solid rgba(212, 175, 55, 0.28);
   background:
-    linear-gradient(135deg, rgba(242, 180, 97, 0.14), rgba(199, 61, 46, 0.1)),
+    linear-gradient(135deg, rgba(212, 175, 55, 0.14), rgba(199, 61, 46, 0.1)),
     rgba(12, 12, 14, 0.94);
   backdrop-filter: blur(16px);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
@@ -18780,7 +18812,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   height: 40px;
   border-radius: 8px;
   background:
-    linear-gradient(145deg, rgba(242, 180, 97, 0.25), rgba(199, 61, 46, 0.3)),
+    linear-gradient(145deg, rgba(212, 175, 55, 0.25), rgba(199, 61, 46, 0.3)),
     #171311;
   background-size: cover;
   background-position: center;
@@ -18914,9 +18946,9 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   padding: 10px;
   transform: translateX(-50%);
   border-radius: 18px;
-  border: 1px solid rgba(242, 180, 97, 0.28);
+  border: 1px solid rgba(212, 175, 55, 0.28);
   background:
-    linear-gradient(135deg, rgba(242, 180, 97, 0.14), rgba(199, 61, 46, 0.1)),
+    linear-gradient(135deg, rgba(212, 175, 55, 0.14), rgba(199, 61, 46, 0.1)),
     rgba(12, 12, 14, 0.92);
   color: inherit;
   text-align: left;
@@ -18930,7 +18962,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   height: 56px;
   border-radius: 12px;
   background:
-    linear-gradient(145deg, rgba(242, 180, 97, 0.25), rgba(199, 61, 46, 0.3)),
+    linear-gradient(145deg, rgba(212, 175, 55, 0.25), rgba(199, 61, 46, 0.3)),
     #171311;
   background-size: cover;
   background-position: center;
@@ -18970,7 +19002,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
 
 .student-now-playing-bg {
   background:
-    radial-gradient(circle at 30% 20%, rgba(242, 180, 97, 0.4), transparent 42%),
+    radial-gradient(circle at 30% 20%, rgba(212, 175, 55, 0.4), transparent 42%),
     #120e0c;
   background-size: cover;
   background-position: center;
@@ -19012,7 +19044,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
 
 .student-now-playing-top button.is-on {
   color: var(--brand-gold-soft);
-  background: rgba(242, 180, 97, 0.16);
+  background: rgba(212, 175, 55, 0.16);
 }
 
 .student-now-playing-top div {
@@ -19043,7 +19075,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   margin: 4px auto 0;
   border-radius: 18px;
   background:
-    linear-gradient(145deg, rgba(242, 180, 97, 0.3), rgba(199, 61, 46, 0.35)),
+    linear-gradient(145deg, rgba(212, 175, 55, 0.3), rgba(199, 61, 46, 0.35)),
     #171311;
   background-size: cover;
   background-position: center;
@@ -19202,7 +19234,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
 
 .student-now-queue-item.is-active,
 .student-now-queue-item:hover {
-  background: rgba(242, 180, 97, 0.12);
+  background: rgba(212, 175, 55, 0.12);
 }
 
 .student-now-queue-cover {
@@ -19425,7 +19457,7 @@ html.light .student-play-ambiance-veil {
 
 html.light .student-play-now {
   background:
-    linear-gradient(135deg, rgba(242, 180, 97, 0.16), rgba(199, 61, 46, 0.1)),
+    linear-gradient(135deg, rgba(212, 175, 55, 0.16), rgba(199, 61, 46, 0.1)),
     #161310;
 }
 
@@ -20581,7 +20613,7 @@ html.is-native-app.keyboard-open .login-shell {
   gap: 6px;
   padding: 12px;
   border-radius: 16px;
-  background: rgba(242, 180, 97, 0.12);
+  background: rgba(212, 175, 55, 0.12);
 }
 
 .student-feed-workout > strong {
@@ -21117,7 +21149,7 @@ html.is-native-app.keyboard-open .login-shell {
 }
 
 .student-feed-modes button.is-on {
-  background: #f2b461;
+  background: var(--brand-gold);
   color: #1a1208;
   border-color: transparent;
 }
@@ -21442,7 +21474,7 @@ html.is-native-app.keyboard-open .login-shell {
   border-radius: 12px;
   border: 2px solid transparent;
   background:
-    linear-gradient(135deg, #f2b461, #df663c 45%, #7c3aed),
+    linear-gradient(135deg, var(--brand-gold), #df663c 45%, #7c3aed),
     #333;
   background-blend-mode: soft-light, normal;
 }
@@ -23710,7 +23742,7 @@ html.is-native-app.keyboard-open .login-shell {
 .student-club-progress span {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, #f2b461, #df663c);
+  background: linear-gradient(90deg, var(--brand-gold), #df663c);
 }
 
 .student-club-card footer {
@@ -23924,7 +23956,7 @@ html.is-native-app.keyboard-open .login-shell {
 }
 
 .student-activity-sport.is-collapsed {
-  color: #f2b461;
+  color: var(--brand-gold);
 }
 
 .student-activity-card-top {
@@ -24067,7 +24099,7 @@ button.student-activity-metric.is-on small {
 }
 
 .student-activity-run-btn.is-start {
-  background: linear-gradient(180deg, #f2b461, #df663c);
+  background: linear-gradient(180deg, var(--brand-gold), #df663c);
   color: #fff;
   box-shadow: 0 8px 18px rgba(223, 102, 60, 0.35);
 }
@@ -24144,7 +24176,7 @@ button.student-activity-metric.is-on small {
   height: 68px;
   border: 0;
   border-radius: 50%;
-  background: linear-gradient(180deg, #f2b461, #df663c);
+  background: linear-gradient(180deg, var(--brand-gold), #df663c);
   color: #fff;
   display: grid;
   place-items: center;
@@ -24333,7 +24365,7 @@ button.student-activity-metric.is-on small {
 .student-activity-segments > button {
   border: 0;
   background: transparent;
-  color: #f2b461;
+  color: var(--brand-gold);
   font-weight: 800;
   font-size: 12px;
   text-align: left;
@@ -24370,7 +24402,7 @@ html.light .student-activity-segments-head strong {
 
 html.light .student-activity-segments-head button,
 html.light .student-activity-segments > button {
-  color: #f2b461 !important;
+  color: var(--brand-gold) !important;
 }
 
 html.light .student-activity-side {
@@ -24420,7 +24452,7 @@ html.light .student-activity-side {
   margin: 0 auto;
   display: grid;
   place-items: center;
-  background: rgba(242, 180, 97, 0.22);
+  background: rgba(212, 175, 55, 0.22);
   color: #df663c;
 }
 
@@ -24467,7 +24499,7 @@ html.light .student-activity-side {
 }
 
 .student-activity-share-card small {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-weight: 800;
   font-size: 11px;
   text-transform: uppercase;
@@ -24673,7 +24705,7 @@ html.light .student-activity-side {
 }
 
 .student-activity-chips button.is-on {
-  background: #f2b461;
+  background: var(--brand-gold);
   color: #1a1208;
   border-color: transparent;
 }
@@ -25441,7 +25473,7 @@ body:has(.student-app-shell) {
   border-radius: 21px;
   display: grid;
   place-items: center;
-  background: rgba(242, 180, 97, 0.18);
+  background: rgba(212, 175, 55, 0.18);
   color: #df663c;
 }
 
@@ -25564,11 +25596,11 @@ body:has(.student-app-shell) {
   width: 100%;
   max-width: 18px;
   border-radius: 8px 8px 4px 4px;
-  background: rgba(242, 180, 97, 0.45);
+  background: rgba(212, 175, 55, 0.45);
 }
 
 .student-perf-bars button.is-on i {
-  background: linear-gradient(180deg, #f2b461, #df663c);
+  background: linear-gradient(180deg, var(--brand-gold), #df663c);
 }
 
 .student-perf-bars small {
@@ -25611,7 +25643,7 @@ body:has(.student-app-shell) {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #f2b461, #df663c);
+  background: linear-gradient(90deg, var(--brand-gold), #df663c);
 }
 
 .student-athlete-offensive {
@@ -25787,7 +25819,7 @@ body:has(.student-app-shell) {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  background: linear-gradient(135deg, var(--brand-gold), #df663c);
   color: #15100b;
   font-size: 11px;
   font-weight: 800;
@@ -25810,7 +25842,7 @@ body:has(.student-app-shell) {
   overflow: auto;
   padding: 18px 16px 10px;
   background:
-    radial-gradient(1200px 240px at 50% -40px, rgba(242, 180, 97, 0.08), transparent 70%),
+    radial-gradient(1200px 240px at 50% -40px, rgba(212, 175, 55, 0.08), transparent 70%),
     var(--app-panel);
 }
 
@@ -25843,7 +25875,7 @@ body:has(.student-app-shell) {
 }
 
 .coach-gpt-bubble.is-me {
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  background: linear-gradient(135deg, var(--brand-gold), #df663c);
   color: #15100b;
   border-top-right-radius: 6px;
 }
@@ -25952,7 +25984,7 @@ body:has(.student-app-shell) {
 }
 
 .coach-gpt-icon-btn.is-send {
-  background: linear-gradient(135deg, #f2b461, #df663c);
+  background: linear-gradient(135deg, var(--brand-gold), #df663c);
   color: #15100b;
 }
 
@@ -26029,7 +26061,7 @@ body:has(.student-app-shell) {
 }
 
 .student-club-tabs button.is-on {
-  background: #f2b461;
+  background: var(--brand-gold);
   color: #1a1208;
   border-color: transparent;
 }
@@ -26073,12 +26105,12 @@ body:has(.student-app-shell) {
 }
 
 .student-club-rank-row.is-me {
-  background: rgba(242, 180, 97, 0.16);
-  border: 1px solid rgba(242, 180, 97, 0.35);
+  background: rgba(212, 175, 55, 0.16);
+  border: 1px solid rgba(212, 175, 55, 0.35);
 }
 
 .student-club-rank-row span {
-  color: #f2b461;
+  color: var(--brand-gold);
   font-weight: 900;
 }
 
@@ -26112,8 +26144,8 @@ body:has(.student-app-shell) {
 
 .student-club-achievement-item.is-earned,
 .student-activity-achievement-grid article.is-earned {
-  border-color: rgba(242, 180, 97, 0.35);
-  background: rgba(242, 180, 97, 0.08);
+  border-color: rgba(212, 175, 55, 0.35);
+  background: rgba(212, 175, 55, 0.08);
 }
 
 .student-club-achievement-item strong,
@@ -26158,7 +26190,7 @@ body:has(.student-app-shell) {
 .student-activity-achievement-pending i {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, #f2b461, #df663c);
+  background: linear-gradient(90deg, var(--brand-gold), #df663c);
 }
 
 .student-activity-evolution,
@@ -26212,7 +26244,7 @@ body:has(.student-app-shell) {
 }
 
 .student-activity-evolution-tabs button.is-on {
-  background: #f2b461;
+  background: var(--brand-gold);
   color: #1a1208;
   border-color: transparent;
 }
@@ -26235,8 +26267,8 @@ body:has(.student-app-shell) {
 }
 
 .student-activity-evolution-metrics button.is-on {
-  border-color: rgba(242, 180, 97, 0.45);
-  background: rgba(242, 180, 97, 0.1);
+  border-color: rgba(212, 175, 55, 0.45);
+  background: rgba(212, 175, 55, 0.1);
 }
 
 .student-activity-evolution-metrics button span {
@@ -26277,7 +26309,7 @@ body:has(.student-app-shell) {
   width: 100%;
   max-width: 28px;
   border-radius: 8px 8px 4px 4px;
-  background: linear-gradient(180deg, #f2b461, #df663c);
+  background: linear-gradient(180deg, var(--brand-gold), #df663c);
 }
 
 .student-activity-evolution-bars small {
@@ -26333,4 +26365,43 @@ body:has(.student-app-shell) {
   .student-activity-evolution-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* ATLLY — portal do aluno: cards, feed e atividade */
+.student-app-shell .student-hero-card {
+  border-color: rgba(212, 175, 55, 0.16);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(212, 175, 55, 0.08), transparent 42%),
+    var(--app-card-bg);
+}
+
+.student-app-shell .student-sheet,
+.student-app-shell .student-empty-state {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.light .student-app-shell .student-sheet,
+html.light .student-app-shell .student-empty-state,
+html.light .student-app-shell .student-hero-card {
+  border-color: rgba(212, 175, 55, 0.18);
+}
+
+.student-app-shell .student-bottom-nav {
+  border-top: 1px solid rgba(212, 175, 55, 0.14);
+  background:
+    linear-gradient(180deg, rgba(212, 175, 55, 0.04), transparent 28%),
+    var(--app-bg-soft);
+}
+
+.student-feed-post-card,
+.student-social-post,
+.student-activity-card,
+.student-club-card {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.student-app-shell a:focus-visible,
+.student-app-shell button:focus-visible {
+  outline: 2px solid rgba(212, 175, 55, 0.55);
+  outline-offset: 2px;
 }

@@ -588,7 +588,7 @@ export function StudentAthleteProfileSection({
                   {post.body ? <p>{post.body}</p> : null}
                   {post.activity ? (
                     <div className="student-activity-share-card student-feed-activity-card">
-                      <small>App Treino Social</small>
+                      <small>ATLLY</small>
                       <ActivityShareCard
                         stats={activityShareStatsFromRow(post.activity)}
                         photoUrl={activitySharePhotoUrl(post)}

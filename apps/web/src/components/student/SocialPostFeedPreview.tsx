@@ -28,7 +28,7 @@ function FeedActivityCard({ post }: { post: SocialPostRow }) {
   if (!activity) return null;
   return (
     <div className="student-activity-share-card student-feed-activity-card">
-      <small>App Treino Social</small>
+      <small>ATLLY</small>
       <ActivityShareCard
         stats={activityShareStatsFromRow(activity)}
         photoUrl={activitySharePhotoUrl(post)}

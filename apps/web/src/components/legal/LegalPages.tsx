@@ -1,13 +1,14 @@
 import { LegalLayout } from "./LegalLayout";
-import { legalMeta } from "../../lib/legal-content";
+import { isLegalIdentityPublic, legalMeta, legalPublicOperatorName } from "../../lib/legal-content";
 import { brand } from "../../lib/brand";
 
 export function TermsPage() {
   return (
     <LegalLayout title="Termos de Uso">
       <p>
-        Estes Termos regulam o uso do {brand.name}, operado por {legalMeta.companyName} (CNPJ {legalMeta.cnpj}
-        ), incluindo treinos, rede social entre atletas, vitrine de produtos e serviços digitais.
+        Estes Termos regulam o uso do {brand.name}, operado por {legalPublicOperatorName()}
+        {isLegalIdentityPublic() ? ` (CNPJ ${legalMeta.cnpj})` : ""}, incluindo treinos, rede social entre
+        atletas, vitrine de produtos e serviços digitais.
       </p>
       <h2 className="text-base font-bold text-sand">1. Cadastro e elegibilidade</h2>
       <p>
@@ -69,7 +70,7 @@ export function PrivacyPage() {
   return (
     <LegalLayout title="Política de Privacidade">
       <p>
-        Esta Política descreve como {legalMeta.companyName} trata dados pessoais no {brand.name}, em conformidade
+        Esta Política descreve como {legalPublicOperatorName()} trata dados pessoais no {brand.name}, em conformidade
         com a Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018).
       </p>
       <h2 className="text-base font-bold text-sand">1. Dados que coletamos</h2>

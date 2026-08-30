@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "App Treino Social",
+    "name": "ATLLY",
     "slug": "app-treino",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#08090b"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": true,
@@ -38,7 +38,7 @@
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#08090b"
+        "backgroundColor": "#000000"
       },
       "permissions": [
         "ACTIVITY_RECOGNITION",

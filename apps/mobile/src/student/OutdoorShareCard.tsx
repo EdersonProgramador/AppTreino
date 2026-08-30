@@ -36,7 +36,7 @@ export function OutdoorShareCard({
 
   async function share() {
     const lines = [
-      `App Treino · ${sportLabel}`,
+      `ATLLY · ${sportLabel}`,
       `${formatKm(distanceMeters)} km · ${formatClock(elapsedSeconds)} · ${formatPace(paceSecPerKm)} /km`,
       elevationGainMeters || elevationLossMeters
         ? `↑ ${Math.round(elevationGainMeters)} m  ↓ ${Math.round(elevationLossMeters)} m`
@@ -53,7 +53,7 @@ export function OutdoorShareCard({
 
   return (
     <View style={[styles.card, { backgroundColor: st.card, borderColor: st.line }]}>
-      <Text style={[styles.kicker, { color: st.muted }]}>App Treino · Outdoor</Text>
+      <Text style={[styles.kicker, { color: st.muted }]}>ATLLY · Outdoor</Text>
       <Text style={[styles.title, { color: st.text }]}>{sportLabel}</Text>
       <View style={styles.row}>
         <Stat label="Distância" value={`${formatKm(distanceMeters)} km`} color={st.text} muted={st.muted} />

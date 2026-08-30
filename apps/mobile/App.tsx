@@ -19,7 +19,7 @@ function BootScreen() {
   const bg = tokensFor(getTheme()).bg;
   return (
     <View style={[styles.boot, { backgroundColor: bg }]}>
-      <ActivityIndicator color="#f2b461" size="large" />
+      <ActivityIndicator color="#d4af37" size="large" />
     </View>
   );
 }

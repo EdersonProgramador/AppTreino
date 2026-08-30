@@ -3307,7 +3307,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         <div className="grid gap-3">
           <span className="eyebrow w-fit">Painel administrativo</span>
           <h1 className="font-display m-0 text-[clamp(28px,3vw,40px)] font-semibold uppercase leading-tight tracking-tight text-sand">
-            Operação do App Treino Social
+            Operação ATLLY
           </h1>
         </div>
         <div className="dashboard-actions flex flex-wrap justify-end gap-2.5">
@@ -7615,7 +7615,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               </div>
               <p className="admin-finalize-modal-text">Antes de encerrar, envie esta mensagem ao aluno:</p>
               <div className="admin-finalize-modal-bubble">
-                <strong>Equipe App Treino Social</strong>
+                <strong>Equipe ATLLY</strong>
                 <p>Há algo a mais em que podemos ajudar?</p>
               </div>
               <p className="admin-finalize-modal-hint">

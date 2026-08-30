@@ -177,10 +177,10 @@ function createHeroStyles(st: StudentTokens) {
       alignItems: "center",
       gap: 14,
       borderWidth: 1,
-      borderColor: "rgba(242,180,97,0.18)",
+      borderColor: "rgba(212,175,55,0.18)",
       borderRadius: 14,
       padding: 18,
-      backgroundColor: "rgba(242,180,97,0.05)"
+      backgroundColor: "rgba(212,175,55,0.05)"
     },
     qrImg: { width: 220, height: 220, backgroundColor: "#fff" }
   });

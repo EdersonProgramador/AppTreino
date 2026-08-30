@@ -203,7 +203,7 @@ export function GreenButton({
       disabled={disabled || loading}
       style={({ pressed }) => [styles.greenWrap, (disabled || loading) && styles.disabled, pressed && styles.pressed]}
     >
-      <LinearGradient colors={["#f2b461", "#df663c"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.greenBtn}>
+      <LinearGradient colors={["#d4af37", "#df663c"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.greenBtn}>
         {loading ? (
           <ActivityIndicator color="#fff" />
         ) : (
@@ -269,7 +269,7 @@ export function ProgressTrack({ percent }: { percent: number }) {
   return (
     <View style={styles.track}>
       <LinearGradient
-        colors={["#f2b461", "#df663c"]}
+        colors={["#d4af37", "#df663c"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[styles.trackFill, { width: `${Math.max(0, Math.min(100, percent))}%` }]}
@@ -281,7 +281,7 @@ export function ProgressTrack({ percent }: { percent: number }) {
 export function CompletedSeal({ label }: { label: string }) {
   const styles = useLayoutStyles();
   return (
-    <LinearGradient colors={["#f2b461", "#df663c"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.seal}>
+    <LinearGradient colors={["#d4af37", "#df663c"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.seal}>
       <Ionicons name="trophy" size={12} color="#1a1208" />
       <Text style={styles.sealText}>{label}</Text>
     </LinearGradient>

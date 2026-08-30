@@ -2270,7 +2270,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           <div className="workspace-sidebar-brand flex min-w-0 items-center gap-3 border-b border-[color:var(--app-border)] pb-[18px]">
             <img
               className="h-[42px] w-[42px] shrink-0 rounded-lg bg-brand-gold/10"
-              src={assetUrl("assets/app-treino-mark.svg")}
+              src={assetUrl("assets/atlly-mark.png")}
               alt=""
               aria-hidden="true"
             />
@@ -2488,10 +2488,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             aria-label={brand.name}
             onClick={() => openTrainingCatalog()}
           >
-            <span>TS</span>
+            <img src={assetUrl("assets/atlly-mark.png")} alt="" aria-hidden="true" />
           </button>
           <button type="button" className="student-brand-copy" onClick={() => openTrainingCatalog()}>
             <strong className="student-brand-name">{brand.name}</strong>
+            <span className="student-brand-category">{brand.category}</span>
             <span className="student-brand-athlete">
               {profile?.name ?? brand.athlete} · {brand.codeLabel} {studentCode}
             </span>

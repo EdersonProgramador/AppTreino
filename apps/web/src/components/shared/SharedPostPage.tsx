@@ -71,7 +71,7 @@ export function SharedPostPage() {
     const image =
       mediaUrl(post.coverUrl) ||
       (firstMedia?.type === "IMAGE" ? mediaUrl(firstMedia.url) : "") ||
-      assetUrl("assets/app-treino-logo.svg");
+      assetUrl("assets/atlly-logo.png");
     ensureMeta("og:title", title);
     ensureMeta("og:description", description);
     ensureMeta("og:image", image);
@@ -99,7 +99,7 @@ export function SharedPostPage() {
     <div className="shared-post-page">
       <header className="shared-post-chrome">
         <Link to={paths.home} aria-label="Ir para início">
-          <img src={assetUrl("assets/app-treino-logo.svg")} alt={brand.name} />
+          <img src={assetUrl("assets/atlly-logo.png")} alt={brand.name} />
         </Link>
       </header>
 
@@ -141,7 +141,7 @@ export function SharedPostPage() {
                 <img src={mediaUrl(media?.url || post.coverUrl || "")} alt="" />
               ) : (
                 <div className="shared-post-media-fallback">
-                  <img src={assetUrl("assets/app-treino-mark.svg")} alt="" />
+                  <img src={assetUrl("assets/atlly-mark.png")} alt="" />
                 </div>
               )}
             </div>

@@ -69,7 +69,7 @@ export function ActivityShareFlow({
   async function shareNative() {
     uiSounds.submit();
     const lines = [
-      `App Treino · ${stats.sportLabel}`,
+      `ATLLY · ${stats.sportLabel}`,
       `${formatKm(stats.distanceMeters)} km · ${formatClock(stats.elapsedSeconds)} · ${
         isRide ? speedLabel : `${formatPace(stats.paceSecPerKm)} /km`
       }`,
@@ -123,7 +123,7 @@ export function ActivityShareFlow({
           ) : (
             <>
               <View style={styles.card}>
-                <Text style={styles.badge}>App Treino Social</Text>
+                <Text style={styles.badge}>ATLLY</Text>
                 <Text style={styles.cardTitle}>{stats.sportLabel.toUpperCase()} CONCLUÍDA</Text>
                 {photoUrl ? <Image source={{ uri: photoUrl }} style={styles.photo} /> : null}
                 <ActivityRouteMap
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 20,
-    backgroundColor: "rgba(242,180,97,0.22)",
+    backgroundColor: "rgba(212,175,55,0.22)",
     alignItems: "center",
     justifyContent: "center"
   },

@@ -369,4 +369,94 @@ export interface ClubChallengeRow {
   joined: boolean;
   progressMeters: number;
   percent: number;
+  scopedLocal?: boolean;
+}
+
+export type LeaderboardPeriod = "day" | "week" | "month" | "year" | "all";
+export type LeaderboardMetric = "distance" | "activities" | "calories" | "elevation" | "time";
+export type ActivityStatsRange = "week" | "month" | "year";
+
+export interface LeaderboardRow {
+  rank: number;
+  userId: string;
+  name: string;
+  avatarUrl?: string | null;
+  distanceMeters: number;
+  activities: number;
+  calories: number;
+  elevationMeters: number;
+  elapsedSeconds: number;
+  metricValue: number;
+  isMe: boolean;
+}
+
+export interface LeaderboardResponse {
+  cell: string;
+  period: LeaderboardPeriod;
+  metric: LeaderboardMetric;
+  sport: OutdoorSport | null;
+  ranking: LeaderboardRow[];
+  me: LeaderboardRow | null;
+}
+
+export interface ActivityStatsBucket {
+  label: string;
+  start: string;
+  distanceKm: number;
+  activities: number;
+  calories: number;
+  elevationM: number;
+  minutes: number;
+  steps: number;
+  avgPaceSecPerKm: number | null;
+  avgHeartRateBpm: number | null;
+}
+
+export interface ActivityStatsResponse {
+  range: ActivityStatsRange;
+  from: string;
+  to: string;
+  totals: {
+    distanceKm: number;
+    activities: number;
+    calories: number;
+    elevationM: number;
+    minutes: number;
+    steps: number;
+  };
+  series: ActivityStatsBucket[];
+}
+
+export interface ActivityAchievementEarned {
+  slug: string;
+  title: string;
+  description: string;
+  category: string;
+  value: number | null;
+  earnedAt: string;
+}
+
+export interface ActivityAchievementPending {
+  slug: string;
+  title: string;
+  description: string;
+  category: string;
+  threshold: number;
+  progress: number;
+  percent: number;
+}
+
+export interface ActivityAchievementsResponse {
+  earned: ActivityAchievementEarned[];
+  pending: ActivityAchievementPending[];
+}
+
+export interface ChallengeRankingRow {
+  rank: number;
+  userId: string;
+  name: string;
+  avatarUrl?: string | null;
+  progressMeters: number;
+  percent: number;
+  isMe: boolean;
 }

@@ -83,7 +83,7 @@ export function WorkoutShareFlow({
 
   const shareUrl = sharePageUrl();
   const shareTitle = "O TREINO DE HOJE ESTÁ PAGO!";
-  const shareText = `${shareTitle} Concluí ${blockTitle} (${programTitle}) em ${durationLabel} no App Treino Social.${
+  const shareText = `${shareTitle} Concluí ${blockTitle} (${programTitle}) em ${durationLabel} na ATLLY.${
     caption.trim() ? `\n${caption.trim()}` : ""
   }`;
   const showCardInline = step === "ready";

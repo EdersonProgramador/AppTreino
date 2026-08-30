@@ -942,7 +942,7 @@ export function NativeWorkoutPlayer({
     <View style={styles.safe}>
       <StatusBar style="light" />
       <LinearGradient
-        colors={["#f2b461", "#df663c", "#c73d2e"]}
+        colors={["#d4af37", "#df663c", "#c73d2e"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[styles.header, { paddingTop: insets.top + (compactHeader ? 4 : 6) }]}
@@ -1499,7 +1499,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 2
   },
-  seqSelected: { borderWidth: 2, borderColor: "rgba(242,180,97,0.44)" },
+  seqSelected: { borderWidth: 2, borderColor: "rgba(212,175,55,0.44)" },
   seqLive: { borderWidth: 2, borderColor: "rgba(199,61,46,0.45)" },
   seqDone: { opacity: 0.85 },
   seqLocked: { opacity: 0.55 },
@@ -1561,7 +1561,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 8
   },
-  pillLive: { backgroundColor: "rgba(242,180,97,0.1)", borderColor: "rgba(199,61,46,0.35)" },
+  pillLive: { backgroundColor: "rgba(212,175,55,0.1)", borderColor: "rgba(199,61,46,0.35)" },
   pill: { color: "#4b4d52", fontSize: 11 },
   pillStrong: { color: runner.ember, fontWeight: "800" },
   mediaFrame: {
@@ -1712,7 +1712,7 @@ const styles = StyleSheet.create({
     width: 86,
     height: 86,
     borderRadius: 24,
-    backgroundColor: "rgba(242,180,97,0.22)",
+    backgroundColor: "rgba(212,175,55,0.22)",
     alignItems: "center",
     justifyContent: "center"
   },

@@ -28,7 +28,17 @@ import {
   type GpsPoint,
   type OutdoorSportKind
 } from "./activity-geo.js";
+import { matchActivityToRoads, trackDistanceMeters } from "./activity-map-match.js";
 import { matchSegments, polylineDistance, segmentCellFromPolyline } from "./activity-segments.js";
+import {
+  aggregateActivityStats,
+  buildLeaderboardRanking,
+  leaderboardPeriodStart,
+  type LeaderboardMetric,
+  type LeaderboardPeriod
+} from "./activity-stats.utils.js";
+import { listUserActivityAchievements, syncUserActivityAchievements } from "./activity-achievements.utils.js";
+import { assertModuleEnabled } from "./commerce.utils.js";
 
 const sportSchema = z.enum(["RUN", "WALK", "RIDE"]);
 const mapTypeSchema = z.enum(["standard", "satellite", "hybrid", "winter"]);
@@ -188,6 +198,7 @@ async function respondCompletedFinish(
 
   let latest = activity;
   if (wantPublish && !post) {
+    await assertModuleEnabled("module_social_publicar", "Publicações desativadas.");
     const caption =
       body.caption?.trim() ||
       activity.caption ||
@@ -270,6 +281,16 @@ function requireDatabase() {
     error.statusCode = 503;
     throw error;
   }
+}
+
+async function loadAthleteWeightKg(userId: string) {
+  const row = await prisma.physicalAssessment.findFirst({
+    where: { userId, deletedAt: null, weightKg: { not: null } },
+    orderBy: { assessedAt: "desc" },
+    select: { weightKg: true }
+  });
+  const kg = row?.weightKg;
+  return typeof kg === "number" && kg > 30 && kg < 250 ? kg : 70;
 }
 
 function httpError(statusCode: number, message: string) {
@@ -416,7 +437,9 @@ function serializeActivity(
     splitsAnalysis,
     photoUrl: row.photoUrl,
     videoUrl: row.videoUrl,
-    caption: row.caption
+    caption: row.caption,
+    roadMatched: Boolean(summary?.roadMatched),
+    matchConfidence: typeof summary?.matchConfidence === "number" ? summary.matchConfidence : null
   };
 }
 
@@ -787,6 +810,7 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     const body = z
       .object({
         body: z.string().max(2000).optional(),
+        intent: z.enum(["post", "note"]).optional().default("post"),
         mediaUrl: z.string().url().or(z.string().startsWith("/")).optional(),
         mediaType: z.enum(["IMAGE", "VIDEO"]).optional(),
         mediaItems: z
@@ -812,6 +836,12 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     );
     if (!text && !mediaItems.length) {
       throw httpError(400, "Escreva algo ou anexe uma foto/vídeo.");
+    }
+
+    if (body.intent === "note" || (!mediaItems.length && body.intent !== "post")) {
+      await assertModuleEnabled("module_social_nota", "Notas desativadas.");
+    } else {
+      await assertModuleEnabled("module_social_publicar", "Publicações desativadas.");
     }
 
     const first = mediaItems[0];
@@ -1070,6 +1100,7 @@ export async function registerSocialRoutes(app: FastifyInstance) {
   app.post("/student/social/stories", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);
+    await assertModuleEnabled("module_social_momentos", "Momentos desativados.");
     const body = z
       .object({
         mediaUrl: z.string().url().or(z.string().startsWith("/")),
@@ -1549,6 +1580,30 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     return { activity: live ? serializeActivity(live) : null };
   });
 
+  app.get("/student/activities/recent", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const rows = await prisma.outdoorActivity.findMany({
+      where: { userId: user.id },
+      orderBy: { startedAt: "desc" },
+      take: 30,
+      select: {
+        id: true,
+        status: true,
+        distanceMeters: true,
+        post: { select: { id: true } }
+      }
+    });
+    return {
+      activities: rows.map((row) => ({
+        id: row.id,
+        status: row.status,
+        distanceMeters: row.distanceMeters,
+        published: Boolean(row.post)
+      }))
+    };
+  });
+
   app.get("/student/activities/heatmap", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);
@@ -1643,7 +1698,12 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     const current = await prisma.outdoorActivity.findFirst({
       where: { userId: user.id, status: { in: ["LIVE", "PAUSED"] } }
     });
-    if (current) {
+    if (current && current.sport !== body.sport) {
+      await prisma.outdoorActivity.update({
+        where: { id: current.id },
+        data: { status: "CANCELED", finishedAt: new Date() }
+      });
+    } else if (current) {
       if (current.status === "PAUSED") {
         const extra = current.pausedAt ? Date.now() - current.pausedAt.getTime() : 0;
         const updated = await prisma.outdoorActivity.update({
@@ -1680,6 +1740,32 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     return { activity: serializeActivity(activity), resumed: false };
   });
 
+  app.post(
+    "/student/activities/match-roads",
+    { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+    async (request) => {
+      requireDatabase();
+      await requireAuth(app, request);
+      const body = z
+        .object({
+          sport: sportSchema,
+          points: z.array(pointSchema).min(2).max(400)
+        })
+        .parse(request.body);
+      const sanitized = sanitizePoints(body.points);
+      if (sanitized.length < 2) {
+        return { matched: false, confidence: 0, points: sanitized, distanceMeters: 0 };
+      }
+      const road = await matchActivityToRoads(body.sport, sanitized, { token: env.MAPBOX_ACCESS_TOKEN });
+      return {
+        matched: road.matched,
+        confidence: road.confidence,
+        points: road.points,
+        distanceMeters: trackDistanceMeters(road.points)
+      };
+    }
+  );
+
   app.post("/student/activities/:id/points", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);
@@ -1691,9 +1777,11 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     if (!activity) throw httpError(404, "Atividade não encontrada.");
 
     const merged = sanitizePoints([...(sanitizePoints(activity.polyline) as GpsPoint[]), ...points]).slice(-20000);
+    const weightKg = await loadAthleteWeightKg(user.id);
     const stats = buildStravaSummary(activity.sport, activity.startedAt, merged, activity.pauseMs, {
       is3d: activity.is3d,
-      mapType: activity.mapType
+      mapType: activity.mapType,
+      weightKg
     });
     const updated = await prisma.outdoorActivity.update({
       where: { id },
@@ -1757,7 +1845,8 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     const stats = merged
       ? buildStravaSummary(activity.sport, activity.startedAt, merged, activity.pauseMs, {
           is3d: activity.is3d,
-          mapType: activity.mapType
+          mapType: activity.mapType,
+          weightKg: await loadAthleteWeightKg(activity.userId)
         })
       : null;
     const updated = await prisma.outdoorActivity.update({
@@ -1809,6 +1898,16 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     return { activity: serializeActivity(updated) };
   });
 
+  app.delete("/student/activities/:id", async (request) => {
+    requireDatabase();
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const { user, activity } = await ownLive(request, id);
+    const post = await prisma.socialPost.findFirst({ where: { activityId: activity.id, authorId: user.id } });
+    if (post) throw httpError(409, "Atividade publicada no feed. Apague o post antes.");
+    await prisma.outdoorActivity.delete({ where: { id: activity.id } });
+    return { ok: true, id: activity.id };
+  });
+
   app.post("/student/activities/:id/finish", async (request) => {
     requireDatabase();
     const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
@@ -1823,20 +1922,30 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     if (activity.status === "PAUSED" && activity.pausedAt) {
       pauseMs += Math.max(0, Date.now() - activity.pausedAt.getTime());
     }
-    const points = sanitizePoints([...(sanitizePoints(activity.polyline) as GpsPoint[]), ...(body.points ?? [])]).slice(
-      -20000
-    );
+    const rawPoints = sanitizePoints([
+      ...(sanitizePoints(activity.polyline) as GpsPoint[]),
+      ...(body.points ?? [])
+    ]).slice(-20000);
 
-    const serverAntiCheat = evaluateAntiCheat(activity.sport as OutdoorSportKind, points);
+    const serverAntiCheat = evaluateAntiCheat(activity.sport as OutdoorSportKind, rawPoints);
     const antiCheat = mergeAntiCheat(serverAntiCheat, body.trackingMeta?.antiCheat ?? null);
     const publishBlocked = shouldBlockPublish(antiCheat);
     const allowPublish = body.publish !== false && !publishBlocked;
+
+    const weightKg = await loadAthleteWeightKg(user.id);
+    const road = await matchActivityToRoads(activity.sport as OutdoorSportKind, rawPoints, {
+      token: env.MAPBOX_ACCESS_TOKEN
+    });
+    const points = road.matched ? road.points : rawPoints;
 
     const summary = {
       ...buildStravaSummary(activity.sport, activity.startedAt, points, pauseMs, {
         is3d: body.is3d ?? activity.is3d,
         mapType: body.mapType ?? activity.mapType,
-        caption: body.caption
+        caption: body.caption,
+        weightKg,
+        roadMatched: road.matched,
+        matchConfidence: road.confidence
       }),
       goals: body.goals ?? extractGoals(activity.layers),
       trackingMeta: {
@@ -1993,8 +2102,10 @@ export async function registerSocialRoutes(app: FastifyInstance) {
       return { updated, post, segmentEfforts };
     });
 
+    void syncUserActivityAchievements(user.id).catch(() => undefined);
+
     return {
-      activity: serializeActivity(finished.updated),
+      activity: serializeActivity(finished.updated, { maxPolylinePoints: 2000 }),
       segmentEfforts: finished.segmentEfforts,
       post: finished.post ? await serializePost({ ...finished.post, activity: finished.updated }, user.id) : null,
       moderation: {
@@ -2007,6 +2118,106 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     };
   });
 
+  app.get("/student/social/achievements", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    return listUserActivityAchievements(user.id);
+  });
+
+  app.get("/student/social/challenges/:id/ranking", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const challenge = await prisma.clubChallenge.findUnique({
+      where: { id },
+      include: {
+        memberships: {
+          include: {
+            user: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } }
+          }
+        }
+      }
+    });
+    if (!challenge || !challenge.isActive) throw httpError(404, "Desafio não encontrado.");
+
+    const from = periodStart(challenge.period);
+    const disk = challenge.cellH3 ? cellDisk(challenge.cellH3, 2) : null;
+    const ranking = await Promise.all(
+      challenge.memberships.map(async (membership) => {
+        const activities = await prisma.outdoorActivity.findMany({
+          where: {
+            userId: membership.userId,
+            status: "COMPLETED",
+            sport: challenge.sport,
+            finishedAt: { gte: from }
+          },
+          select: { distanceMeters: true, finishedAt: true, cells: { select: { cell: true } } }
+        });
+        const progressMeters = activities.reduce((sum, item) => {
+          if (disk && item.cells.every((cell) => !disk.includes(cell.cell))) return sum;
+          return sum + item.distanceMeters;
+        }, 0);
+        return {
+          userId: membership.userId,
+          name: membership.user.name,
+          avatarUrl: membership.user.profile?.avatarUrl ?? null,
+          progressMeters,
+          percent: Math.min(100, Math.round((progressMeters / challenge.goalMeters) * 100)),
+          isMe: membership.userId === user.id
+        };
+      })
+    );
+
+    const sorted = ranking
+      .filter((row) => row.progressMeters > 0)
+      .sort((a, b) => b.progressMeters - a.progressMeters)
+      .map((row, index) => ({ ...row, rank: index + 1 }));
+
+    return {
+      challenge: {
+        id: challenge.id,
+        title: challenge.title,
+        sport: challenge.sport,
+        goalMeters: challenge.goalMeters
+      },
+      ranking: sorted,
+      me: sorted.find((row) => row.isMe) ?? null
+    };
+  });
+
+  app.get("/student/activities/stats", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const query = z
+      .object({
+        range: z.enum(["week", "month", "year"]).default("week"),
+        sport: sportSchema.optional()
+      })
+      .parse(request.query);
+
+    const rows = await prisma.outdoorActivity.findMany({
+      where: {
+        userId: user.id,
+        status: "COMPLETED",
+        ...(query.sport ? { sport: query.sport } : {})
+      },
+      select: {
+        sport: true,
+        finishedAt: true,
+        distanceMeters: true,
+        elapsedSeconds: true,
+        calories: true,
+        elevationGainMeters: true,
+        stepsCount: true,
+        avgPaceSecPerKm: true,
+        avgHeartRateBpm: true
+      },
+      orderBy: { finishedAt: "asc" }
+    });
+
+    return aggregateActivityStats(rows, query.range);
+  });
+
   app.get("/student/activities/leaderboard", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);
@@ -2015,7 +2226,8 @@ export async function registerSocialRoutes(app: FastifyInstance) {
         lat: z.coerce.number().min(-90).max(90),
         lng: z.coerce.number().min(-180).max(180),
         sport: sportSchema.optional(),
-        period: z.enum(["week", "month", "all"]).default("week"),
+        period: z.enum(["day", "week", "month", "year", "all"]).default("week"),
+        metric: z.enum(["distance", "activities", "calories", "elevation", "time"]).default("distance"),
         resolution: z.coerce.number().int().refine((n) => n === 9 || n === 11).default(9),
         limit: z.coerce.number().int().min(1).max(50).default(20)
       })
@@ -2023,13 +2235,7 @@ export async function registerSocialRoutes(app: FastifyInstance) {
 
     const cell = latLngToCell(query.lat, query.lng, query.resolution as 9 | 11);
     const nearbyCells = cellDisk(cell, 1);
-    const now = Date.now();
-    const from =
-      query.period === "week"
-        ? new Date(now - 7 * 24 * 3600 * 1000)
-        : query.period === "month"
-          ? new Date(now - 30 * 24 * 3600 * 1000)
-          : null;
+    const from = leaderboardPeriodStart(query.period as LeaderboardPeriod);
 
     const rows = await prisma.outdoorActivityCell.findMany({
       where: {
@@ -2041,58 +2247,83 @@ export async function registerSocialRoutes(app: FastifyInstance) {
       select: {
         userId: true,
         activityId: true,
-        distanceMeters: true,
         sport: true,
         user: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } }
       },
-      take: 2000
+      take: 4000
     });
+
+    const activityIds = [...new Set(rows.map((row) => row.activityId))];
+    const activities = activityIds.length
+      ? await prisma.outdoorActivity.findMany({
+          where: { id: { in: activityIds }, status: "COMPLETED" },
+          select: {
+            id: true,
+            distanceMeters: true,
+            calories: true,
+            elevationGainMeters: true,
+            elapsedSeconds: true
+          }
+        })
+      : [];
+    const activityMap = new Map(activities.map((item) => [item.id, item]));
 
     const byUser = new Map<
       string,
-      { userId: string; name: string; avatarUrl: string | null; distanceMeters: number; activities: number; sport: string }
+      {
+        userId: string;
+        name: string;
+        avatarUrl: string | null;
+        distanceMeters: number;
+        activities: number;
+        calories: number;
+        elevationMeters: number;
+        elapsedSeconds: number;
+        metricValue: number;
+      }
     >();
     const seenActivity = new Set<string>();
     for (const row of rows) {
       const key = `${row.userId}:${row.activityId}`;
       if (seenActivity.has(key)) continue;
       seenActivity.add(key);
+      const activity = activityMap.get(row.activityId);
+      if (!activity) continue;
       const prev = byUser.get(row.userId);
       if (prev) {
-        prev.distanceMeters += row.distanceMeters;
+        prev.distanceMeters += activity.distanceMeters;
         prev.activities += 1;
+        prev.calories += activity.calories;
+        prev.elevationMeters += activity.elevationGainMeters;
+        prev.elapsedSeconds += activity.elapsedSeconds;
       } else {
         byUser.set(row.userId, {
           userId: row.userId,
           name: row.user.name,
           avatarUrl: row.user.profile?.avatarUrl ?? null,
-          distanceMeters: row.distanceMeters,
+          distanceMeters: activity.distanceMeters,
           activities: 1,
-          sport: row.sport
+          calories: activity.calories,
+          elevationMeters: activity.elevationGainMeters,
+          elapsedSeconds: activity.elapsedSeconds,
+          metricValue: 0
         });
       }
     }
 
-    const ranking = [...byUser.values()]
-      .sort((a, b) => b.distanceMeters - a.distanceMeters)
-      .slice(0, query.limit)
-      .map((row, index) => ({
-        rank: index + 1,
-        userId: row.userId,
-        name: row.name,
-        avatarUrl: row.avatarUrl,
-        distanceMeters: row.distanceMeters,
-        activities: row.activities,
-        isMe: row.userId === user.id
-      }));
-
-    const me = ranking.find((row) => row.isMe) ?? null;
+    const { ranking, me } = buildLeaderboardRanking(
+      [...byUser.values()],
+      query.metric as LeaderboardMetric,
+      user.id,
+      query.limit
+    );
 
     return {
       cell,
       cells: nearbyCells,
       resolution: query.resolution,
       period: query.period,
+      metric: query.metric,
       sport: query.sport ?? null,
       ranking,
       me

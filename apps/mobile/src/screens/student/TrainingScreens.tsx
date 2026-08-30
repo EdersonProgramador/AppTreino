@@ -572,7 +572,7 @@ export function HistoryScreen() {
               icon="share-outline"
               onPress={() => {
                 void Share.share({
-                  message: `Treino dia ${item.dayNumber} concluído em ${new Date(item.startedAt).toLocaleString("pt-BR")} no App Treino. ${musclesFor(item.dayNumber)}`
+                  message: `Treino dia ${item.dayNumber} concluído em ${new Date(item.startedAt).toLocaleString("pt-BR")} na ATLLY. ${musclesFor(item.dayNumber)}`
                 });
               }}
             />
@@ -716,7 +716,7 @@ function createTrainingStyles(st: StudentTokens) {
     list: { paddingHorizontal: 16, gap: 12 },
     modality: {
       borderWidth: 1,
-      borderColor: "rgba(242,180,97,0.2)",
+      borderColor: "rgba(212,175,55,0.2)",
       borderRadius: 14,
       overflow: "hidden",
       backgroundColor: st.card
@@ -750,8 +750,8 @@ function createTrainingStyles(st: StudentTokens) {
     },
     cardRow: { flexDirection: "row", alignItems: "center", gap: 12 },
     cardBody: { flex: 1, minWidth: 0 },
-    programActive: { borderColor: "rgba(242,180,97,0.42)", backgroundColor: st.highlight },
-    programDone: { borderColor: "rgba(242,180,97,0.5)" },
+    programActive: { borderColor: "rgba(212,175,55,0.42)", backgroundColor: st.highlight },
+    programDone: { borderColor: "rgba(212,175,55,0.5)" },
     thumb: { width: 58, height: 58, borderRadius: 14, backgroundColor: st.card },
     programTitle: { color: st.text, fontSize: 16, fontWeight: "800" },
     programSub: { color: st.muted, fontSize: 13, marginTop: 4, lineHeight: 18 },
@@ -759,7 +759,7 @@ function createTrainingStyles(st: StudentTokens) {
       marginHorizontal: 16,
       gap: 18,
       borderWidth: 1,
-      borderColor: "rgba(242,180,97,0.18)",
+      borderColor: "rgba(212,175,55,0.18)",
       borderRadius: 18,
       paddingVertical: 20,
       paddingHorizontal: 16,
@@ -793,7 +793,7 @@ function createTrainingStyles(st: StudentTokens) {
       borderRadius: 28,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: "rgba(242,180,97,0.18)"
+      backgroundColor: "rgba(212,175,55,0.18)"
     },
     inlineSeal: {
       flexDirection: "row",
@@ -802,7 +802,7 @@ function createTrainingStyles(st: StudentTokens) {
       borderRadius: 999,
       paddingHorizontal: 10,
       paddingVertical: 5,
-      backgroundColor: "#f2b461"
+      backgroundColor: "#d4af37"
     },
     inlineSealText: { color: "#1a1208", fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
     favBadge: {
@@ -810,11 +810,11 @@ function createTrainingStyles(st: StudentTokens) {
       alignItems: "center",
       gap: 6,
       borderWidth: 1,
-      borderColor: "rgba(242,180,97,0.35)",
+      borderColor: "rgba(212,175,55,0.35)",
       borderRadius: 999,
       paddingHorizontal: 14,
       paddingVertical: 8,
-      backgroundColor: "rgba(242,180,97,0.16)"
+      backgroundColor: "rgba(212,175,55,0.16)"
     },
     favBadgeText: { color: st.goldUi, fontSize: 13, fontWeight: "800" },
     rateRow: { alignItems: "center", gap: 4 },

@@ -1,12 +1,12 @@
-# Deploy — Neon + Render + Vercel + domínio HostGator
+# Deploy — ATLLY (Neon + Render + Vercel + HostGator)
 
 Stack de produção:
 
 | Camada | Serviço | Domínio |
 |--------|---------|---------|
 | Banco | Neon (PostgreSQL) | — |
-| API | Render | `https://apptreino-backend.onrender.com` (depois `api.edersonprogramador.com`) |
-| Web | Vercel | `https://edersonprogramador.com` |
+| API | Render | `https://api.atlly.com.br` |
+| Web | Vercel | `https://atlly.com.br` e `https://www.atlly.com.br` |
 | DNS | HostGator | aponta os domínios acima |
 
 ## 1. Neon (banco)
@@ -42,16 +42,16 @@ npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
 NODE_ENV=production
 DATABASE_URL=<neon connection string sslmode=require>
 JWT_SECRET=<segredo longo>
-WEB_ORIGIN=https://edersonprogramador.com,https://www.edersonprogramador.com
-PUBLIC_BASE_URL=https://api.edersonprogramador.com
+WEB_ORIGIN=https://atlly.com.br,https://www.atlly.com.br
+PUBLIC_BASE_URL=https://api.atlly.com.br
 GOOGLE_CLIENT_ID=<mesmo do Google Cloud / Vercel>
 ASAAS_API_KEY=<produção>
 ASAAS_API_URL=https://api.asaas.com/v3
 ASAAS_WEBHOOK_TOKEN=<token do webhook>
 ```
 
-4. Domínio customizado no Render: `api.edersonprogramador.com`.
-5. Webhook Asaas: `https://api.edersonprogramador.com/webhooks/asaas`
+4. Domínio customizado no Render: `api.atlly.com.br`.
+5. Webhook Asaas: `https://api.atlly.com.br/webhooks/asaas`
 
 Uploads ficam no disco do container (efêmeros no plano gratuito). Para produção estável de mídia, use **Cloudflare R2 + CDN** — veja [deploy-r2.md](./deploy-r2.md).
 
@@ -62,11 +62,11 @@ Uploads ficam no disco do container (efêmeros no plano gratuito). Para produç�
 3. Variáveis de ambiente (Production):
 
 ```txt
-VITE_API_URL=https://api.edersonprogramador.com
+VITE_API_URL=https://api.atlly.com.br
 VITE_GOOGLE_CLIENT_ID=<mesmo Client ID do Google>
 ```
 
-4. Domínios: `edersonprogramador.com` e `www.edersonprogramador.com`.
+4. Domínios: `atlly.com.br` e `www.atlly.com.br`.
 
 ## 4. DNS na HostGator
 
@@ -76,14 +76,14 @@ No cPanel → Zone Editor (ou DNS da HostGator):
 
 Siga o que a Vercel mostrar (valores mudam por conta). Em geral:
 
-- `edersonprogramador.com` → registros **A** indicados pela Vercel  
+- `atlly.com.br` → registros **A** indicados pela Vercel  
   **ou** CNAME flattening conforme painel
 - `www` → **CNAME** para `cname.vercel-dns.com` (ou o alvo exibido na Vercel)
 
 ### API (Render)
 
 - `api` → **CNAME** para o host do serviço Render  
-  (ex.: `app-treino-api.onrender.com` — use o hostname exato do dashboard)
+  (ex.: `apptreino-backend.onrender.com` — use o hostname exato do dashboard)
 
 Aguarde a propagação DNS e valide SSL nos painéis Render/Vercel.
 
@@ -91,14 +91,14 @@ Aguarde a propagação DNS e valide SSL nos painéis Render/Vercel.
 
 No Google Cloud Console, Authorized JavaScript origins:
 
-- `https://edersonprogramador.com`
-- `https://www.edersonprogramador.com`
+- `https://atlly.com.br`
+- `https://www.atlly.com.br`
 - `http://localhost:5173` (dev)
 
 ## 6. Checklist pós-deploy
 
-- [ ] `https://api.edersonprogramador.com/health` → `database: ok`
-- [ ] Abra `https://edersonprogramador.com` e faça login
+- [ ] `https://api.atlly.com.br/health` → `database: ok`
+- [ ] Abra `https://atlly.com.br` e faça login
 - [ ] Confirme que não há erro de CORS no DevTools
 - [ ] Teste upload e URL pública sob `https://api.edersonprogramador.com/uploads/...`
 - [ ] Configure o webhook Asaas e confirme um pagamento de teste/produção

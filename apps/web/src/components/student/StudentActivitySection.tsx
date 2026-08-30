@@ -1563,7 +1563,7 @@ export function StudentActivitySection({
     const isRide = stats.sport === "RIDE";
     const speedLabel = stats.speedKmh && stats.speedKmh > 0 ? `${stats.speedKmh.toFixed(1)} km/h` : "—";
     const text = [
-      `App Treino · ${stats.sportLabel}`,
+      `ATLLY · ${stats.sportLabel}`,
       `${formatKm(stats.distanceMeters)} km · ${formatClock(stats.elapsedSeconds)} · ${
         isRide ? speedLabel : `${formatPace(stats.paceSecPerKm)} /km`
       }`,
@@ -2043,7 +2043,7 @@ export function StudentActivitySection({
             ) : (
               <>
                 <div className="student-activity-share-card">
-                  <small>App Treino Social</small>
+                  <small>ATLLY</small>
                   <ActivityShareCard
                     stats={shareStats}
                     photoUrl={photoUrl}
@@ -2113,7 +2113,7 @@ export function StudentActivitySection({
             </button>
           </header>
           <div className="student-activity-saved-card">
-            <small>App Treino · Outdoor</small>
+            <small>ATLLY · Outdoor</small>
             <ActivityShareCard stats={finishStats} />
             <button type="button" className="student-green-button" onClick={() => void shareNative(finishStats)}>
               <Share2 size={16} /> Compartilhar

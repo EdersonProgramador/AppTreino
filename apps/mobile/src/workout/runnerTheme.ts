@@ -5,7 +5,7 @@ export const runner = {
   muted: "#44403a",
   faint: "#605a52",
   line: "rgba(21,26,34,0.12)",
-  gold: "#f2b461",
+  gold: "#d4af37",
   goldUi: "#c48a28",
   coral: "#df663c",
   ember: "#c73d2e",

@@ -84,7 +84,7 @@ export function LiveRoomScreen() {
     />
   ) : (
     <View style={styles.loading}>
-      <ActivityIndicator color="#f2b461" />
+      <ActivityIndicator color="#d4af37" />
       <Text style={styles.loadingText}>Preparando live…</Text>
     </View>
   );
@@ -137,7 +137,7 @@ function LiveRoom({ mode, liveId, title, token, insetTop, insetBottom, draft, on
 
       {status === "preparing" ? (
         <View style={styles.loading}>
-          <ActivityIndicator color="#f2b461" />
+          <ActivityIndicator color="#d4af37" />
           <Text style={styles.loadingText}>Preparando live…</Text>
         </View>
       ) : null}

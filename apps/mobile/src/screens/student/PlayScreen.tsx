@@ -15,6 +15,7 @@ import { apiGet } from "../../auth/api";
 import { mediaUrl } from "../../lib/media";
 import { musicPlayback, type NativeTrack } from "../../musicPlayback";
 import { readLikedIds, toggleLikedId, writeLikedIds } from "../../student/likes";
+import { brand } from "../../student/brand";
 import { StudentPage } from "../../student/layout";
 import { useStudent } from "../../student/StudentContext";
 import { st } from "../../student/theme";
@@ -27,7 +28,7 @@ function toNative(track: MusicTrack, album?: MusicAlbum): NativeTrack | null {
   return {
     id: track.id,
     title: track.title,
-    artist: track.artist || album?.title || "App Treino",
+    artist: track.artist || album?.title || brand.name,
     artwork: mediaUrl(track.coverUrl || album?.coverUrl),
     url
   };
@@ -211,7 +212,7 @@ export function PlayScreen() {
         ) : (
           <>
             <Text style={styles.kicker}>
-              <Ionicons name="musical-notes" size={14} color="#fff" /> Play App Treino Social
+              <Ionicons name="musical-notes" size={14} color="#fff" /> {brand.playTitle}
             </Text>
             <Text style={styles.heroTitle}>{greeting}</Text>
             <Text style={styles.lead}>Catálogo para o treino, com player completo e fila contínua.</Text>
@@ -272,7 +273,7 @@ export function PlayScreen() {
                     )}
                     <View style={{ flex: 1 }}>
                       <Text style={styles.trackTitle}>{track.title}</Text>
-                      <Text style={styles.trackSub}>{track.artist || "App Treino"}</Text>
+                      <Text style={styles.trackSub}>{track.artist || brand.name}</Text>
                     </View>
                   </Pressable>
                 ))}
@@ -328,7 +329,7 @@ export function PlayScreen() {
                       )}
                       <View style={{ flex: 1 }}>
                         <Text style={styles.trackTitle}>{track.title}</Text>
-                        <Text style={styles.trackSub}>{track.artist || "App Treino"}</Text>
+                        <Text style={styles.trackSub}>{track.artist || brand.name}</Text>
                       </View>
                       <Text style={styles.duration}>{formatClock(track.durationSec)}</Text>
                       <Ionicons name={active && playing ? "pause" : "play"} size={16} color="#fff" />

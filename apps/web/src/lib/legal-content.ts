@@ -1,11 +1,38 @@
 import { brand } from "./brand";
 
-/** Textos legais públicos — revisar CNPJ/endereço antes de operação comercial. */
+const PLACEHOLDER_CNPJ_DIGITS = "00000000000100";
+
+function normalizeCnpj(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+/** CNPJ real configurado em VITE_LEGAL_CNPJ (vazio ou placeholder = oculto no site). */
+export function isLegalIdentityPublic(cnpj = legalMeta.cnpj) {
+  const digits = normalizeCnpj(cnpj);
+  return digits.length > 0 && digits !== PLACEHOLDER_CNPJ_DIGITS;
+}
+
+/** Nome exibido publicamente: razão social quando regularizado, senão a marca do produto. */
+export function legalPublicOperatorName() {
+  return isLegalIdentityPublic() ? legalMeta.companyName : brand.name;
+}
+
+/** Linha de metadados das páginas legais (sem CNPJ enquanto não regularizado). */
+export function legalDocumentSubtitle() {
+  const parts = [legalPublicOperatorName()];
+  if (isLegalIdentityPublic()) {
+    parts.push(`CNPJ ${legalMeta.cnpj}`);
+  }
+  parts.push(`Atualizado em ${legalMeta.lastUpdated}`);
+  return parts.join(" · ");
+}
+
+/** Textos legais públicos — preencher VITE_LEGAL_* após regularização societária. */
 export const legalMeta = {
   companyName: import.meta.env.VITE_LEGAL_COMPANY_NAME?.trim() || brand.legalName,
-  cnpj: import.meta.env.VITE_LEGAL_CNPJ?.trim() || "00.000.000/0001-00",
-  contactEmail: import.meta.env.VITE_LEGAL_CONTACT_EMAIL?.trim() || "contato@apptreino.com",
-  dpoEmail: import.meta.env.VITE_LEGAL_DPO_EMAIL?.trim() || "privacidade@apptreino.com",
+  cnpj: import.meta.env.VITE_LEGAL_CNPJ?.trim() || "",
+  contactEmail: import.meta.env.VITE_LEGAL_CONTACT_EMAIL?.trim() || "contato@atlly.com.br",
+  dpoEmail: import.meta.env.VITE_LEGAL_DPO_EMAIL?.trim() || "privacidade@atlly.com.br",
   lastUpdated: "30 de agosto de 2026"
 } as const;
 

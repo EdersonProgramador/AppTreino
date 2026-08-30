@@ -3,17 +3,16 @@ import { DarkTheme, DefaultTheme } from "@react-navigation/native";
 import { getTheme, subscribeTheme, type UiTheme } from "./prefs";
 
 const brand = {
-  gold: "#f2b461",
-  goldUi: "#c48a28",
-  coral: "#df663c",
+  gold: "#d4af37",
+  goldUi: "#b8922a",
+  coral: "#e06a3c",
   ember: "#c73d2e",
   white: "#ffffff",
   danger: "#df3838",
-  headerFrom: "#be3027",
-  headerTo: "#165f47",
+  headerFrom: "#0a0a0a",
+  headerTo: "#1a1208",
   playBg: "#0a0c10"
 } as const;
-
 export const lightSt = {
   ...brand,
   goldUi: "#c48a28",
@@ -52,13 +51,13 @@ export const darkSt: typeof lightSt = {
   lineStrong: "rgba(255,255,255,0.2)",
   fill: "rgba(255,255,255,0.05)",
   ink: "#f4ebe0",
-  tabActive: "#f2b461",
+  tabActive: "#d4af37",
   cardSoft: "rgba(26,32,42,0.92)",
   inputBg: "rgba(7,8,10,0.72)",
   emptyBg: "rgba(26,32,42,0.92)",
   chatThem: "#151a22",
   avatarBg: "#151a22",
-  highlight: "rgba(242,180,97,0.12)",
+  highlight: "rgba(212,175,55,0.12)",
   tabBarBg: "rgba(16,19,26,0.96)",
   tabBarBorder: "rgba(255,255,255,0.12)",
   panelBg: "#1a202a"

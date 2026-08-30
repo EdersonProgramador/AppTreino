@@ -39,7 +39,7 @@ export function WorkoutSharePreview({
   const videoSrc = !imageSrc && videoUrl ? mediaUrl(videoUrl) || videoUrl : null;
   return (
     <div className="runner-share-card" data-testid="workout-share-card" ref={cardRef}>
-      <span className="runner-share-card-badge">App Treino Social</span>
+      <span className="runner-share-card-badge">ATLLY</span>
       <h3>O TREINO DE HOJE ESTÁ PAGO!</h3>
       {imageSrc ? (
         <div className="runner-share-card-photo">

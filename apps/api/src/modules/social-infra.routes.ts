@@ -4,6 +4,7 @@ import { requireAuth } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { emitToUser } from "./social-socket.js";
+import { assertModuleEnabled } from "./commerce.utils.js";
 
 function httpError(statusCode: number, message: string) {
   const error = new Error(message) as Error & { statusCode: number };
@@ -160,6 +161,7 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
   app.post("/student/social/reels", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);
+    await assertModuleEnabled("module_social_clipes", "Clipes desativados.");
     const body = z
       .object({
         videoUrl: z.string().url().or(z.string().startsWith("/")),
@@ -418,6 +420,7 @@ export async function registerSocialInfraRoutes(app: FastifyInstance) {
   app.post("/student/social/live", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);
+    await assertModuleEnabled("module_social_live", "Ao vivo desativado.");
     const body = z
       .object({
         title: z.string().min(2).max(80),

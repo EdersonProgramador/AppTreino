@@ -1,163 +1,321 @@
 import {
-  CalendarDays,
-  Check,
-  CircleDollarSign,
-  Clock3,
+  Activity,
+  Bike,
+  Brain,
   Dumbbell,
+  Flame,
+  Footprints,
   LineChart,
-  MessageCircle,
-  Ruler,
-  ShieldCheck,
-  Smartphone,
+  MapPin,
   Sparkles,
-  Star,
+  Target,
   Timer,
-  UserRound,
-  X,
+  Trophy,
+  Users,
   Zap
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export const landingNav = [
-  { href: "#app", label: "O App" },
-  { href: "#para-quem", label: "Para Quem É" },
-  { href: "#resultados", label: "Resultados" },
+  { href: "#sistema", label: "O Sistema" },
+  { href: "#modalidades", label: "Modalidades" },
+  { href: "#performance", label: "Performance" },
+  { href: "#comunidade", label: "Comunidade" },
   { href: "#planos", label: "Planos" },
   { href: "#faq", label: "FAQ" }
 ] as const;
 
+export const heroTrustItems = [
+  "Acesso imediato",
+  "Dados e histórico centralizados",
+  "Diferentes modalidades",
+  "Comunidade de atletas",
+  "Garantia de 7 dias"
+] as const;
+
 export const socialProofMetrics = [
-  { icon: Smartphone, value: "+10.000", label: "usuários ativos" },
-  { icon: Dumbbell, value: "+500.000", label: "treinos concluídos" },
-  { icon: Star, value: "4.9/5", label: "na App Store e Google Play" },
-  { icon: ShieldCheck, value: "100%", label: "satisfação garantida" }
+  { icon: Users, value: "+10.000", label: "Atletas na plataforma*", footnote: true },
+  { icon: Activity, value: "+500.000", label: "Atividades realizadas*", footnote: true },
+  { icon: Trophy, value: "4,9/5", label: "Avaliação da comunidade*", footnote: true },
+  { icon: Timer, value: "24/7", label: "Sua evolução registrada", footnote: false }
 ] as const;
 
-export const painSolutionRows = [
-  {
-    pain: "Perder tempo pensando qual exercício fazer no dia.",
-    solution: "Treino pronto e organizado por sessões, focado no seu objetivo."
-  },
-  {
-    pain: "Esquecer a carga da semana passada e não evoluir.",
-    solution: "Registro de cargas para progressão constante."
-  },
-  {
-    pain: "Treinar sem saber se o tempo de descanso está certo.",
-    solution: "Cronômetro regressivo integrado entre as séries."
-  },
-  {
-    pain: "Faltar por falta de orientação e perder o ritmo.",
-    solution: "Clareza total do processo, gerando constância diária."
-  }
+export const withoutSystemItems = [
+  "Treinos espalhados e sem histórico centralizado.",
+  "Cargas e repetições esquecidas.",
+  "Corridas sem conexão com sua rotina de treinamento.",
+  "Dificuldade para visualizar constância e progresso.",
+  "Pouca clareza sobre o que fazer no próximo treino."
 ] as const;
 
-export const audienceSegments: Array<{
-  icon: LucideIcon;
-  title: string;
-  text: string;
-}> = [
+export const withSystemItems = [
+  "Treinos organizados por modalidade e objetivo.",
+  "Histórico de cargas, séries e repetições.",
+  "Corrida, caminhada e ciclismo integrados à sua jornada.",
+  "Métricas e evolução reunidas em um único perfil.",
+  "Mais clareza para executar sua próxima missão."
+] as const;
+
+export const modalities: Array<{ icon: LucideIcon; title: string; text: string }> = [
   {
-    icon: UserRound,
-    title: "Para quem quer sair do zero",
-    text: "Sem dúvida na academia. Saiba exatamente o que fazer, quantas repetições executar e como treinar com segurança."
+    icon: MapPin,
+    title: "Corrida",
+    text: "Registre distância, ritmo, velocidade, tempo, frequência cardíaca, calorias, passos, voltas e evolução."
   },
   {
-    icon: LineChart,
-    title: "Para quem já treina, mas estagnou",
-    text: "Pare de repetir o mesmo treino há meses. Acompanhe progressão real de carga e volume para quebrar o platô."
+    icon: Footprints,
+    title: "Caminhada",
+    text: "Transforme movimento diário em atividade mensurável e acompanhe sua constância."
   },
   {
-    icon: Clock3,
-    title: "Para quem tem a rotina corrida",
-    text: "Treinos otimizados para entregar o máximo no tempo que você tem — 30, 45 ou 60 minutos."
+    icon: Bike,
+    title: "Ciclismo",
+    text: "Registre percursos, distância, velocidade e desempenho."
+  },
+  {
+    icon: Dumbbell,
+    title: "Musculação",
+    text: "Organize sessões, exercícios, séries, repetições, cargas e intervalos."
+  },
+  {
+    icon: Flame,
+    title: "Crossfit",
+    text: "Acompanhe sessões e evolução dentro da modalidade."
+  },
+  {
+    icon: Zap,
+    title: "HIIT",
+    text: "Treinos intensos organizados para otimizar seu tempo e desempenho."
+  },
+  {
+    icon: Target,
+    title: "Funcional e outras",
+    text: "Construa uma jornada de treinamento compatível com seu objetivo."
   }
 ];
 
-export const resources: Array<{
-  icon: LucideIcon;
-  title: string;
-  text: string;
-}> = [
+export const commandCenterPillars = [
+  { title: "Readiness", text: "Visualize sua condição para a próxima atividade." },
+  { title: "Recovery", text: "Acompanhe recuperação e equilíbrio entre estímulo e descanso." },
+  { title: "BioCore", text: "Centralize informações relacionadas ao seu corpo e evolução física." },
+  { title: "Performance", text: "Compare períodos e acompanhe tendências da sua performance." },
+  { title: "Evolution", text: "Transforme semanas e meses de atividades em uma linha contínua de progresso." }
+] as const;
+
+export const workoutPerks = [
+  "Séries e repetições",
+  "Registro de cargas",
+  "Histórico por exercício",
+  "Cronômetro de descanso",
+  "Vídeos de execução",
+  "Sessões organizadas",
+  "Progresso atualizado"
+] as const;
+
+export const telemetryMetrics = [
+  "Distância",
+  "Tempo",
+  "Ritmo",
+  "Velocidade",
+  "Calorias",
+  "Frequência cardíaca",
+  "Passos",
+  "Voltas",
+  "Frequência de treino",
+  "Cargas",
+  "Volume",
+  "Histórico"
+] as const;
+
+export const intelligenceFeatures = [
   {
-    icon: Dumbbell,
-    title: "Treino digital interativo",
-    text: "Rotina organizada por sessões (A, B, C...), com séries, repetições, vídeos de execução e intervalo de descanso."
+    icon: Sparkles,
+    title: "Planos inteligentes",
+    text: "Organização orientada ao seu objetivo e modalidade."
   },
   {
     icon: LineChart,
-    title: "Gráficos de evolução e frequência",
-    text: "Visualize progresso, constância semanal e histórico em um painel simples e direto."
+    title: "Análise de performance",
+    text: "Transforme histórico em informações úteis para sua evolução."
   },
   {
-    icon: Ruler,
-    title: "Avaliação física no bolso",
-    text: "Registre medidas e fotos de antes/depois com privacidade para comparar sua transformação."
+    icon: Brain,
+    title: "Acompanhamento contínuo",
+    text: "Entenda tendências e mudanças ao longo do tempo."
+  }
+];
+
+export const bioCoreItems = [
+  "Peso",
+  "Medidas corporais",
+  "Composição corporal",
+  "Avaliações físicas",
+  "Histórico",
+  "Fotos de evolução"
+] as const;
+
+export const communityFeatures = [
+  "Feed",
+  "Clubes",
+  "Desafios",
+  "Eventos",
+  "Clipes",
+  "Live",
+  "Mensagens"
+] as const;
+
+export const challengeTypes = [
+  "Distância",
+  "Frequência",
+  "Treinos",
+  "Corrida",
+  "Ciclismo",
+  "Consistência",
+  "Performance"
+] as const;
+
+export const professionalRoles = [
+  { title: "Coaches", text: "Organizam e acompanham programas de treinamento." },
+  { title: "Personal trainers", text: "Gerenciam alunos, sessões e evolução." },
+  {
+    title: "Nutricionistas",
+    text: "Podem integrar acompanhamento nutricional à jornada do atleta.*"
   },
   {
-    icon: MessageCircle,
-    title: "Suporte direto com especialistas",
-    text: "Dúvida sobre execução ou ajuste de plano? O time responde você direto no app."
+    title: "Academias · Boxes · Studios",
+    text: "Criam suas comunidades e conectam profissionais e alunos."
+  }
+] as const;
+
+export const audienceSegments: Array<{ title: string; text: string; featured?: boolean }> = [
+  {
+    title: "Para quem está começando",
+    text: "Tenha clareza desde o primeiro treino e construa consistência sem depender de papel ou memória."
+  },
+  {
+    title: "Para quem já treina",
+    text: "Registre cargas, volume, frequência e evolução para parar de treinar no automático.",
+    featured: true
+  },
+  {
+    title: "Para corredores",
+    text: "Transforme quilômetros em histórico, métricas e evolução."
+  },
+  {
+    title: "Para quem pedala",
+    text: "Centralize suas atividades dentro da mesma jornada esportiva."
+  },
+  {
+    title: "Para quem pratica várias modalidades",
+    text: "Musculação hoje. Corrida amanhã. HIIT no fim de semana. Seu corpo é um só — seu histórico também deveria ser."
+  },
+  {
+    title: "Para quem quer performance",
+    text: "Use dados para entender sua própria evolução."
   }
 ];
 
 export const testimonials = [
   {
     quote:
-      "Eu sempre começava a academia e parava em 1 mês porque ficava perdido. Com o App Treino Social, eu só abro o celular e sigo o passo a passo. Já são 5 meses sem faltar!",
+      "Eu sempre começava a academia e parava porque ficava perdido. Agora abro o aplicativo e sei exatamente qual é o próximo treino.",
     name: "Lucas M.",
     meta: "28 anos"
   },
   {
     quote:
-      "A diferença de conseguir registrar a carga de cada exercício foi absurda. Meu corpo mudou mais nos últimos 3 meses do que no ano passado inteiro.",
+      "Registrar minhas cargas mudou completamente minha percepção de evolução. Hoje consigo comparar meu desempenho em vez de simplesmente achar que estou melhorando.",
     name: "Juliana R.",
     meta: "34 anos"
   }
 ] as const;
 
 export const monthlyPlanPerks = [
-  "Acesso ilimitado ao App Treino Social",
-  "Acompanhamento de cargas e evolução",
-  "Suporte via aplicativo",
-  "Renovação mensal automática"
+  "Acesso à ATLLY",
+  "Treinos digitais",
+  "Registro de cargas",
+  "Histórico e evolução",
+  "Recursos da comunidade",
+  "Suporte pelo aplicativo",
+  "Renovação mensal"
 ] as const;
 
 export const annualPlanPerks = [
-  "Tudo do Plano Mensal",
-  "Bônus: Guia de Acompanhamento Nutricional (PDF)",
-  "Bônus: Calculadora de Calorias e Macros",
-  "Menor preço garantido por 1 ano",
-  "Economia de mais de 10% vs. mensal"
+  "Tudo do plano mensal",
+  "Acesso por 12 meses",
+  "Guia de acompanhamento nutricional",
+  "Calculadora de calorias e macros",
+  "Melhor condição do período"
 ] as const;
 
 export const faqItems = [
   {
-    question: "O App Treino Social funciona para treino em casa ou só academia?",
+    question: "A ATLLY serve apenas para musculação?",
     answer:
-      "Funciona para ambos. Os treinos são adaptados para o ambiente onde você treina e para os equipamentos que possui."
+      "Não. A proposta da ATLLY é funcionar como um sistema de performance com diferentes modalidades, incluindo musculação, corrida, caminhada, ciclismo e outras categorias disponíveis na plataforma."
   },
   {
-    question: "E se eu não souber como fazer o exercício?",
+    question: "Sou iniciante. Posso utilizar?",
     answer:
-      "Cada exercício dentro do app possui demonstração visual clara e instruções simples para você não errar a postura."
+      "Sim. A experiência foi pensada para oferecer clareza tanto para quem está começando quanto para atletas que já possuem histórico de treinamento."
   },
   {
-    question: "Como funciona a cobrança?",
+    question: "Posso registrar minhas cargas?",
     answer:
-      "A cobrança é realizada via cartão de crédito ou PIX de forma segura. No plano mensal, a renovação é mês a mês; no anual, você garante o desconto no valor total."
+      "Sim. Você pode acompanhar exercícios, séries, repetições, cargas e histórico de evolução conforme os recursos disponíveis no treino."
+  },
+  {
+    question: "A ATLLY possui corrida?",
+    answer: "Sim. A corrida faz parte da experiência esportiva da plataforma, juntamente com outras atividades."
+  },
+  {
+    question: "Posso participar de desafios?",
+    answer: "Sim. A área de desafios adiciona metas e experiências competitivas à jornada."
+  },
+  {
+    question: "Existe comunidade?",
+    answer:
+      "Sim. A ATLLY incorpora recursos sociais para aproximar atletas, comunidades, clubes e organizações."
+  },
+  {
+    question: "Academias e coaches podem participar?",
+    answer:
+      "A arquitetura da ATLLY contempla organizações e profissionais vinculados aos atletas, conforme os recursos disponibilizados para cada perfil."
   },
   {
     question: "Como recebo meu acesso?",
-    answer:
-      "O acesso é imediato. Assim que o pagamento for confirmado, você recebe as instruções no seu e-mail para entrar no app e começar na hora."
+    answer: "Após a confirmação da assinatura, você recebe as orientações necessárias para acessar sua conta."
+  },
+  {
+    question: "Posso cancelar?",
+    answer: "Sim, observando as condições do plano contratado."
   }
 ];
 
 export const workoutRows = [
-  { name: "Supino reto", sets: "4x 8-10", load: "72 kg", rest: "90s" },
-  { name: "Tríceps corda", sets: "3x 12", load: "34 kg", rest: "60s" },
-  { name: "Desenvolvimento", sets: "3x 10", load: "28 kg", rest: "75s" }
-];
+  { name: "Supino reto", sets: "4 × 8–10", load: "72 kg" },
+  { name: "Tríceps corda", sets: "3 × 12", load: "34 kg" },
+  { name: "Desenvolvimento", sets: "3 × 10", load: "28 kg" }
+] as const;
 
-export const trustIcons = [ShieldCheck, Zap, Timer, CircleDollarSign, Check, Sparkles] as const;
+export const footerProductLinks = [
+  { href: "#sistema", label: "O Sistema" },
+  { href: "#modalidades", label: "Modalidades" },
+  { href: "#performance", label: "Corrida" },
+  { href: "#performance", label: "Treinos" },
+  { href: "#comunidade", label: "Desafios" },
+  { href: "#comunidade", label: "Comunidade" }
+] as const;
+
+export const footerCompanyLinks = [
+  { href: "#sistema", label: "Sobre" },
+  { href: "#profissionais", label: "Profissionais" },
+  { href: "#comunidade", label: "Academias" },
+  { href: "#comunidade", label: "Boxes" },
+  { href: "#comunidade", label: "Studios" }
+] as const;
+
+export const footerSupportLinks = [
+  { href: "#faq", label: "Central de Ajuda" },
+  { href: "#faq", label: "FAQ" }
+] as const;

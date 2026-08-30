@@ -334,7 +334,7 @@ function createShopStyles(st: StudentTokens) {
       gap: 8,
       borderRadius: 12,
       padding: 12,
-      backgroundColor: "rgba(242,180,97,0.16)"
+      backgroundColor: "rgba(212,175,55,0.16)"
     },
     toastText: { color: st.text, fontWeight: "700" },
     info: {

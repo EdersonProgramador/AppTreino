@@ -335,7 +335,7 @@ function createStyles(st: StudentTokens) {
       borderRadius: 19,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: "#f2b461"
+      backgroundColor: "#d4af37"
     }
   });
 }

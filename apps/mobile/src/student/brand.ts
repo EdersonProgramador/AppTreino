@@ -1,8 +1,10 @@
-/** Identidade pública do produto (atleta + rede social + treino/corrida). */
+/** Identidade pública ATLLY — Human Performance System. */
 export const brand = {
-  name: "App Treino Social",
-  shortName: "App Treino Social",
-  tagline: "Rede social de atletas · treino e corrida",
+  name: "ATLLY",
+  shortName: "ATLLY",
+  category: "Human Performance System",
+  tagline: "Human Performance System",
+  socialLine: "Rede social de atletas · Treino · Corrida · Performance",
   athlete: "Atleta",
   athletes: "Atletas",
   athleteProfile: "Perfil do atleta",
@@ -11,10 +13,10 @@ export const brand = {
   profileSettingsHint: "Dados cadastrais usados em treinos e matrícula.",
   feedEmptyTitle: "Seu Feed começa aqui",
   feedEmptyText: "Publique um treino, siga atletas ou finalize uma corrida na aba Corrida.",
-  supportTeam: "Equipe App Treino Social",
-  shareSuffix: "no App Treino Social",
-  musicDefaultArtist: "App Treino Social",
-  playTitle: "Play App Treino Social",
+  supportTeam: "Equipe ATLLY",
+  shareSuffix: "na ATLLY",
+  musicDefaultArtist: "ATLLY",
+  playTitle: "Play ATLLY",
   codeLabel: "Código",
   followAthletes: "Seguir atletas",
   communityHint: "Conecte-se com outros atletas no Feed, Desafios e Corrida."

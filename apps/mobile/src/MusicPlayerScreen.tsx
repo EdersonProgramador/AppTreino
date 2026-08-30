@@ -91,7 +91,7 @@ export function MusicPlayerScreen({ onClose }: ScreenProps) {
             <Text style={styles.meta}>{subtitle}</Text>
           </View>
           <Pressable onPress={() => void toggleLike()} style={styles.iconBtn}>
-            <Ionicons name={liked ? "heart" : "heart-outline"} size={26} color={liked ? "#f2b461" : "#fff7ec"} />
+            <Ionicons name={liked ? "heart" : "heart-outline"} size={26} color={liked ? "#d4af37" : "#fff7ec"} />
           </Pressable>
         </View>
 
@@ -124,15 +124,15 @@ export function MusicPlayerScreen({ onClose }: ScreenProps) {
           </View>
         </Pressable>
 
-        {loading ? <ActivityIndicator color="#f2b461" style={{ marginTop: 18 }} /> : null}
+        {loading ? <ActivityIndicator color="#d4af37" style={{ marginTop: 18 }} /> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <View style={styles.extra}>
           <Pressable onPress={() => void musicPlayback.setShuffle(!shuffle)} style={[styles.iconBtn, shuffle && styles.iconOn]}>
-            <Ionicons name="shuffle" size={22} color={shuffle ? "#15100b" : "#f2b461"} />
+            <Ionicons name="shuffle" size={22} color={shuffle ? "#15100b" : "#d4af37"} />
           </Pressable>
           <Pressable onPress={() => void musicPlayback.cycleRepeat()} style={[styles.iconBtn, repeat !== "off" && styles.iconOn]}>
-            <Ionicons name={repeat === "one" ? "repeat" : "repeat-outline"} size={22} color={repeat !== "off" ? "#15100b" : "#f2b461"} />
+            <Ionicons name={repeat === "one" ? "repeat" : "repeat-outline"} size={22} color={repeat !== "off" ? "#15100b" : "#d4af37"} />
           </Pressable>
         </View>
 
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
     marginBottom: 18
   },
   backText: {
-    color: "#f2b461",
+    color: "#d4af37",
     fontWeight: "800"
   },
   artwork: {
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   },
   meta: {
     marginTop: 8,
-    color: "#f2b461",
+    color: "#d4af37",
     fontWeight: "700"
   },
   seek: {
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   },
   seekFill: {
     height: "100%",
-    backgroundColor: "#f2b461"
+    backgroundColor: "#d4af37"
   },
   hint: {
     marginTop: 14,
@@ -251,11 +251,11 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: "rgba(242,180,97,0.35)",
+    borderColor: "rgba(212,175,55,0.35)",
     alignItems: "center",
     justifyContent: "center"
   },
-  iconOn: { backgroundColor: "#f2b461", borderColor: "#f2b461" },
+  iconOn: { backgroundColor: "#d4af37", borderColor: "#d4af37" },
   controls: {
     marginTop: 18,
     flexDirection: "row",
@@ -270,14 +270,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(242,180,97,0.35)"
+    borderColor: "rgba(212,175,55,0.35)"
   },
   ctrlPrimary: {
-    backgroundColor: "#f2b461",
-    borderColor: "#f2b461"
+    backgroundColor: "#d4af37",
+    borderColor: "#d4af37"
   },
   ctrlText: {
-    color: "#f2b461",
+    color: "#d4af37",
     fontWeight: "800"
   },
   ctrlPrimaryText: {
@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
   queueTitle: { marginTop: 24, color: "#fff7ec", fontWeight: "800", fontSize: 16 },
   queueRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
   queueActive: { opacity: 1 },
-  queueIndex: { width: 22, color: "#f2b461", fontWeight: "800" },
+  queueIndex: { width: 22, color: "#d4af37", fontWeight: "800" },
   queueName: { color: "#fff7ec", fontWeight: "800" },
   queueArtist: { color: "rgba(255,247,236,0.55)", fontSize: 12 },
   error: {
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start"
   },
   closeText: {
-    color: "#f2b461",
+    color: "#d4af37",
     fontWeight: "800"
   },
   stopBtn: {

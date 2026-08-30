@@ -77,7 +77,7 @@ export class ExpoLocationBridge implements LocationBridge {
         pausesUpdatesAutomatically: false,
         activityType: Location.ActivityType.Fitness,
         foregroundService: {
-          notificationTitle: "App Treino · GPS ativo",
+          notificationTitle: "ATLLY · GPS ativo",
           notificationBody: "Gravando sua atividade. Toque para voltar.",
           notificationColor: "#E85D04"
         }
