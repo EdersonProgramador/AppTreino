@@ -131,8 +131,6 @@ import { StudentClubSection } from "./StudentClubSection";
 import { StudentActivitySection } from "./StudentActivitySection";
 import { StudentWeatherChip } from "./StudentWeatherChip";
 import { StudentPerformanceCharts } from "./StudentPerformanceCharts";
-import { StudentActivityEvolutionCharts } from "./StudentActivityEvolutionCharts";
-import { StudentActivityAchievementsPanel } from "./StudentActivityAchievementsPanel";
 import { StudentStreakMonthGrid } from "./StudentStreakDayIcons";
 import { StudentDailyMotivation } from "./StudentDailyMotivation";
 import { StudentAiCoachChat } from "./StudentAiCoachChat";
@@ -4246,8 +4244,6 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 sportTotals={consistency?.sportTotals}
                 weeklyVolume={consistency?.weeklyVolume}
               />
-              <StudentActivityEvolutionCharts token={token} />
-              <StudentActivityAchievementsPanel token={token} />
             </section>
           </StudentAthleteProfileSection>
         )}

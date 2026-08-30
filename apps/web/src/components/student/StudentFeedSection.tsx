@@ -28,6 +28,7 @@ import { readFeedCache, writeFeedCache } from "../../lib/feed-cache";
 import { useFeedChromeStore } from "../../stores/feedChromeStore";
 import { brand } from "../../lib/brand";
 import { shareSocialPost } from "../../lib/share-social-post";
+import { hasAnySocialCreateOption, socialModulesFromConfig } from "../../lib/module-config";
 import { isVideoFile, MEDIA_FILE_ACCEPT } from "../../lib/video-formats";
 import type {
   SocialAuthor,
@@ -197,17 +198,21 @@ type ActiveLiveRail = {
 
 export function StudentFeedSection({
   token,
+  publicConfig = {},
   onNavigate,
   onOpenDm,
   onOpenPeerProfile,
   onOpenLive
 }: {
   token: string;
+  publicConfig?: Record<string, string>;
   onNavigate?: (section: SocialNav) => void;
   onOpenDm?: (userId: string) => void;
   onOpenPeerProfile?: (userId: string) => void;
   onOpenLive?: (liveId: string) => void;
 }) {
+  const socialModules = useMemo(() => socialModulesFromConfig(publicConfig), [publicConfig]);
+  const canCreateAnything = useMemo(() => hasAnySocialCreateOption(publicConfig), [publicConfig]);
   const cached = useMemo(() => readFeedCache(), []);
   const [posts, setPosts] = useState<SocialPostRow[]>(() => cached?.posts ?? []);
   const [people, setPeople] = useState<SocialAuthor[]>(() => cached?.people ?? []);
@@ -413,6 +418,7 @@ export function StudentFeedSection({
         "/student/social/posts",
         {
           body: body.trim(),
+          intent: "post",
           mediaItems: prepared,
           mediaUrl: prepared[0]?.url,
           mediaType: prepared[0]?.type
@@ -631,7 +637,7 @@ export function StudentFeedSection({
     try {
       const created = await apiPost<{ post: SocialPostRow }>(
         "/student/social/posts",
-        { body: noteBody.trim() },
+        { body: noteBody.trim(), intent: "note" },
         token
       );
       setPosts((current) => [created.post, ...current]);
@@ -676,6 +682,7 @@ export function StudentFeedSection({
   useEffect(() => {
     useFeedChromeStore.getState().bind({
       toggleCreate: () => {
+        if (!canCreateAnything) return;
         setSearchOpen(false);
         setCreateMenuOpen((open) => !open);
       },
@@ -685,7 +692,7 @@ export function StudentFeedSection({
       }
     });
     return () => useFeedChromeStore.getState().unbind();
-  }, []);
+  }, [canCreateAnything]);
 
   useEffect(() => {
     if (!createMenuOpen) {
@@ -765,6 +772,9 @@ export function StudentFeedSection({
   }, [commentsPostId]);
 
   function openCreate(panel: CreatePanel) {
+    if (panel === "post" && !socialModules.publicar) return;
+    if (panel === "story" && !socialModules.momentos) return;
+    if (panel === "note" && !socialModules.nota) return;
     setCreateMenuOpen(false);
     setSearchOpen(false);
     if (panel === "story") {
@@ -836,56 +846,72 @@ export function StudentFeedSection({
                   : { top: 72, right: 12 }
               }
             >
-              <button type="button" role="menuitem" onClick={() => openCreate("post")}>
-                <PenSquare size={20} strokeWidth={1.6} /> Publicar
-              </button>
-              <button type="button" role="menuitem" onClick={() => openCreate("story")}>
-                <Plus size={20} strokeWidth={1.6} className="student-feed-create-dashed" /> Momento
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setCreateMenuOpen(false);
-                  onNavigate?.("reels");
-                }}
-              >
-                <Clapperboard size={20} strokeWidth={1.6} /> Clipes
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setCreateMenuOpen(false);
-                  onNavigate?.("live");
-                }}
-              >
-                <Radio size={20} strokeWidth={1.6} /> Ao vivo
-              </button>
-              <button type="button" role="menuitem" onClick={() => openCreate("note")}>
-                <StickyNote size={20} strokeWidth={1.6} /> Nota
-              </button>
+              {socialModules.publicar ? (
+                <button type="button" role="menuitem" onClick={() => openCreate("post")}>
+                  <PenSquare size={20} strokeWidth={1.6} /> Publicar
+                </button>
+              ) : null}
+              {socialModules.momentos ? (
+                <button type="button" role="menuitem" onClick={() => openCreate("story")}>
+                  <Plus size={20} strokeWidth={1.6} className="student-feed-create-dashed" /> Momento
+                </button>
+              ) : null}
+              {socialModules.clipes ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setCreateMenuOpen(false);
+                    onNavigate?.("reels");
+                  }}
+                >
+                  <Clapperboard size={20} strokeWidth={1.6} /> Clipes
+                </button>
+              ) : null}
+              {socialModules.live ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setCreateMenuOpen(false);
+                    onNavigate?.("live");
+                  }}
+                >
+                  <Radio size={20} strokeWidth={1.6} /> Ao vivo
+                </button>
+              ) : null}
+              {socialModules.nota ? (
+                <button type="button" role="menuitem" onClick={() => openCreate("note")}>
+                  <StickyNote size={20} strokeWidth={1.6} /> Nota
+                </button>
+              ) : null}
             </div>,
             document.body
           )
         : null}
 
+      {(socialModules.momentos || socialModules.live) && (
       <div className="student-feed-stories">
         <header>
           <div>
             <strong>Momentos</strong>
             <small>Somem em 24h</small>
           </div>
-          <button type="button" className="student-feed-story-gallery-link" onClick={() => void openGallery()}>
-            Galeria
-          </button>
+          {socialModules.momentos ? (
+            <button type="button" className="student-feed-story-gallery-link" onClick={() => void openGallery()}>
+              Galeria
+            </button>
+          ) : null}
         </header>
         <div className="student-feed-story-rail">
-          <button type="button" className="student-feed-story-add" onClick={() => openCreate("story")}>
-            <span>+</span>
-            <small>Seu momento</small>
-          </button>
-          {activeLives.map((live) => (
+          {socialModules.momentos ? (
+            <button type="button" className="student-feed-story-add" onClick={() => openCreate("story")}>
+              <span>+</span>
+              <small>Seu momento</small>
+            </button>
+          ) : null}
+          {socialModules.live
+            ? activeLives.map((live) => (
             <button
               key={`live-${live.id}`}
               type="button"
@@ -903,8 +929,10 @@ export function StudentFeedSection({
               <em className="student-live-rail-badge">AO VIVO</em>
               <small>{live.isMine ? "Você" : live.host.name.split(" ")[0]}</small>
             </button>
-          ))}
-          {storyRailsWithoutLiveHosts.map((rail) => {
+          ))
+            : null}
+          {socialModules.momentos
+            ? storyRailsWithoutLiveHosts.map((rail) => {
             const storyIndex = rails.findIndex((row) => row.userId === rail.userId);
             const cover = rail.items[0];
             const coverUrl = cover?.coverUrl || (String(cover?.mediaType || "").toUpperCase() === "IMAGE" ? cover?.mediaUrl : null) || rail.image_url;
@@ -928,11 +956,13 @@ export function StudentFeedSection({
                 <small>{rail.isMine ? "Você" : rail.username.split(" ")[0]}</small>
               </button>
             );
-          })}
+          })
+            : null}
         </div>
       </div>
+      )}
 
-      {createPanel === "post" && (
+      {socialModules.publicar && createPanel === "post" && (
         <form className="student-feed-composer" onSubmit={publish}>
           <header className="student-feed-composer-head">
             <strong>Publicar</strong>
@@ -1232,7 +1262,7 @@ export function StudentFeedSection({
         </button>
       )}
 
-      {createPanel === "story" &&
+      {socialModules.momentos && createPanel === "story" &&
         createPortal(
           <div
             className="student-feed-modal"
@@ -1344,7 +1374,7 @@ export function StudentFeedSection({
           document.body
         )}
 
-      {createPanel === "note" && (
+      {socialModules.nota && createPanel === "note" && (
         <div className="student-activity-sheet" role="dialog" aria-label="Nova nota">
           <header>
             <strong>Nota</strong>
