@@ -29,12 +29,42 @@ export function asaasBillingTypes(billingType: AsaasBillingType) {
   return ["PIX", "CREDIT_CARD"] as const;
 }
 
+export function vitrineCheckoutCallbacks(input: { orderId?: string; purchaseId?: string }) {
+  const webOrigin =
+    env.ASAAS_CALLBACK_URL?.split(",")[0]?.trim() ?? env.WEB_ORIGIN.split(",")[0]?.trim() ?? env.WEB_ORIGIN;
+  const isHttps = webOrigin.startsWith("https://");
+  const callbackBase = isHttps ? webOrigin : "https://example.com";
+
+  const successParams = new URLSearchParams();
+  successParams.set("section", "products");
+  successParams.set("storeTab", "orders");
+  successParams.set("payment", "success");
+  if (input.orderId) successParams.set("orderId", input.orderId);
+  if (input.purchaseId) successParams.set("purchaseId", input.purchaseId);
+
+  const cancelParams = new URLSearchParams();
+  cancelParams.set("section", "products");
+  cancelParams.set("storeTab", "cart");
+  cancelParams.set("payment", "cancel");
+
+  return {
+    successUrl: `${callbackBase}/?${successParams.toString()}`,
+    cancelUrl: `${callbackBase}/?${cancelParams.toString()}`,
+    expiredUrl: `${callbackBase}/?${cancelParams.toString()}`
+  };
+}
+
 export async function createAsaasCheckout(input: {
   externalReference: string;
   itemName: string;
   itemDescription: string;
   amountInCents: number;
   billingType: AsaasBillingType;
+  callbacks?: {
+    successUrl: string;
+    cancelUrl: string;
+    expiredUrl: string;
+  };
 }) {
   if (!env.ASAAS_API_KEY) {
     return null;
@@ -44,7 +74,7 @@ export async function createAsaasCheckout(input: {
     env.ASAAS_CALLBACK_URL?.split(",")[0]?.trim() ?? env.WEB_ORIGIN.split(",")[0]?.trim() ?? env.WEB_ORIGIN;
   const isHttps = webOrigin.startsWith("https://");
   const callbackBase = isHttps ? webOrigin : "https://example.com";
-  const callback = {
+  const callback = input.callbacks ?? {
     successUrl: `${callbackBase}/`,
     cancelUrl: `${callbackBase}/`,
     expiredUrl: `${callbackBase}/`

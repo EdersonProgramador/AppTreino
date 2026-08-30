@@ -3,7 +3,7 @@ import { z } from "zod";
 import { isAdminStudentPreview, requireAuth, requireRole } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
-import { createAsaasCheckout, orderExternalReference, type AsaasBillingType } from "./asaas.client.js";
+import { createAsaasCheckout, orderExternalReference, vitrineCheckoutCallbacks, type AsaasBillingType } from "./asaas.client.js";
 import { asaasCheckoutItemName } from "./checkout.utils.js";
 import { buildPaginationMeta, parsePagination } from "./pagination.js";
 import {
@@ -15,6 +15,13 @@ import {
   ORDER_PAID_STATUSES,
   resolveOrderTimestamps
 } from "./commerce.utils.js";
+import {
+  formatShippingAddress,
+  lookupPostalCode,
+  normalizePostalCode,
+  quoteShipping,
+  productToShippingInput
+} from "./shipping.service.js";
 
 function requireDatabase() {
   if (!env.DATABASE_URL) {
@@ -84,9 +91,40 @@ const orderStatusSchema = z.object({
   status: z.enum(["PENDING", "CONFIRMED", "READY", "DELIVERED", "CANCELED", "REFUNDED"])
 });
 
+const destinationSchema = z.object({
+  postalCode: z.string().trim().optional(),
+  street: z.string().trim().max(200).optional(),
+  number: z.string().trim().max(40).optional(),
+  complement: z.string().trim().max(120).optional(),
+  neighborhood: z.string().trim().max(120).optional(),
+  city: z.string().trim().max(120).optional(),
+  state: z.string().trim().max(2).optional()
+});
+
+const cartShippingSchema = z.object({
+  fulfillmentMethod: z.enum(["PICKUP", "DELIVERY"]).optional(),
+  destination: destinationSchema.optional(),
+  shippingServiceId: z.string().trim().max(80).nullable().optional(),
+  shippingServiceName: z.string().trim().max(120).nullable().optional(),
+  shippingCarrier: z.string().trim().max(120).nullable().optional()
+});
+
+const shippingZoneSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  stateCode: z.string().trim().max(2).nullable().optional(),
+  postalFrom: z.string().trim().max(8).nullable().optional(),
+  postalTo: z.string().trim().max(8).nullable().optional(),
+  feeInCents: z.number().int().min(0),
+  priority: z.number().int().min(0).default(0),
+  isActive: z.boolean().default(true)
+});
+
 async function serializeCart(userId: string) {
   const cart = await getOrCreateCart(userId);
   const totals = await buildCartTotals(cart);
+  const quote = totals.shippingQuote;
+  const lineMap = new Map(quote.itemLines.map((line) => [line.productId, line]));
+
   return {
     cart: {
       id: cart.id,
@@ -97,13 +135,36 @@ async function serializeCart(userId: string) {
       shippingMethod: totals.shippingMethod,
       amountInCents: totals.amountInCents,
       itemCount: totals.itemCount,
-      items: totals.items.map((item) => ({
-        id: item.id,
-        productId: item.productId,
-        quantity: item.quantity,
-        product: item.product,
-        lineTotalInCents: item.product.priceInCents * item.quantity
-      }))
+      fulfillmentMethod: quote.fulfillmentMethod,
+      canPickup: quote.canPickup,
+      canDeliver: quote.canDeliver,
+      quoteSource: quote.quoteSource,
+      shippingServices: quote.services,
+      destination: {
+        postalCode: cart.destinationPostalCode,
+        street: cart.destinationStreet,
+        number: cart.destinationNumber,
+        complement: cart.destinationComplement,
+        neighborhood: cart.destinationNeighborhood,
+        city: cart.destinationCity,
+        state: cart.destinationState
+      },
+      shippingServiceId: cart.shippingServiceId,
+      shippingServiceName: cart.shippingServiceName,
+      shippingCarrier: cart.shippingCarrier,
+      formattedAddress: quote.formattedAddress,
+      items: totals.items.map((item) => {
+        const line = lineMap.get(item.productId);
+        return {
+          id: item.id,
+          productId: item.productId,
+          quantity: item.quantity,
+          product: item.product,
+          lineTotalInCents: item.product.priceInCents * item.quantity,
+          shippingInCents: line?.shippingInCents ?? 0,
+          shippingMethod: line?.shippingMethod ?? "PICKUP"
+        };
+      })
     }
   };
 }
@@ -114,6 +175,104 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
     requireDatabase();
     await assertModuleEnabled("module_products");
     const authUser = await requireAuth(app, request);
+    return serializeCart(authUser.id);
+  });
+
+  app.get("/student/shipping/cep/:cep", async (request) => {
+    requireDatabase();
+    await assertModuleEnabled("module_products");
+    await requireAuth(app, request);
+    const { cep } = z.object({ cep: z.string().min(8).max(9) }).parse(request.params);
+    const address = await lookupPostalCode(cep);
+    return { address };
+  });
+
+  app.post("/student/shipping/quote", async (request) => {
+    requireDatabase();
+    await assertModuleEnabled("module_products");
+    await requireAuth(app, request);
+    const body = z
+      .object({
+        productId: z.string().min(1),
+        quantity: z.number().int().min(1).max(99).default(1),
+        fulfillmentMethod: z.enum(["PICKUP", "DELIVERY"]).optional(),
+        destination: destinationSchema.optional(),
+        shippingServiceId: z.string().trim().max(80).nullable().optional()
+      })
+      .parse(request.body ?? {});
+
+    const product = await prisma.product.findFirst({
+      where: { id: body.productId, isActive: true, deletedAt: null }
+    });
+    if (!product) throw httpError(404, "Produto não encontrado.");
+
+    const quote = await quoteShipping({
+      items: [productToShippingInput(product, body.quantity)],
+      fulfillmentMethod: body.fulfillmentMethod ?? null,
+      destination: body.destination ?? null,
+      selectedServiceId: body.shippingServiceId ?? null
+    });
+
+    return {
+      quote: {
+        fulfillmentMethod: quote.fulfillmentMethod,
+        shippingMethod: quote.shippingMethod,
+        shippingInCents: quote.shippingInCents,
+        amountInCents: product.priceInCents * body.quantity + quote.shippingInCents,
+        services: quote.services,
+        quoteSource: quote.quoteSource,
+        canPickup: quote.canPickup,
+        canDeliver: quote.canDeliver,
+        itemLines: quote.itemLines.map((line) => ({
+          productId: line.productId,
+          shippingInCents: line.shippingInCents,
+          shippingMethod: line.shippingMethod
+        }))
+      }
+    };
+  });
+
+  app.put("/student/cart/shipping", async (request) => {
+    requireDatabase();
+    await assertModuleEnabled("module_products");
+    const authUser = await requireAuth(app, request);
+    if (isAdminStudentPreview(authUser)) {
+      throw httpError(403, "Preview admin não pode alterar o carrinho.");
+    }
+    const body = cartShippingSchema.parse(request.body ?? {});
+    const cart = await getOrCreateCart(authUser.id);
+
+    let destination = body.destination ?? {};
+    if (destination.postalCode && !destination.street) {
+      try {
+        const lookedUp = await lookupPostalCode(destination.postalCode);
+        destination = { ...lookedUp, ...destination, postalCode: lookedUp.postalCode };
+      } catch {
+        // Mantém o que o aluno informou manualmente.
+      }
+    }
+
+    await prisma.cart.update({
+      where: { id: cart.id },
+      data: {
+        fulfillmentMethod: body.fulfillmentMethod ?? cart.fulfillmentMethod,
+        destinationPostalCode: destination.postalCode
+          ? normalizePostalCode(destination.postalCode)
+          : cart.destinationPostalCode,
+        destinationStreet: destination.street ?? cart.destinationStreet,
+        destinationNumber: destination.number ?? cart.destinationNumber,
+        destinationComplement: destination.complement ?? cart.destinationComplement,
+        destinationNeighborhood: destination.neighborhood ?? cart.destinationNeighborhood,
+        destinationCity: destination.city ?? cart.destinationCity,
+        destinationState: destination.state ?? cart.destinationState,
+        shippingServiceId:
+          body.shippingServiceId === undefined ? cart.shippingServiceId : body.shippingServiceId,
+        shippingServiceName:
+          body.shippingServiceName === undefined ? cart.shippingServiceName : body.shippingServiceName,
+        shippingCarrier: body.shippingCarrier === undefined ? cart.shippingCarrier : body.shippingCarrier
+      }
+    });
+
     return serializeCart(authUser.id);
   });
 
@@ -246,9 +405,26 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
     const totals = await buildCartTotals(cart);
     if (totals.items.length === 0) throw httpError(400, "Carrinho sem itens válidos.");
 
-    if (totals.shippingMethod === "DELIVERY" && !body.shippingAddress?.trim()) {
-      throw httpError(400, "Informe o endereço para entrega.");
+    const formattedAddress =
+      formatShippingAddress({
+        postalCode: cart.destinationPostalCode,
+        street: cart.destinationStreet,
+        number: cart.destinationNumber,
+        complement: cart.destinationComplement,
+        neighborhood: cart.destinationNeighborhood,
+        city: cart.destinationCity,
+        state: cart.destinationState
+      }) ??
+      body.shippingAddress?.trim() ??
+      null;
+
+    if (totals.shippingMethod === "DELIVERY") {
+      if (!cart.destinationPostalCode || !cart.destinationStreet || !cart.destinationNumber) {
+        throw httpError(400, "Informe CEP, rua e número para entrega.");
+      }
     }
+
+    const lineMap = new Map(totals.shippingQuote.itemLines.map((line) => [line.productId, line]));
 
     const order = await prisma.$transaction(async (tx) => {
       const created = await tx.order.create({
@@ -260,20 +436,38 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
           shippingInCents: totals.shippingInCents,
           amountInCents: totals.amountInCents,
           shippingMethod: totals.shippingMethod,
-          shippingAddress:
-            totals.shippingMethod === "DELIVERY" ? body.shippingAddress?.trim() || null : null,
+          shippingAddress: totals.shippingMethod === "DELIVERY" ? formattedAddress : null,
+          destinationPostalCode: cart.destinationPostalCode,
+          destinationStreet: cart.destinationStreet,
+          destinationNumber: cart.destinationNumber,
+          destinationComplement: cart.destinationComplement,
+          destinationNeighborhood: cart.destinationNeighborhood,
+          destinationCity: cart.destinationCity,
+          destinationState: cart.destinationState,
+          shippingCarrier: cart.shippingCarrier,
+          shippingServiceId: cart.shippingServiceId,
+          shippingServiceName: cart.shippingServiceName,
+          shippingQuoteSource: totals.shippingQuote.quoteSource,
           couponId: totals.couponId,
           couponCode: totals.couponCode,
           notes: body.notes?.trim() || null,
           paymentMethod: body.billingType === "UNDEFINED" ? null : body.billingType,
           items: {
-            create: totals.items.map((item) => ({
-              productId: item.productId,
-              productName: item.product.name,
-              quantity: item.quantity,
-              unitPriceInCents: item.product.priceInCents,
-              amountInCents: item.product.priceInCents * item.quantity
-            }))
+            create: totals.items.map((item) => {
+              const line = lineMap.get(item.productId);
+              return {
+                productId: item.productId,
+                productName: item.product.name,
+                quantity: item.quantity,
+                unitPriceInCents: item.product.priceInCents,
+                amountInCents: item.product.priceInCents * item.quantity,
+                shippingInCents: line?.shippingInCents ?? 0,
+                shippingMethod: line?.shippingMethod ?? totals.shippingMethod,
+                shippingCarrier: line?.carrier ?? cart.shippingCarrier,
+                shippingServiceId: line?.serviceId ?? cart.shippingServiceId,
+                shippingServiceName: line?.serviceName ?? cart.shippingServiceName
+              };
+            })
           }
         },
         include: { items: true, user: true }
@@ -289,7 +483,20 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
       await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
       await tx.cart.update({
         where: { id: cart.id },
-        data: { couponCode: null }
+        data: {
+          couponCode: null,
+          fulfillmentMethod: null,
+          destinationPostalCode: null,
+          destinationStreet: null,
+          destinationNumber: null,
+          destinationComplement: null,
+          destinationNeighborhood: null,
+          destinationCity: null,
+          destinationState: null,
+          shippingCarrier: null,
+          shippingServiceId: null,
+          shippingServiceName: null
+        }
       });
 
       return created;
@@ -300,7 +507,8 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
       itemName: asaasCheckoutItemName(`Pedido (${order.items.length} item(ns))`),
       itemDescription: `Pedido vitrine - ${authUser.name}`,
       amountInCents: order.amountInCents,
-      billingType: body.billingType as AsaasBillingType
+      billingType: body.billingType as AsaasBillingType,
+      callbacks: vitrineCheckoutCallbacks({ orderId: order.id })
     });
 
     const updatedOrder = asaasCheckout
@@ -328,6 +536,51 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
       take: 50
     });
     return { orders };
+  });
+
+  app.get("/student/store/summary", async (request) => {
+    requireDatabase();
+    await assertModuleEnabled("module_purchases");
+    const authUser = await requireAuth(app, request);
+
+    const [orders, purchases, cartSnapshot] = await Promise.all([
+      prisma.order.findMany({
+        where: { userId: authUser.id, deletedAt: null },
+        include: { items: true },
+        orderBy: { createdAt: "desc" },
+        take: 50
+      }),
+      prisma.purchase.findMany({
+        where: { userId: authUser.id, deletedAt: null },
+        include: { product: true },
+        orderBy: { createdAt: "desc" },
+        take: 50
+      }),
+      (async () => {
+        try {
+          await assertModuleEnabled("module_products");
+          const cart = await getOrCreateCart(authUser.id);
+          const totals = await buildCartTotals(cart);
+          return { itemCount: totals.itemCount, amountInCents: totals.amountInCents };
+        } catch {
+          return { itemCount: 0, amountInCents: 0 };
+        }
+      })()
+    ]);
+
+    const pendingCount =
+      orders.filter((order) => order.status === "PENDING").length +
+      purchases.filter((purchase) => purchase.status === "PENDING").length;
+
+    return {
+      cartItemCount: cartSnapshot.itemCount,
+      cartAmountInCents: cartSnapshot.amountInCents,
+      orderCount: orders.length,
+      purchaseCount: purchases.length,
+      pendingCount,
+      orders: orders.slice(0, 8),
+      purchases: purchases.slice(0, 8)
+    };
   });
 
   app.post("/student/orders/:id/checkout", async (request) => {
@@ -360,7 +613,8 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
       itemName: asaasCheckoutItemName(`Pedido (${order.items.length} item(ns))`),
       itemDescription: `Pedido vitrine - ${authUser.name}`,
       amountInCents: order.amountInCents,
-      billingType: body.billingType as AsaasBillingType
+      billingType: body.billingType as AsaasBillingType,
+      callbacks: vitrineCheckoutCallbacks({ orderId: order.id })
     });
     if (!asaasCheckout) {
       throw httpError(503, "Pagamento online indisponível. A academia confirmará o pedido manualmente.");
@@ -377,6 +631,71 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
     });
 
     return { order: updated, alreadyPaid: false };
+  });
+
+  // ----- Admin shipping zones -----
+  app.get("/admin/shipping/zones", async (request) => {
+    requireDatabase();
+    await requireRole(app, request, "ADMIN");
+    await assertModuleEnabled("module_products");
+    const zones = await prisma.shippingZone.findMany({
+      where: { deletedAt: null },
+      orderBy: [{ priority: "desc" }, { name: "asc" }]
+    });
+    return { zones };
+  });
+
+  app.post("/admin/shipping/zones", async (request, reply) => {
+    requireDatabase();
+    await requireRole(app, request, "ADMIN");
+    await assertModuleEnabled("module_products");
+    const body = shippingZoneSchema.parse(request.body);
+    const zone = await prisma.shippingZone.create({
+      data: {
+        name: body.name,
+        stateCode: body.stateCode?.trim().toUpperCase() || null,
+        postalFrom: body.postalFrom ? normalizePostalCode(body.postalFrom) : null,
+        postalTo: body.postalTo ? normalizePostalCode(body.postalTo) : null,
+        feeInCents: body.feeInCents,
+        priority: body.priority,
+        isActive: body.isActive
+      }
+    });
+    return reply.code(201).send({ zone });
+  });
+
+  app.put("/admin/shipping/zones/:id", async (request) => {
+    requireDatabase();
+    await requireRole(app, request, "ADMIN");
+    await assertModuleEnabled("module_products");
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const body = shippingZoneSchema.partial().parse(request.body);
+    const zone = await prisma.shippingZone.update({
+      where: { id },
+      data: {
+        name: body.name,
+        stateCode: body.stateCode === undefined ? undefined : body.stateCode?.trim().toUpperCase() || null,
+        postalFrom:
+          body.postalFrom === undefined ? undefined : body.postalFrom ? normalizePostalCode(body.postalFrom) : null,
+        postalTo: body.postalTo === undefined ? undefined : body.postalTo ? normalizePostalCode(body.postalTo) : null,
+        feeInCents: body.feeInCents,
+        priority: body.priority,
+        isActive: body.isActive
+      }
+    });
+    return { zone };
+  });
+
+  app.delete("/admin/shipping/zones/:id", async (request) => {
+    requireDatabase();
+    await requireRole(app, request, "ADMIN");
+    await assertModuleEnabled("module_products");
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    await prisma.shippingZone.update({
+      where: { id },
+      data: { deletedAt: new Date(), isActive: false }
+    });
+    return { ok: true };
   });
 
   // ----- Admin coupons -----

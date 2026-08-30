@@ -4074,14 +4074,25 @@ button.delete-action-button:hover,
 }
 
 .commerce-hub .commerce-product-form,
-.commerce-hub .commerce-purchase-form {
+.commerce-hub .commerce-purchase-form,
+.commerce-hub .commerce-shipping-settings,
+.commerce-hub .commerce-shipping-zone-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.commerce-product-shipping-grid {
+  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
 .commerce-hub .commerce-product-form .primary-button,
-.commerce-hub .commerce-purchase-form .primary-button {
+.commerce-hub .commerce-purchase-form .primary-button,
+.commerce-hub .commerce-shipping-settings .primary-button,
+.commerce-hub .commerce-shipping-zone-form .primary-button {
   grid-column: 1 / -1;
 }
 
@@ -4092,7 +4103,10 @@ button.delete-action-button:hover,
 
 @media (max-width: 760px) {
   .commerce-hub .commerce-product-form,
-  .commerce-hub .commerce-purchase-form {
+  .commerce-hub .commerce-purchase-form,
+  .commerce-hub .commerce-shipping-settings,
+  .commerce-hub .commerce-shipping-zone-form,
+  .commerce-product-shipping-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -11340,6 +11354,353 @@ label.runner-share-secondary {
 
 .student-cart-summary-card {
   align-items: start;
+}
+
+.student-store-sheet .student-sheet-heading p {
+  max-width: 42rem;
+}
+
+.student-store-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 16px;
+}
+
+.student-store-tabs button {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.student-store-tabs button.is-active {
+  border-color: rgba(242, 180, 97, 0.55);
+  background: rgba(242, 180, 97, 0.14);
+}
+
+.student-store-loading {
+  margin: 0 0 12px;
+  opacity: 0.75;
+}
+
+.student-store-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+}
+
+.student-store-filters button {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  background: transparent;
+  color: inherit;
+}
+
+.student-store-filters button.is-active {
+  border-color: rgba(95, 208, 137, 0.45);
+  background: rgba(95, 208, 137, 0.12);
+}
+
+.student-store-billing {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.student-store-billing-options {
+  display: grid;
+  gap: 8px;
+}
+
+.student-store-billing-options label {
+  display: grid;
+  gap: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.student-store-billing-options label.is-active {
+  border-color: rgba(242, 180, 97, 0.5);
+  background: rgba(242, 180, 97, 0.08);
+}
+
+.student-store-billing-options input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.student-store-billing-options strong {
+  font-size: 14px;
+}
+
+.student-store-billing-options small {
+  opacity: 0.75;
+  font-size: 12px;
+}
+
+.student-store-fulfillment,
+.student-store-address-form {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.student-store-fulfillment-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.student-store-fulfillment-options button {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 12px;
+  background: transparent;
+  color: inherit;
+  font-weight: 800;
+}
+
+.student-store-fulfillment-options button.is-active {
+  border-color: rgba(242, 180, 97, 0.55);
+  background: rgba(242, 180, 97, 0.12);
+}
+
+.student-store-address-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.student-store-item-shipping {
+  display: block;
+  font-size: 12px;
+  opacity: 0.78;
+}
+
+.student-store-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.student-store-modal {
+  width: min(560px, 100%);
+  max-height: min(90vh, 760px);
+  overflow: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--student-sheet-bg, #12131a);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+}
+
+.student-store-modal-head,
+.student-store-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.student-store-modal-actions {
+  border-bottom: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.student-store-modal-body {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.student-store-modal-close {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  opacity: 0.75;
+}
+
+.student-store-payment-note,
+.student-store-history-kind {
+  font-size: 12px;
+  opacity: 0.78;
+}
+
+.student-store-history {
+  display: grid;
+  gap: 10px;
+}
+
+.student-store-history-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.student-store-history-head {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  border: 0;
+}
+
+.student-store-history-head strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.student-store-history-head span {
+  display: block;
+  font-size: 13px;
+  opacity: 0.82;
+}
+
+.student-store-history-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.student-store-history-body {
+  padding: 0 14px 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.student-store-history-items {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.student-store-history-paid {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #5fd089;
+  font-weight: 700;
+}
+
+.student-profile-store-panel {
+  margin: 0 0 18px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.student-profile-store-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.student-profile-store-kicker {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.student-profile-store-head h2 {
+  margin: 4px 0 0;
+  font-size: 18px;
+}
+
+.student-profile-store-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.student-profile-store-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.student-profile-store-stats article {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.student-profile-store-stats strong {
+  font-size: 20px;
+}
+
+.student-profile-store-stats span {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.student-profile-store-list {
+  display: grid;
+  gap: 8px;
+}
+
+.student-profile-store-item {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  color: inherit;
+  text-align: left;
+}
+
+.student-profile-store-item strong,
+.student-profile-store-item span {
+  display: block;
+}
+
+.student-profile-store-item span {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.student-profile-store-empty {
+  margin: 0 0 10px;
+  opacity: 0.8;
+}
+
+.student-profile-store-history {
+  margin-top: 8px;
 }
 
 .student-toast-confirm {
@@ -25648,5 +26009,328 @@ body:has(.student-app-shell) {
 
   .coach-gpt-dock {
     margin: 10px;
+  }
+}
+
+.student-club-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.student-club-tabs button {
+  border: 1px solid var(--app-border);
+  background: var(--app-fill);
+  color: var(--app-text);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.student-club-tabs button.is-on {
+  background: #f2b461;
+  color: #1a1208;
+  border-color: transparent;
+}
+
+.student-club-tabs.is-metrics button {
+  font-size: 10px;
+}
+
+.student-club-hint {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.student-club-ranking-list {
+  display: grid;
+  gap: 6px;
+}
+
+.student-club-ranking-list.is-compact {
+  margin-top: 4px;
+}
+
+.student-club-ranking-list small {
+  color: var(--app-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.student-club-rank-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--app-fill);
+}
+
+.student-club-rank-row.is-me {
+  background: rgba(242, 180, 97, 0.16);
+  border: 1px solid rgba(242, 180, 97, 0.35);
+}
+
+.student-club-rank-row span {
+  color: #f2b461;
+  font-weight: 900;
+}
+
+.student-club-rank-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-club-rank-row em {
+  color: var(--app-muted);
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.student-club-achievement-grid,
+.student-activity-achievement-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.student-club-achievement-item,
+.student-activity-achievement-grid article {
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: var(--app-fill);
+}
+
+.student-club-achievement-item.is-earned,
+.student-activity-achievement-grid article.is-earned {
+  border-color: rgba(242, 180, 97, 0.35);
+  background: rgba(242, 180, 97, 0.08);
+}
+
+.student-club-achievement-item strong,
+.student-activity-achievement-grid strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.student-club-achievement-item p,
+.student-activity-achievement-grid p {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.student-club-achievement-pending,
+.student-activity-achievement-pending {
+  display: grid;
+  gap: 8px;
+}
+
+.student-club-achievement-pending > div p,
+.student-activity-achievement-pending > div p {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: 12px;
+}
+
+.student-club-achievement-pending b,
+.student-activity-achievement-pending b {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--app-border);
+  overflow: hidden;
+}
+
+.student-club-achievement-pending i,
+.student-activity-achievement-pending i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #f2b461, #df663c);
+}
+
+.student-activity-evolution,
+.student-activity-achievements {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  background: var(--app-panel);
+  display: grid;
+  gap: 12px;
+}
+
+.student-activity-evolution header,
+.student-activity-achievements header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.student-activity-evolution header small,
+.student-activity-achievements header small {
+  display: block;
+  color: var(--app-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.student-activity-evolution header h3,
+.student-activity-achievements header h3 {
+  margin: 2px 0 0;
+  font-size: 18px;
+}
+
+.student-activity-evolution-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.student-activity-evolution-tabs button {
+  border: 1px solid var(--app-border);
+  background: var(--app-fill);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.student-activity-evolution-tabs button.is-on {
+  background: #f2b461;
+  color: #1a1208;
+  border-color: transparent;
+}
+
+.student-activity-evolution-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.student-activity-evolution-metrics button {
+  border: 1px solid var(--app-border);
+  background: var(--app-fill);
+  border-radius: 14px;
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  text-align: left;
+}
+
+.student-activity-evolution-metrics button.is-on {
+  border-color: rgba(242, 180, 97, 0.45);
+  background: rgba(242, 180, 97, 0.1);
+}
+
+.student-activity-evolution-metrics button span {
+  font-size: 11px;
+  color: var(--app-muted);
+  font-weight: 700;
+}
+
+.student-activity-evolution-metrics button strong {
+  font-size: 13px;
+}
+
+.student-activity-evolution-bars {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(28px, 1fr));
+  gap: 8px;
+  align-items: end;
+  min-height: 120px;
+}
+
+.student-activity-evolution-bars em {
+  grid-column: 1 / -1;
+  color: var(--app-muted);
+  font-style: normal;
+  font-size: 12px;
+}
+
+.student-activity-evolution-bars > div {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  align-content: end;
+  min-height: 120px;
+}
+
+.student-activity-evolution-bars i {
+  display: block;
+  width: 100%;
+  max-width: 28px;
+  border-radius: 8px 8px 4px 4px;
+  background: linear-gradient(180deg, #f2b461, #df663c);
+}
+
+.student-activity-evolution-bars small {
+  font-size: 10px;
+  color: var(--app-muted);
+  text-align: center;
+}
+
+.student-activity-evolution-foot {
+  display: grid;
+  gap: 8px;
+}
+
+.student-activity-evolution-foot p {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+
+.student-activity-evolution-extra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+
+.student-activity-evolution-extra span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.student-activity-evolution-error,
+.student-activity-evolution-empty {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+
+.student-activity-achievement-grid article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.student-activity-achievement-pending strong {
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .student-activity-evolution-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

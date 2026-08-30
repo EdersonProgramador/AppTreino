@@ -153,6 +153,7 @@ import type {
   OrderRow,
   CouponRow,
   RatingRow,
+  ShippingZoneRow,
   SupportTicketRow,
   UploadResponse,
   WorkoutRow
@@ -490,6 +491,8 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   const [aiPlans, setAiPlans] = useState<AiWorkoutPlanRow[]>([]);
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [editingProduct, setEditingProduct] = useState<ProductRow | null>(null);
+  const [shippingZones, setShippingZones] = useState<ShippingZoneRow[]>([]);
+  const [editingShippingZone, setEditingShippingZone] = useState<ShippingZoneRow | null>(null);
   const [purchases, setPurchases] = useState<PurchaseRow[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [coupons, setCoupons] = useState<CouponRow[]>([]);
@@ -892,8 +895,14 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         break;
       }
       case "products": {
-        const response = await apiGet<{ products: ProductRow[] }>("/admin/products", token);
-        setProducts(response.products);
+        const [productsResponse, zonesResponse, settingsResponse] = await Promise.all([
+          apiGet<{ products: ProductRow[] }>("/admin/products", token),
+          apiGet<{ zones: ShippingZoneRow[] }>("/admin/shipping/zones", token).catch(() => ({ zones: [] as ShippingZoneRow[] })),
+          apiGet<{ settings: Record<string, string> }>("/admin/settings", token).catch(() => ({ settings: {} as Record<string, string> }))
+        ]);
+        setProducts(productsResponse.products);
+        setShippingZones(zonesResponse.zones);
+        setSystemSettings((current) => ({ ...current, ...settingsResponse.settings }));
         break;
       }
       case "purchases": {
@@ -2657,6 +2666,9 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         : shippingRaw === "DELIVERY"
           ? ("DELIVERY" as const)
           : ("PICKUP" as const);
+    const shippingFeeRaw = String(data.get("shippingFee") ?? "").trim();
+    const shippingFeeInCents =
+      shippingFeeRaw === "" ? null : parseBRLMoneyToCents(shippingFeeRaw);
     const payload = {
       name: String(data.get("name") ?? ""),
       description: String(data.get("description") ?? ""),
@@ -2664,6 +2676,13 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       imageUrl: String(data.get("imageUrl") ?? "") || "",
       kind,
       shippingMethod,
+      allowsPickup: data.get("allowsPickup") === "on",
+      allowsDelivery: data.get("allowsDelivery") === "on",
+      shippingFeeInCents,
+      weightGrams: Math.max(1, Math.round(Number(data.get("weightGrams") ?? 300))),
+      lengthCm: Math.max(1, Math.round(Number(data.get("lengthCm") ?? 20))),
+      widthCm: Math.max(1, Math.round(Number(data.get("widthCm") ?? 15))),
+      heightCm: Math.max(1, Math.round(Number(data.get("heightCm") ?? 10))),
       stock: stockRaw === "" ? null : Math.max(0, Math.round(Number(stockRaw))),
       priceInCents
     };
@@ -2710,6 +2729,65 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
 
   function handleCancelProductEdit() {
     setEditingProduct(null);
+  }
+
+  async function handleSaveCommerceShippingSettings() {
+    try {
+      await apiPut(
+        "/admin/settings",
+        {
+          commerce_delivery_fee_cents: systemSettings["commerce_delivery_fee_cents"] ?? "1500",
+          commerce_origin_postal_code: systemSettings["commerce_origin_postal_code"] ?? "01310100",
+          commerce_shipping_provider: systemSettings["commerce_shipping_provider"] ?? "auto"
+        },
+        token
+      );
+      await applyAdminChange(["products"], "Configurações de frete salvas.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível salvar as configurações de frete."));
+    }
+  }
+
+  async function handleSaveShippingZone(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const feeInCents = parseBRLMoneyToCents(String(data.get("fee") ?? ""));
+    if (feeInCents == null || feeInCents < 0) {
+      setFeedback("Informe uma taxa de frete válida.");
+      return;
+    }
+    const payload = {
+      name: String(data.get("name") ?? ""),
+      stateCode: String(data.get("stateCode") ?? "").trim().toUpperCase() || null,
+      postalFrom: String(data.get("postalFrom") ?? "").replace(/\D/g, "") || null,
+      postalTo: String(data.get("postalTo") ?? "").replace(/\D/g, "") || null,
+      feeInCents,
+      priority: Math.max(0, Math.round(Number(data.get("priority") ?? 0))),
+      isActive: data.get("isActive") !== "false"
+    };
+    try {
+      if (editingShippingZone) {
+        await apiPut(`/admin/shipping/zones/${editingShippingZone.id}`, payload, token);
+        setEditingShippingZone(null);
+      } else {
+        await apiPost("/admin/shipping/zones", payload, token);
+      }
+      form.reset();
+      await applyAdminChange(["products"], "Faixa de frete salva.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível salvar a faixa de frete."));
+    }
+  }
+
+  async function handleDeleteShippingZone(zoneId: string) {
+    try {
+      await apiDelete(`/admin/shipping/zones/${zoneId}`, token);
+      if (editingShippingZone?.id === zoneId) setEditingShippingZone(null);
+      await applyAdminChange(["products"], "Faixa de frete removida.");
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível remover a faixa de frete."));
+    }
   }
 
   async function handleUpdateProductStatus(productId: string, isActive: boolean) {
@@ -2868,6 +2946,14 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   function setSystemSettingValue(key: string, value: string) {
     setSystemSettings((previous) => ({ ...previous, [key]: value }));
   }
+
+  const socialSettingRows = [
+    { key: "module_social_publicar", label: "Publicar", description: "Posts com foto, vídeo ou legenda no feed." },
+    { key: "module_social_momentos", label: "Momentos", description: "Stories de 24h e galeria de momentos." },
+    { key: "module_social_clipes", label: "Clipes", description: "Seção de clipes verticais (reels)." },
+    { key: "module_social_live", label: "Ao vivo", description: "Transmissões ao vivo e lives salvas." },
+    { key: "module_social_nota", label: "Nota", description: "Publicações somente de texto pelo atalho Nota." }
+  ];
 
   const moduleSettingRows = [
     { key: "module_products", label: "Catálogo / Vitrine", description: "Produtos físicos e digitais na loja do aluno." },
@@ -6726,6 +6812,66 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               placeholder="Descrição curta"
               defaultValue={editingProduct?.description ?? ""}
             />
+            <div className="commerce-product-shipping-grid">
+              <label className="admin-checkbox-field">
+                <input
+                  type="checkbox"
+                  name="allowsPickup"
+                  defaultChecked={editingProduct?.allowsPickup ?? true}
+                />
+                Permite retirada
+              </label>
+              <label className="admin-checkbox-field">
+                <input
+                  type="checkbox"
+                  name="allowsDelivery"
+                  defaultChecked={editingProduct?.allowsDelivery ?? true}
+                />
+                Permite entrega
+              </label>
+              <input
+                name="shippingFee"
+                type="text"
+                inputMode="decimal"
+                placeholder="Frete fixo do item (vazio = padrão)"
+                defaultValue={
+                  editingProduct?.shippingFeeInCents != null
+                    ? (editingProduct.shippingFeeInCents / 100).toLocaleString("pt-BR", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })
+                    : ""
+                }
+              />
+              <input
+                name="weightGrams"
+                type="number"
+                min="1"
+                placeholder="Peso (g)"
+                defaultValue={editingProduct?.weightGrams ?? 300}
+              />
+              <input
+                name="lengthCm"
+                type="number"
+                min="1"
+                placeholder="Comp. (cm)"
+                defaultValue={editingProduct?.lengthCm ?? 20}
+              />
+              <input
+                name="widthCm"
+                type="number"
+                min="1"
+                placeholder="Larg. (cm)"
+                defaultValue={editingProduct?.widthCm ?? 15}
+              />
+              <input
+                name="heightCm"
+                type="number"
+                min="1"
+                placeholder="Alt. (cm)"
+                defaultValue={editingProduct?.heightCm ?? 10}
+              />
+            </div>
             <button className="primary-button" type="submit">
               <Save size={18} />
               {editingProduct ? "Salvar alterações" : "Cadastrar produto"}
@@ -6736,6 +6882,150 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               </button>
             )}
           </form>
+        </article>
+        <article className="table-panel finance-panel">
+          <div className={panelTitleClass}>
+            <div>
+              <h2>Frete da vitrine</h2>
+              <p>Taxa padrão, CEP de origem e integração Melhor Envio/Correios.</p>
+            </div>
+            <span>Entrega</span>
+          </div>
+          <div className={`${crudFormClass} commerce-shipping-settings`}>
+            <label className="student-field-label">
+              Taxa padrão de entrega (centavos)
+              <input
+                type="number"
+                min="0"
+                value={systemSettings["commerce_delivery_fee_cents"] ?? "1500"}
+                onChange={(event) => setSystemSettingValue("commerce_delivery_fee_cents", event.target.value)}
+              />
+            </label>
+            <label className="student-field-label">
+              CEP de origem
+              <input
+                value={systemSettings["commerce_origin_postal_code"] ?? "01310100"}
+                onChange={(event) =>
+                  setSystemSettingValue("commerce_origin_postal_code", event.target.value.replace(/\D/g, ""))
+                }
+                placeholder="01310100"
+              />
+            </label>
+            <label className="student-field-label">
+              Provedor de frete
+              <select
+                value={systemSettings["commerce_shipping_provider"] ?? "auto"}
+                onChange={(event) => setSystemSettingValue("commerce_shipping_provider", event.target.value)}
+              >
+                <option value="auto">Automático (Melhor Envio + faixas + taxa fixa)</option>
+                <option value="melhor_envio">Somente Melhor Envio</option>
+                <option value="zones">Somente faixas regionais</option>
+                <option value="flat">Somente taxa fixa</option>
+              </select>
+            </label>
+            <button type="button" className="primary-button" onClick={() => void handleSaveCommerceShippingSettings()}>
+              <Save size={18} />
+              Salvar frete
+            </button>
+          </div>
+          <div className={panelTitleClass}>
+            <div>
+              <h3>{editingShippingZone ? "Editar faixa" : "Nova faixa por região/CEP"}</h3>
+              <p>Use UF ou intervalo de CEP quando Melhor Envio não estiver disponível.</p>
+            </div>
+            <span>{shippingZones.length}</span>
+          </div>
+          <form
+            key={editingShippingZone?.id ?? "new-shipping-zone"}
+            className={`${crudFormClass} commerce-shipping-zone-form`}
+            onSubmit={handleSaveShippingZone}
+          >
+            <input name="name" placeholder="Nome da faixa" defaultValue={editingShippingZone?.name ?? ""} required />
+            <input
+              name="stateCode"
+              placeholder="UF (opcional)"
+              maxLength={2}
+              defaultValue={editingShippingZone?.stateCode ?? ""}
+            />
+            <input name="postalFrom" placeholder="CEP inicial" defaultValue={editingShippingZone?.postalFrom ?? ""} />
+            <input name="postalTo" placeholder="CEP final" defaultValue={editingShippingZone?.postalTo ?? ""} />
+            <input
+              name="fee"
+              type="text"
+              inputMode="decimal"
+              placeholder="Taxa (ex.: 19,90)"
+              defaultValue={
+                editingShippingZone
+                  ? (editingShippingZone.feeInCents / 100).toLocaleString("pt-BR", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2
+                    })
+                  : ""
+              }
+              required
+            />
+            <input
+              name="priority"
+              type="number"
+              min="0"
+              placeholder="Prioridade"
+              defaultValue={editingShippingZone?.priority ?? 0}
+            />
+            <select name="isActive" defaultValue={editingShippingZone?.isActive === false ? "false" : "true"}>
+              <option value="true">Ativa</option>
+              <option value="false">Inativa</option>
+            </select>
+            <button className="primary-button" type="submit">
+              <Save size={18} />
+              {editingShippingZone ? "Salvar faixa" : "Cadastrar faixa"}
+            </button>
+            {editingShippingZone ? (
+              <button type="button" className="outline-button" onClick={() => setEditingShippingZone(null)}>
+                Cancelar edição
+              </button>
+            ) : null}
+          </form>
+          {shippingZones.length > 0 ? (
+            shippingZones.map((zone) => (
+              <div className={`${dataRowClass} commerce-shipping-zone-row`} key={zone.id}>
+                <span>
+                  <strong>{zone.name}</strong>
+                  {zone.stateCode ? ` · ${zone.stateCode}` : ""}
+                  {zone.postalFrom || zone.postalTo
+                    ? ` · CEP ${zone.postalFrom ?? "..."}–${zone.postalTo ?? "..."}`
+                    : ""}
+                  {" · "}
+                  {formatPriceInBRL(zone.feeInCents)} · prioridade {zone.priority}
+                </span>
+                <div className="cms-row-actions cms-row-actions-danger">
+                  <button type="button" className={editActionButtonClass} onClick={() => setEditingShippingZone(zone)}>
+                    <Pencil size={17} />
+                  </button>
+                  <button
+                    type="button"
+                    className={deleteActionButtonClass}
+                    onClick={() => void handleDeleteShippingZone(zone.id)}
+                  >
+                    <Trash2 size={17} />
+                  </button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="dash-empty">
+              <MapPin size={18} />
+              Nenhuma faixa regional cadastrada.
+            </div>
+          )}
+        </article>
+        <article className="table-panel finance-panel">
+          <div className={panelTitleClass}>
+            <div>
+              <h2>Produtos cadastrados</h2>
+              <p>Itens publicados na vitrine do aluno.</p>
+            </div>
+            <span>{products.length}</span>
+          </div>
           {products.length > 0 ? (
             visibleProducts.map((product) => (
               <div className={`${dataRowClass} commerce-product-row`} key={product.id}>
@@ -7767,6 +8057,40 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           >
             <Save size={18} />
             Salvar configurações dos módulos
+          </button>
+        </article>
+        <article className="table-panel">
+          <div className={panelTitleClass}>
+            <div>
+              <h2>Rede social</h2>
+              <p>Controle o que os alunos podem criar no feed e nas seções sociais.</p>
+            </div>
+            <span>
+              {socialSettingRows.filter((item) => systemSettings[item.key] !== "false").length} ativos
+            </span>
+          </div>
+          {socialSettingRows.map((module) => (
+            <div className={dataRowClass} key={module.key}>
+              <span>
+                <strong>{module.label}</strong>
+                {module.description}
+              </span>
+              <select
+                aria-label={`Rede social ${module.label}`}
+                value={systemSettings[module.key] ?? "true"}
+                onChange={(event) => setSystemSettingValue(module.key, event.target.value)}
+              >
+                <option value="true">Ativo</option>
+                <option value="false">Inativo</option>
+              </select>
+            </div>
+          ))}
+          <button
+            className="primary-button compact-button"
+            onClick={() => void handleSaveSettings(systemSettings)}
+          >
+            <Save size={18} />
+            Salvar configurações da rede social
           </button>
         </article>
         <article className="table-panel">

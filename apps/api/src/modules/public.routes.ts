@@ -172,7 +172,15 @@ export async function registerPublicRoutes(app: FastifyInstance) {
       "module_favorites",
       "module_ratings",
       "module_contact",
-      "module_ai"
+      "module_ai",
+      "module_social_publicar",
+      "module_social_momentos",
+      "module_social_clipes",
+      "module_social_live",
+      "module_social_nota",
+      "commerce_delivery_fee_cents",
+      "commerce_origin_postal_code",
+      "commerce_shipping_provider"
     ];
 
     const records = await prisma.systemSetting.findMany({
@@ -368,5 +376,98 @@ export async function registerPublicRoutes(app: FastifyInstance) {
       .header("Cache-Control", "public, max-age=120")
       .type("text/html; charset=utf-8")
       .send(html);
+  });
+
+  app.get("/public/melhor-envio/callback", async (request, reply) => {
+    const query = z
+      .object({
+        code: z.string().optional(),
+        error: z.string().optional(),
+        error_description: z.string().optional(),
+        scope: z.string().optional()
+      })
+      .parse(request.query ?? {});
+
+    const apiBase = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+    const sandbox = env.MELHOR_ENVIO_SANDBOX !== false;
+    const tokenUrl = sandbox
+      ? "https://sandbox.melhorenvio.com.br/oauth/token"
+      : "https://melhorenvio.com.br/oauth/token";
+
+    if (query.error) {
+      const html = `<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"/><title>Melhor Envio — erro</title></head>
+<body style="font-family:system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 16px;line-height:1.5">
+  <h1>Autorização não concluída</h1>
+  <p><strong>Erro:</strong> ${escapeHtml(query.error)}</p>
+  ${query.error_description ? `<p>${escapeHtml(query.error_description)}</p>` : ""}
+  <p>Tente autorizar de novo pelo painel Melhor Envio.</p>
+</body></html>`;
+      return reply.type("text/html; charset=utf-8").send(html);
+    }
+
+    if (!query.code?.trim()) {
+      const html = `<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"/><title>Melhor Envio — sem código</title></head>
+<body style="font-family:system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 16px;line-height:1.5">
+  <h1>Código não recebido</h1>
+  <p>A URL chegou sem o parâmetro <code>code</code>. Isso costuma acontecer quando o redirect cadastrado no Melhor Envio não aponta para esta rota.</p>
+  <p>Cadastre no app Melhor Envio esta URL exata de redirect:</p>
+  <pre style="background:#f4f4f4;padding:12px;border-radius:8px;overflow:auto">${escapeHtml(`${apiBase}/public/melhor-envio/callback`)}</pre>
+  <p>Depois abra novamente o link de autorização OAuth com o mesmo <code>redirect_uri</code>.</p>
+</body></html>`;
+      return reply.type("text/html; charset=utf-8").send(html);
+    }
+
+    const code = query.code.trim();
+    const redirectUri = `${apiBase}/public/melhor-envio/callback`;
+    const html = `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <title>Melhor Envio — código recebido</title>
+  <style>
+    body{font-family:system-ui,sans-serif;max-width:720px;margin:40px auto;padding:0 16px;line-height:1.5;color:#111}
+    code,pre{background:#f4f4f4;border-radius:8px}
+    pre{padding:12px;overflow:auto;word-break:break-all}
+    .ok{color:#0a7a2f;font-weight:700}
+    ol{padding-left:20px}
+  </style>
+</head>
+<body>
+  <h1 class="ok">Código recebido com sucesso</h1>
+  <p>Copie o código abaixo e troque pelo <strong>access_token</strong> (não use o Client Secret no .env).</p>
+  <pre id="melhor-code">${escapeHtml(code)}</pre>
+  <p><strong>redirect_uri</strong> usado neste fluxo:</p>
+  <pre>${escapeHtml(redirectUri)}</pre>
+  <h2>PowerShell</h2>
+  <pre>Invoke-RestMethod \`
+  -Uri "${escapeHtml(tokenUrl)}" \`
+  -Method POST \`
+  -ContentType "application/json" \`
+  -Headers @{
+    Accept = "application/json"
+    "User-Agent" = "App Treino (seu-email@exemplo.com)"
+  } \`
+  -Body (@{
+    grant_type = "authorization_code"
+    client_id = "SEU_CLIENT_ID"
+    client_secret = "SEU_CLIENT_SECRET"
+    redirect_uri = "${escapeHtml(redirectUri)}"
+    code = "${escapeHtml(code)}"
+  } | ConvertTo-Json)</pre>
+  <h2>No .env da API</h2>
+  <ol>
+    <li>Cole o <code>access_token</code> (JWT longo, começa com <code>eyJ</code>) em <code>MELHOR_ENVIO_TOKEN</code></li>
+    <li>Mantenha <code>MELHOR_ENVIO_SANDBOX="${sandbox ? "true" : "false"}"</code></li>
+    <li>Reinicie a API</li>
+  </ol>
+  ${query.scope ? `<p><small>Escopos: ${escapeHtml(query.scope)}</small></p>` : ""}
+</body>
+</html>`;
+
+    return reply.header("Cache-Control", "no-store").type("text/html; charset=utf-8").send(html);
   });
 }

@@ -70,8 +70,12 @@ import { labelProductKind, labelPurchaseStatus, labelOrderStatus, labelShippingM
 import { labelLocationType, studentLocationLabel } from "../../lib/locations";
 import { sessionLabelFromBlock, trainingCopy } from "../../lib/training-copy";
 import { brand } from "../../lib/brand";
+import { hasAnySocialCreateOption, moduleEnabled, socialModuleDefaultEnabled, socialModulesFromConfig, SOCIAL_MODULE_KEYS } from "../../lib/module-config";
 import { isSandboxCheckoutEnabled } from "../../lib/sandbox-checkout";
 import { StudentAthleteProfileSection } from "./StudentAthleteProfileSection";
+import { StudentStoreSection } from "./StudentStoreSection";
+import { StudentProfileStorePanel } from "./StudentProfileStorePanel";
+import { type StoreTab } from "../../lib/store-commerce";
 import { StudentPeerProfileSection } from "./StudentPeerProfileSection";
 import { RunnerIcon } from "../shared/RunnerIcon";
 import { AnimatedList } from "../shared/AnimatedList";
@@ -127,6 +131,8 @@ import { StudentClubSection } from "./StudentClubSection";
 import { StudentActivitySection } from "./StudentActivitySection";
 import { StudentWeatherChip } from "./StudentWeatherChip";
 import { StudentPerformanceCharts } from "./StudentPerformanceCharts";
+import { StudentActivityEvolutionCharts } from "./StudentActivityEvolutionCharts";
+import { StudentActivityAchievementsPanel } from "./StudentActivityAchievementsPanel";
 import { StudentStreakMonthGrid } from "./StudentStreakDayIcons";
 import { StudentDailyMotivation } from "./StudentDailyMotivation";
 import { StudentAiCoachChat } from "./StudentAiCoachChat";
@@ -225,6 +231,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [aiPlans, setAiPlans] = useState<AiWorkoutPlanRow[]>([]);
   const [aiBusy, setAiBusy] = useState(false);
   const [publicConfig, setPublicConfig] = useState<Record<string, string>>({});
+  const socialModules = useMemo(() => socialModulesFromConfig(publicConfig), [publicConfig]);
+  const canCreateSocial = useMemo(() => hasAnySocialCreateOption(publicConfig), [publicConfig]);
   const [showStudentQr, setShowStudentQr] = useState(false);
   const [studentPaymentCards, setStudentPaymentCards] = useState<PaymentCardRow[]>([]);
   const [showAddCardForm, setShowAddCardForm] = useState(false);
@@ -257,6 +265,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [cartQtyBusyId, setCartQtyBusyId] = useState<string | null>(null);
   const [purchasingProductId, setPurchasingProductId] = useState<string | null>(null);
   const [purchaseConfirmId, setPurchaseConfirmId] = useState<string | null>(null);
+  const [storeTab, setStoreTab] = useState<StoreTab>("catalog");
+  const [storePaymentNotice, setStorePaymentNotice] = useState<string | null>(null);
   const purchaseConfirmTimer = useRef<number | null>(null);
   const [studentWorkoutFavorites, setStudentWorkoutFavorites] = useState<StudentFavoriteRow[]>([]);
   const [ratingDraft, setRatingDraft] = useState<Record<string, { score: number; comment: string }>>({});
@@ -699,7 +709,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   };
 
   const goToSection = (section: StudentPanelSection) => {
-    const nextSection = section === "favorites" ? "ratings" : section === "home" ? "feed" : section;
+    let nextSection = section === "favorites" ? "ratings" : section === "home" ? "feed" : section;
+    if (nextSection === "reels" && !socialModules.clipes) nextSection = "feed";
+    if (nextSection === "live" && !socialModules.live) nextSection = "feed";
+    if (nextSection === "cart") {
+      setStoreTab("cart");
+      nextSection = "products";
+    }
+    if (nextSection === "orders" || nextSection === "purchases") {
+      setStoreTab("orders");
+      nextSection = "products";
+    }
     if (studentSection === "player" && nextSection !== "player") {
       // Sair sem concluir = reset do treino do dia.
       void (async () => {
@@ -722,6 +742,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     setStudentSection(nextSection);
   };
 
+  const openStore = (tab: StoreTab = "catalog") => {
+    setStoreTab(tab);
+    goToSection("products");
+  };
+
   const openDmWithPeer = (userId: string) => {
     setMessagePeerId(userId);
     goToSection("messages");
@@ -733,13 +758,26 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   };
 
   const openLiveById = (liveId: string) => {
+    if (!socialModules.live) return;
     setJoinLiveId(liveId);
     goToSection("live");
   };
 
   useEffect(() => {
     const raw = searchParams.get("section");
-    if (!raw) return;
+    const storeTabParam = searchParams.get("storeTab");
+    const paymentParam = searchParams.get("payment");
+    if (storeTabParam === "catalog" || storeTabParam === "cart" || storeTabParam === "orders") {
+      setStoreTab(storeTabParam);
+    }
+    if (paymentParam === "success") {
+      setStorePaymentNotice("Pagamento recebido. Seu pedido será atualizado em instantes.");
+      setStoreTab("orders");
+    } else if (paymentParam === "cancel") {
+      setStorePaymentNotice("Pagamento cancelado. Seu carrinho continua salvo.");
+      setStoreTab("cart");
+    }
+    if (!raw && !storeTabParam && !paymentParam) return;
     const next = (raw === "home" ? "feed" : raw === "favorites" ? "ratings" : raw) as StudentPanelSection;
     const allowed: StudentPanelSection[] = [
       "feed",
@@ -772,10 +810,31 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       "chat",
       "requests"
     ];
-    if (!allowed.includes(next) || next === studentSectionRef.current) return;
-    setStudentSection(next);
+    const resolved =
+      next === "cart" || next === "orders" || next === "purchases"
+        ? "products"
+        : storeTabParam || paymentParam
+          ? "products"
+          : next;
+    if (!allowed.includes(resolved) || resolved === studentSectionRef.current) {
+      if (storeTabParam || paymentParam) {
+        const cleaned = new URLSearchParams(searchParams);
+        cleaned.delete("section");
+        cleaned.delete("storeTab");
+        cleaned.delete("payment");
+        cleaned.delete("orderId");
+        cleaned.delete("purchaseId");
+        setSearchParams(cleaned, { replace: true });
+      }
+      return;
+    }
+    setStudentSection(resolved);
     const cleaned = new URLSearchParams(searchParams);
     cleaned.delete("section");
+    cleaned.delete("storeTab");
+    cleaned.delete("payment");
+    cleaned.delete("orderId");
+    cleaned.delete("purchaseId");
     setSearchParams(cleaned, { replace: true });
   }, [searchParams, setSearchParams]);
 
@@ -2440,7 +2499,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         </div>
 
         <div className="student-header-actions">
-          {isFeedFamilySection && (
+          {isFeedFamilySection && canCreateSocial && (
             <>
               <button
                 type="button"
@@ -2494,15 +2553,15 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   "student-icon-button",
                   "student-cart-button",
                   "has-items",
-                  studentSection === "cart" ? "is-active" : ""
+                  studentSection === "products" && storeTab === "cart" ? "is-active" : ""
                 ]
                   .filter(Boolean)
                   .join(" ")}
                 aria-label={`Carrinho com ${studentCart!.itemCount} ${studentCart!.itemCount === 1 ? "item" : "itens"}`}
-                aria-current={studentSection === "cart" ? "page" : undefined}
+                aria-current={studentSection === "products" && storeTab === "cart" ? "page" : undefined}
                 onClick={() => {
                   setNotificationsOpen(false);
-                  goToSection("cart");
+                  openStore("cart");
                 }}
               >
                 <ShoppingCart size={22} strokeWidth={2.25} />
@@ -2654,12 +2713,19 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                     { label: "Desafios", icon: Trophy, action: () => goToSection("club") },
                     { label: "Menu completo", icon: Menu, action: () => goToSection("menu") },
                     { label: "Meu Perfil", icon: UserRound, action: () => goToSection("profile") },
-                    { label: "Clipes", icon: Video, action: () => goToSection("reels") },
-                    { label: "Ao vivo", icon: Radio, action: () => goToSection("live") },
+                    { label: "Clipes", icon: Video, action: () => goToSection("reels"), moduleKey: SOCIAL_MODULE_KEYS.clipes },
+                    { label: "Ao vivo", icon: Radio, action: () => goToSection("live"), moduleKey: SOCIAL_MODULE_KEYS.live },
                     { label: "Mensagens", icon: MessageCircle, action: () => goToSection("messages") },
                     { label: "Pedidos", icon: UserPlus, action: () => goToSection("requests") }
-                  ] as const
-                ).map((item) => (
+                  ] as Array<{
+                    label: string;
+                    icon: typeof Home;
+                    action: () => void;
+                    moduleKey?: string;
+                  }>
+                )
+                  .filter((item) => !item.moduleKey || moduleEnabled(publicConfig, item.moduleKey, socialModuleDefaultEnabled(item.moduleKey)))
+                  .map((item) => (
                   <button
                     key={item.label}
                     type="button"
@@ -2712,6 +2778,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         {(studentSection === "home" || studentSection === "feed") && token && (
           <StudentFeedSection
             token={token}
+            publicConfig={publicConfig}
             onNavigate={(section) => goToSection(section === "chat" ? "messages" : section)}
             onOpenDm={openDmWithPeer}
             onOpenPeerProfile={openPeerProfile}
@@ -2719,10 +2786,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           />
         )}
 
-        {studentSection === "reels" && token && (
+        {studentSection === "reels" && token && socialModules.clipes && (
           <StudentReelsSection token={token} onOpenDm={openDmWithPeer} onOpenPeerProfile={openPeerProfile} />
         )}
-        {studentSection === "live" && token && (
+        {studentSection === "live" && token && socialModules.live && (
           <StudentLiveSection
             token={token}
             initialLiveId={joinLiveId}
@@ -3462,324 +3529,24 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           </section>
         )}
 
-        {studentSection === "products" && publicConfig["module_products"] !== "false" && (
-          <section className="student-sheet">
-            <div className="student-sheet-heading">
-              <span>Loja da academia</span>
-              <h1>Vitrine online</h1>
-              <p>
-                {studentProducts.length} produto(s) · peça e retire na unidade ou receba o digital após confirmação
-              </p>
-            </div>
-            {purchaseConfirmId && (
-              <div className="student-toast-confirm" role="status">
-                <Check size={18} />
-                Pedido criado — abrindo pagamento…
-              </div>
-            )}
-            {studentProducts.length > 0 ? (
-              <div className="student-products-grid">
-                {studentProducts.map((product) => (
-                  <article className="student-product-card" key={product.id}>
-                    <div className="student-product-media">
-                      {product.imageUrl ? (
-                        <img src={mediaUrl(product.imageUrl)} alt={product.name} />
-                      ) : (
-                        <div className="student-product-fallback" aria-hidden="true">
-                          <Package size={30} />
-                        </div>
-                      )}
-                    </div>
-                    <div className="student-product-body">
-                      <small>
-                        {product.category ? `${product.category} · ` : ""}
-                        {labelProductKind(product.kind)}
-                        {product.shippingMethod
-                          ? ` · ${labelShippingMethod(product.shippingMethod)}`
-                          : product.kind === "DIGITAL"
-                            ? ` · ${labelShippingMethod("DIGITAL")}`
-                            : ` · ${labelShippingMethod("PICKUP")}`}
-                      </small>
-                      <strong className="student-product-name">{product.name}</strong>
-                      {product.description ? (
-                        <span className="student-product-desc">{product.description}</span>
-                      ) : null}
-                      <strong className="student-product-price">{formatPriceInBRL(product.priceInCents)}</strong>
-                      <div className="student-product-actions">
-                        <button
-                          className="student-green-button"
-                          type="button"
-                          disabled={Boolean(product.outOfStock) || purchasingProductId === product.id}
-                          onClick={() => void handleAddToCart(product.id)}
-                        >
-                          {purchasingProductId === product.id ? "Adicionando…" : "Adicionar ao carrinho"}
-                        </button>
-                        <button
-                          className="student-green-button"
-                          type="button"
-                          disabled={
-                            Boolean(product.purchasedByMe) ||
-                            Boolean(product.outOfStock) ||
-                            purchasingProductId === product.id
-                          }
-                          onClick={() => void handleBuyProduct(product.id)}
-                        >
-                          {product.outOfStock
-                            ? "Sem estoque"
-                            : product.purchasedByMe
-                              ? product.kind === "DIGITAL"
-                                ? "Já adquirido"
-                                : "Pedido em andamento"
-                              : purchasingProductId === product.id
-                                ? "Abrindo pagamento…"
-                                : "Comprar agora"}
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <article className="student-empty-state">
-                <Package size={34} />
-                <strong>Nenhum produto na vitrine</strong>
-                <span>Quando a academia publicar itens, eles aparecerão aqui.</span>
-              </article>
-            )}
-          </section>
-        )}
-
-        {studentSection === "cart" && publicConfig["module_products"] !== "false" && (
-          <section className="student-sheet">
-            <div className="student-sheet-heading">
-              <span>Loja</span>
-              <h1>Carrinho</h1>
-              <p>
-                {(studentCart?.itemCount ?? 0) > 0
-                  ? `${studentCart!.itemCount} item(ns) salvos · finalize quando quiser`
-                  : "Seus itens ficam salvos enquanto você navega"}
-              </p>
-            </div>
-            {(studentCart?.items?.length ?? 0) > 0 ? (
-              <>
-                {studentCart!.items.map((item) => {
-                  const stockLimit = item.product.stock;
-                  const atStockLimit = stockLimit != null && item.quantity >= stockLimit;
-                  const qtyBusy = cartQtyBusyId === item.productId;
-                  return (
-                  <article className="student-info-card" key={item.id}>
-                    {item.product.imageUrl ? (
-                      <img
-                        className="student-card-image"
-                        src={mediaUrl(item.product.imageUrl)}
-                        alt={item.product.name}
-                      />
-                    ) : (
-                      <div className="student-card-icon" aria-hidden="true">
-                        <Package size={22} />
-                      </div>
-                    )}
-                    <div>
-                      <strong>{item.product.name}</strong>
-                      <span>{formatPriceInBRL(item.lineTotalInCents)}</span>
-                      {stockLimit != null && item.quantity >= stockLimit ? (
-                        <span className="student-cart-stock-hint">😅 Estoque esgotado para este item</span>
-                      ) : null}
-                      <div className="student-cart-item-actions">
-                        <div className="student-cart-qty" role="group" aria-label={`Quantidade de ${item.product.name}`}>
-                          <button
-                            type="button"
-                            className="student-cart-qty-btn"
-                            aria-label="Diminuir quantidade"
-                            disabled={cartCheckingOut || qtyBusy}
-                            onClick={() => void handleCartQuantity(item.productId, item.quantity - 1)}
-                          >
-                            <Minus size={16} />
-                          </button>
-                          <strong className="student-cart-qty-value">{item.quantity}</strong>
-                          <button
-                            type="button"
-                            className="student-cart-qty-btn"
-                            aria-label={
-                              atStockLimit
-                                ? "Estoque esgotado para este item"
-                                : "Aumentar quantidade"
-                            }
-                            disabled={cartCheckingOut || qtyBusy || atStockLimit}
-                            onClick={() => void handleCartQuantity(item.productId, item.quantity + 1)}
-                          >
-                            <Plus size={16} />
-                          </button>
-                        </div>
-                        <button
-                          type="button"
-                          className="student-link-button"
-                          disabled={cartCheckingOut || qtyBusy}
-                          onClick={() => void handleCartQuantity(item.productId, 0)}
-                        >
-                          Remover do carrinho
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                  );
-                })}
-                <article className="student-info-card student-cart-summary-card">
-                  <div className="student-card-icon" aria-hidden="true">
-                    <ShoppingCart size={22} />
-                  </div>
-                  <div className="student-cart-summary">
-                    <strong className="student-cart-summary-title">Resumo</strong>
-                    <div className="student-cart-summary-lines">
-                      <span>Subtotal {formatPriceInBRL(studentCart!.subtotalInCents)}</span>
-                      {studentCart!.discountInCents > 0 && (
-                        <span>Desconto −{formatPriceInBRL(studentCart!.discountInCents)}</span>
-                      )}
-                      <span>Frete {formatPriceInBRL(studentCart!.shippingInCents)}</span>
-                    </div>
-                    <strong className="student-product-price student-cart-summary-total">
-                      {formatPriceInBRL(studentCart!.amountInCents)}
-                    </strong>
-                    <div className="student-cart-summary-actions">
-                      <label className="student-field-label">
-                        Cupom
-                        <input
-                          value={cartCouponInput}
-                          onChange={(event) => setCartCouponInput(event.target.value)}
-                          placeholder="Código"
-                        />
-                      </label>
-                      <button type="button" className="student-green-button" onClick={() => void handleApplyCartCoupon()}>
-                        Aplicar cupom de desconto
-                      </button>
-                      <div className="student-field-label student-cart-shipping">
-                        Entrega
-                        <strong>{labelShippingMethod(cartShippingMethod)}</strong>
-                        <span className="student-muted-hint">Definida pelo admin no produto</span>
-                      </div>
-                      {cartShippingMethod === "DELIVERY" && (
-                        <label className="student-field-label">
-                          Endereço
-                          <input
-                            value={cartAddress}
-                            onChange={(event) => setCartAddress(event.target.value)}
-                            placeholder="Rua, número, bairro, cidade"
-                          />
-                        </label>
-                      )}
-                      <button
-                        type="button"
-                        className="student-green-button"
-                        disabled={cartCheckingOut}
-                        onClick={() => void handleCartCheckout()}
-                      >
-                        {cartCheckingOut ? "Finalizando pedido…" : "Finalizar compra"}
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              </>
-            ) : (
-              <article className="student-empty-state">
-                <ShoppingCart size={34} />
-                <strong>Carrinho vazio</strong>
-                <span>Adicione produtos na vitrine para montar o pedido.</span>
-              </article>
-            )}
-          </section>
-        )}
-
-        {studentSection === "orders" && publicConfig["module_purchases"] !== "false" && (
-          <section className="student-sheet">
-            <div className="student-sheet-heading">
-              <span>Pedidos</span>
-              <h1>Pedidos do carrinho</h1>
-              <p>{studentOrders.length} pedido(s) multi-item</p>
-            </div>
-            {studentOrders.length > 0 ? (
-              studentOrders.map((order) => (
-                <article className="student-info-card" key={order.id}>
-                  <ShoppingCart size={22} />
-                  <div>
-                    <strong>
-                      {order.items.map((item) => `${item.productName}×${item.quantity}`).join(", ")}
-                    </strong>
-                    <span>
-                      {formatPriceInBRL(order.amountInCents)} · {labelShippingMethod(order.shippingMethod)}
-                    </span>
-                    <span className={`finance-status-badge tone-${purchaseStatusTone(order.status)}`}>
-                      {labelOrderStatus(order.status)}
-                    </span>
-                    <span>{new Date(order.createdAt).toLocaleDateString("pt-BR")}</span>
-                    {order.status === "PENDING" && order.paymentUrl && (
-                      <button
-                        type="button"
-                        className="student-green-button"
-                        style={{ marginTop: 8, minHeight: 40 }}
-                        onClick={() => openAsaasCheckout(order.paymentUrl as string)}
-                      >
-                        Pagar agora
-                      </button>
-                    )}
-                  </div>
-                </article>
-              ))
-            ) : (
-              <article className="student-empty-state">
-                <ShoppingCart size={34} />
-                <strong>Nenhum pedido do carrinho</strong>
-                <span>Finalize um carrinho para ver os pedidos aqui.</span>
-              </article>
-            )}
-          </section>
-        )}
-
-        {studentSection === "purchases" && publicConfig["module_purchases"] !== "false" && (
-          <section className="student-sheet">
-            <div className="student-sheet-heading">
-              <span>Pedidos</span>
-              <h1>Minhas compras</h1>
-              <p>{studentPurchases.length} pedido(s) · status atualizado pela academia</p>
-            </div>
-            {studentPurchases.length > 0 ? (
-              studentPurchases.map((purchase) => (
-                <article className="student-info-card" key={purchase.id}>
-                  <ShoppingCart size={22} />
-                  <div>
-                    <strong>{purchase.product.name}</strong>
-                    <span>
-                      {formatPriceInBRL(purchase.amountInCents)} · {labelProductKind(purchase.product.kind)}
-                    </span>
-                    <span className={`finance-status-badge tone-${purchaseStatusTone(purchase.status)}`}>
-                      {labelPurchaseStatus(purchase.status)}
-                    </span>
-                    <span>{new Date(purchase.createdAt).toLocaleDateString("pt-BR")}</span>
-                    {purchase.status === "PENDING" && (
-                      <button
-                        type="button"
-                        className="student-green-button"
-                        style={{ marginTop: 8, minHeight: 40 }}
-                        disabled={purchasingProductId === purchase.id}
-                        onClick={() => void handlePayPurchase(purchase.id)}
-                      >
-                        {purchasingProductId === purchase.id
-                          ? "Abrindo..."
-                          : purchase.paymentUrl
-                            ? "Pagar agora"
-                            : "Gerar pagamento"}
-                      </button>
-                    )}
-                  </div>
-                </article>
-              ))
-            ) : (
-              <article className="student-empty-state">
-                <ShoppingCart size={34} />
-                <strong>Nenhum pedido ainda</strong>
-                <span>Solicite um produto na vitrine para acompanhar aqui.</span>
-              </article>
-            )}
-          </section>
+        {(studentSection === "products" ||
+          studentSection === "cart" ||
+          studentSection === "orders" ||
+          studentSection === "purchases") &&
+          (publicConfig["module_products"] !== "false" || publicConfig["module_purchases"] !== "false") && (
+          <StudentStoreSection
+            token={token!}
+            productsEnabled={publicConfig["module_products"] !== "false"}
+            purchasesEnabled={publicConfig["module_purchases"] !== "false"}
+            activeTab={storeTab}
+            onTabChange={setStoreTab}
+            onCartUpdated={(nextCart) => setStudentCart(nextCart)}
+            onFlashError={flashError}
+            onFlashSuccess={(message) => setSuccess(message)}
+            onFlashStockLimit={flashStockLimit}
+            paymentNotice={storePaymentNotice}
+            onPaymentNoticeConsumed={() => setStorePaymentNotice(null)}
+          />
         )}
 
         {studentSection === "ratings" && (
@@ -4442,6 +4209,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 .catch(() => undefined);
             }}
           >
+            <StudentProfileStorePanel
+              token={token}
+              enabled={publicConfig["module_products"] !== "false" || publicConfig["module_purchases"] !== "false"}
+              onOpenStore={openStore}
+            />
             <section className="student-athlete-offensive">
               <header>
                 <div>
@@ -4472,6 +4244,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 sportTotals={consistency?.sportTotals}
                 weeklyVolume={consistency?.weeklyVolume}
               />
+              <StudentActivityEvolutionCharts token={token} />
+              <StudentActivityAchievementsPanel token={token} />
             </section>
           </StudentAthleteProfileSection>
         )}
@@ -4813,35 +4587,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   group: "Play e loja",
                   icon: Package,
                   title: "Vitrine",
-                  action: () => goToSection("products"),
-                  favorite: true,
-                  moduleKey: "module_products"
-                },
-                {
-                  group: "Play e loja",
-                  icon: ShoppingCart,
-                  title: "Carrinho",
-                  action: () => goToSection("cart"),
-                  moduleKey: "module_products"
-                },
-                {
-                  group: "Play e loja",
-                  icon: ShoppingCart,
-                  title: "Pedidos online",
-                  action: () => goToSection("orders"),
-                  moduleKey: "module_purchases"
-                },
-                {
-                  group: "Play e loja",
-                  icon: ShoppingCart,
-                  title: "Compras rápidas",
-                  action: () => goToSection("purchases"),
-                  moduleKey: "module_purchases"
+                  action: () => openStore("catalog"),
+                  favorite: true
                 },
                 { group: "Play e loja", icon: Music2, title: "Play", action: () => goToSection("play"), favorite: true },
                 { group: "Comunidade", icon: CalendarPlus, title: "Eventos", action: () => goToSection("events") },
-                { group: "Comunidade", icon: Video, title: "Clipes", action: () => goToSection("reels"), favorite: true },
-                { group: "Comunidade", icon: Radio, title: "Ao vivo", action: () => goToSection("live") },
+                { group: "Comunidade", icon: Video, title: "Clipes", action: () => goToSection("reels"), favorite: true, moduleKey: SOCIAL_MODULE_KEYS.clipes },
+                { group: "Comunidade", icon: Radio, title: "Ao vivo", action: () => goToSection("live"), moduleKey: SOCIAL_MODULE_KEYS.live },
                 { group: "Comunidade", icon: MessageCircle, title: "Mensagens", action: () => goToSection("messages") },
                 { group: "Comunidade", icon: UserPlus, title: "Pedidos", action: () => goToSection("requests") },
                 { group: "Comunidade", icon: MapPin, title: "Unidades", action: () => goToSection("locations") },
@@ -4869,7 +4621,16 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 moduleKey?: string;
               }>
             )
-              .filter((item) => !item.moduleKey || publicConfig[item.moduleKey] !== "false")
+              .filter((item) => {
+                if (item.title === "Vitrine") {
+                  return publicConfig["module_products"] !== "false" || publicConfig["module_purchases"] !== "false";
+                }
+                if (!item.moduleKey) return true;
+                if (item.moduleKey.startsWith("module_social_")) {
+                  return moduleEnabled(publicConfig, item.moduleKey, socialModuleDefaultEnabled(item.moduleKey));
+                }
+                return publicConfig[item.moduleKey] !== "false";
+              })
               .reduce(
                 (acc, item, index, list) => {
                   if (index === 0 || list[index - 1].group !== item.group) {

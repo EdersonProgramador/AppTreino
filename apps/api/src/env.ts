@@ -52,7 +52,17 @@ const envSchema = z.object({
   OLLAMA_BASE_URL: z.preprocess((value) => (value === "" ? undefined : value), z.string().url().optional()),
   OLLAMA_HOST: z.preprocess((value) => (value === "" ? undefined : value), z.string().optional()),
   OLLAMA_MODEL: z.preprocess((value) => (value === "" ? undefined : value), z.string().optional()),
-  OLLAMA_EMBEDDING_MODEL: z.string().default("nomic-embed-text")
+  OLLAMA_EMBEDDING_MODEL: z.string().default("nomic-embed-text"),
+  MAPBOX_ACCESS_TOKEN: z.preprocess((value) => {
+    const direct = typeof value === "string" ? value.trim() : "";
+    const fromVite = String(process.env.VITE_MAPBOX_ACCESS_TOKEN ?? "").trim();
+    const token = direct || fromVite;
+    return token.length ? token : undefined;
+  }, z.string().optional()),
+  MELHOR_ENVIO_TOKEN: z.preprocess((value) => (value === "" ? undefined : value), z.string().optional()),
+  MELHOR_ENVIO_SANDBOX: z
+    .preprocess((value) => value === "true" || value === "1", z.boolean())
+    .default(true)
 });
 
 export const env = envSchema.parse(process.env);

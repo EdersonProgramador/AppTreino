@@ -4368,6 +4368,13 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     category: z.string().optional(),
     kind: z.enum(["PHYSICAL", "DIGITAL"]).default("PHYSICAL"),
     shippingMethod: z.enum(["PICKUP", "DELIVERY", "DIGITAL"]).optional(),
+    allowsPickup: z.boolean().optional(),
+    allowsDelivery: z.boolean().optional(),
+    shippingFeeInCents: z.number().int().min(0).nullable().optional(),
+    weightGrams: z.number().int().min(1).max(30000).optional(),
+    lengthCm: z.number().int().min(1).max(300).optional(),
+    widthCm: z.number().int().min(1).max(300).optional(),
+    heightCm: z.number().int().min(1).max(300).optional(),
     stock: z.number().int().min(0).nullable().optional(),
     isActive: z.boolean().default(true)
   });

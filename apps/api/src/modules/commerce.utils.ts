@@ -1,5 +1,6 @@
 import type { OrderStatus, ProductKind, PurchaseStatus, ShippingMethod } from "@prisma/client";
 import { prisma } from "../prisma.js";
+import { productToShippingInput, quoteShipping } from "./shipping.service.js";
 
 export const PURCHASE_PAID_STATUSES: PurchaseStatus[] = ["CONFIRMED", "READY", "DELIVERED"];
 export const PURCHASE_OPEN_STATUSES: PurchaseStatus[] = ["PENDING", "CONFIRMED", "READY"];
@@ -16,7 +17,15 @@ export const DEFAULT_SYSTEM_SETTINGS: Record<string, string> = {
   module_ratings: "true",
   module_favorites: "true",
   module_ai: "true",
-  qr_checkin_enabled: "true"
+  module_social_publicar: "true",
+  module_social_momentos: "true",
+  module_social_clipes: "false",
+  module_social_live: "false",
+  module_social_nota: "false",
+  qr_checkin_enabled: "true",
+  commerce_delivery_fee_cents: "1500",
+  commerce_origin_postal_code: "01310100",
+  commerce_shipping_provider: "auto"
 };
 
 export async function ensureDefaultSystemSettings() {
@@ -250,7 +259,7 @@ export async function getOrCreateCart(userId: string) {
 
 type CartWithItems = Awaited<ReturnType<typeof getOrCreateCart>>;
 
-export async function buildCartTotals(cart: Pick<CartWithItems, "couponCode" | "items">) {
+export async function buildCartTotals(cart: CartWithItems) {
   const activeItems = cart.items.filter((item) => item.product.isActive && !item.product.deletedAt);
   const subtotalInCents = activeItems.reduce(
     (sum, item) => sum + item.product.priceInCents * item.quantity,
@@ -273,21 +282,31 @@ export async function buildCartTotals(cart: Pick<CartWithItems, "couponCode" | "
     }
   }
 
-  const shipping = await resolveShippingQuote(
-    activeItems.map((item) => ({
-      kind: item.product.kind,
-      shippingMethod: item.product.shippingMethod
-    }))
-  );
+  const shippingItems = activeItems.map((item) => productToShippingInput(item.product, item.quantity));
+  const shippingQuote = await quoteShipping({
+    items: shippingItems,
+    fulfillmentMethod: cart.fulfillmentMethod,
+    destination: {
+      postalCode: cart.destinationPostalCode,
+      street: cart.destinationStreet,
+      number: cart.destinationNumber,
+      complement: cart.destinationComplement,
+      neighborhood: cart.destinationNeighborhood,
+      city: cart.destinationCity,
+      state: cart.destinationState
+    },
+    selectedServiceId: cart.shippingServiceId
+  });
 
-  const amountInCents = Math.max(0, subtotalInCents - discountInCents + shipping.shippingInCents);
+  const amountInCents = Math.max(0, subtotalInCents - discountInCents + shippingQuote.shippingInCents);
 
   return {
     items: activeItems,
     subtotalInCents,
     discountInCents,
-    shippingInCents: shipping.shippingInCents,
-    shippingMethod: shipping.shippingMethod,
+    shippingInCents: shippingQuote.shippingInCents,
+    shippingMethod: shippingQuote.shippingMethod,
+    shippingQuote,
     amountInCents,
     couponId,
     couponCode,

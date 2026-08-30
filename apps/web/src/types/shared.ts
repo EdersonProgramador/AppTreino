@@ -194,6 +194,13 @@ export interface ProductRow {
   category?: string | null;
   kind?: "PHYSICAL" | "DIGITAL";
   shippingMethod?: "PICKUP" | "DELIVERY" | "DIGITAL";
+  allowsPickup?: boolean;
+  allowsDelivery?: boolean;
+  shippingFeeInCents?: number | null;
+  weightGrams?: number;
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
   stock?: number | null;
   isActive: boolean;
   createdAt: string;
@@ -219,6 +226,13 @@ export interface PurchaseRow {
   productId: string;
   amountInCents: number;
   quantity?: number;
+  shippingInCents?: number;
+  shippingMethod?: ShippingMethod;
+  shippingAddress?: string | null;
+  destinationPostalCode?: string | null;
+  shippingCarrier?: string | null;
+  shippingServiceName?: string | null;
+  shippingQuoteSource?: string | null;
   status: PurchaseStatus;
   paymentMethod?: string | null;
   notes?: string | null;
@@ -242,6 +256,9 @@ export interface OrderItemRow {
   quantity: number;
   unitPriceInCents: number;
   amountInCents: number;
+  shippingInCents?: number;
+  shippingMethod?: ShippingMethod;
+  shippingServiceName?: string | null;
 }
 
 export interface OrderRow {
@@ -282,11 +299,60 @@ export interface CouponRow {
   createdAt: string;
 }
 
+export interface ShippingServiceOption {
+  id: string;
+  name: string;
+  company: string;
+  priceInCents: number;
+  deliveryDays: number | null;
+}
+
+export interface ShippingZoneRow {
+  id: string;
+  name: string;
+  stateCode?: string | null;
+  postalFrom?: string | null;
+  postalTo?: string | null;
+  feeInCents: number;
+  priority: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ShippingQuotePreview {
+  fulfillmentMethod: ShippingMethod;
+  shippingMethod: ShippingMethod;
+  shippingInCents: number;
+  amountInCents?: number;
+  services: ShippingServiceOption[];
+  quoteSource?: string | null;
+  canPickup: boolean;
+  canDeliver: boolean;
+  itemLines: Array<{
+    productId: string;
+    shippingInCents: number;
+    shippingMethod: ShippingMethod;
+  }>;
+}
+
+export interface ShippingDestination {
+  postalCode?: string | null;
+  street?: string | null;
+  number?: string | null;
+  complement?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
+}
+
 export interface CartItemRow {
   id: string;
   productId: string;
   quantity: number;
   lineTotalInCents: number;
+  shippingInCents?: number;
+  shippingMethod?: ShippingMethod;
   product: ProductRow;
 }
 
@@ -300,6 +366,16 @@ export interface CartRow {
   shippingMethod: ShippingMethod;
   amountInCents: number;
   itemCount: number;
+  fulfillmentMethod?: ShippingMethod | null;
+  canPickup?: boolean;
+  canDeliver?: boolean;
+  quoteSource?: string | null;
+  shippingServices?: ShippingServiceOption[];
+  destination?: ShippingDestination | null;
+  shippingServiceId?: string | null;
+  shippingServiceName?: string | null;
+  shippingCarrier?: string | null;
+  formattedAddress?: string | null;
 }
 
 

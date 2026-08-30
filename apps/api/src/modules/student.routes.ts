@@ -15,8 +15,13 @@ import {
   blockingPurchaseStatusesForProduct,
   PURCHASE_PAID_STATUSES
 } from "./commerce.utils.js";
-import { createAsaasCheckout, purchaseExternalReference, type AsaasBillingType } from "./asaas.client.js";
+import { createAsaasCheckout, purchaseExternalReference, vitrineCheckoutCallbacks, type AsaasBillingType } from "./asaas.client.js";
 import { asaasCheckoutItemName } from "./checkout.utils.js";
+import {
+  formatShippingAddress,
+  productToShippingInput,
+  quoteShipping
+} from "./shipping.service.js";
 import { ensureProgramCycleRecorded, recordProgramCycleCompletion } from "./program-completion.utils.js";
 import { attachCoachRoutes } from "./coach.routes.js";
 
@@ -1638,6 +1643,10 @@ export async function registerStudentRoutes(app: FastifyInstance) {
 
     await assertSessionProgressComplete(session.id, session.workoutBlockId);
 
+    if (body.publish) {
+      await assertModuleEnabled("module_social_publicar", "Publicações desativadas.");
+    }
+
     const finishedAt = new Date();
     const completedDayNumber = session.dayNumber;
     const programDays = [...assignment.program.days].sort(
@@ -1896,7 +1905,22 @@ export async function registerStudentRoutes(app: FastifyInstance) {
 
   const studentPurchaseSchema = z.object({
     productId: z.string().min(1),
-    billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED")
+    billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED"),
+    fulfillmentMethod: z.enum(["PICKUP", "DELIVERY"]).optional(),
+    destination: z
+      .object({
+        postalCode: z.string().trim().optional(),
+        street: z.string().trim().max(200).optional(),
+        number: z.string().trim().max(40).optional(),
+        complement: z.string().trim().max(120).optional(),
+        neighborhood: z.string().trim().max(120).optional(),
+        city: z.string().trim().max(120).optional(),
+        state: z.string().trim().max(2).optional()
+      })
+      .optional(),
+    shippingServiceId: z.string().trim().max(80).nullable().optional(),
+    shippingServiceName: z.string().trim().max(120).nullable().optional(),
+    shippingCarrier: z.string().trim().max(120).nullable().optional()
   });
 
   const studentPurchaseCheckoutSchema = z.object({
@@ -2077,13 +2101,45 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       throw error;
     }
 
+    const shippingQuote = await quoteShipping({
+      items: [productToShippingInput(product, 1)],
+      fulfillmentMethod: body.fulfillmentMethod ?? null,
+      destination: body.destination ?? null,
+      selectedServiceId: body.shippingServiceId ?? null
+    });
+    const shippingLine = shippingQuote.itemLines[0];
+    const amountInCents = product.priceInCents + shippingQuote.shippingInCents;
+    const formattedAddress = formatShippingAddress(body.destination ?? {});
+
+    if (shippingQuote.shippingMethod === "DELIVERY") {
+      if (!body.destination?.postalCode || !body.destination?.street || !body.destination?.number) {
+        const error = new Error("Informe CEP, rua e número para entrega.") as Error & { statusCode: number };
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+
     const purchase = await prisma.purchase.create({
       data: {
         userId: authUser.id,
         productId: product.id,
-        amountInCents: product.priceInCents,
+        amountInCents,
         quantity: 1,
         status: "PENDING",
+        shippingInCents: shippingQuote.shippingInCents,
+        shippingMethod: shippingQuote.shippingMethod,
+        shippingAddress: shippingQuote.shippingMethod === "DELIVERY" ? formattedAddress : null,
+        destinationPostalCode: body.destination?.postalCode ?? null,
+        destinationStreet: body.destination?.street ?? null,
+        destinationNumber: body.destination?.number ?? null,
+        destinationComplement: body.destination?.complement ?? null,
+        destinationNeighborhood: body.destination?.neighborhood ?? null,
+        destinationCity: body.destination?.city ?? null,
+        destinationState: body.destination?.state ?? null,
+        shippingCarrier: body.shippingCarrier ?? shippingLine?.carrier ?? null,
+        shippingServiceId: body.shippingServiceId ?? shippingLine?.serviceId ?? null,
+        shippingServiceName: body.shippingServiceName ?? shippingLine?.serviceName ?? null,
+        shippingQuoteSource: shippingQuote.quoteSource,
         paymentMethod: body.billingType === "UNDEFINED" ? null : body.billingType
       },
       include: {
@@ -2096,7 +2152,8 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       itemName: asaasCheckoutItemName(product.name),
       itemDescription: `Pedido vitrine - ${authUser.name}`,
       amountInCents: purchase.amountInCents,
-      billingType: body.billingType as AsaasBillingType
+      billingType: body.billingType as AsaasBillingType,
+      callbacks: vitrineCheckoutCallbacks({ purchaseId: purchase.id })
     });
 
     const updatedPurchase = asaasCheckout
@@ -2155,7 +2212,8 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       itemName: asaasCheckoutItemName(purchase.product.name),
       itemDescription: `Pedido vitrine - ${authUser.name}`,
       amountInCents: purchase.amountInCents,
-      billingType: body.billingType as AsaasBillingType
+      billingType: body.billingType as AsaasBillingType,
+      callbacks: vitrineCheckoutCallbacks({ purchaseId: purchase.id })
     });
 
     if (!asaasCheckout) {

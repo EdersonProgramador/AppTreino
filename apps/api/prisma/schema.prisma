@@ -45,6 +45,7 @@ model User {
   notifications             StudentNotification[]
   programCycleCompletions   ProgramCycleCompletion[]
   modalityAchievements      ModalityAchievement[]
+  activityAchievements      UserActivityAchievement[]
   socialPosts               SocialPost[]
   socialLikes               SocialLike[]
   socialDislikes            SocialDislike[]
@@ -794,6 +795,13 @@ model Product {
   kind           ProductKind    @default(PHYSICAL)
   /// Definido pelo admin: PICKUP/DELIVERY para físico; DIGITAL para digital.
   shippingMethod ShippingMethod @default(PICKUP) @map("shipping_method")
+  allowsPickup   Boolean        @default(true) @map("allows_pickup")
+  allowsDelivery Boolean        @default(true) @map("allows_delivery")
+  shippingFeeInCents Int?       @map("shipping_fee_in_cents")
+  weightGrams    Int            @default(300) @map("weight_grams")
+  lengthCm       Int            @default(20) @map("length_cm")
+  widthCm        Int            @default(15) @map("width_cm")
+  heightCm       Int            @default(10) @map("height_cm")
   stock          Int?
   isActive       Boolean        @default(true) @map("is_active")
   deletedAt      DateTime?      @map("deleted_at")
@@ -834,6 +842,20 @@ model Purchase {
   amountInCents  Int            @map("amount_in_cents")
   quantity       Int            @default(1)
   status         PurchaseStatus @default(PENDING)
+  shippingInCents Int           @default(0) @map("shipping_in_cents")
+  shippingMethod ShippingMethod @default(PICKUP) @map("shipping_method")
+  shippingAddress String?       @map("shipping_address")
+  destinationPostalCode String?  @map("destination_postal_code")
+  destinationStreet String?    @map("destination_street")
+  destinationNumber String?    @map("destination_number")
+  destinationComplement String? @map("destination_complement")
+  destinationNeighborhood String? @map("destination_neighborhood")
+  destinationCity String?        @map("destination_city")
+  destinationState String?       @map("destination_state")
+  shippingCarrier String?       @map("shipping_carrier")
+  shippingServiceId String?     @map("shipping_service_id")
+  shippingServiceName String?   @map("shipping_service_name")
+  shippingQuoteSource String?   @map("shipping_quote_source")
   paymentMethod  String?        @map("payment_method")
   notes          String?
   asaasPaymentId String?        @unique @map("asaas_payment_id")
@@ -891,10 +913,38 @@ model Coupon {
   @@map("coupons")
 }
 
+model ShippingZone {
+  id         String    @id @default(cuid())
+  name       String
+  stateCode  String?   @map("state_code")
+  postalFrom String?   @map("postal_from")
+  postalTo   String?   @map("postal_to")
+  feeInCents Int       @map("fee_in_cents")
+  priority   Int       @default(0)
+  isActive   Boolean   @default(true) @map("is_active")
+  deletedAt  DateTime? @map("deleted_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  @@index([isActive, priority])
+  @@map("shipping_zones")
+}
+
 model Cart {
   id         String   @id @default(cuid())
   userId     String   @unique @map("user_id")
   couponCode String?  @map("coupon_code")
+  fulfillmentMethod ShippingMethod? @map("fulfillment_method")
+  destinationPostalCode String? @map("destination_postal_code")
+  destinationStreet String? @map("destination_street")
+  destinationNumber String? @map("destination_number")
+  destinationComplement String? @map("destination_complement")
+  destinationNeighborhood String? @map("destination_neighborhood")
+  destinationCity String? @map("destination_city")
+  destinationState String? @map("destination_state")
+  shippingCarrier String? @map("shipping_carrier")
+  shippingServiceId String? @map("shipping_service_id")
+  shippingServiceName String? @map("shipping_service_name")
   updatedAt  DateTime @updatedAt @map("updated_at")
   createdAt  DateTime @default(now()) @map("created_at")
 
@@ -929,6 +979,17 @@ model Order {
   amountInCents   Int            @map("amount_in_cents")
   shippingMethod  ShippingMethod @default(PICKUP) @map("shipping_method")
   shippingAddress String?        @map("shipping_address")
+  destinationPostalCode String?  @map("destination_postal_code")
+  destinationStreet String?      @map("destination_street")
+  destinationNumber String?      @map("destination_number")
+  destinationComplement String?  @map("destination_complement")
+  destinationNeighborhood String? @map("destination_neighborhood")
+  destinationCity String?        @map("destination_city")
+  destinationState String?       @map("destination_state")
+  shippingCarrier String?        @map("shipping_carrier")
+  shippingServiceId String?      @map("shipping_service_id")
+  shippingServiceName String?    @map("shipping_service_name")
+  shippingQuoteSource String?    @map("shipping_quote_source")
   couponId        String?        @map("coupon_id")
   couponCode      String?        @map("coupon_code")
   notes           String?
@@ -956,6 +1017,11 @@ model OrderItem {
   quantity        Int    @default(1)
   unitPriceInCents Int   @map("unit_price_in_cents")
   amountInCents   Int    @map("amount_in_cents")
+  shippingInCents Int      @default(0) @map("shipping_in_cents")
+  shippingMethod  ShippingMethod @default(PICKUP) @map("shipping_method")
+  shippingCarrier String?  @map("shipping_carrier")
+  shippingServiceId String? @map("shipping_service_id")
+  shippingServiceName String? @map("shipping_service_name")
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
@@ -1164,6 +1230,23 @@ model ModalityAchievement {
   @@unique([userId, modalityId])
   @@index([userId, lastCompletedAt])
   @@map("modality_achievements")
+}
+
+/// Conquistas de atividade outdoor (distância, streak, desafio).
+model UserActivityAchievement {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slug        String
+  title       String
+  description String
+  category    String
+  value       Float?
+  earnedAt    DateTime @default(now()) @map("earned_at")
+
+  @@unique([userId, slug])
+  @@index([userId, earnedAt])
+  @@map("user_activity_achievements")
 }
 
 /// Inbox individual de notificações por aluno (login).
