@@ -5,6 +5,7 @@ import { requireAuth } from "../auth.js";
 import { prisma } from "../prisma.js";
 import { authorize } from "./org-auth/authorize.js";
 import { loadOrgAuthContext, writeAuditLog } from "./org-auth/context.js";
+import { authorizeOrg, httpOrgError } from "./org-auth/scope.js";
 
 const slugSchema = z
   .string()
@@ -782,5 +783,818 @@ export async function registerOrgRoutes(app: FastifyInstance) {
     });
 
     return reply.code(201).send({ assignment });
+  });
+
+  // ─── Ciclo de vida (update / soft-delete) ───
+
+  app.put("/org/organizations/:organizationId", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { organizationId } = z.object({ organizationId: z.string().min(1) }).parse(request.params);
+    denyUnlessAllowed(authorize({ ctx, permission: "organizations.update", organizationId }));
+    const body = organizationBodySchema.partial().extend({
+      status: z.enum(["ACTIVE", "INACTIVE", "SUSPENDED"]).optional()
+    }).parse(request.body);
+
+    const organization = await prisma.organization.update({
+      where: { id: organizationId },
+      data: {
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.slug !== undefined ? { slug: body.slug } : {}),
+        ...(body.type !== undefined ? { type: body.type } : {}),
+        ...(body.status !== undefined ? { status: body.status } : {})
+      }
+    });
+
+    await writeAuditLog({
+      userId: user.id,
+      organizationId,
+      action: "organization.update",
+      resourceType: "organization",
+      resourceId: organizationId,
+      newValues: organization,
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"]
+    });
+
+    return { organization };
+  });
+
+  app.delete("/org/organizations/:organizationId", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { organizationId } = z.object({ organizationId: z.string().min(1) }).parse(request.params);
+    denyUnlessAllowed(authorize({ ctx, permission: "organizations.delete", organizationId }));
+
+    await prisma.organization.update({
+      where: { id: organizationId },
+      data: { deletedAt: new Date(), status: "INACTIVE" }
+    });
+
+    await writeAuditLog({
+      userId: user.id,
+      organizationId,
+      action: "organization.delete",
+      resourceType: "organization",
+      resourceId: organizationId,
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"]
+    });
+
+    return { ok: true };
+  });
+
+  app.put("/org/units/:unitId", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { unitId } = z.object({ unitId: z.string().min(1) }).parse(request.params);
+    const unit = await prisma.unit.findFirst({ where: { id: unitId, deletedAt: null } });
+    if (!unit) throw httpOrgError(404, "Unidade não encontrada.");
+    denyUnlessAllowed(
+      authorize({ ctx, permission: "units.update", organizationId: unit.organizationId, unitId })
+    );
+    const body = unitBodySchema.partial().extend({
+      status: z.enum(["ACTIVE", "INACTIVE"]).optional()
+    }).parse(request.body);
+
+    const updated = await prisma.unit.update({
+      where: { id: unitId },
+      data: body
+    });
+
+    await writeAuditLog({
+      userId: user.id,
+      organizationId: unit.organizationId,
+      unitId,
+      action: "unit.update",
+      resourceType: "unit",
+      resourceId: unitId,
+      newValues: updated,
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"]
+    });
+
+    return { unit: updated };
+  });
+
+  app.delete("/org/units/:unitId", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { unitId } = z.object({ unitId: z.string().min(1) }).parse(request.params);
+    const unit = await prisma.unit.findFirst({ where: { id: unitId, deletedAt: null } });
+    if (!unit) throw httpOrgError(404, "Unidade não encontrada.");
+    denyUnlessAllowed(
+      authorize({ ctx, permission: "units.delete", organizationId: unit.organizationId, unitId })
+    );
+
+    await prisma.unit.update({
+      where: { id: unitId },
+      data: { deletedAt: new Date(), status: "INACTIVE" }
+    });
+
+    await writeAuditLog({
+      userId: user.id,
+      organizationId: unit.organizationId,
+      unitId,
+      action: "unit.delete",
+      resourceType: "unit",
+      resourceId: unitId,
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"]
+    });
+
+    return { ok: true };
+  });
+
+  app.patch("/org/members/:memberId", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { memberId } = z.object({ memberId: z.string().min(1) }).parse(request.params);
+    const member = await prisma.organizationMember.findUnique({ where: { id: memberId } });
+    if (!member) throw httpOrgError(404, "Membro não encontrado.");
+    denyUnlessAllowed(
+      authorize({
+        ctx,
+        permission: "roles.manage",
+        organizationId: member.organizationId,
+        unitId: member.unitId
+      })
+    );
+    const body = z
+      .object({
+        role: z.enum(["ORGANIZATION_ADMIN", "UNIT_MANAGER", "COACH", "NUTRITIONIST", "ATHLETE"]).optional(),
+        unitId: z.string().nullable().optional(),
+        status: z.enum(["ACTIVE", "INACTIVE", "SUSPENDED"]).optional()
+      })
+      .parse(request.body);
+
+    const updated = await prisma.organizationMember.update({
+      where: { id: memberId },
+      data: {
+        ...(body.role !== undefined ? { role: body.role } : {}),
+        ...(body.unitId !== undefined ? { unitId: body.unitId } : {}),
+        ...(body.status !== undefined ? { status: body.status } : {})
+      }
+    });
+
+    await writeAuditLog({
+      userId: user.id,
+      organizationId: member.organizationId,
+      unitId: updated.unitId,
+      action: "organization_member.update",
+      resourceType: "organization_member",
+      resourceId: memberId,
+      newValues: updated,
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"]
+    });
+
+    return { member: updated };
+  });
+
+  app.delete("/org/members/:memberId", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { memberId } = z.object({ memberId: z.string().min(1) }).parse(request.params);
+    const member = await prisma.organizationMember.findUnique({ where: { id: memberId } });
+    if (!member) throw httpOrgError(404, "Membro não encontrado.");
+    denyUnlessAllowed(
+      authorize({ ctx, permission: "roles.manage", organizationId: member.organizationId, unitId: member.unitId })
+    );
+
+    await prisma.organizationMember.update({
+      where: { id: memberId },
+      data: { status: "INACTIVE" }
+    });
+
+    await writeAuditLog({
+      userId: user.id,
+      organizationId: member.organizationId,
+      unitId: member.unitId,
+      action: "organization_member.deactivate",
+      resourceType: "organization_member",
+      resourceId: memberId,
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"]
+    });
+
+    return { ok: true };
+  });
+
+  app.patch("/org/athlete-links/:linkId", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { linkId } = z.object({ linkId: z.string().min(1) }).parse(request.params);
+    const link = await prisma.athleteOrganizationLink.findFirst({
+      where: { id: linkId, deletedAt: null }
+    });
+    if (!link) throw httpOrgError(404, "Vínculo não encontrado.");
+    denyUnlessAllowed(
+      await authorizeOrg({
+        ctx,
+        permission: "athletes.unlink",
+        organizationId: link.organizationId,
+        unitId: link.unitId,
+        athleteId: link.athleteId
+      })
+    );
+    const body = z
+      .object({
+        status: z.enum(["PENDING", "ACTIVE", "SUSPENDED", "CANCELLED"])
+      })
+      .parse(request.body);
+
+    const updated = await prisma.athleteOrganizationLink.update({
+      where: { id: linkId },
+      data: {
+        status: body.status,
+        endedAt: body.status === "CANCELLED" || body.status === "SUSPENDED" ? new Date() : null,
+        deletedAt: body.status === "CANCELLED" ? new Date() : null
+      }
+    });
+
+    await writeAuditLog({
+      userId: user.id,
+      organizationId: link.organizationId,
+      unitId: link.unitId,
+      action: "athlete.link.update",
+      resourceType: "athlete_organization_link",
+      resourceId: linkId,
+      newValues: updated,
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"]
+    });
+
+    return { link: updated };
+  });
+
+  app.patch("/org/professional-assignments/:assignmentId", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { assignmentId } = z.object({ assignmentId: z.string().min(1) }).parse(request.params);
+    const assignment = await prisma.professionalAssignment.findFirst({
+      where: { id: assignmentId, deletedAt: null }
+    });
+    if (!assignment) throw httpOrgError(404, "Atribuição não encontrada.");
+    const permission =
+      assignment.professionalType === "COACH" ? ("coaches.update" as const) : ("nutritionists.update" as const);
+    denyUnlessAllowed(
+      await authorizeOrg({
+        ctx,
+        permission,
+        organizationId: assignment.organizationId,
+        unitId: assignment.unitId,
+        athleteId: assignment.athleteId
+      })
+    );
+    const body = z
+      .object({
+        status: z.enum(["ACTIVE", "INACTIVE", "ENDED"]),
+        isPrimary: z.boolean().optional()
+      })
+      .parse(request.body);
+
+    const updated = await prisma.professionalAssignment.update({
+      where: { id: assignmentId },
+      data: {
+        status: body.status,
+        isPrimary: body.isPrimary,
+        deletedAt: body.status === "ENDED" ? new Date() : null
+      }
+    });
+
+    await writeAuditLog({
+      userId: user.id,
+      organizationId: assignment.organizationId,
+      unitId: assignment.unitId,
+      action: "professional_assignment.update",
+      resourceType: "professional_assignment",
+      resourceId: assignmentId,
+      newValues: updated,
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"]
+    });
+
+    return { assignment: updated };
+  });
+
+  app.put("/org/classes/:classId", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { classId } = z.object({ classId: z.string().min(1) }).parse(request.params);
+    const trainingClass = await prisma.trainingClass.findFirst({
+      where: { id: classId, deletedAt: null }
+    });
+    if (!trainingClass) throw httpOrgError(404, "Turma não encontrada.");
+    denyUnlessAllowed(
+      authorize({
+        ctx,
+        permission: "classes.update",
+        organizationId: trainingClass.organizationId,
+        unitId: trainingClass.unitId
+      })
+    );
+    const body = z
+      .object({
+        name: z.string().trim().min(2).max(120).optional(),
+        description: z.string().trim().max(500).nullable().optional(),
+        coachId: z.string().min(1).optional(),
+        modalityId: z.string().nullable().optional(),
+        capacity: z.number().int().positive().max(500).nullable().optional(),
+        status: z.enum(["ACTIVE", "INACTIVE", "ARCHIVED"]).optional(),
+        scheduleData: z.record(z.unknown()).optional()
+      })
+      .parse(request.body);
+
+    const updated = await prisma.trainingClass.update({
+      where: { id: classId },
+      data: {
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.description !== undefined ? { description: body.description } : {}),
+        ...(body.coachId !== undefined ? { coachId: body.coachId } : {}),
+        ...(body.modalityId !== undefined ? { modalityId: body.modalityId } : {}),
+        ...(body.capacity !== undefined ? { capacity: body.capacity } : {}),
+        ...(body.status !== undefined ? { status: body.status } : {}),
+        ...(body.scheduleData !== undefined
+          ? { scheduleData: body.scheduleData as Prisma.InputJsonValue }
+          : {})
+      }
+    });
+
+    await writeAuditLog({
+      userId: user.id,
+      organizationId: trainingClass.organizationId,
+      unitId: trainingClass.unitId,
+      action: "training_class.update",
+      resourceType: "training_class",
+      resourceId: classId,
+      newValues: updated,
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"]
+    });
+
+    return { trainingClass: updated };
+  });
+
+  app.delete("/org/classes/:classId", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { classId } = z.object({ classId: z.string().min(1) }).parse(request.params);
+    const trainingClass = await prisma.trainingClass.findFirst({
+      where: { id: classId, deletedAt: null }
+    });
+    if (!trainingClass) throw httpOrgError(404, "Turma não encontrada.");
+    denyUnlessAllowed(
+      authorize({
+        ctx,
+        permission: "classes.delete",
+        organizationId: trainingClass.organizationId,
+        unitId: trainingClass.unitId
+      })
+    );
+
+    await prisma.trainingClass.update({
+      where: { id: classId },
+      data: { deletedAt: new Date(), status: "ARCHIVED" }
+    });
+
+    await writeAuditLog({
+      userId: user.id,
+      organizationId: trainingClass.organizationId,
+      unitId: trainingClass.unitId,
+      action: "training_class.delete",
+      resourceType: "training_class",
+      resourceId: classId,
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"]
+    });
+
+    return { ok: true };
+  });
+
+  app.patch("/org/class-members/:memberId", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { memberId } = z.object({ memberId: z.string().min(1) }).parse(request.params);
+    const member = await prisma.trainingClassMember.findUnique({
+      where: { id: memberId },
+      include: { class: { select: { organizationId: true, unitId: true } } }
+    });
+    if (!member) throw httpOrgError(404, "Membro da turma não encontrado.");
+    denyUnlessAllowed(
+      await authorizeOrg({
+        ctx,
+        permission: "classes.assign_athletes",
+        organizationId: member.class.organizationId,
+        unitId: member.class.unitId,
+        athleteId: member.athleteId
+      })
+    );
+    const body = z.object({ status: z.enum(["ACTIVE", "INACTIVE"]) }).parse(request.body);
+    const updated = await prisma.trainingClassMember.update({
+      where: { id: memberId },
+      data: { status: body.status }
+    });
+    return { member: updated };
+  });
+
+  app.put("/org/nutrition-plans/:planId", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { planId } = z.object({ planId: z.string().min(1) }).parse(request.params);
+    const plan = await prisma.nutritionPlan.findFirst({ where: { id: planId, deletedAt: null } });
+    if (!plan) throw httpOrgError(404, "Plano nutricional não encontrado.");
+    denyUnlessAllowed(
+      authorize({
+        ctx,
+        permission: "nutrition.update",
+        organizationId: plan.organizationId,
+        unitId: plan.unitId
+      })
+    );
+    const body = z
+      .object({
+        title: z.string().trim().min(2).max(120).optional(),
+        description: z.string().trim().max(2000).nullable().optional(),
+        status: z.enum(["DRAFT", "ACTIVE", "ARCHIVED"]).optional()
+      })
+      .parse(request.body);
+
+    const updated = await prisma.nutritionPlan.update({
+      where: { id: planId },
+      data: body
+    });
+
+    await writeAuditLog({
+      userId: user.id,
+      organizationId: plan.organizationId,
+      unitId: plan.unitId,
+      action: "nutrition_plan.update",
+      resourceType: "nutrition_plan",
+      resourceId: planId,
+      newValues: updated,
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"]
+    });
+
+    return { plan: updated };
+  });
+
+  app.delete("/org/nutrition-plans/:planId", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { planId } = z.object({ planId: z.string().min(1) }).parse(request.params);
+    const plan = await prisma.nutritionPlan.findFirst({ where: { id: planId, deletedAt: null } });
+    if (!plan) throw httpOrgError(404, "Plano nutricional não encontrado.");
+    denyUnlessAllowed(
+      authorize({
+        ctx,
+        permission: "nutrition.update",
+        organizationId: plan.organizationId,
+        unitId: plan.unitId
+      })
+    );
+
+    await prisma.nutritionPlan.update({
+      where: { id: planId },
+      data: { deletedAt: new Date(), status: "ARCHIVED" }
+    });
+
+    return { ok: true };
+  });
+
+  // ─── Programas ORGANIZATION / COACH ───
+
+  app.get("/org/workout-blocks", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    denyUnlessAllowed(authorize({ ctx, permission: "training.view" }));
+
+    const blocks = await prisma.workoutBlock.findMany({
+      where: { deletedAt: null },
+      select: {
+        id: true,
+        title: true,
+        modalityId: true,
+        modality: { select: { id: true, name: true } }
+      },
+      orderBy: { title: "asc" },
+      take: 300
+    });
+
+    return { blocks };
+  });
+
+  app.get("/org/organizations/:organizationId/programs", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { organizationId } = z.object({ organizationId: z.string().min(1) }).parse(request.params);
+    denyUnlessAllowed(authorize({ ctx, permission: "training.view", organizationId }));
+
+    const programs = await prisma.program.findMany({
+      where: {
+        organizationId,
+        deletedAt: null,
+        sourceType: { in: ["ORGANIZATION", "COACH"] }
+      },
+      include: {
+        modality: { select: { id: true, name: true } },
+        unit: { select: { id: true, name: true } },
+        days: {
+          select: { id: true, dayNumber: true, order: true, workoutBlockId: true },
+          orderBy: [{ dayNumber: "asc" }, { order: "asc" }]
+        },
+        assignedUsers: {
+          where: { status: "ACTIVE" },
+          select: { id: true, userId: true }
+        }
+      },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }]
+    });
+
+    return { programs };
+  });
+
+  const orgProgramSchema = z.object({
+    organizationId: z.string().min(1),
+    unitId: z.string().optional(),
+    modalityId: z.string().min(1),
+    title: z.string().trim().min(2).max(160),
+    description: z.string().trim().max(2000).optional(),
+    sourceType: z.enum(["ORGANIZATION", "COACH"]).default("ORGANIZATION"),
+    coachUserId: z.string().optional(),
+    targetGender: z.enum(["ALL", "MALE", "FEMALE"]).default("ALL"),
+    days: z
+      .array(
+        z.object({
+          workoutBlockId: z.string().min(1),
+          dayNumber: z.number().int().positive().max(365),
+          order: z.number().int().positive().max(50).default(1)
+        })
+      )
+      .min(1)
+      .max(60)
+  });
+
+  app.post("/org/programs", async (request, reply) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const body = orgProgramSchema.parse(request.body);
+    denyUnlessAllowed(
+      authorize({
+        ctx,
+        permission: "training.create",
+        organizationId: body.organizationId,
+        unitId: body.unitId ?? null
+      })
+    );
+
+    const modality = await prisma.modality.findFirst({
+      where: { id: body.modalityId, deletedAt: null, isActive: true }
+    });
+    if (!modality) throw httpOrgError(404, "Modalidade não encontrada.");
+
+    const blockIds = [...new Set(body.days.map((day) => day.workoutBlockId))];
+    const blocks = await prisma.workoutBlock.findMany({
+      where: { id: { in: blockIds }, deletedAt: null },
+      select: { id: true }
+    });
+    if (blocks.length !== blockIds.length) {
+      throw httpOrgError(400, "Uma ou mais fichas (blocos) são inválidas.");
+    }
+
+    const coachUserId =
+      body.sourceType === "COACH" ? body.coachUserId ?? user.id : body.coachUserId ?? null;
+
+    const program = await prisma.program.create({
+      data: {
+        title: body.title,
+        description: body.description?.trim() || `Programa ${body.sourceType.toLowerCase()} — ${modality.name}`,
+        modalityId: body.modalityId,
+        sourceType: body.sourceType,
+        organizationId: body.organizationId,
+        unitId: body.unitId ?? null,
+        coachUserId,
+        visibility: "ORGANIZATION",
+        audienceMode: "SELECTED",
+        targetGender: body.targetGender,
+        status: "DRAFT",
+        isActive: true,
+        plannedSessions: body.days.length,
+        totalWorkouts: body.days.length,
+        cycleLengthDays: Math.max(1, body.days.length),
+        days: {
+          create: body.days.map((day) => ({
+            workoutBlockId: day.workoutBlockId,
+            dayNumber: day.dayNumber,
+            order: day.order
+          }))
+        }
+      },
+      include: {
+        modality: { select: { id: true, name: true } },
+        days: true
+      }
+    });
+
+    await writeAuditLog({
+      userId: user.id,
+      organizationId: body.organizationId,
+      unitId: body.unitId ?? null,
+      action: "program.create",
+      resourceType: "program",
+      resourceId: program.id,
+      newValues: { id: program.id, title: program.title, sourceType: program.sourceType },
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"]
+    });
+
+    return reply.code(201).send({ program });
+  });
+
+  app.post("/org/programs/:programId/publish", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { programId } = z.object({ programId: z.string().min(1) }).parse(request.params);
+    const program = await prisma.program.findFirst({
+      where: {
+        id: programId,
+        deletedAt: null,
+        sourceType: { in: ["ORGANIZATION", "COACH"] }
+      },
+      include: { days: true }
+    });
+    if (!program?.organizationId) throw httpOrgError(404, "Programa organizacional não encontrado.");
+    denyUnlessAllowed(
+      authorize({
+        ctx,
+        permission: "training.publish",
+        organizationId: program.organizationId,
+        unitId: program.unitId
+      })
+    );
+    if (!program.days.length) throw httpOrgError(409, "Programa sem dias/fichas para publicar.");
+
+    const updated = await prisma.program.update({
+      where: { id: programId },
+      data: {
+        status: "PUBLISHED",
+        isActive: true,
+        publishedAt: new Date()
+      }
+    });
+
+    await writeAuditLog({
+      userId: user.id,
+      organizationId: program.organizationId,
+      unitId: program.unitId,
+      action: "program.publish",
+      resourceType: "program",
+      resourceId: programId,
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"]
+    });
+
+    return { program: updated };
+  });
+
+  app.post("/org/programs/:programId/archive", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { programId } = z.object({ programId: z.string().min(1) }).parse(request.params);
+    const program = await prisma.program.findFirst({
+      where: {
+        id: programId,
+        deletedAt: null,
+        sourceType: { in: ["ORGANIZATION", "COACH"] }
+      }
+    });
+    if (!program?.organizationId) throw httpOrgError(404, "Programa organizacional não encontrado.");
+    denyUnlessAllowed(
+      authorize({
+        ctx,
+        permission: "training.update",
+        organizationId: program.organizationId,
+        unitId: program.unitId
+      })
+    );
+
+    const updated = await prisma.program.update({
+      where: { id: programId },
+      data: { status: "ARCHIVED", isActive: false }
+    });
+
+    return { program: updated };
+  });
+
+  app.post("/org/programs/:programId/assign", async (request, reply) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { programId } = z.object({ programId: z.string().min(1) }).parse(request.params);
+    const body = z
+      .object({
+        athleteIds: z.array(z.string().min(1)).min(1).max(100),
+        trainingClassId: z.string().optional()
+      })
+      .parse(request.body);
+
+    const program = await prisma.program.findFirst({
+      where: {
+        id: programId,
+        deletedAt: null,
+        sourceType: { in: ["ORGANIZATION", "COACH"] }
+      }
+    });
+    if (!program?.organizationId) throw httpOrgError(404, "Programa organizacional não encontrado.");
+
+    for (const athleteId of body.athleteIds) {
+      denyUnlessAllowed(
+        await authorizeOrg({
+          ctx,
+          permission: "training.assign",
+          organizationId: program.organizationId,
+          unitId: program.unitId,
+          athleteId
+        })
+      );
+    }
+
+    const created = [];
+    for (const athleteId of body.athleteIds) {
+      const row = await prisma.userProgram.upsert({
+        where: { userId_programId: { userId: athleteId, programId } },
+        create: {
+          userId: athleteId,
+          programId,
+          status: "ACTIVE",
+          organizationId: program.organizationId,
+          unitId: program.unitId,
+          assignedByUserId: user.id,
+          trainingClassId: body.trainingClassId ?? null,
+          assignmentSource: body.trainingClassId
+            ? "CLASS"
+            : program.sourceType === "COACH"
+              ? "COACH"
+              : "ORGANIZATION",
+          totalWorkouts: program.totalWorkouts
+        },
+        update: {
+          status: "ACTIVE",
+          organizationId: program.organizationId,
+          unitId: program.unitId,
+          assignedByUserId: user.id,
+          trainingClassId: body.trainingClassId ?? null,
+          assignmentSource: body.trainingClassId
+            ? "CLASS"
+            : program.sourceType === "COACH"
+              ? "COACH"
+              : "ORGANIZATION"
+        }
+      });
+      created.push(row);
+    }
+
+    await writeAuditLog({
+      userId: user.id,
+      organizationId: program.organizationId,
+      unitId: program.unitId,
+      action: "program.assign",
+      resourceType: "program",
+      resourceId: programId,
+      newValues: { athleteIds: body.athleteIds, count: created.length },
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"]
+    });
+
+    return reply.code(201).send({ assignments: created });
+  });
+
+  app.delete("/org/programs/:programId", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { programId } = z.object({ programId: z.string().min(1) }).parse(request.params);
+    const program = await prisma.program.findFirst({
+      where: {
+        id: programId,
+        deletedAt: null,
+        sourceType: { in: ["ORGANIZATION", "COACH"] }
+      }
+    });
+    if (!program?.organizationId) throw httpOrgError(404, "Programa organizacional não encontrado.");
+    denyUnlessAllowed(
+      authorize({
+        ctx,
+        permission: "training.delete",
+        organizationId: program.organizationId,
+        unitId: program.unitId
+      })
+    );
+
+    await prisma.program.update({
+      where: { id: programId },
+      data: { deletedAt: new Date(), isActive: false, status: "ARCHIVED" }
+    });
+
+    return { ok: true };
   });
 }

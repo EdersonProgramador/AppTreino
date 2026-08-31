@@ -1217,6 +1217,44 @@ async function main() {
     }
   }
   console.log("Plan features seeded for individual entitlements.");
+
+  const demoOrg = await prisma.organization.upsert({
+    where: { slug: "box-cross" },
+    create: {
+      id: "seed-org-box-cross",
+      name: "Box Cross",
+      slug: "box-cross",
+      type: "BOX",
+      status: "ACTIVE"
+    },
+    update: {
+      name: "Box Cross",
+      type: "BOX",
+      status: "ACTIVE",
+      deletedAt: null
+    }
+  });
+
+  await prisma.unit.upsert({
+    where: { id: "seed-unit-medicilandia" },
+    create: {
+      id: "seed-unit-medicilandia",
+      organizationId: demoOrg.id,
+      name: "Medicilândia",
+      city: "Medicilândia",
+      state: "PA",
+      status: "ACTIVE"
+    },
+    update: {
+      organizationId: demoOrg.id,
+      name: "Medicilândia",
+      city: "Medicilândia",
+      state: "PA",
+      status: "ACTIVE",
+      deletedAt: null
+    }
+  });
+  console.log("Demo organization: Box Cross / Medicilândia-PA");
 }
 
 main()

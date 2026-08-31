@@ -161,6 +161,19 @@ export async function apiPut<T>(path: string, body: unknown, token?: string | nu
   return parseResponse<T>(response, Boolean(token));
 }
 
+export async function apiPatch<T>(path: string, body: unknown, token?: string | null): Promise<T> {
+  const response = await fetch(`${apiUrl(path)}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(token)
+    },
+    body: JSON.stringify(body)
+  });
+
+  return parseResponse<T>(response, Boolean(token));
+}
+
 export async function apiDelete<T>(path: string, token?: string | null): Promise<T> {
   const response = await fetch(`${apiUrl(path)}`, {
     method: "DELETE",

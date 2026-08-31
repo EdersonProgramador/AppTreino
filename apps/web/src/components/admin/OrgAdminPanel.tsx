@@ -1,19 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Building2,
-  Dumbbell,
-  Loader2,
-  Plus,
-  RefreshCw,
-  Search,
-  UserCog,
-  UsersRound
-} from "lucide-react";
-import { apiGet, apiPost } from "../../api";
+import { Building2, Dumbbell, Loader2, Plus, RefreshCw, Search, Trash2, UserCog, UsersRound } from "lucide-react";
+import { apiDelete, apiGet, apiPatch, apiPost } from "../../api";
 import { dataRowClass, panelTitleClass } from "../../lib/admin-cms-classes";
+import { OrgProgramsPanel } from "./OrgProgramsPanel";
 
 type OrgType = "ACADEMY" | "BOX" | "STUDIO" | "RUNNING_TEAM" | "OTHER";
-type OrgTab = "estrutura" | "equipe" | "alunos" | "turmas" | "nutricao" | "modalidades";
+type OrgTab = "estrutura" | "equipe" | "alunos" | "turmas" | "nutricao" | "modalidades" | "programas";
 type MemberRole = "ORGANIZATION_ADMIN" | "UNIT_MANAGER" | "COACH" | "NUTRITIONIST" | "ATHLETE";
 type ProfessionalType = "COACH" | "NUTRITIONIST";
 
@@ -324,6 +316,7 @@ export function OrgAdminPanel({ token }: Props) {
     { id: "estrutura", label: "Estrutura" },
     { id: "equipe", label: "Equipe" },
     { id: "alunos", label: "Alunos" },
+    { id: "programas", label: "Programas" },
     { id: "turmas", label: "Turmas" },
     { id: "nutricao", label: "Nutrição" },
     { id: "modalidades", label: "Modalidades" }
@@ -380,8 +373,30 @@ export function OrgAdminPanel({ token }: Props) {
             <div className="grid gap-2">
               {organizations.map((org) => (
                 <button key={org.id} type="button" className={`${dataRowClass} text-left ${selectedOrgId === org.id ? "ring-1 ring-brand-gold/50" : ""}`} onClick={() => setSelectedOrgId(org.id)}>
-                  <strong>{org.name}</strong>
-                  <span className="block text-xs text-sand-muted">{org.type} · {org.units.length} unidade(s)</span>
+                  <div className="flex items-start justify-between gap-2">
+                    <span>
+                      <strong>{org.name}</strong>
+                      <span className="block text-xs text-sand-muted">{org.type} · {org.units.length} unidade(s)</span>
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="text-red-400"
+                      title="Remover organização"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void runAction(async () => {
+                          await apiDelete(`/org/organizations/${org.id}`, token);
+                          if (selectedOrgId === org.id) setSelectedOrgId("");
+                        }, "Organização removida.");
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") event.currentTarget.click();
+                      }}
+                    >
+                      <Trash2 size={14} />
+                    </span>
+                  </div>
                 </button>
               ))}
             </div>
@@ -415,7 +430,25 @@ export function OrgAdminPanel({ token }: Props) {
                   }, "Unidade criada.")}>Adicionar unidade</button>
                   <ul className="grid gap-1 text-sm text-sand-muted">
                     {selectedOrg.units.map((unit) => (
-                      <li key={unit.id}>{unit.name}{unit.city ? ` — ${unit.city}/${unit.state ?? ""}` : ""}</li>
+                      <li key={unit.id} className="flex items-center justify-between gap-2">
+                        <span>
+                          {unit.name}
+                          {unit.city ? ` — ${unit.city}/${unit.state ?? ""}` : ""}
+                        </span>
+                        <button
+                          type="button"
+                          className="text-red-400"
+                          disabled={busy}
+                          title="Remover unidade"
+                          onClick={() =>
+                            void runAction(async () => {
+                              await apiDelete(`/org/units/${unit.id}`, token);
+                            }, "Unidade removida.")
+                          }
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -464,9 +497,26 @@ export function OrgAdminPanel({ token }: Props) {
                 {members.length === 0 ? <p className="text-sm text-sand-muted">Nenhum membro.</p> : (
                   <ul className="grid gap-2 text-sm">
                     {members.map((m) => (
-                      <li key={m.id} className={dataRowClass}>
-                        <strong>{m.user.name}</strong>
-                        <span className="block text-xs text-sand-muted">{m.role} · {m.status}{m.unit ? ` · ${m.unit.name}` : ""}</span>
+                      <li key={m.id} className={`${dataRowClass} flex items-start justify-between gap-2`}>
+                        <span>
+                          <strong>{m.user.name}</strong>
+                          <span className="block text-xs text-sand-muted">{m.role} · {m.status}{m.unit ? ` · ${m.unit.name}` : ""}</span>
+                        </span>
+                        {m.status === "ACTIVE" && (
+                          <button
+                            type="button"
+                            className="text-red-400"
+                            disabled={busy}
+                            title="Desativar membro"
+                            onClick={() =>
+                              void runAction(async () => {
+                                await apiDelete(`/org/members/${m.id}`, token);
+                              }, "Membro desativado.")
+                            }
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -492,7 +542,27 @@ export function OrgAdminPanel({ token }: Props) {
                 <h3 className="mb-2 mt-6 text-sm font-bold text-sand">Vínculos ativos</h3>
                 {athleteLinks.length === 0 ? <p className="text-sm text-sand-muted">Nenhum vínculo.</p> : (
                   <ul className="grid gap-2 text-sm">{athleteLinks.map((l) => (
-                    <li key={l.id} className={dataRowClass}><strong>{l.athlete.name}</strong><span className="block text-xs text-sand-muted">{l.unit.name} · {l.status}</span></li>
+                    <li key={l.id} className={`${dataRowClass} flex items-start justify-between gap-2`}>
+                      <span>
+                        <strong>{l.athlete.name}</strong>
+                        <span className="block text-xs text-sand-muted">{l.unit.name} · {l.status}</span>
+                      </span>
+                      {l.status === "ACTIVE" && (
+                        <button
+                          type="button"
+                          className="text-red-400"
+                          disabled={busy}
+                          title="Cancelar vínculo"
+                          onClick={() =>
+                            void runAction(async () => {
+                              await apiPatch(`/org/athlete-links/${l.id}`, { status: "CANCELLED" }, token);
+                            }, "Vínculo cancelado.")
+                          }
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </li>
                   ))}</ul>
                 )}
               </article>
@@ -516,11 +586,42 @@ export function OrgAdminPanel({ token }: Props) {
                 <h3 className="mb-2 mt-6 text-sm font-bold text-sand">Atribuições</h3>
                 {assignments.length === 0 ? <p className="text-sm text-sand-muted">Nenhuma atribuição.</p> : (
                   <ul className="grid gap-2 text-sm">{assignments.map((a) => (
-                    <li key={a.id} className={dataRowClass}><strong>{a.professional.name}</strong> → {a.athlete.name}<span className="block text-xs text-sand-muted">{a.professionalType} · {a.unit.name}</span></li>
+                    <li key={a.id} className={`${dataRowClass} flex items-start justify-between gap-2`}>
+                      <span>
+                        <strong>{a.professional.name}</strong> → {a.athlete.name}
+                        <span className="block text-xs text-sand-muted">{a.professionalType} · {a.unit.name}</span>
+                      </span>
+                      {a.status === "ACTIVE" && (
+                        <button
+                          type="button"
+                          className="text-red-400"
+                          disabled={busy}
+                          title="Encerrar atribuição"
+                          onClick={() =>
+                            void runAction(async () => {
+                              await apiPatch(`/org/professional-assignments/${a.id}`, { status: "ENDED" }, token);
+                            }, "Atribuição encerrada.")
+                          }
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </li>
                   ))}</ul>
                 )}
               </article>
             </div>
+          )}
+
+          {tab === "programas" && (
+            <OrgProgramsPanel
+              token={token}
+              organizationId={selectedOrgId}
+              units={selectedOrg.units}
+              busy={busy}
+              onBusy={runAction}
+              onError={(message) => setError(message)}
+            />
           )}
 
           {tab === "turmas" && (
@@ -555,7 +656,25 @@ export function OrgAdminPanel({ token }: Props) {
                 <h2 className="mb-4 text-lg font-bold text-sand">Turmas</h2>
                 {classes.length === 0 ? <p className="text-sm text-sand-muted">Nenhuma turma.</p> : (
                   <ul className="grid gap-2 text-sm">{classes.map((c) => (
-                    <li key={c.id} className={dataRowClass}><strong>{c.name}</strong><span className="block text-xs text-sand-muted">{c.unit.name} · Coach: {c.coach.name} · {c.members.length} aluno(s)</span></li>
+                    <li key={c.id} className={`${dataRowClass} flex items-start justify-between gap-2`}>
+                      <span>
+                        <strong>{c.name}</strong>
+                        <span className="block text-xs text-sand-muted">{c.unit.name} · Coach: {c.coach.name} · {c.members.length} aluno(s)</span>
+                      </span>
+                      <button
+                        type="button"
+                        className="text-red-400"
+                        disabled={busy}
+                        title="Arquivar turma"
+                        onClick={() =>
+                          void runAction(async () => {
+                            await apiDelete(`/org/classes/${c.id}`, token);
+                          }, "Turma arquivada.")
+                        }
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </li>
                   ))}</ul>
                 )}
               </article>
@@ -594,7 +713,25 @@ export function OrgAdminPanel({ token }: Props) {
                 <h2 className="mb-4 text-lg font-bold text-sand">Planos nutricionais</h2>
                 {nutritionPlans.length === 0 ? <p className="text-sm text-sand-muted">Nenhum plano.</p> : (
                   <ul className="grid gap-2 text-sm">{nutritionPlans.map((p) => (
-                    <li key={p.id} className={dataRowClass}><strong>{p.title}</strong><span className="block text-xs text-sand-muted">{p.status} · {p.nutritionist.name} · {p.assignments.length} atribuição(ões)</span></li>
+                    <li key={p.id} className={`${dataRowClass} flex items-start justify-between gap-2`}>
+                      <span>
+                        <strong>{p.title}</strong>
+                        <span className="block text-xs text-sand-muted">{p.status} · {p.nutritionist.name} · {p.assignments.length} atribuição(ões)</span>
+                      </span>
+                      <button
+                        type="button"
+                        className="text-red-400"
+                        disabled={busy}
+                        title="Arquivar plano"
+                        onClick={() =>
+                          void runAction(async () => {
+                            await apiDelete(`/org/nutrition-plans/${p.id}`, token);
+                          }, "Plano arquivado.")
+                        }
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </li>
                   ))}</ul>
                 )}
               </article>

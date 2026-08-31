@@ -99,6 +99,26 @@ describe("org authorize", () => {
     assert.equal(denied, "DENY");
   });
 
+  it("coach can create org resources without athleteId", () => {
+    const result = authorize({
+      ctx: ctx({
+        userId: "coach-1",
+        memberships: [
+          {
+            organizationId: "org-1",
+            unitId: "unit-1",
+            role: "COACH",
+            status: "ACTIVE"
+          }
+        ]
+      }),
+      permission: "training.create",
+      organizationId: "org-1",
+      unitId: "unit-1"
+    });
+    assert.equal(result, "ALLOW");
+  });
+
   it("athlete self scope allows own view permission context", () => {
     const result = authorize({
       ctx: ctx({

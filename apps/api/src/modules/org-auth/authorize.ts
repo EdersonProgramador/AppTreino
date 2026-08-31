@@ -103,7 +103,10 @@ export function authorize(input: AuthorizeInput): AuthorizeResult {
   }
 
   if (scope === "ASSIGNED_ATHLETES") {
-    if (!athleteId) return "DENY";
+    // Operações de recurso (criar turma/programa) dentro da org — sem athleteId ainda.
+    if (!athleteId) {
+      return organizationId ? "ALLOW" : "DENY";
+    }
     if (athleteId === ctx.userId && permission.endsWith(".view")) {
       return "ALLOW";
     }
