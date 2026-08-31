@@ -8,8 +8,8 @@ export function homePathForRole(role: UserRole) {
 }
 
 export function loginPath(planCode?: string | null) {
-  if (planCode === "monthly" || planCode === "annual") {
-    return `${paths.login}?plan=${planCode}`;
+  if (planCode && planCode.trim()) {
+    return `${paths.login}?plan=${encodeURIComponent(planCode.trim())}`;
   }
   return paths.login;
 }

@@ -10,6 +10,7 @@ import {
   studentMatchesProgramTargetGender
 } from "./cms-publication.utils.js";
 import { fetchOrganizationProgramsForAthlete, mergePublishedPrograms } from "./org-workouts.utils.js";
+import { assertIndividualFeature, listUserPlanFeatures } from "./org-auth/entitlements.js";
 import { validActiveMembershipWhere } from "./membership.utils.js";
 import {
   assertModuleEnabled,
@@ -454,6 +455,8 @@ export async function getPublishedWorkouts(
       return [];
     }
   }
+
+  await assertIndividualFeature(userId, "fixed_training_programs");
 
   const student = await prisma.user.findUnique({
     where: { id: userId },
@@ -921,6 +924,13 @@ export async function getPublishedWorkouts(
 export async function registerStudentRoutes(app: FastifyInstance) {
   app.addHook("preHandler", async (request) => {
     await requirePathRole(app, request, "/student", "USER");
+  });
+
+  app.get("/student/entitlements", async (request) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    const featureKeys = await listUserPlanFeatures(user.id);
+    return { featureKeys };
   });
 
   /** Catálogo visual para aluno sem assinatura ativa (primeira experiência). */

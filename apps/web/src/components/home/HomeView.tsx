@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Check, ChevronRight, Menu, ShieldCheck, X } from "lucide-react";
-import { formatPriceInBRL, initialPlans } from "@app-treino/shared";
+import { formatPriceInBRL } from "@app-treino/shared";
+import { apiGet } from "../../api";
 import { brand } from "../../lib/brand";
 import { isLegalIdentityPublic, legalMeta, legalPublicOperatorName } from "../../lib/legal-content";
 import { paths } from "../../auth/paths";
@@ -54,12 +55,19 @@ export function HomeView({
 }) {
   const [stickyVisible, setStickyVisible] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [catalogPlans, setCatalogPlans] = useState<Array<{ code: string; name: string; priceInCents: number; billingCycle?: string }>>([]);
   const scrollRootRef = useRef<HTMLElement | null>(null);
-  const monthly = initialPlans.find((plan) => plan.code === "monthly")!;
-  const annual = initialPlans.find((plan) => plan.code === "annual")!;
-  const annualAnchorCents = monthly.priceInCents * 12;
-  const annualSavingsCents = annualAnchorCents - annual.priceInCents;
-  const annualInstallmentCents = Math.round(annual.priceInCents / 12);
+  const monthly = catalogPlans.find((plan) => plan.code === "monthly") ?? catalogPlans[0] ?? null;
+  const annual = catalogPlans.find((plan) => plan.code === "annual") ?? catalogPlans[1] ?? null;
+  const annualAnchorCents = monthly && annual ? monthly.priceInCents * 12 : 0;
+  const annualSavingsCents = monthly && annual ? annualAnchorCents - annual.priceInCents : 0;
+  const annualInstallmentCents = annual ? Math.round(annual.priceInCents / 12) : 0;
+
+  useEffect(() => {
+    void apiGet<{ plans: Array<{ code: string; name: string; priceInCents: number; billingCycle?: string }> }>("/plans")
+      .then((response) => setCatalogPlans(response.plans ?? []))
+      .catch(() => setCatalogPlans([]));
+  }, []);
 
   useEffect(() => {
     const root = scrollRootRef.current;
@@ -525,8 +533,9 @@ export function HomeView({
           <h2 className="ui-display mt-4 text-[clamp(1.75rem,4vw,2.25rem)] font-bold uppercase">Escolha como você quer começar sua evolução</h2>
           <p className="mt-3 text-sand-muted">Sem complicação. Acesso imediato pelo celular.</p>
           <div className="mt-10 grid gap-5 lg:grid-cols-2">
+            {monthly ? (
             <article className="home-plan-card rounded-3xl border border-white/10 p-6 sm:p-8">
-              <h3 className="font-display text-2xl font-bold uppercase">Mensal</h3>
+              <h3 className="font-display text-2xl font-bold uppercase">{monthly.name}</h3>
               <p className="mt-1 text-sm text-sand-muted">Para quem deseja flexibilidade.</p>
               <div className="mt-4">
                 <strong className="font-display text-4xl text-brand-gold">{formatPriceInBRL(monthly.priceInCents)}</strong>
@@ -540,21 +549,30 @@ export function HomeView({
                   </li>
                 ))}
               </ul>
-              <button type="button" className="ui-btn-primary mt-6 w-full sm:w-auto" onClick={() => onStart("monthly")}>
+              <button type="button" className="ui-btn-primary mt-6 w-full sm:w-auto" onClick={() => onStart(monthly.code)}>
                 Começar no plano mensal
                 <ArrowRight size={18} />
               </button>
             </article>
+            ) : (
+              <article className="home-plan-card rounded-3xl border border-white/10 p-6 sm:p-8">
+                <p className="text-sm text-sand-muted">Carregando planos…</p>
+              </article>
+            )}
+            {annual ? (
             <article className="home-plan-featured relative rounded-3xl border border-brand-gold/50 p-6 shadow-glow sm:p-8">
               <span className="absolute right-4 top-4 rounded-full bg-brand-gold px-3 py-1 text-[10px] font-extrabold uppercase text-black">
                 Mais vantajoso
               </span>
-              <h3 className="font-display text-2xl font-bold uppercase">Anual</h3>
+              <h3 className="font-display text-2xl font-bold uppercase">{annual.name}</h3>
               <div className="mt-4">
-                <p className="text-sm line-through text-sand-faint">{formatPriceInBRL(annualAnchorCents)}</p>
+                {annualSavingsCents > 0 ? (
+                  <p className="text-sm line-through text-sand-faint">{formatPriceInBRL(annualAnchorCents)}</p>
+                ) : null}
                 <strong className="font-display text-4xl text-brand-gold">12× {formatPriceInBRL(annualInstallmentCents)}</strong>
                 <p className="mt-1 text-sm text-sand-muted">
-                  ou {formatPriceInBRL(annual.priceInCents)} à vista — economize {formatPriceInBRL(annualSavingsCents)}
+                  ou {formatPriceInBRL(annual.priceInCents)} à vista
+                  {annualSavingsCents > 0 ? ` — economize ${formatPriceInBRL(annualSavingsCents)}` : ""}
                 </p>
               </div>
               <ul className="mt-6 grid gap-2">
@@ -565,11 +583,12 @@ export function HomeView({
                   </li>
                 ))}
               </ul>
-              <button type="button" className="ui-btn-primary mt-6 w-full sm:w-auto" onClick={() => onStart("annual")}>
+              <button type="button" className="ui-btn-primary mt-6 w-full sm:w-auto" onClick={() => onStart(annual.code)}>
                 Garantir plano anual
                 <ArrowRight size={18} />
               </button>
             </article>
+            ) : null}
           </div>
         </div>
       </section>

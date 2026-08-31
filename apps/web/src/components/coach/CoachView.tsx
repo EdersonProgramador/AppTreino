@@ -67,6 +67,7 @@ type OrgProgram = {
 type NutritionPlan = {
   id: string;
   title: string;
+  description?: string | null;
   status: string;
   nutritionist: OrgUser;
   unit: Unit;
@@ -118,6 +119,11 @@ export function CoachView({ token, userName, onLogout }: Props) {
   const [memberAthleteId, setMemberAthleteId] = useState("");
   const [assignProgramId, setAssignProgramId] = useState("");
   const [assignAthleteId, setAssignAthleteId] = useState("");
+  const [planTitle, setPlanTitle] = useState("");
+  const [planDescription, setPlanDescription] = useState("");
+  const [planUnitId, setPlanUnitId] = useState("");
+  const [nutritionAssignPlanId, setNutritionAssignPlanId] = useState("");
+  const [nutritionAssignAthleteId, setNutritionAssignAthleteId] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -148,7 +154,10 @@ export function CoachView({ token, userName, onLogout }: Props) {
     if (selectedOrg?.units[0] && !classUnitId) {
       setClassUnitId(selectedOrg.units[0].id);
     }
-  }, [classUnitId, selectedOrg]);
+    if (selectedOrg?.units[0] && !planUnitId) {
+      setPlanUnitId(selectedOrg.units[0].id);
+    }
+  }, [classUnitId, planUnitId, selectedOrg]);
 
   const runAction = async (action: () => Promise<void>, successMessage: string) => {
     setBusy(true);
@@ -501,27 +510,134 @@ export function CoachView({ token, userName, onLogout }: Props) {
           </section>
         )}
 
-        {tab === "nutrition" && workspace && (
-          <section className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5">
-            <h2 className="mb-2 text-lg font-bold">Planos nutricionais</h2>
-            <p className="mb-4 text-sm text-sand-muted">
-              Conteúdo detalhado (refeições/macros) ainda é limitado — aqui você acompanha planos e atribuições da sua org.
-            </p>
-            {workspace.nutritionPlans.length === 0 ? (
-              <p className="text-sm text-sand-muted">Nenhum plano nutricional no seu escopo.</p>
-            ) : (
-              <ul className="grid gap-2 text-sm">
-                {workspace.nutritionPlans.map((plan) => (
-                  <li key={plan.id} className="rounded-2xl border border-[color:var(--app-border)] px-4 py-3">
-                    <strong>{plan.title}</strong>
-                    <span className="block text-xs text-sand-muted">
-                      {plan.status} · {plan.organization.name} · {plan.nutritionist.name} · {plan.assignments.length}{" "}
-                      atribuição(ões)
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+        {tab === "nutrition" && workspace && selectedOrg && (
+          <section className="grid gap-6 lg:grid-cols-2">
+            <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5">
+              <h2 className="mb-2 text-lg font-bold">Novo plano nutricional</h2>
+              <p className="mb-4 text-sm text-sand-muted">
+                Escreva o conteúdo completo (refeições, macros, orientações). O aluno vê no app em Minha organização.
+              </p>
+              <div className="grid gap-3">
+                <input
+                  className="admin-input"
+                  placeholder="Título"
+                  value={planTitle}
+                  onChange={(e) => setPlanTitle(e.target.value)}
+                />
+                <textarea
+                  className="admin-input min-h-[140px]"
+                  placeholder="Conteúdo do plano…"
+                  value={planDescription}
+                  onChange={(e) => setPlanDescription(e.target.value)}
+                />
+                <select className="admin-input" value={planUnitId} onChange={(e) => setPlanUnitId(e.target.value)}>
+                  {selectedOrg.units.map((unit) => (
+                    <option key={unit.id} value={unit.id}>
+                      {unit.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="admin-primary-button"
+                  disabled={busy || planTitle.trim().length < 2 || !planUnitId}
+                  onClick={() =>
+                    void runAction(async () => {
+                      await apiPost(
+                        "/org/nutrition-plans",
+                        {
+                          organizationId: selectedOrg.id,
+                          unitId: planUnitId,
+                          nutritionistId: workspace.userId,
+                          title: planTitle.trim(),
+                          description: planDescription.trim() || undefined,
+                          status: "ACTIVE"
+                        },
+                        token
+                      );
+                      setPlanTitle("");
+                      setPlanDescription("");
+                    }, "Plano nutricional criado.")
+                  }
+                >
+                  Criar plano
+                </button>
+              </div>
+              <h3 className="mb-2 mt-6 text-sm font-bold">Atribuir a aluno</h3>
+              <div className="grid gap-3">
+                <select
+                  className="admin-input"
+                  value={nutritionAssignPlanId}
+                  onChange={(e) => setNutritionAssignPlanId(e.target.value)}
+                >
+                  <option value="">Plano</option>
+                  {workspace.nutritionPlans.map((plan) => (
+                    <option key={plan.id} value={plan.id}>
+                      {plan.title}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="admin-input"
+                  value={nutritionAssignAthleteId}
+                  onChange={(e) => setNutritionAssignAthleteId(e.target.value)}
+                >
+                  <option value="">Aluno</option>
+                  {workspace.assignedAthletes.map((athlete) => (
+                    <option key={athlete.id} value={athlete.id}>
+                      {athlete.name}
+                    </option>
+                  ))}
+                  {workspace.athleteLinks.map((link) => (
+                    <option key={`n-${link.athlete.id}`} value={link.athlete.id}>
+                      {link.athlete.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="admin-primary-button"
+                  disabled={busy || !nutritionAssignPlanId || !nutritionAssignAthleteId}
+                  onClick={() =>
+                    void runAction(async () => {
+                      await apiPost(
+                        "/org/nutrition-assignments",
+                        {
+                          nutritionPlanId: nutritionAssignPlanId,
+                          athleteId: nutritionAssignAthleteId,
+                          startDate: new Date().toISOString()
+                        },
+                        token
+                      );
+                      setNutritionAssignAthleteId("");
+                    }, "Plano atribuído.")
+                  }
+                >
+                  Atribuir
+                </button>
+              </div>
+            </article>
+            <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5">
+              <h2 className="mb-4 text-lg font-bold">Planos nutricionais</h2>
+              {workspace.nutritionPlans.length === 0 ? (
+                <p className="text-sm text-sand-muted">Nenhum plano nutricional no seu escopo.</p>
+              ) : (
+                <ul className="grid gap-2 text-sm">
+                  {workspace.nutritionPlans.map((plan) => (
+                    <li key={plan.id} className="rounded-2xl border border-[color:var(--app-border)] px-4 py-3">
+                      <strong>{plan.title}</strong>
+                      <span className="block text-xs text-sand-muted">
+                        {plan.status} · {plan.organization.name} · {plan.nutritionist.name} · {plan.assignments.length}{" "}
+                        atribuição(ões)
+                      </span>
+                      {plan.description ? (
+                        <span className="mt-2 block whitespace-pre-wrap text-xs text-sand-muted">{plan.description}</span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
           </section>
         )}
       </main>

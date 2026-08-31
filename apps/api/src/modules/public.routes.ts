@@ -147,11 +147,24 @@ export async function registerPublicRoutes(app: FastifyInstance) {
       where: { deletedAt: null },
       orderBy: {
         priceInCents: "asc"
+      },
+      include: {
+        features: { select: { featureKey: true } }
       }
     });
 
     return {
-      plans: plans.length > 0 ? plans : initialPlans
+      plans:
+        plans.length > 0
+          ? plans.map((plan) => ({
+              id: plan.id,
+              code: plan.code,
+              name: plan.name,
+              priceInCents: plan.priceInCents,
+              billingCycle: plan.billingCycle,
+              featureKeys: plan.features.map((item) => item.featureKey)
+            }))
+          : initialPlans
     };
   });
 

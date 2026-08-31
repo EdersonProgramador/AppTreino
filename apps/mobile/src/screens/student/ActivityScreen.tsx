@@ -45,10 +45,15 @@ type LapRecord = { index: number; lat: number; lng: number; t: number; distanceM
 type MapType = "standard" | "satellite" | "hybrid" | "winter";
 type ActivityMap = "global" | "weekly" | "night" | "personal";
 
-const SPORTS: Array<{ id: OutdoorSport; label: string; ionicon?: keyof typeof Ionicons.glyphMap }> = [
-  { id: "RUN", label: "Corrida" },
-  { id: "WALK", label: "Caminhada", ionicon: "walk-outline" },
-  { id: "RIDE", label: "Ciclismo", ionicon: "bicycle-outline" }
+const SPORTS: Array<{
+  id: OutdoorSport;
+  label: string;
+  ionicon?: keyof typeof Ionicons.glyphMap;
+  featureKey: string;
+}> = [
+  { id: "RUN", label: "Corrida", featureKey: "running_engine" },
+  { id: "WALK", label: "Caminhada", ionicon: "walk-outline", featureKey: "walking_engine" },
+  { id: "RIDE", label: "Ciclismo", ionicon: "bicycle-outline", featureKey: "cycling_engine" }
 ];
 
 function mergeRoutePoints(
@@ -117,6 +122,7 @@ export function ActivityScreen() {
   const autoArmLapRef = useRef(true);
   const lapMarkerRef = useRef<LapMarker | null>(null);
   const [sport, setSport] = useState<OutdoorSport>("RUN");
+  const [featureKeys, setFeatureKeys] = useState<string[] | null>(null);
   const [mapType, setMapType] = useState<MapType>("standard");
   const [activityMap, setActivityMap] = useState<ActivityMap>("personal");
   const [layers, setLayers] = useState({ pois: true, bikeLanes: false, avalanche: false, slope: false, aspect: false });
@@ -329,6 +335,20 @@ export function ActivityScreen() {
       }
       if (goals?.laps) setLaps(goals.laps);
     });
+  }, [session.token]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void apiGet<{ featureKeys: string[] }>("/student/entitlements", session.token)
+      .then((response) => {
+        if (!cancelled) setFeatureKeys(response.featureKeys ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setFeatureKeys(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [session.token]);
 
   useEffect(() => {
@@ -1246,6 +1266,11 @@ export function ActivityScreen() {
 
   async function selectSport(next: OutdoorSport) {
     if (running) return;
+    const meta = SPORTS.find((item) => item.id === next);
+    if (featureKeys && meta && !featureKeys.includes(meta.featureKey)) {
+      setError("Esta modalidade não está incluída no seu plano.");
+      return;
+    }
     setError(null);
     if (next !== sport) {
       clearSessionRoute();
@@ -1346,12 +1371,18 @@ export function ActivityScreen() {
           </View>
         ) : null}
         <View style={styles.tabs}>
-          {SPORTS.map((item) => (
+          {SPORTS.map((item) => {
+            const locked = featureKeys !== null && !featureKeys.includes(item.featureKey);
+            return (
             <Pressable
               key={item.id}
-              disabled={running}
+              disabled={running || locked}
               onPress={() => void selectSport(item.id)}
-              style={[styles.tab, sport === item.id && styles.tabOn, running && styles.tabDisabled]}
+              style={[
+                styles.tab,
+                sport === item.id && styles.tabOn,
+                (running || locked) && styles.tabDisabled
+              ]}
             >
               {item.id === "RUN" ? (
                 <RunnerIcon size={14} color={sport === item.id ? "#df663c" : "#605a52"} gender={profile?.gender} />
@@ -1360,7 +1391,8 @@ export function ActivityScreen() {
               )}
               <Text style={[styles.tabText, sport === item.id && styles.tabTextOn]}>{item.label}</Text>
             </Pressable>
-          ))}
+            );
+          })}
         </View>
         <View style={styles.map}>
           <TrackingMap

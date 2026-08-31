@@ -1,5 +1,4 @@
 import type { FastifyInstance } from "fastify";
-import { initialPlans } from "@app-treino/shared";
 import { z } from "zod";
 import { hashPassword, isAdminStudentPreview, requireAuth, toAuthUser } from "../auth.js";
 import { env } from "../env.js";
@@ -11,6 +10,8 @@ import {
   asaasCheckoutItemName,
   evaluateSandboxConfirmGate
 } from "./checkout.utils.js";
+
+const planCodeSchema = z.string().trim().min(1).max(80);
 
 const checkoutRegisterSchema = z
   .object({
@@ -26,9 +27,7 @@ const checkoutRegisterSchema = z
     level: z.string().min(3).optional(),
     daysPerWeek: z.coerce.number().int().min(2).max(7).optional(),
     equipmentTags: z.array(z.string().min(1)).optional(),
-    planCode: z.enum(["monthly", "annual"], {
-      required_error: "Escolha um plano para continuar."
-    }),
+    planCode: planCodeSchema,
     billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED"),
     acceptTerms: z.literal(true, {
       errorMap: () => ({ message: "Aceite os Termos de Uso para continuar." })
@@ -47,9 +46,7 @@ const checkoutRegisterSchema = z
   });
 
 const checkoutSessionSchema = z.object({
-  planCode: z.enum(["monthly", "annual"], {
-    required_error: "Escolha um plano para continuar."
-  }),
+  planCode: planCodeSchema,
   billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED")
 });
 
@@ -65,6 +62,18 @@ function requireDatabase() {
     error.statusCode = 503;
     throw error;
   }
+}
+
+async function resolveCheckoutPlan(planCode: string) {
+  const plan = await prisma.plan.findFirst({
+    where: { code: planCode, deletedAt: null }
+  });
+  if (!plan) {
+    const error = new Error("Plano inválido ou indisponível.") as Error & { statusCode: number };
+    error.statusCode = 400;
+    throw error;
+  }
+  return plan;
 }
 
 function addCycleDate(start: Date, cycle: "MONTHLY" | "YEARLY") {
@@ -93,13 +102,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       });
     }
     const body = checkoutSessionSchema.parse(request.body);
-    const planSeed = initialPlans.find((plan) => plan.code === body.planCode);
-
-    if (!planSeed) {
-      return reply.code(400).send({
-        message: "Plano inválido."
-      });
-    }
+    const planSeed = await resolveCheckoutPlan(body.planCode);
 
     const activeMembership = await prisma.membership.findFirst({
       where: {
@@ -188,11 +191,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     }
 
     const startsAt = todayUtcOnly();
-    const plan = await prisma.plan.upsert({
-      where: { code: planSeed.code },
-      create: planSeed,
-      update: {}
-    });
+    const plan = planSeed;
 
     const { user, membership, payment } = await prisma.$transaction(async (tx) => {
       const user = await tx.user.findUniqueOrThrow({
@@ -330,13 +329,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     const email = body.email ? body.email.toLowerCase() : null;
     const phone = body.phone || null;
     const fallbackEmail = email ?? (phone ? `phone-${phone.replace(/[^a-z0-9]+/gi, "").toLowerCase()}@app-treino.local` : null);
-    const planSeed = initialPlans.find((plan) => plan.code === body.planCode);
-
-    if (!planSeed) {
-      return reply.code(400).send({
-        message: "Plano inválido."
-      });
-    }
+    const planSeed = await resolveCheckoutPlan(body.planCode);
 
     const existingUser =
       (email ? await prisma.user.findUnique({ where: { email } }) : null) ??
@@ -349,11 +342,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     }
 
     const startsAt = todayUtcOnly();
-    const plan = await prisma.plan.upsert({
-      where: { code: planSeed.code },
-      create: planSeed,
-      update: {}
-    });
+    const plan = planSeed;
 
     const birthDate = body.birthDate ? new Date(body.birthDate) : null;
     const consentAt = new Date();

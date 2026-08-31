@@ -63,6 +63,7 @@ type TrainingClass = {
 type NutritionPlan = {
   id: string;
   title: string;
+  description?: string | null;
   status: string;
   nutritionist: OrgUser;
   unit: { id: string; name: string };
@@ -202,6 +203,7 @@ export function OrgAdminPanel({ token }: Props) {
   const [classMemberAthleteId, setClassMemberAthleteId] = useState("");
 
   const [planTitle, setPlanTitle] = useState("");
+  const [planDescription, setPlanDescription] = useState("");
   const [planNutriQuery, setPlanNutriQuery] = useState("");
   const [planNutriResults, setPlanNutriResults] = useState<OrgUser[]>([]);
   const [planNutriId, setPlanNutriId] = useState("");
@@ -210,6 +212,12 @@ export function OrgAdminPanel({ token }: Props) {
   const [nutritionAssignQuery, setNutritionAssignQuery] = useState("");
   const [nutritionAssignResults, setNutritionAssignResults] = useState<OrgUser[]>([]);
   const [nutritionAssignAthleteId, setNutritionAssignAthleteId] = useState("");
+
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"ORGANIZATION_ADMIN" | "UNIT_MANAGER" | "COACH" | "NUTRITIONIST">("COACH");
+  const [inviteUnitId, setInviteUnitId] = useState("");
+  const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
 
   const [modalityUnitId, setModalityUnitId] = useState("");
   const [modalityId, setModalityId] = useState("");
@@ -496,6 +504,62 @@ export function OrgAdminPanel({ token }: Props) {
                     setMemberUserId(""); setMemberUserQuery(""); setMemberUserResults([]);
                   }, "Membro adicionado.")}>Salvar membro</button>
                 </div>
+                <h3 className="mb-2 mt-6 text-sm font-bold text-sand">Convidar por e-mail (link)</h3>
+                <div className="grid gap-3">
+                  <input className="admin-input" placeholder="Nome" value={inviteName} onChange={(e) => setInviteName(e.target.value)} />
+                  <input className="admin-input" type="email" placeholder="E-mail" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
+                  <select className="admin-input" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as typeof inviteRole)}>
+                    <option value="COACH">Coach</option>
+                    <option value="NUTRITIONIST">Nutricionista</option>
+                    <option value="UNIT_MANAGER">Gerente de unidade</option>
+                    <option value="ORGANIZATION_ADMIN">Admin da organização</option>
+                  </select>
+                  <select className="admin-input" value={inviteUnitId} onChange={(e) => setInviteUnitId(e.target.value)}>
+                    <option value="">Toda a organização</option>
+                    {selectedOrg.units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    className="admin-primary-button"
+                    disabled={busy || inviteName.trim().length < 2 || !inviteEmail.trim()}
+                    onClick={() =>
+                      void runAction(async () => {
+                        const response = await apiPost<{ inviteUrl: string; coachPanelUrl?: string }>(
+                          "/org/invites",
+                          {
+                            organizationId: selectedOrgId,
+                            unitId: inviteUnitId || undefined,
+                            email: inviteEmail.trim(),
+                            name: inviteName.trim(),
+                            role: inviteRole
+                          },
+                          token
+                        );
+                        setLastInviteUrl(response.inviteUrl);
+                        setInviteName("");
+                        setInviteEmail("");
+                      }, "Convite gerado.")
+                    }
+                  >
+                    Gerar link de convite
+                  </button>
+                  {lastInviteUrl && (
+                    <div className="rounded-2xl border border-[color:var(--app-border)] bg-black/20 p-3 text-xs text-sand-muted">
+                      <p className="mb-2 font-bold text-sand">Link (válido 7 dias)</p>
+                      <p className="mb-2 break-all">{lastInviteUrl}</p>
+                      <button
+                        type="button"
+                        className="admin-primary-button"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(lastInviteUrl);
+                          setFeedback("Link copiado.");
+                        }}
+                      >
+                        Copiar link
+                      </button>
+                    </div>
+                  )}
+                </div>
               </article>
               <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5">
                 <h2 className="mb-4 text-lg font-bold text-sand">Equipe cadastrada</h2>
@@ -692,13 +756,26 @@ export function OrgAdminPanel({ token }: Props) {
                 <h2 className="mb-4 text-lg font-bold text-sand">Novo plano nutricional</h2>
                 <div className="grid gap-3">
                   <input className="admin-input" placeholder="Título" value={planTitle} onChange={(e) => setPlanTitle(e.target.value)} />
+                  <textarea
+                    className="admin-input min-h-[120px]"
+                    placeholder="Conteúdo do plano (refeições, macros, orientações…)"
+                    value={planDescription}
+                    onChange={(e) => setPlanDescription(e.target.value)}
+                  />
                   <select className="admin-input" value={planUnitId} onChange={(e) => setPlanUnitId(e.target.value)}>
                     {selectedOrg.units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
                   </select>
                   <UserPicker label="Nutricionista" query={planNutriQuery} onQueryChange={setPlanNutriQuery} value={planNutriId} onChange={setPlanNutriId} results={planNutriResults} onSearch={() => void searchUsers(planNutriQuery).then(setPlanNutriResults).catch(() => setError("Busca falhou."))} />
                   <button type="button" className="admin-primary-button" disabled={busy || !planTitle.trim() || !planNutriId} onClick={() => void runAction(async () => {
-                    await apiPost("/org/nutrition-plans", { organizationId: selectedOrgId, unitId: planUnitId, nutritionistId: planNutriId, title: planTitle.trim(), status: "DRAFT" }, token);
-                    setPlanTitle(""); setPlanNutriId(""); setPlanNutriQuery(""); setPlanNutriResults([]);
+                    await apiPost("/org/nutrition-plans", {
+                      organizationId: selectedOrgId,
+                      unitId: planUnitId,
+                      nutritionistId: planNutriId,
+                      title: planTitle.trim(),
+                      description: planDescription.trim() || undefined,
+                      status: "DRAFT"
+                    }, token);
+                    setPlanTitle(""); setPlanDescription(""); setPlanNutriId(""); setPlanNutriQuery(""); setPlanNutriResults([]);
                   }, "Plano criado.")}>Criar plano</button>
                 </div>
                 <h3 className="mb-2 mt-6 text-sm font-bold text-sand">Atribuir plano a aluno</h3>
@@ -722,6 +799,7 @@ export function OrgAdminPanel({ token }: Props) {
                       <span>
                         <strong>{p.title}</strong>
                         <span className="block text-xs text-sand-muted">{p.status} · {p.nutritionist.name} · {p.assignments.length} atribuição(ões)</span>
+                        {p.description ? <span className="mt-1 block text-xs text-sand-muted line-clamp-3 whitespace-pre-wrap">{p.description}</span> : null}
                       </span>
                       <button
                         type="button"

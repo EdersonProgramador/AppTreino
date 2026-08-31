@@ -1,11 +1,23 @@
 import type { FastifyInstance } from "fastify";
 import type { Prisma } from "@prisma/client";
+import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { requireAuth } from "../auth.js";
+import { hashPassword, requireAuth } from "../auth.js";
+import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { authorize } from "./org-auth/authorize.js";
 import { loadOrgAuthContext, writeAuditLog } from "./org-auth/context.js";
 import { authorizeOrg, httpOrgError } from "./org-auth/scope.js";
+
+function webAppOrigin() {
+  const origins = env.WEB_ORIGIN.split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const production = origins.find(
+    (origin) => !origin.includes("localhost") && !origin.includes("127.0.0.1")
+  );
+  return production ?? origins[0] ?? "https://www.atlly.com.br";
+}
 
 const slugSchema = z
   .string()
@@ -193,13 +205,16 @@ export async function registerOrgRoutes(app: FastifyInstance) {
       prisma.nutritionPlan.findMany({
         where: {
           deletedAt: null,
-          ...(staffMemberships.some((m) => m.role === "NUTRITIONIST") && isCoachOnly
-            ? { nutritionistId: user.id }
-            : isCoachOnly
-              ? { id: { in: [] } }
-              : orgIds
-                ? { organizationId: { in: orgIds } }
-                : {})
+          ...(isCoachOnly
+            ? {
+                OR: [
+                  { nutritionistId: user.id },
+                  ...(orgIds ? [{ organizationId: { in: orgIds } }] : [])
+                ]
+              }
+            : orgIds
+              ? { organizationId: { in: orgIds } }
+              : {})
         },
         include: {
           nutritionist: { select: { id: true, name: true, email: true } },
@@ -439,7 +454,7 @@ export async function registerOrgRoutes(app: FastifyInstance) {
     const isSelf = athleteId === user.id;
     if (!isSelf) {
       denyUnlessAllowed(
-        authorize({
+        await authorizeOrg({
           ctx,
           permission: "athletes.view",
           athleteId
@@ -447,7 +462,7 @@ export async function registerOrgRoutes(app: FastifyInstance) {
       );
     }
 
-    const [links, assignments, classMembers] = await Promise.all([
+    const [links, assignments, classMembers, nutritionAssignments] = await Promise.all([
       prisma.athleteOrganizationLink.findMany({
         where: { athleteId, deletedAt: null, status: { in: ["PENDING", "ACTIVE"] } },
         include: { organization: true, unit: true }
@@ -458,11 +473,33 @@ export async function registerOrgRoutes(app: FastifyInstance) {
       }),
       prisma.trainingClassMember.findMany({
         where: { athleteId, status: "ACTIVE" },
-        include: { class: { include: { modality: true, coach: { select: { id: true, name: true } } } } }
+        include: {
+          class: {
+            include: {
+              modality: true,
+              coach: { select: { id: true, name: true, email: true } },
+              organization: { select: { id: true, name: true } },
+              unit: { select: { id: true, name: true } }
+            }
+          }
+        }
+      }),
+      prisma.nutritionAssignment.findMany({
+        where: { athleteId, status: "ACTIVE" },
+        include: {
+          nutritionPlan: {
+            include: {
+              nutritionist: { select: { id: true, name: true, email: true } },
+              organization: { select: { id: true, name: true } },
+              unit: { select: { id: true, name: true } }
+            }
+          }
+        },
+        orderBy: { startDate: "desc" }
       })
     ]);
 
-    return { links, assignments, classMembers };
+    return { links, assignments, classMembers, nutritionAssignments };
   });
 
   app.get("/org/users", async (request) => {
@@ -847,7 +884,7 @@ export async function registerOrgRoutes(app: FastifyInstance) {
     unitId: z.string().min(1),
     nutritionistId: z.string().min(1),
     title: z.string().trim().min(2).max(120),
-    description: z.string().trim().max(500).optional(),
+    description: z.string().trim().max(8000).optional(),
     status: z.enum(["DRAFT", "ACTIVE", "ARCHIVED"]).default("DRAFT")
   });
 
@@ -1399,7 +1436,7 @@ export async function registerOrgRoutes(app: FastifyInstance) {
     const body = z
       .object({
         title: z.string().trim().min(2).max(120).optional(),
-        description: z.string().trim().max(2000).nullable().optional(),
+        description: z.string().trim().max(8000).nullable().optional(),
         status: z.enum(["DRAFT", "ACTIVE", "ARCHIVED"]).optional()
       })
       .parse(request.body);
@@ -1780,5 +1817,101 @@ export async function registerOrgRoutes(app: FastifyInstance) {
     });
 
     return { ok: true };
+  });
+
+  app.post("/org/invites", async (request, reply) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const body = z
+      .object({
+        organizationId: z.string().min(1),
+        unitId: z.string().optional(),
+        email: z.string().trim().email(),
+        name: z.string().trim().min(2).max(120),
+        role: z.enum(["ORGANIZATION_ADMIN", "UNIT_MANAGER", "COACH", "NUTRITIONIST"])
+      })
+      .parse(request.body);
+
+    denyUnlessAllowed(
+      authorize({
+        ctx,
+        permission: "roles.manage",
+        organizationId: body.organizationId,
+        unitId: body.unitId ?? null
+      })
+    );
+
+    const email = body.email.toLowerCase();
+    let invited = await prisma.user.findUnique({ where: { email } });
+    let createdUser = false;
+    if (!invited) {
+      const tempPassword = randomBytes(12).toString("base64url");
+      invited = await prisma.user.create({
+        data: {
+          name: body.name,
+          email,
+          passwordHash: await hashPassword(tempPassword),
+          provider: "EMAIL",
+          role: "USER",
+          status: "ACTIVE",
+          enrollmentStatus: "PENDING"
+        }
+      });
+      createdUser = true;
+    }
+
+    const member = await prisma.organizationMember.upsert({
+      where: {
+        organizationId_userId_role: {
+          organizationId: body.organizationId,
+          userId: invited.id,
+          role: body.role
+        }
+      },
+      create: {
+        organizationId: body.organizationId,
+        userId: invited.id,
+        role: body.role,
+        unitId: body.unitId ?? null,
+        status: "ACTIVE"
+      },
+      update: {
+        unitId: body.unitId ?? null,
+        status: "ACTIVE"
+      }
+    });
+
+    const rawToken = randomBytes(32).toString("hex");
+    const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+    await prisma.passwordResetToken.deleteMany({ where: { userId: invited.id } });
+    await prisma.passwordResetToken.create({
+      data: {
+        userId: invited.id,
+        tokenHash,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      }
+    });
+
+    const inviteUrl = `${webAppOrigin()}/login?reset=${encodeURIComponent(rawToken)}&coach=1`;
+
+    await writeAuditLog({
+      userId: user.id,
+      organizationId: body.organizationId,
+      unitId: body.unitId ?? null,
+      action: "organization_member.invite",
+      resourceType: "organization_member",
+      resourceId: member.id,
+      newValues: { email, role: body.role, createdUser },
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"]
+    });
+
+    return reply.code(201).send({
+      member,
+      user: { id: invited.id, name: invited.name, email: invited.email },
+      createdUser,
+      inviteUrl,
+      coachPanelUrl: `${webAppOrigin()}/coach`
+    });
   });
 }

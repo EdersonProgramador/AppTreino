@@ -51,7 +51,7 @@ import {
 import { lazy, Suspense, type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
-import { formatPriceInBRL, initialPlans } from "@app-treino/shared";
+import { formatPriceInBRL } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { useAuth } from "../../auth/AuthContext";
 import { BRAZILIAN_STATES, CITIES_BY_STATE } from "../../brazil-data";
@@ -112,6 +112,7 @@ import type {
   WorkoutRow,
   WorkoutSessionResponse
 } from "../../types";
+import { StudentOrgSection } from "./StudentOrgSection";
 import type { PlanCode } from "../../types/auth";
 import { assessmentPerimeterKeys, assessmentPhotoFields } from "../../types/admin";
 import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
@@ -236,6 +237,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [showAddCardForm, setShowAddCardForm] = useState(false);
   const [checkoutPayment, setCheckoutPayment] = useState<PaymentRow | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState<PlanCode | "sandbox" | null>(null);
+  const [catalogPlans, setCatalogPlans] = useState<
+    Array<{ code: string; name: string; priceInCents: number; billingCycle: string }>
+  >([]);
   const [streakCalendarOpen, setStreakCalendarOpen] = useState(false);
   const [streakCalendarMonth, setStreakCalendarMonth] = useState(() => new Date().getMonth() + 1);
   const [checkoutDraft, setCheckoutDraft] = useState<{
@@ -532,6 +536,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     apiGet<{ config: Record<string, string> }>("/public/config")
       .then((response) => setPublicConfig(response.config))
       .catch(() => {});
+    apiGet<{
+      plans: Array<{ code: string; name: string; priceInCents: number; billingCycle: string }>;
+    }>("/plans")
+      .then((response) => {
+        const plans = response.plans ?? [];
+        setCatalogPlans(plans);
+        if (plans[0] && !plans.some((plan) => plan.code === checkoutDraft.planCode)) {
+          setCheckoutDraft((current) => ({ ...current, planCode: plans[0].code }));
+        }
+      })
+      .catch(() => setCatalogPlans([]));
     loadStudentCards();
   }, [token]);
 
@@ -804,6 +819,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       "orders",
       "ratings",
       "locations",
+      "org",
       "reels",
       "live",
       "messages",
@@ -2326,7 +2342,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             )}
             <form className="checkout-form" onSubmit={handleCreateCheckout}>
               <div className="checkout-plan-grid">
-                {initialPlans.map((plan) => (
+                {(catalogPlans.length > 0 ? catalogPlans : []).map((plan) => (
                   <label className="checkout-plan-option" key={plan.code}>
                     <input
                       name="planCode"
@@ -2347,6 +2363,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                     </span>
                   </label>
                 ))}
+                {catalogPlans.length === 0 && (
+                  <p className="text-sm text-sand-muted">Carregando planos…</p>
+                )}
               </div>
               <label>
                 Pagamento
@@ -2833,6 +2852,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             onPublished={() => goToSection("feed")}
             onLiveChromeChange={setActivityLiveChrome}
           />
+        )}
+
+        {studentSection === "org" && token && authUser?.id && (
+          <StudentOrgSection token={token} athleteId={authUser.id} />
         )}
 
         {studentSection === "training" && (
@@ -4579,6 +4602,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 { group: "Treino", icon: Trophy, title: "Desafios", action: () => goToSection("club"), favorite: true },
                 { group: "Treino", icon: Sparkles, title: "Coach IA", action: () => goToSection("ai"), moduleKey: "module_ai" },
                 { group: "Conta", icon: ShieldCheck, title: "Matrículas", action: () => goToSection("membership") },
+                { group: "Conta", icon: Building2, title: "Minha organização", action: () => goToSection("org") },
                 { group: "Conta", icon: CreditCard, title: "Pagamentos", action: () => goToSection("payments"), favorite: true },
                 { group: "Saúde", icon: Ruler, title: trainingCopy.physicalAssessment, action: () => goToSection("assessments") },
                 { group: "Saúde", icon: CalendarDays, title: "Frequência", action: () => goToSection("status") },

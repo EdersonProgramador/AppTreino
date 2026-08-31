@@ -6,7 +6,8 @@ import {
   UserRound
 } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { formatPriceInBRL, initialPlans } from "@app-treino/shared";
+import { formatPriceInBRL } from "@app-treino/shared";
+import { apiGet } from "../../api";
 import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
 import type { AuthMode, PlanCode } from "../../types/auth";
 import { googleClientId } from "../../lib/urls";
@@ -42,7 +43,14 @@ export const LoginView = ({
   );
   const formRef = useRef<HTMLFormElement | null>(null);
   const googleButtonRef = useRef<HTMLDivElement | null>(null);
-  const selectedPlan = initialPlans.find((plan) => plan.code === selectedPlanCode);
+  const [catalogPlans, setCatalogPlans] = useState<Array<{ code: string; name: string; priceInCents: number }>>([]);
+  const selectedPlan = catalogPlans.find((plan) => plan.code === selectedPlanCode) ?? null;
+
+  useEffect(() => {
+    void apiGet<{ plans: Array<{ code: string; name: string; priceInCents: number }> }>("/plans")
+      .then((response) => setCatalogPlans(response.plans ?? []))
+      .catch(() => setCatalogPlans([]));
+  }, []);
 
   useEffect(() => {
     if (selectedPlanCode || preferRegister) setMode("register");

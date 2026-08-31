@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { apiPost, NativeApiError } from "../../auth/api";
+import { apiGet, apiPost, NativeApiError } from "../../auth/api";
 import { mediaUrl } from "../../lib/media";
 import { trainingCopy } from "../../student/copy";
 import { GreenButton, OutlineButton, SheetHeading, StudentPage } from "../../student/layout";
@@ -11,10 +11,7 @@ import { useSt, type StudentTokens } from "../../student/theme";
 import { uiSounds } from "../../student/uiSounds";
 import { money } from "../../theme";
 
-const PLANS = [
-  { code: "monthly", name: "Mensal", priceInCents: 9700 },
-  { code: "annual", name: "Anual", priceInCents: 104700 }
-] as const;
+type CatalogPlan = { code: string; name: string; priceInCents: number };
 
 const BILLING = [
   { value: "UNDEFINED", label: "Escolher no checkout" },
@@ -38,14 +35,28 @@ const LOCKED_FEATURES = [
 
 export function SubscriptionScreen() {
   const { session, refresh, payments, membership } = useStudent();
-  const { st } = useSt();
   const styles = useLockedStyles();
-  const [planCode, setPlanCode] = useState<(typeof PLANS)[number]["code"]>("monthly");
+  const [plans, setPlans] = useState<CatalogPlan[]>([]);
+  const [planCode, setPlanCode] = useState("monthly");
   const [billingType, setBillingType] = useState<(typeof BILLING)[number]["value"]>("UNDEFINED");
   const [busy, setBusy] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const pending = payments.find((item) => item.status === "PENDING" || item.status === "OVERDUE");
+  const selectedPlan = plans.find((item) => item.code === planCode) ?? plans[0] ?? null;
+
+  useEffect(() => {
+    void apiGet<{ plans: CatalogPlan[] }>("/plans")
+      .then((response) => {
+        const next = response.plans ?? [];
+        setPlans(next);
+        if (next[0] && !next.some((plan) => plan.code === planCode)) {
+          setPlanCode(next[0].code);
+        }
+      })
+      .catch(() => setPlans([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -93,7 +104,8 @@ export function SubscriptionScreen() {
     }
   }
 
-  const checkoutPayment = pending ?? (paymentUrl ? { amountInCents: PLANS.find((item) => item.code === planCode)?.priceInCents, paymentUrl } : null);
+  const checkoutPayment =
+    pending ?? (paymentUrl ? { amountInCents: selectedPlan?.priceInCents, paymentUrl } : null);
 
   return (
     <StudentPage chrome={false}>
@@ -112,8 +124,16 @@ export function SubscriptionScreen() {
         <Text style={styles.copy}>{`Status atual: ${membership.status ?? "PENDENTE"} · ${membership.plan?.name ?? "Plano"}`}</Text>
       ) : null}
       <View style={styles.card}>
-        {PLANS.map((plan) => (
-          <Pressable key={plan.code} onPress={() => { uiSounds.radioSelect(); setPlanCode(plan.code); }} style={[styles.plan, planCode === plan.code && styles.planOn]}>
+        {plans.length === 0 ? <Text style={styles.copy}>Carregando planos…</Text> : null}
+        {plans.map((plan) => (
+          <Pressable
+            key={plan.code}
+            onPress={() => {
+              uiSounds.radioSelect();
+              setPlanCode(plan.code);
+            }}
+            style={[styles.plan, planCode === plan.code && styles.planOn]}
+          >
             <Text style={styles.planName}>{plan.name}</Text>
             <Text style={styles.planPrice}>{money(plan.priceInCents)}</Text>
           </Pressable>
@@ -121,7 +141,11 @@ export function SubscriptionScreen() {
         <Text style={styles.label}>Pagamento</Text>
         <View style={styles.row}>
           {BILLING.map((item) => (
-            <Pressable key={item.value} onPress={() => setBillingType(item.value)} style={[styles.chip, billingType === item.value && styles.chipOn]}>
+            <Pressable
+              key={item.value}
+              onPress={() => setBillingType(item.value)}
+              style={[styles.chip, billingType === item.value && styles.chipOn]}
+            >
               <Text style={[styles.chipText, billingType === item.value && styles.chipTextOn]}>{item.label}</Text>
             </Pressable>
           ))}
@@ -136,7 +160,12 @@ export function SubscriptionScreen() {
         {(__DEV__ || process.env.EXPO_PUBLIC_ENABLE_SANDBOX_CONFIRM === "true") && paymentId && !paymentUrl ? (
           <OutlineButton label="Finalizar checkout sandbox" onPress={() => void confirmSandbox()} />
         ) : null}
-        <GreenButton label={busy ? "Gerando checkout…" : "Assinar agora"} loading={busy} onPress={() => void subscribe()} />
+        <GreenButton
+          label={busy ? "Gerando checkout…" : "Assinar agora"}
+          loading={busy}
+          onPress={() => void subscribe()}
+          disabled={busy || plans.length === 0}
+        />
       </View>
     </StudentPage>
   );
@@ -155,14 +184,24 @@ export function LockedContentsScreen() {
 
   return (
     <StudentPage chrome={false}>
-      <SheetHeading kicker="ATLLY" title="Este treino está bloqueado" subtitle="Finalize a assinatura pendente para liberar o player e as funcionalidades do atleta." />
+      <SheetHeading
+        kicker="ATLLY"
+        title="Este treino está bloqueado"
+        subtitle="Finalize a assinatura pendente para liberar o player e as funcionalidades do atleta."
+      />
       <View style={styles.lockCard}>
         <Ionicons name="lock-closed" size={34} color={st.gold} />
         <Text style={styles.lockTitle}>Este treino está bloqueado</Text>
-        <Text style={styles.copy}>Finalize a assinatura pendente para liberar o player e as funcionalidades do aluno.</Text>
+        <Text style={styles.copy}>
+          Finalize a assinatura pendente para liberar o player e as funcionalidades do aluno.
+        </Text>
         <GreenButton label="Assinar agora" onPress={goSubscribe} />
       </View>
-      <SheetHeading kicker="Prévia do app" title="Modalidades disponíveis para o seu perfil" subtitle="Conteúdo filtrado pelo seu sexo cadastrado. Assine para liberar os treinos." />
+      <SheetHeading
+        kicker="Prévia do app"
+        title="Modalidades disponíveis para o seu perfil"
+        subtitle="Conteúdo filtrado pelo seu sexo cadastrado. Assine para liberar os treinos."
+      />
       {modalities.length === 0 ? (
         <View style={{ gap: 12 }}>
           {LOCKED_FEATURES.map((feature) => (
@@ -211,13 +250,50 @@ function createLockedStyles(st: StudentTokens) {
     note: { marginHorizontal: 16, padding: 14, borderRadius: 14, backgroundColor: "rgba(212,175,55,0.16)", gap: 4 },
     noteTitle: { color: st.text, fontWeight: "800" },
     copy: { color: st.muted, fontSize: 13, lineHeight: 18, paddingHorizontal: 12 },
-    lockCard: { margin: 16, alignItems: "center", gap: 10, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: st.line, backgroundColor: st.card },
+    lockCard: {
+      margin: 16,
+      alignItems: "center",
+      gap: 10,
+      padding: 24,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: st.line,
+      backgroundColor: st.card
+    },
     lockTitle: { color: st.text, fontSize: 22, fontWeight: "900", textAlign: "center" },
-    mod: { marginHorizontal: 16, marginBottom: 12, borderRadius: 16, overflow: "hidden", borderWidth: 1, borderColor: st.line, backgroundColor: st.card, paddingBottom: 12, gap: 6 },
+    mod: {
+      marginHorizontal: 16,
+      marginBottom: 12,
+      borderRadius: 16,
+      overflow: "hidden",
+      borderWidth: 1,
+      borderColor: st.line,
+      backgroundColor: st.card,
+      paddingBottom: 12,
+      gap: 6
+    },
     cover: { width: "100%", aspectRatio: 16 / 9, backgroundColor: st.avatarBg },
     fallback: { alignItems: "center", justifyContent: "center" },
-    lockBadge: { position: "absolute", top: 12, right: 12, width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(0,0,0,0.55)", alignItems: "center", justifyContent: "center" },
-    feature: { marginHorizontal: 16, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: st.line, backgroundColor: st.card, gap: 8 },
+    lockBadge: {
+      position: "absolute",
+      top: 12,
+      right: 12,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: "rgba(0,0,0,0.55)",
+      alignItems: "center",
+      justifyContent: "center"
+    },
+    feature: {
+      marginHorizontal: 16,
+      padding: 16,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: st.line,
+      backgroundColor: st.card,
+      gap: 8
+    },
     featureHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }
   });
 }

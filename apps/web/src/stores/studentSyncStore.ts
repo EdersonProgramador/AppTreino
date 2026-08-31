@@ -40,6 +40,7 @@ export type StudentPanelSection =
   | "favorites"
   | "ratings"
   | "locations"
+  | "org"
   | "play"
   | "reels"
   | "live"

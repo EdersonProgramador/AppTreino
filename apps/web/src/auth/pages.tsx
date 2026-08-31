@@ -11,6 +11,7 @@ import { brand } from "../lib/brand";
 import { useAuth } from "./AuthContext";
 import { AdminPanel, CoachPanel, StudentPanel, TransitionScreen } from "./RouteGuards";
 import { homePathForRole, loginPath, paths } from "./paths";
+import { setPostLoginDestination } from "./session";
 
 export function HomePage() {
   const { user, token, isTransitioning, transitionMessage } = useAuth();
@@ -102,18 +103,23 @@ export function LoginPage() {
 
   useEffect(() => {
     const reset = searchParams.get("reset");
-    if (reset) {
-      setResetToken(reset);
+    const coachInvite = searchParams.get("coach") === "1";
+    if (coachInvite) {
+      setPostLoginDestination(paths.coach);
+    }
+    if (reset || coachInvite) {
+      if (reset) setResetToken(reset);
       const next = new URLSearchParams(searchParams);
       next.delete("reset");
+      next.delete("coach");
       setSearchParams(next, { replace: true });
     }
   }, [searchParams, setResetToken, setSearchParams]);
 
   useEffect(() => {
     const plan = searchParams.get("plan");
-    if (plan === "monthly" || plan === "annual") {
-      setSelectedPlanCode(plan);
+    if (plan && plan.trim()) {
+      setSelectedPlanCode(plan.trim());
     }
   }, [searchParams, setSelectedPlanCode]);
 

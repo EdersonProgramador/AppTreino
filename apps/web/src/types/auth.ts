@@ -1,5 +1,5 @@
 export type AuthMode = "login" | "register" | "forgot" | "reset";
-export type PlanCode = "monthly" | "annual";
+export type PlanCode = string;
 
 declare global {
   interface Window {

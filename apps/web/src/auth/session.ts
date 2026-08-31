@@ -8,6 +8,25 @@ import {
 
 export const TOKEN_KEY = "app-treino-token";
 export const USER_KEY = "app-treino-user";
+export const POST_LOGIN_DEST_KEY = "atlly-post-login";
+
+export function setPostLoginDestination(path: string) {
+  try {
+    window.sessionStorage.setItem(POST_LOGIN_DEST_KEY, path);
+  } catch {
+    // ignore
+  }
+}
+
+export function consumePostLoginDestination(): string | null {
+  try {
+    const value = window.sessionStorage.getItem(POST_LOGIN_DEST_KEY);
+    if (value) window.sessionStorage.removeItem(POST_LOGIN_DEST_KEY);
+    return value;
+  } catch {
+    return null;
+  }
+}
 
 export const paths = {
   home: "/",

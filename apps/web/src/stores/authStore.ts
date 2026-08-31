@@ -3,6 +3,7 @@ import type { AuthUser } from "@app-treino/shared";
 import {
   TOKEN_KEY,
   USER_KEY,
+  consumePostLoginDestination,
   homePathForRole,
   normalizeAuthUser,
   persistStoredUser,
@@ -116,7 +117,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   establishSession: (response) => {
     const user = normalizeAuthUser(response.user);
-    const destination = homePathForRole(user.role);
+    const destination = consumePostLoginDestination() ?? homePathForRole(user.role);
     window.localStorage.setItem(TOKEN_KEY, response.token);
     persistStoredUser(user);
     useUiPrefsStore.getState().setTheme("light");

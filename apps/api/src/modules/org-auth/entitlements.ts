@@ -1,8 +1,9 @@
+import { PLAN_FEATURE_KEYS, type PlanFeatureKey } from "@app-treino/shared";
 import { prisma } from "../../prisma.js";
 import { validActiveMembershipWhere } from "../membership.utils.js";
 
 /** Entitlements individuais — independentes de vínculo organizacional. */
-export async function userHasPlanFeature(userId: string, featureKey: string): Promise<boolean> {
+export async function listUserPlanFeatures(userId: string): Promise<PlanFeatureKey[]> {
   const membership = await prisma.membership.findFirst({
     where: {
       userId,
@@ -24,15 +25,20 @@ export async function userHasPlanFeature(userId: string, featureKey: string): Pr
       where: { id: userId },
       select: { enrollmentStatus: true }
     });
-    return user?.enrollmentStatus === "ACTIVE";
+    return user?.enrollmentStatus === "ACTIVE" ? [...PLAN_FEATURE_KEYS] : [];
   }
 
   const features = membership.plan.features.map((item) => item.featureKey);
   if (!features.length) {
-    return true;
+    return [...PLAN_FEATURE_KEYS];
   }
 
-  return features.includes(featureKey);
+  return PLAN_FEATURE_KEYS.filter((key) => features.includes(key));
+}
+
+export async function userHasPlanFeature(userId: string, featureKey: string): Promise<boolean> {
+  const features = await listUserPlanFeatures(userId);
+  return features.includes(featureKey as PlanFeatureKey);
 }
 
 export async function assertIndividualFeature(userId: string, featureKey: string) {

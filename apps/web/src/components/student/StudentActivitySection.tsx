@@ -60,10 +60,10 @@ type MapType = "standard" | "satellite" | "hybrid" | "winter";
 type ActivityMap = "global" | "weekly" | "night" | "personal";
 type LayerKey = "pois" | "bikeLanes" | "avalanche" | "slope" | "aspect";
 
-const SPORTS: Array<{ id: OutdoorSport; label: string; Icon: typeof Footprints | typeof BikeIcon }> = [
-  { id: "RUN", label: "Corrida", Icon: Footprints },
-  { id: "WALK", label: "Caminhada", Icon: Footprints },
-  { id: "RIDE", label: "Ciclismo", Icon: BikeIcon }
+const SPORTS: Array<{ id: OutdoorSport; label: string; Icon: typeof Footprints | typeof BikeIcon; featureKey: string }> = [
+  { id: "RUN", label: "Corrida", Icon: Footprints, featureKey: "running_engine" },
+  { id: "WALK", label: "Caminhada", Icon: Footprints, featureKey: "walking_engine" },
+  { id: "RIDE", label: "Ciclismo", Icon: BikeIcon, featureKey: "cycling_engine" }
 ];
 
 const MAP_TYPES: Array<{ id: MapType; label: string }> = [
@@ -313,6 +313,7 @@ export function StudentActivitySection({
   const [sport, setSport] = useState<OutdoorSport>(preferredSport);
   const sportRef = useRef(sport);
   sportRef.current = sport;
+  const [featureKeys, setFeatureKeys] = useState<string[] | null>(null);
   const genderRef = useRef(athleteGender);
   genderRef.current = athleteGender;
   const [mapType, setMapType] = useState<MapType>("hybrid");
@@ -488,6 +489,20 @@ export function StudentActivitySection({
   useEffect(() => {
     return () => onLiveChromeChange?.(false);
   }, [onLiveChromeChange]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void apiGet<{ featureKeys: string[] }>("/student/entitlements", token)
+      .then((response) => {
+        if (!cancelled) setFeatureKeys(response.featureKeys ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setFeatureKeys(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   useEffect(() => {
     if (running || paused) return;
@@ -1642,6 +1657,11 @@ export function StudentActivitySection({
 
   async function selectSport(next: OutdoorSport) {
     if (running) return;
+    const meta = SPORTS.find((item) => item.id === next);
+    if (featureKeys && meta && !featureKeys.includes(meta.featureKey)) {
+      setError("Esta modalidade não está incluída no seu plano.");
+      return;
+    }
     setError(null);
     if (next !== sport) {
       stopWatch();
@@ -1683,20 +1703,25 @@ export function StudentActivitySection({
     <section className={sessionActive ? "student-activity is-live" : "student-activity"}>
       <div className="student-activity-map">
         <div className="student-activity-tabs" role="tablist" aria-label="Modalidade">
-          {SPORTS.map((item) => (
+          {SPORTS.map((item) => {
+            const locked = featureKeys !== null && !featureKeys.includes(item.featureKey);
+            return (
             <button
               key={item.id}
               type="button"
               role="tab"
               aria-selected={sport === item.id}
-              className={sport === item.id ? "is-on" : ""}
-              disabled={running}
+              aria-disabled={locked}
+              title={locked ? "Não incluído no seu plano" : undefined}
+              className={`${sport === item.id ? "is-on" : ""}${locked ? " is-locked" : ""}`}
+              disabled={running || locked}
               onClick={() => void selectSport(item.id)}
             >
               {item.id === "RUN" ? <RunnerIcon size={16} gender={athleteGender} /> : <item.Icon size={16} />}
               {item.label}
             </button>
-          ))}
+            );
+          })}
         </div>
         <iframe
           ref={iframeRef}
