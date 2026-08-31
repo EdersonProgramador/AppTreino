@@ -3,6 +3,7 @@ import {
   AlertCircle,
   ArrowRight,
   Bot,
+  Building2,
   CalendarDays,
   CalendarPlus,
   Check,
@@ -175,6 +176,7 @@ import { AdminPaginationBar } from "./AdminPaginationBar";
 import { AdminReports } from "./AdminReports";
 import { MusicAdminPanel } from "./MusicAdminPanel";
 import { OutdoorModerationAdminPanel } from "./OutdoorModerationAdminPanel";
+import { OrgAdminPanel } from "./OrgAdminPanel";
 
 type AdminSelfProfile = {
   id: string;
@@ -209,6 +211,7 @@ type AdminSection =
   | "cards"
   | "contact"
   | "outdoorModeration"
+  | "organizations"
   | "favorites"
   | "ratings"
   | "assessments"
@@ -3267,6 +3270,13 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           >
             <Flag size={18} />
             <span className="sidebar-label">GPS / Anti-cheat</span>
+          </button>
+          <button
+            className={adminSection === "organizations" ? "active" : ""}
+            onClick={() => goAdminSection("organizations")}
+          >
+            <Building2 size={18} />
+            <span className="sidebar-label">Organizações</span>
           </button>
           <button className={adminSection === "ratings" ? "active" : ""} onClick={() => goAdminSection("ratings")}>
             <Star size={18} />
@@ -6707,6 +6717,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
 
       {adminSection === "music" && token && <MusicAdminPanel token={token} />}
       {adminSection === "outdoorModeration" && token && <OutdoorModerationAdminPanel token={token} />}
+      {adminSection === "organizations" && token && <OrgAdminPanel token={token} />}
 
       {adminSection === "products" && <section className="finance-hub commerce-hub" id="admin-products">
         <header className="finance-hub-header">

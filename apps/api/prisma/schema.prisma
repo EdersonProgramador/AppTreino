@@ -74,6 +74,17 @@ model User {
   outdoorActivityCells      OutdoorActivityCell[]
   outdoorSegmentEfforts     OutdoorSegmentEffort[]
   clubMemberships           ClubMembership[]
+  organizationMembers       OrganizationMember[]
+  athleteOrganizationLinks  AthleteOrganizationLink[] @relation("AthleteOrganizationAthlete")
+  professionalAssignmentsAsProfessional ProfessionalAssignment[] @relation("ProfessionalAssignmentProfessional")
+  professionalAssignmentsAsAthlete ProfessionalAssignment[] @relation("ProfessionalAssignmentAthlete")
+  coachedTrainingClasses      TrainingClass[]          @relation("TrainingClassCoach")
+  nutritionPlansAuthored      NutritionPlan[]          @relation("NutritionPlanAuthor")
+  nutritionAssignmentsReceived NutritionAssignment[]   @relation("NutritionAssignmentAthlete")
+  nutritionAssignmentsCreated NutritionAssignment[]    @relation("NutritionAssignmentAssigner")
+  userProgramsAssigned        UserProgram[]            @relation("UserProgramAssigner")
+  auditLogs                   AuditLog[]
+  platformOperator            PlatformOperator?
   createdAt           DateTime             @default(now()) @map("created_at")
   updatedAt           DateTime             @updatedAt @map("updated_at")
 
@@ -149,6 +160,7 @@ model Plan {
   billingCycle BillingCycle @map("billing_cycle")
   deletedAt    DateTime?    @map("deleted_at")
   memberships  Membership[]
+  features     PlanFeature[]
   createdAt    DateTime     @default(now()) @map("created_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
 
@@ -256,6 +268,9 @@ model Modality {
   exerciseLinks ExerciseModality[]
   workoutBlocks WorkoutBlock[]
   achievements  ModalityAchievement[]
+  unitModalities UnitModality[]
+  professionalAssignments ProfessionalAssignment[]
+  trainingClasses TrainingClass[]
   deletedAt     DateTime?          @map("deleted_at")
   createdAt     DateTime           @default(now()) @map("created_at")
   updatedAt     DateTime           @updatedAt @map("updated_at")
@@ -356,9 +371,17 @@ model Program {
   workoutSessions   WorkoutSession[]
   favorites         WorkoutFavorite[]
   cycleCompletions  ProgramCycleCompletion[]
+  sourceType        ProgramSourceType      @default(PLATFORM) @map("source_type")
+  organizationId    String?                @map("organization_id")
+  organization      Organization?          @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  unitId            String?                @map("unit_id")
+  unit              Unit?                  @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  coachUserId       String?                @map("coach_user_id")
+  visibility        ProgramVisibility      @default(PUBLIC)
 
   @@index([status, isActive, deletedAt])
   @@index([modalityId])
+  @@index([sourceType, organizationId, unitId])
   @@map("programs")
 }
 
@@ -376,9 +399,19 @@ model UserProgram {
   plannedEndsAt     DateTime?         @map("planned_ends_at")
   completedAt       DateTime?         @map("completed_at")
   updatedAt         DateTime          @updatedAt @map("updated_at")
+  organizationId    String?           @map("organization_id")
+  organization      Organization?     @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  unitId            String?           @map("unit_id")
+  unit              Unit?             @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  assignedByUserId  String?           @map("assigned_by_user_id")
+  assignedBy        User?             @relation("UserProgramAssigner", fields: [assignedByUserId], references: [id], onDelete: SetNull)
+  trainingClassId   String?           @map("training_class_id")
+  trainingClass     TrainingClass?    @relation(fields: [trainingClassId], references: [id], onDelete: SetNull)
+  assignmentSource  UserProgramAssignmentSource @default(PLATFORM_AUTO) @map("assignment_source")
   workoutSessions   WorkoutSession[]
 
   @@unique([userId, programId])
+  @@index([organizationId, unitId])
   @@map("user_programs")
 }
 
@@ -1122,23 +1155,26 @@ enum LocationType {
 }
 
 model Location {
-  id          String       @id @default(cuid())
-  name        String
-  slug        String       @unique
-  type        LocationType @default(ACADEMY)
-  description String?
-  address     String?
-  city        String?
-  state       String?
-  phone       String?
-  imageUrl    String?      @map("image_url")
-  isActive    Boolean      @default(true) @map("is_active")
-  sortOrder   Int          @default(0) @map("sort_order")
-  deletedAt   DateTime?    @map("deleted_at")
-  profiles    Profile[]
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
+  id             String       @id @default(cuid())
+  name           String
+  slug           String       @unique
+  type           LocationType @default(ACADEMY)
+  description    String?
+  address        String?
+  city           String?
+  state          String?
+  phone          String?
+  imageUrl       String?      @map("image_url")
+  isActive       Boolean      @default(true) @map("is_active")
+  sortOrder      Int          @default(0) @map("sort_order")
+  organizationId String?      @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  deletedAt      DateTime?    @map("deleted_at")
+  profiles       Profile[]
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
 
+  @@index([organizationId])
   @@map("locations")
 }
 
@@ -1760,4 +1796,390 @@ model ClubMembership {
   @@unique([userId, challengeId])
   @@index([challengeId])
   @@map("club_memberships")
+}
+
+// ─── Camada organizacional (opcional — não substitui assinatura individual) ───
+
+enum OrganizationType {
+  ACADEMY
+  BOX
+  STUDIO
+  RUNNING_TEAM
+  OTHER
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum UnitStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum OrganizationMemberRole {
+  PLATFORM_OWNER
+  ORGANIZATION_ADMIN
+  UNIT_MANAGER
+  COACH
+  NUTRITIONIST
+  ATHLETE
+}
+
+enum OrganizationMemberStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum AthleteOrganizationStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+enum ProfessionalType {
+  COACH
+  NUTRITIONIST
+}
+
+enum ProfessionalAssignmentStatus {
+  ACTIVE
+  INACTIVE
+  ENDED
+}
+
+enum TrainingClassStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum TrainingClassMemberStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ProgramSourceType {
+  PLATFORM
+  ORGANIZATION
+  COACH
+}
+
+enum ProgramVisibility {
+  PUBLIC
+  ORGANIZATION
+  ASSIGNED
+}
+
+enum UserProgramAssignmentSource {
+  PLATFORM_AUTO
+  ADMIN
+  COACH
+  ORGANIZATION
+  CLASS
+}
+
+enum NutritionPlanStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum NutritionAssignmentStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum AccessScope {
+  GLOBAL
+  ORGANIZATION
+  UNIT
+  ASSIGNED_ATHLETES
+  SELF
+}
+
+model Organization {
+  id                      String                    @id @default(cuid())
+  name                    String
+  slug                    String                    @unique
+  type                    OrganizationType          @default(OTHER)
+  status                  OrganizationStatus        @default(ACTIVE)
+  deletedAt               DateTime?                 @map("deleted_at")
+  createdAt               DateTime                  @default(now()) @map("created_at")
+  updatedAt               DateTime                  @updatedAt @map("updated_at")
+  units                   Unit[]
+  locations               Location[]
+  members                 OrganizationMember[]
+  athleteLinks            AthleteOrganizationLink[]
+  professionalAssignments ProfessionalAssignment[]
+  trainingClasses         TrainingClass[]
+  programs                Program[]
+  userPrograms            UserProgram[]
+  nutritionPlans          NutritionPlan[]
+  auditLogs               AuditLog[]
+
+  @@index([status, deletedAt])
+  @@map("organizations")
+}
+
+model Unit {
+  id                      String                    @id @default(cuid())
+  organizationId          String                    @map("organization_id")
+  organization            Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name                    String
+  city                    String?
+  state                   String?
+  neighborhood            String?
+  address                 String?
+  latitude                Float?
+  longitude               Float?
+  status                  UnitStatus                @default(ACTIVE)
+  deletedAt               DateTime?                 @map("deleted_at")
+  createdAt               DateTime                  @default(now()) @map("created_at")
+  updatedAt               DateTime                  @updatedAt @map("updated_at")
+  members                 OrganizationMember[]
+  athleteLinks            AthleteOrganizationLink[]
+  professionalAssignments ProfessionalAssignment[]
+  unitModalities          UnitModality[]
+  trainingClasses         TrainingClass[]
+  programs                Program[]
+  userPrograms            UserProgram[]
+  nutritionPlans          NutritionPlan[]
+  auditLogs               AuditLog[]
+
+  @@index([organizationId, status, deletedAt])
+  @@map("units")
+}
+
+model OrganizationMember {
+  id             String                   @id @default(cuid())
+  organizationId String                   @map("organization_id")
+  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unitId         String?                  @map("unit_id")
+  unit           Unit?                    @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  userId         String                   @map("user_id")
+  user           User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           OrganizationMemberRole
+  status         OrganizationMemberStatus @default(ACTIVE)
+  createdAt      DateTime                 @default(now()) @map("created_at")
+  updatedAt      DateTime                 @updatedAt @map("updated_at")
+
+  @@unique([organizationId, userId, role])
+  @@index([userId, status])
+  @@index([organizationId, unitId, role])
+  @@map("organization_members")
+}
+
+model AthleteOrganizationLink {
+  id             String                    @id @default(cuid())
+  athleteId      String                    @map("athlete_id")
+  athlete        User                      @relation("AthleteOrganizationAthlete", fields: [athleteId], references: [id], onDelete: Cascade)
+  organizationId String                    @map("organization_id")
+  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unitId         String                    @map("unit_id")
+  unit           Unit                      @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  status         AthleteOrganizationStatus @default(PENDING)
+  joinedAt       DateTime                  @default(now()) @map("joined_at")
+  endedAt        DateTime?                 @map("ended_at")
+  deletedAt      DateTime?                 @map("deleted_at")
+  createdAt      DateTime                  @default(now()) @map("created_at")
+  updatedAt      DateTime                  @updatedAt @map("updated_at")
+
+  @@unique([athleteId, organizationId, unitId])
+  @@index([organizationId, unitId, status])
+  @@map("athlete_organization_links")
+}
+
+model ProfessionalAssignment {
+  id               String                       @id @default(cuid())
+  organizationId   String                       @map("organization_id")
+  organization     Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unitId           String                       @map("unit_id")
+  unit             Unit                         @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  professionalId   String                       @map("professional_id")
+  professional     User                         @relation("ProfessionalAssignmentProfessional", fields: [professionalId], references: [id], onDelete: Cascade)
+  athleteId        String                       @map("athlete_id")
+  athlete          User                         @relation("ProfessionalAssignmentAthlete", fields: [athleteId], references: [id], onDelete: Cascade)
+  professionalType ProfessionalType             @map("professional_type")
+  modalityId       String?                      @map("modality_id")
+  modality         Modality?                    @relation(fields: [modalityId], references: [id], onDelete: SetNull)
+  isPrimary        Boolean                      @default(false) @map("is_primary")
+  status           ProfessionalAssignmentStatus @default(ACTIVE)
+  deletedAt        DateTime?                    @map("deleted_at")
+  createdAt        DateTime                     @default(now()) @map("created_at")
+  updatedAt        DateTime                     @updatedAt @map("updated_at")
+
+  @@index([professionalId, status])
+  @@index([athleteId, status])
+  @@index([organizationId, unitId])
+  @@map("professional_assignments")
+}
+
+model UnitModality {
+  id         String   @id @default(cuid())
+  unitId     String   @map("unit_id")
+  unit       Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  modalityId String   @map("modality_id")
+  modality   Modality @relation(fields: [modalityId], references: [id], onDelete: Cascade)
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([unitId, modalityId])
+  @@map("unit_modalities")
+}
+
+model TrainingClass {
+  id             String                  @id @default(cuid())
+  organizationId String                  @map("organization_id")
+  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unitId         String                  @map("unit_id")
+  unit           Unit                    @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  coachId        String                  @map("coach_id")
+  coach          User                    @relation("TrainingClassCoach", fields: [coachId], references: [id], onDelete: Cascade)
+  modalityId     String?                 @map("modality_id")
+  modality       Modality?               @relation(fields: [modalityId], references: [id], onDelete: SetNull)
+  name           String
+  description    String?
+  scheduleData   Json?                   @map("schedule_data")
+  capacity       Int?
+  status         TrainingClassStatus     @default(ACTIVE)
+  deletedAt      DateTime?               @map("deleted_at")
+  createdAt      DateTime                @default(now()) @map("created_at")
+  updatedAt      DateTime                @updatedAt @map("updated_at")
+  members        TrainingClassMember[]
+  userPrograms   UserProgram[]
+
+  @@index([organizationId, unitId, status])
+  @@index([coachId])
+  @@map("training_classes")
+}
+
+model TrainingClassMember {
+  id        String                    @id @default(cuid())
+  classId   String                    @map("class_id")
+  class     TrainingClass             @relation(fields: [classId], references: [id], onDelete: Cascade)
+  athleteId String                    @map("athlete_id")
+  status    TrainingClassMemberStatus @default(ACTIVE)
+  joinedAt  DateTime                  @default(now()) @map("joined_at")
+
+  @@unique([classId, athleteId])
+  @@index([athleteId, status])
+  @@map("training_class_members")
+}
+
+model NutritionPlan {
+  id             String              @id @default(cuid())
+  organizationId String              @map("organization_id")
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unitId         String              @map("unit_id")
+  unit           Unit                @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  nutritionistId String              @map("nutritionist_id")
+  nutritionist   User                @relation("NutritionPlanAuthor", fields: [nutritionistId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  status         NutritionPlanStatus @default(DRAFT)
+  deletedAt      DateTime?           @map("deleted_at")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  assignments    NutritionAssignment[]
+
+  @@index([organizationId, unitId, status])
+  @@map("nutrition_plans")
+}
+
+model NutritionAssignment {
+  id               String                    @id @default(cuid())
+  nutritionPlanId  String                    @map("nutrition_plan_id")
+  nutritionPlan    NutritionPlan             @relation(fields: [nutritionPlanId], references: [id], onDelete: Cascade)
+  athleteId        String                    @map("athlete_id")
+  athlete          User                      @relation("NutritionAssignmentAthlete", fields: [athleteId], references: [id], onDelete: Cascade)
+  assignedByUserId String?                   @map("assigned_by_user_id")
+  assignedBy       User?                     @relation("NutritionAssignmentAssigner", fields: [assignedByUserId], references: [id], onDelete: SetNull)
+  startDate        DateTime                  @map("start_date")
+  endDate          DateTime?                 @map("end_date")
+  status           NutritionAssignmentStatus @default(ACTIVE)
+  createdAt        DateTime                  @default(now()) @map("created_at")
+  updatedAt        DateTime                  @updatedAt @map("updated_at")
+
+  @@index([athleteId, status])
+  @@index([nutritionPlanId])
+  @@map("nutrition_assignments")
+}
+
+model RbacRole {
+  id          String             @id @default(cuid())
+  slug        String             @unique
+  name        String
+  scope       AccessScope
+  permissions RbacRolePermission[]
+  createdAt   DateTime           @default(now()) @map("created_at")
+
+  @@map("rbac_roles")
+}
+
+model RbacPermission {
+  id        String               @id @default(cuid())
+  slug      String               @unique
+  resource  String
+  action    String
+  roles     RbacRolePermission[]
+  createdAt DateTime             @default(now()) @map("created_at")
+
+  @@map("rbac_permissions")
+}
+
+model RbacRolePermission {
+  roleId       String         @map("role_id")
+  role         RbacRole       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String         @map("permission_id")
+  permission   RbacPermission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("rbac_role_permissions")
+}
+
+model PlatformOperator {
+  userId    String   @id @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("platform_operators")
+}
+
+model PlanFeature {
+  id         String   @id @default(cuid())
+  planId     String   @map("plan_id")
+  plan       Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  featureKey String   @map("feature_key")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([planId, featureKey])
+  @@map("plan_features")
+}
+
+model AuditLog {
+  id             String        @id @default(cuid())
+  userId         String?       @map("user_id")
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  organizationId String?       @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  unitId         String?       @map("unit_id")
+  unit           Unit?         @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  action         String
+  resourceType   String        @map("resource_type")
+  resourceId     String?       @map("resource_id")
+  oldValues      Json?         @map("old_values")
+  newValues      Json?         @map("new_values")
+  ipAddress      String?       @map("ip_address")
+  userAgent      String?       @map("user_agent")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  @@index([organizationId, createdAt])
+  @@index([userId, createdAt])
+  @@map("audit_logs")
 }

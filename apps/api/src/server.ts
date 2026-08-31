@@ -26,6 +26,7 @@ import { registerCommerceRoutes } from "./modules/commerce.routes.js";
 import { startMembershipMaintenanceJobs } from "./modules/membership-jobs.js";
 import { registerMusicRoutes } from "./modules/music.routes.js";
 import { registerUserRoutes } from "./modules/user.routes.js";
+import { registerOrgRoutes } from "./modules/org.routes.js";
 import type { Server as HttpServer } from "node:http";
 
 const app = Fastify({
@@ -212,6 +213,7 @@ await registerMediaRoutes(app);
 await registerAuthRoutes(app);
 await registerCheckoutRoutes(app);
 await registerAdminRoutes(app);
+await registerOrgRoutes(app);
 await registerUserRoutes(app);
 await registerStudentRoutes(app);
 await registerSocialRoutes(app);

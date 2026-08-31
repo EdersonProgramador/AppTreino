@@ -39,6 +39,8 @@ import {
 } from "./activity-stats.utils.js";
 import { listUserActivityAchievements, syncUserActivityAchievements } from "./activity-achievements.utils.js";
 import { assertModuleEnabled } from "./commerce.utils.js";
+import { assertIndividualFeature } from "./org-auth/entitlements.js";
+import { outdoorFeatureForSport } from "./org-auth/outdoor-features.js";
 
 const sportSchema = z.enum(["RUN", "WALK", "RIDE"]);
 const mapTypeSchema = z.enum(["standard", "satellite", "hybrid", "winter"]);
@@ -1694,6 +1696,8 @@ export async function registerSocialRoutes(app: FastifyInstance) {
         goals: goalsSchema
       })
       .parse(request.body);
+
+    await assertIndividualFeature(user.id, outdoorFeatureForSport(body.sport));
 
     const current = await prisma.outdoorActivity.findFirst({
       where: { userId: user.id, status: { in: ["LIVE", "PAUSED"] } }

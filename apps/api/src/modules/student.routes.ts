@@ -9,6 +9,7 @@ import {
   filterActiveBlockExercises,
   studentMatchesProgramTargetGender
 } from "./cms-publication.utils.js";
+import { fetchOrganizationProgramsForAthlete, mergePublishedPrograms } from "./org-workouts.utils.js";
 import { validActiveMembershipWhere } from "./membership.utils.js";
 import {
   assertModuleEnabled,
@@ -468,6 +469,7 @@ export async function getPublishedWorkouts(
 
   let publishedPrograms = await prisma.program.findMany({
     where: {
+      sourceType: "PLATFORM",
       status: "PUBLISHED",
       isActive: true,
       deletedAt: null,
@@ -548,12 +550,8 @@ export async function getPublishedWorkouts(
     }
   }
 
-  publishedPrograms.sort(
-    (first, second) =>
-      first.sortOrder - second.sortOrder ||
-      (second.publishedAt?.getTime() ?? 0) - (first.publishedAt?.getTime() ?? 0) ||
-      first.createdAt.getTime() - second.createdAt.getTime()
-  );
+  const orgPrograms = await fetchOrganizationProgramsForAthlete(userId, studentGender);
+  publishedPrograms = mergePublishedPrograms(publishedPrograms, orgPrograms) as typeof publishedPrograms;
 
   if (publishedPrograms.length === 0) {
     return [];

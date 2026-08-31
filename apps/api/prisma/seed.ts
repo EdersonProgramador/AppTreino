@@ -1186,6 +1186,37 @@ async function main() {
   });
 
   console.log(`E2E admin: ${e2eAdminEmail}`);
+
+  const platformOwnerEmail = "edersonprogramador@gmail.com".toLowerCase();
+  const platformOwner = await prisma.user.findUnique({ where: { email: platformOwnerEmail } });
+  if (platformOwner) {
+    await prisma.platformOperator.upsert({
+      where: { userId: platformOwner.id },
+      create: { userId: platformOwner.id },
+      update: {}
+    });
+    console.log(`Platform operator: ${platformOwnerEmail}`);
+  }
+
+  const defaultFeatures = [
+    "running_engine",
+    "walking_engine",
+    "cycling_engine",
+    "fixed_training_programs",
+    "progress_tracking",
+    "activity_history"
+  ];
+  const plans = await prisma.plan.findMany({ where: { deletedAt: null } });
+  for (const plan of plans) {
+    for (const featureKey of defaultFeatures) {
+      await prisma.planFeature.upsert({
+        where: { planId_featureKey: { planId: plan.id, featureKey } },
+        create: { planId: plan.id, featureKey },
+        update: {}
+      });
+    }
+  }
+  console.log("Plan features seeded for individual entitlements.");
 }
 
 main()

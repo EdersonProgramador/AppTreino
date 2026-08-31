@@ -1,6 +1,13 @@
 import type { UserRole } from "./rbac.js";
 
 export type { UserRole, RbacResource, RbacAction, Permission } from "./rbac.js";
+export type { OrganizationMemberRole, AccessScope, OrgPermission, PlanFeatureKey } from "./org-rbac.js";
+export {
+  ORG_ROLE_SCOPE,
+  ORG_ROLE_PERMISSIONS,
+  orgRoleHasPermission,
+  PLAN_FEATURE_KEYS
+} from "./org-rbac.js";
 export {
   USER_ROLES,
   ROLE_HOME_PATH,
