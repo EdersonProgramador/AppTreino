@@ -9,7 +9,7 @@ import { PrivacyPage, RefundPolicyPage, TermsPage } from "../components/legal/Le
 import { assetUrl } from "../lib/urls";
 import { brand } from "../lib/brand";
 import { useAuth } from "./AuthContext";
-import { AdminPanel, StudentPanel, TransitionScreen } from "./RouteGuards";
+import { AdminPanel, CoachPanel, StudentPanel, TransitionScreen } from "./RouteGuards";
 import { homePathForRole, loginPath, paths } from "./paths";
 
 export function HomePage() {
@@ -184,4 +184,8 @@ export function AdminPage() {
 
 export function StudentPage() {
   return <StudentPanel />;
+}
+
+export function CoachPage() {
+  return <CoachPanel />;
 }

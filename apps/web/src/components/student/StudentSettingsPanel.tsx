@@ -4,9 +4,11 @@ import {
   FiSettings,
   FiChevronLeft
 } from "react-icons/fi";
+import { Link } from "react-router-dom";
 import { useUiPrefsStore } from "../../stores/uiPrefsStore";
 import { uiSounds } from "../../lib/ui-sounds";
 import { ThemeModeSwitch } from "../shared/ThemeModeSwitch";
+import { paths } from "../../auth/paths";
 
 type StudentSettingsPanelProps = {
   onBack: () => void;
@@ -118,6 +120,21 @@ export const StudentSettingsPanel = ({ onBack }: StudentSettingsPanelProps) => {
 
       <div className="grid gap-4 rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-panel)] p-4 sm:p-6">
         <ThemeModeSwitch />
+      </div>
+
+      <div className="grid gap-3 rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-panel)] p-4 sm:p-6">
+        <div className="grid gap-1 px-1">
+          <h3 className="m-0 text-lg font-extrabold text-sand">Painel profissional</h3>
+          <p className="m-0 text-sm text-sand-faint">
+            Se você é coach, nutricionista ou admin de uma academia/box, abra o workspace da organização.
+          </p>
+        </div>
+        <Link
+          to={paths.coach}
+          className="inline-flex items-center justify-center rounded-2xl border border-brand-gold/40 bg-brand-gold/15 px-4 py-3 text-sm font-extrabold text-sand no-underline transition hover:bg-brand-gold/25"
+        >
+          Abrir painel do coach
+        </Link>
       </div>
 
       <div className="grid gap-4 rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-panel)] p-4 sm:p-6">

@@ -2,8 +2,8 @@ import { useEffect, useLayoutEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { SoundProvider, useSoundEnabled as useLibrarySoundEnabled } from "react-sounds";
 import { AuthProvider } from "./auth/AuthContext";
-import { AdminPage, DownloadPage, HomePage, LoginPage, PrivacyPageRoute, RefundPolicyPageRoute, SharedPostRoute, StudentPage, TermsPageRoute } from "./auth/pages";
-import { GuestRoute, ProtectedRoute, RoleHomeRedirect, SessionGate } from "./auth/RouteGuards";
+import { AdminPage, CoachPage, DownloadPage, HomePage, LoginPage, PrivacyPageRoute, RefundPolicyPageRoute, SharedPostRoute, StudentPage, TermsPageRoute } from "./auth/pages";
+import { AuthenticatedRoute, GuestRoute, ProtectedRoute, RoleHomeRedirect, SessionGate } from "./auth/RouteGuards";
 import { paths } from "./auth/paths";
 import { applyDocumentTheme, useUiPrefsStore } from "./stores/uiPrefsStore";
 import { ALL_UI_SOUND_PRELOAD } from "./lib/ui-sounds";
@@ -32,6 +32,10 @@ const AppRoutes = () => (
 
         <Route element={<ProtectedRoute role="USER" />}>
           <Route path={paths.student} element={<StudentPage />} />
+        </Route>
+
+        <Route element={<AuthenticatedRoute />}>
+          <Route path={paths.coach} element={<CoachPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to={paths.home} replace />} />

@@ -72,6 +72,190 @@ export async function registerOrgRoutes(app: FastifyInstance) {
     };
   });
 
+  const STAFF_ROLES = new Set([
+    "PLATFORM_OWNER",
+    "ORGANIZATION_ADMIN",
+    "UNIT_MANAGER",
+    "COACH",
+    "NUTRITIONIST"
+  ]);
+
+  app.get("/org/me/workspace", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const staffMemberships = ctx.memberships.filter((member) => STAFF_ROLES.has(member.role));
+    const isStaff = ctx.isPlatformOperator || ctx.isPlatformAdmin || staffMemberships.length > 0;
+
+    if (!isStaff) {
+      return {
+        isStaff: false,
+        userId: ctx.userId,
+        memberships: [],
+        organizations: [],
+        assignedAthletes: [],
+        classes: [],
+        programs: [],
+        nutritionPlans: [],
+        athleteLinks: []
+      };
+    }
+
+    const orgIds =
+      ctx.isPlatformOperator || ctx.isPlatformAdmin
+        ? undefined
+        : [...new Set(staffMemberships.map((member) => member.organizationId))];
+
+    const orgWhere = {
+      deletedAt: null,
+      ...(orgIds ? { id: { in: orgIds } } : {})
+    };
+
+    const isCoachOnly =
+      !ctx.isPlatformOperator &&
+      !ctx.isPlatformAdmin &&
+      staffMemberships.every((member) => member.role === "COACH" || member.role === "NUTRITIONIST");
+
+    const [organizations, assignments, classes, programs, nutritionPlans, athleteLinks] = await Promise.all([
+      prisma.organization.findMany({
+        where: orgWhere,
+        orderBy: { name: "asc" },
+        include: {
+          units: { where: { deletedAt: null }, orderBy: { name: "asc" } }
+        }
+      }),
+      prisma.professionalAssignment.findMany({
+        where: {
+          deletedAt: null,
+          status: "ACTIVE",
+          ...(isCoachOnly
+            ? { professionalId: user.id }
+            : orgIds
+              ? { organizationId: { in: orgIds } }
+              : {})
+        },
+        include: {
+          athlete: { select: { id: true, name: true, email: true } },
+          professional: { select: { id: true, name: true, email: true } },
+          unit: { select: { id: true, name: true } },
+          organization: { select: { id: true, name: true } },
+          modality: { select: { id: true, name: true } }
+        },
+        orderBy: { createdAt: "desc" },
+        take: 200
+      }),
+      prisma.trainingClass.findMany({
+        where: {
+          deletedAt: null,
+          ...(isCoachOnly
+            ? { coachId: user.id }
+            : orgIds
+              ? { organizationId: { in: orgIds } }
+              : {})
+        },
+        include: {
+          coach: { select: { id: true, name: true, email: true } },
+          unit: { select: { id: true, name: true } },
+          organization: { select: { id: true, name: true } },
+          modality: { select: { id: true, name: true } },
+          members: {
+            where: { status: "ACTIVE" },
+            select: { id: true, athleteId: true }
+          }
+        },
+        orderBy: { name: "asc" },
+        take: 100
+      }),
+      prisma.program.findMany({
+        where: {
+          deletedAt: null,
+          sourceType: { in: ["ORGANIZATION", "COACH"] },
+          ...(isCoachOnly
+            ? {
+                OR: [
+                  { coachUserId: user.id },
+                  ...(orgIds ? [{ organizationId: { in: orgIds } }] : [])
+                ]
+              }
+            : orgIds
+              ? { organizationId: { in: orgIds } }
+              : {})
+        },
+        include: {
+          modality: { select: { id: true, name: true } },
+          unit: { select: { id: true, name: true } },
+          organization: { select: { id: true, name: true } },
+          days: { select: { id: true, dayNumber: true }, orderBy: { dayNumber: "asc" } },
+          assignedUsers: { where: { status: "ACTIVE" }, select: { id: true, userId: true } }
+        },
+        orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+        take: 100
+      }),
+      prisma.nutritionPlan.findMany({
+        where: {
+          deletedAt: null,
+          ...(staffMemberships.some((m) => m.role === "NUTRITIONIST") && isCoachOnly
+            ? { nutritionistId: user.id }
+            : isCoachOnly
+              ? { id: { in: [] } }
+              : orgIds
+                ? { organizationId: { in: orgIds } }
+                : {})
+        },
+        include: {
+          nutritionist: { select: { id: true, name: true, email: true } },
+          unit: { select: { id: true, name: true } },
+          organization: { select: { id: true, name: true } },
+          assignments: {
+            where: { status: "ACTIVE" },
+            select: { id: true, athleteId: true, startDate: true }
+          }
+        },
+        orderBy: { updatedAt: "desc" },
+        take: 100
+      }),
+      prisma.athleteOrganizationLink.findMany({
+        where: {
+          deletedAt: null,
+          status: { in: ["PENDING", "ACTIVE"] },
+          ...(orgIds ? { organizationId: { in: orgIds } } : {})
+        },
+        include: {
+          athlete: { select: { id: true, name: true, email: true } },
+          unit: { select: { id: true, name: true } },
+          organization: { select: { id: true, name: true } }
+        },
+        orderBy: { joinedAt: "desc" },
+        take: 200
+      })
+    ]);
+
+    const assignedAthletes =
+      isCoachOnly
+        ? assignments.map((item) => item.athlete)
+        : [
+            ...new Map(
+              [...assignments.map((item) => item.athlete), ...athleteLinks.map((item) => item.athlete)].map(
+                (athlete) => [athlete.id, athlete]
+              )
+            ).values()
+          ];
+
+    return {
+      isStaff: true,
+      userId: ctx.userId,
+      isPlatformOperator: ctx.isPlatformOperator,
+      isPlatformAdmin: ctx.isPlatformAdmin,
+      memberships: staffMemberships,
+      organizations,
+      assignedAthletes,
+      assignments,
+      classes,
+      programs,
+      nutritionPlans,
+      athleteLinks: isCoachOnly ? [] : athleteLinks
+    };
+  });
+
   app.get("/org/organizations", async (request) => {
     const user = await requireAuth(app, request);
     const ctx = await loadOrgAuthContext(user);

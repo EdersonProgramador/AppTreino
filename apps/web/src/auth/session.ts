@@ -18,6 +18,7 @@ export const paths = {
   refundPolicy: "/politica-reembolso",
   admin: "/admin",
   student: "/aluno",
+  coach: "/coach",
   app: "/app",
   sharedPost: "/p/:postId"
 } as const;
@@ -63,16 +64,21 @@ export function isStudentPath(pathname: string) {
   return pathname === paths.student || pathname.startsWith(`${paths.student}/`);
 }
 
+export function isCoachPath(pathname: string) {
+  return pathname === paths.coach || pathname.startsWith(`${paths.coach}/`);
+}
+
 export function isRoleHomePath(pathname: string, role: UserRole) {
   const normalized = normalizeRole(role);
-  if (normalized === "ADMIN") return isAdminPath(pathname);
-  return isStudentPath(pathname);
+  if (normalized === "ADMIN") return isAdminPath(pathname) || isCoachPath(pathname);
+  return isStudentPath(pathname) || isCoachPath(pathname);
 }
 
 /** True when the current URL is forbidden for this role (must redirect). */
 export function mustRedirectForRole(pathname: string, role: UserRole) {
   const normalized = normalizeRole(role);
   if (isGuestPath(pathname)) return true;
+  if (isCoachPath(pathname)) return false;
   if (normalized === "USER" && isAdminPath(pathname)) return true;
   if (normalized === "ADMIN" && isStudentPath(pathname)) return true;
   return false;

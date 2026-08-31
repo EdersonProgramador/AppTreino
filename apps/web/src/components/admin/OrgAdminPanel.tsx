@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Building2, Dumbbell, Loader2, Plus, RefreshCw, Search, Trash2, UserCog, UsersRound } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../../api";
 import { dataRowClass, panelTitleClass } from "../../lib/admin-cms-classes";
+import { paths } from "../../auth/paths";
 import { OrgProgramsPanel } from "./OrgProgramsPanel";
 
 type OrgType = "ACADEMY" | "BOX" | "STUDIO" | "RUNNING_TEAM" | "OTHER";
@@ -334,6 +336,9 @@ export function OrgAdminPanel({ token }: Props) {
           {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
           Atualizar
         </button>
+        <Link className="dash-link-button no-underline" to={paths.coach}>
+          Abrir painel coach
+        </Link>
       </header>
 
       {error && <p className="text-sm text-red-400">{error}</p>}

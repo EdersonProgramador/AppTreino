@@ -25,6 +25,7 @@ describe("session role routing", () => {
     assert.equal(mustRedirectForRole("/login", "USER"), true);
     assert.equal(mustRedirectForRole("/admin", "USER"), true);
     assert.equal(mustRedirectForRole("/aluno", "USER"), false);
+    assert.equal(mustRedirectForRole("/coach", "USER"), false);
   });
 
   it("admin must leave /, /login and /aluno", () => {
@@ -32,12 +33,15 @@ describe("session role routing", () => {
     assert.equal(mustRedirectForRole("/login", "ADMIN"), true);
     assert.equal(mustRedirectForRole("/aluno", "ADMIN"), true);
     assert.equal(mustRedirectForRole("/admin", "ADMIN"), false);
+    assert.equal(mustRedirectForRole("/coach", "ADMIN"), false);
   });
 
   it("role home detection", () => {
     assert.equal(isRoleHomePath("/aluno", "USER"), true);
     assert.equal(isRoleHomePath("/admin", "USER"), false);
     assert.equal(isRoleHomePath("/admin", "ADMIN"), true);
+    assert.equal(isRoleHomePath("/coach", "USER"), true);
+    assert.equal(isRoleHomePath("/coach", "ADMIN"), true);
   });
 
   it("route ACL mirrors panels", () => {

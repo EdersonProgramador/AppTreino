@@ -92,6 +92,26 @@ export function ProtectedRoute({ role }: { role: UserRole }) {
   return <Outlet />;
 }
 
+/** Any authenticated session (USER or ADMIN) — used by /coach. */
+export function AuthenticatedRoute() {
+  const { user, token, isTransitioning, phase } = useAuth();
+  const location = useLocation();
+
+  if (isTransitioning) {
+    return <TransitionScreen />;
+  }
+
+  if (!user || !token) {
+    return <Navigate to={paths.home} replace state={{ from: location }} />;
+  }
+
+  if (phase !== "authenticated" && !isRoleHomePath(location.pathname, user.role)) {
+    return <TransitionScreen message="Abrindo painel profissional..." />;
+  }
+
+  return <Outlet />;
+}
+
 /** Resolves /app → role home without ever mounting Admin/Student shells. */
 export function RoleHomeRedirect() {
   const { user, token, isTransitioning, transitionMessage } = useAuth();
@@ -115,6 +135,10 @@ const UserViewLazy = lazy(() =>
   import("../components/student/UserView").then((module) => ({ default: module.UserView }))
 );
 
+const CoachViewLazy = lazy(() =>
+  import("../components/coach/CoachView").then((module) => ({ default: module.CoachView }))
+);
+
 /** Warm the student chunk as soon as a USER session is established. */
 export function preloadStudentPanel() {
   void import("../components/student/UserView");
@@ -122,6 +146,10 @@ export function preloadStudentPanel() {
 
 export function preloadAdminPanel() {
   void import("../components/admin/AdminView");
+}
+
+export function preloadCoachPanel() {
+  void import("../components/coach/CoachView");
 }
 
 export function AdminPanel() {
@@ -152,6 +180,20 @@ export function StudentPanel() {
   return (
     <Suspense fallback={<TransitionScreen message="Abrindo seu painel..." />}>
       <UserViewLazy token={token} onLogout={logout} />
+    </Suspense>
+  );
+}
+
+export function CoachPanel() {
+  const { token, user, logout } = useAuth();
+
+  if (!token || !user) {
+    return <Navigate to={paths.home} replace />;
+  }
+
+  return (
+    <Suspense fallback={<TransitionScreen message="Abrindo painel profissional..." />}>
+      <CoachViewLazy token={token} userName={user.name} onLogout={logout} />
     </Suspense>
   );
 }
