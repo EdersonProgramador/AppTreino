@@ -177,6 +177,7 @@ import { AdminReports } from "./AdminReports";
 import { MusicAdminPanel } from "./MusicAdminPanel";
 import { OutdoorModerationAdminPanel } from "./OutdoorModerationAdminPanel";
 import { OrgAdminPanel } from "./OrgAdminPanel";
+import { PlanFeaturesAdminPanel } from "./PlanFeaturesAdminPanel";
 
 type AdminSelfProfile = {
   id: string;
@@ -5853,6 +5854,13 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 </div>
               )}
             </article>
+          )}
+
+          {financeTab === "plans" && token && (
+            <PlanFeaturesAdminPanel
+              token={token}
+              plans={plans.map((item) => ({ id: item.id, name: item.name, code: item.code }))}
+            />
           )}
 
           {financeTab === "memberships" && (

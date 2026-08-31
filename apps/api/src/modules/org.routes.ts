@@ -428,6 +428,44 @@ export async function registerOrgRoutes(app: FastifyInstance) {
     return { members };
   });
 
+  app.get("/org/organizations/:organizationId/athlete-links", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { organizationId } = z.object({ organizationId: z.string().min(1) }).parse(request.params);
+    denyUnlessAllowed(authorize({ ctx, permission: "athletes.view", organizationId }));
+
+    const links = await prisma.athleteOrganizationLink.findMany({
+      where: { organizationId, deletedAt: null },
+      include: {
+        athlete: { select: { id: true, name: true, email: true } },
+        unit: { select: { id: true, name: true } }
+      },
+      orderBy: { joinedAt: "desc" }
+    });
+
+    return { links };
+  });
+
+  app.get("/org/organizations/:organizationId/professional-assignments", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const { organizationId } = z.object({ organizationId: z.string().min(1) }).parse(request.params);
+    denyUnlessAllowed(authorize({ ctx, permission: "coaches.view", organizationId }));
+
+    const assignments = await prisma.professionalAssignment.findMany({
+      where: { organizationId, deletedAt: null },
+      include: {
+        professional: { select: { id: true, name: true, email: true } },
+        athlete: { select: { id: true, name: true, email: true } },
+        unit: { select: { id: true, name: true } },
+        modality: { select: { id: true, name: true } }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+
+    return { assignments };
+  });
+
   const unitModalitySchema = z.object({
     unitId: z.string().min(1),
     modalityId: z.string().min(1),

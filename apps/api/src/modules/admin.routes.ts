@@ -3810,6 +3810,51 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  app.get("/admin/plans/:id/features", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const plan = await prisma.plan.findFirst({
+      where: { id, deletedAt: null },
+      include: { features: { orderBy: { featureKey: "asc" } } }
+    });
+    if (!plan) {
+      const error = new Error("Plano não encontrado.") as Error & { statusCode: number };
+      error.statusCode = 404;
+      throw error;
+    }
+    return {
+      planId: plan.id,
+      featureKeys: plan.features.map((item) => item.featureKey)
+    };
+  });
+
+  app.put("/admin/plans/:id/features", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const body = z
+      .object({
+        featureKeys: z.array(z.string().min(1).max(80))
+      })
+      .parse(request.body);
+
+    const plan = await prisma.plan.findFirst({ where: { id, deletedAt: null } });
+    if (!plan) {
+      const error = new Error("Plano não encontrado.") as Error & { statusCode: number };
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const uniqueKeys = [...new Set(body.featureKeys)];
+    await prisma.$transaction([
+      prisma.planFeature.deleteMany({ where: { planId: id } }),
+      ...uniqueKeys.map((featureKey) =>
+        prisma.planFeature.create({ data: { planId: id, featureKey } })
+      )
+    ]);
+
+    return { planId: id, featureKeys: uniqueKeys };
+  });
+
   app.get("/admin/memberships", async (request) => {
     requireDatabase();
     const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
