@@ -7,11 +7,11 @@
   "rewrites": [
     {
       "source": "/public/share/:path*",
-      "destination": "https://apptreino-backend.onrender.com/public/share/:path*"
+      "destination": "https://api.atlly.com.br/public/share/:path*"
     },
     {
       "source": "/public/posts/:path*",
-      "destination": "https://apptreino-backend.onrender.com/public/posts/:path*"
+      "destination": "https://api.atlly.com.br/public/posts/:path*"
     },
     {
       "source": "/((?!assets/|activity-map\\.html|live-room\\.html).*)",
