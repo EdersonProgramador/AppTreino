@@ -18,24 +18,27 @@ export default {
           faint: "rgb(var(--sand-faint-rgb) / <alpha-value>)"
         },
         brand: {
-          gold: "#d4af37",
-          amber: "#ff9d00",
-          silver: "#c0c0c0",
-          chrome: "#e8e8ec",
-          coral: "#e06a3c",
-          ember: "#c73d2e",
+          gold: "var(--brand-gold)",
+          amber: "var(--brand-amber)",
+          silver: "var(--brand-silver)",
+          chrome: "var(--brand-chrome)",
+          coral: "var(--brand-coral)",
+          ember: "var(--brand-ember)",
+          telemetry: "var(--brand-telemetry)",
+          "telemetry-soft": "var(--brand-telemetry-soft)",
           mint: "#4fd6a0",
           teal: "#128f72"
         }
       },
       fontFamily: {
-        display: ["\"Space Grotesk\"", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["\"Oxanium\"", "\"Space Grotesk\"", "ui-sans-serif", "system-ui", "sans-serif"],
         sans: ["\"Manrope\"", "ui-sans-serif", "system-ui", "sans-serif"]
       },
       boxShadow: {
-        glow: "0 24px 80px rgba(212, 175, 55, 0.22)",
+        glow: "0 24px 80px rgba(224, 106, 60, 0.22)",
         panel: "var(--shadow-panel)",
-        soft: "var(--shadow-soft)"
+        soft: "var(--shadow-soft)",
+        telemetry: "0 0 24px rgba(72, 180, 220, 0.28)"
       },
       backgroundImage: {
         "hero-grid": "var(--hero-grid)",
@@ -52,7 +55,7 @@ export default {
         }
       },
       animation: {
-        "fade-up": "fade-up 0.45s ease-out both",
+        "fade-up": "fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both",
         "pulse-soft": "pulse-soft 2.4s ease-in-out infinite"
       },
       transitionTimingFunction: {
