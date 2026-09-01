@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { formatPriceInBRL } from "@app-treino/shared";
 import { brand } from "../../lib/brand";
 import { heroTrustItems } from "../../lib/home-content";
-import { formatPlanPriceLines, getCheckoutMinimumAmountMessage, getEffectivePriceCents, isCheckoutEligiblePlan, type CatalogPlan } from "../../lib/plan-catalog";
+import { formatPlanPriceLines, getCheckoutMinimumAmountMessage, getEffectivePriceCents, isCheckoutEligiblePlan, planHasPromoDiscount, type CatalogPlan } from "../../lib/plan-catalog";
 
 export type BillingType = "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED";
 
@@ -30,7 +30,10 @@ type SubscriptionFunnelPanelProps = {
   couponDraft?: string;
   onCouponDraftChange?: (value: string) => void;
   onApplyCoupon?: () => void;
+  onRemoveCoupon?: () => void;
   couponFeedback?: string | null;
+  couponApplying?: boolean;
+  selectedPlanHasDiscount?: boolean;
 };
 
 const STEPS = [
@@ -54,11 +57,12 @@ function PlanCard({
   const benefits = plan.cardBenefits.length > 0 ? plan.cardBenefits : ["Acesso completo ao ecossistema ATLLY"];
   const featured = plan.isFeatured || Boolean(plan.badgeLabel);
   const minimumMessage = getCheckoutMinimumAmountMessage(plan);
+  const hasPromoPrice = Boolean(priceLines.anchor);
 
   return (
     <button
       type="button"
-      className={`activate-plan-card${featured ? " is-featured" : ""}${selected ? " is-selected" : ""}${minimumMessage ? " is-below-minimum" : ""}`}
+      className={`activate-plan-card${featured ? " is-featured" : ""}${selected ? " is-selected" : ""}${minimumMessage ? " is-below-minimum" : ""}${hasPromoPrice ? " has-promo-price" : ""}`}
       onClick={onSelect}
     >
       {plan.badgeLabel ? <span className="activate-plan-card__badge">{plan.badgeLabel}</span> : null}
@@ -67,13 +71,12 @@ function PlanCard({
         {plan.description ? <span>{plan.description}</span> : null}
       </div>
       <div className="activate-plan-card__price">
-        {plan.couponCode && (plan.discountInCents ?? 0) > 0 ? (
-          <span className="activate-plan-card__coupon">Cupom {plan.couponCode}</span>
-        ) : null}
         {priceLines.anchor ? <span className="activate-plan-card__anchor">{priceLines.anchor}</span> : null}
+        <div className="activate-plan-card__price-main">
+          <span className="activate-plan-card__amount">{priceLines.primary}</span>
+          <span className="activate-plan-card__cycle">{priceLines.secondary}</span>
+        </div>
         {priceLines.discountLabel ? <span className="activate-plan-card__discount">{priceLines.discountLabel}</span> : null}
-        <span className="activate-plan-card__amount">{priceLines.primary}</span>
-        <span className="activate-plan-card__cycle">{priceLines.secondary}</span>
         {minimumMessage ? <span className="activate-plan-card__minimum">{minimumMessage}</span> : null}
       </div>
       <ul className="activate-plan-perks">
@@ -111,11 +114,15 @@ export function SubscriptionFunnelPanel({
   couponDraft = "",
   onCouponDraftChange,
   onApplyCoupon,
-  couponFeedback
+  onRemoveCoupon,
+  couponFeedback,
+  couponApplying = false,
+  selectedPlanHasDiscount = false
 }: SubscriptionFunnelPanelProps) {
   const selectedPlan = plans.find((plan) => plan.code === selectedPlanCode) ?? plans[0] ?? null;
   const selectedPlanCheckoutError = selectedPlan ? getCheckoutMinimumAmountMessage(selectedPlan) : null;
   const canCheckoutSelectedPlan = selectedPlan ? isCheckoutEligiblePlan(selectedPlan) : false;
+  const resolvedSelectedPlanHasDiscount = selectedPlanHasDiscount || planHasPromoDiscount(selectedPlan);
 
   return (
     <div className="activate-funnel-panel">
@@ -161,22 +168,43 @@ export function SubscriptionFunnelPanel({
 
           {(step === 1 || showPaymentStep) && onApplyCoupon && onCouponDraftChange ? (
             <div className="activate-coupon-box">
-              <div className="activate-coupon-field">
-                <span className="activate-coupon-field__hint">Tem um cupom?</span>
-                <div className="activate-coupon-field__row">
-                  <input
-                    value={couponDraft}
-                    onChange={(event) => onCouponDraftChange(event.target.value.toUpperCase())}
-                    placeholder="Código"
-                    autoComplete="off"
-                    aria-label="Código do cupom"
-                  />
-                  <button type="button" className="activate-coupon-apply" onClick={onApplyCoupon}>
-                    Aplicar
-                  </button>
+              {couponCode && resolvedSelectedPlanHasDiscount && !couponDraft.trim() ? (
+                <div className="activate-coupon-applied-row">
+                  <span className="activate-coupon-applied">Desconto aplicado</span>
+                  {onRemoveCoupon ? (
+                    <button type="button" className="activate-coupon-apply" onClick={onRemoveCoupon}>
+                      Remover
+                    </button>
+                  ) : null}
                 </div>
-              </div>
-              {couponFeedback ? <p className="activate-coupon-feedback">{couponFeedback}</p> : null}
+              ) : (
+                <div className="activate-coupon-field">
+                  <span className="activate-coupon-field__hint">Tem um cupom?</span>
+                  <div className="activate-coupon-field__row">
+                    <input
+                      value={couponDraft}
+                      onChange={(event) => onCouponDraftChange(event.target.value.toUpperCase())}
+                      placeholder="Código"
+                      autoComplete="off"
+                      aria-label="Código do cupom"
+                      disabled={couponApplying}
+                    />
+                    <button
+                      type="button"
+                      className="activate-coupon-apply"
+                      onClick={onApplyCoupon}
+                      disabled={couponApplying || !couponDraft.trim()}
+                    >
+                      {couponApplying ? "…" : "Aplicar"}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {couponFeedback ? (
+                <p className={`activate-coupon-feedback${couponFeedback.includes("inválido") ? " is-error" : ""}`}>
+                  {couponFeedback}
+                </p>
+              ) : null}
             </div>
           ) : null}
 

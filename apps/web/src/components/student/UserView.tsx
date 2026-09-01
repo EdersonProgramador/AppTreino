@@ -118,7 +118,7 @@ import { assessmentPerimeterKeys, assessmentPhotoFields } from "../../types/admi
 import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
 import { SubscriptionCheckoutShell } from "../checkout/SubscriptionCheckoutShell";
 import { SubscriptionFunnelPanel } from "../checkout/SubscriptionFunnelPanel";
-import { formatPlanPriceLines, getEffectivePriceCents } from "../../lib/plan-catalog";
+import { formatPlanPriceLines, getEffectivePriceCents, planHasPromoDiscount } from "../../lib/plan-catalog";
 import { paths } from "../../auth/paths";
 import { clearCheckoutIntent, readCheckoutIntent } from "../../lib/checkout-intent";
 import { resolvePendingPaymentForSelectedPlan } from "../../lib/checkout-pending";
@@ -254,6 +254,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [couponDraft, setCouponDraft] = useState(initialCouponCode ?? "");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(initialCouponCode);
   const [couponFeedback, setCouponFeedback] = useState<string | null>(null);
+  const [couponApplying, setCouponApplying] = useState(false);
   const [checkoutDraft, setCheckoutDraft] = useState<{
     planCode: PlanCode;
     billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED";
@@ -568,20 +569,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   }, [catalogPlans, catalogPlansLoading, checkoutDraft.planCode]);
 
   useEffect(() => {
-    const selected = catalogPlans.find((plan) => plan.code === checkoutDraft.planCode);
-    if (selected?.couponCode && !appliedCoupon) {
-      setAppliedCoupon(selected.couponCode);
-      setCouponDraft(selected.couponCode);
-    }
-  }, [appliedCoupon, catalogPlans, checkoutDraft.planCode]);
-
-  useEffect(() => {
     if (!appliedCoupon || catalogPlansLoading) return;
     const selected = catalogPlans.find((plan) => plan.code === checkoutDraft.planCode);
-    if (selected && (selected.discountInCents ?? 0) > 0) {
-      setCouponFeedback(`Cupom ${appliedCoupon} aplicado com sucesso.`);
+    if (selected && planHasPromoDiscount(selected)) {
+      setCouponFeedback(null);
+      setCouponApplying(false);
     } else if (appliedCoupon) {
-      setCouponFeedback("Cupom inválido ou indisponível para este plano.");
+      setCouponFeedback("Código inválido ou indisponível para este plano.");
+      setCouponApplying(false);
     }
   }, [appliedCoupon, catalogPlansLoading, catalogPlans, checkoutDraft.planCode]);
 
@@ -589,14 +584,24 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     const next = couponDraft.trim().toUpperCase();
     if (!next) {
       setAppliedCoupon(null);
-      setCouponFeedback("Cupom removido. Gere um novo checkout para atualizar o valor.");
+      setCouponFeedback(null);
       setCheckoutPayment(null);
       return;
     }
+    setCouponApplying(true);
     setAppliedCoupon(next);
-    setCouponFeedback("Cupom aplicado. Clique em Ativar agora para gerar o checkout com o novo valor.");
+    setCouponDraft("");
     setCheckoutPayment(null);
   };
+
+  const handleRemoveSubscriptionCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponDraft("");
+    setCouponFeedback(null);
+    setCheckoutPayment(null);
+  };
+
+  const selectedCatalogPlan = catalogPlans.find((plan) => plan.code === checkoutDraft.planCode) ?? null;
 
   function resolveCheckoutCoupon(planCode: PlanCode): string | null {
     if (appliedCoupon) return appliedCoupon;
@@ -2524,7 +2529,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               couponDraft={couponDraft}
               onCouponDraftChange={setCouponDraft}
               onApplyCoupon={handleApplySubscriptionCoupon}
+              onRemoveCoupon={handleRemoveSubscriptionCoupon}
               couponFeedback={couponFeedback}
+              couponApplying={couponApplying || catalogPlansLoading}
+              selectedPlanHasDiscount={planHasPromoDiscount(selectedCatalogPlan)}
             />
           ) : null}
 

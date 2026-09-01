@@ -552,17 +552,15 @@ export function HomeView({
                     {plan.description ? <p className="mt-1 text-sm text-sand-muted">{plan.description}</p> : null}
                     <div className="mt-4">
                       {priceLines.anchor ? <p className="text-sm line-through text-sand-faint">{priceLines.anchor}</p> : null}
-                    {plan.couponCode && (plan.discountInCents ?? 0) > 0 ? (
-                      <span className="mb-2 inline-flex rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold uppercase text-emerald-300">
-                        Cupom {plan.couponCode} · economize {formatPriceInBRL(plan.discountInCents ?? 0)}
-                      </span>
-                    ) : priceLines.discountLabel ? (
-                      <span className="mb-2 inline-flex rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold uppercase text-emerald-300">
-                        {priceLines.discountLabel}
-                      </span>
-                    ) : null}
-                      <strong className="font-display text-4xl text-brand-gold">{priceLines.primary}</strong>
-                      <p className="mt-1 text-sm text-sand-muted">{priceLines.secondary}</p>
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <strong className="font-display text-4xl text-brand-gold">{priceLines.primary}</strong>
+                        <p className="text-sm text-sand-muted">{priceLines.secondary}</p>
+                      </div>
+                      {priceLines.discountLabel ? (
+                        <span className="mt-2 inline-flex rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold uppercase text-emerald-300">
+                          {priceLines.discountLabel}
+                        </span>
+                      ) : null}
                     </div>
                     <ul className="mt-6 grid gap-2">
                       {benefits.map((perk) => (
@@ -572,7 +570,7 @@ export function HomeView({
                         </li>
                       ))}
                     </ul>
-                    <button type="button" className="ui-btn-primary mt-6 w-full sm:w-auto" onClick={() => onStart(plan.code, plan.couponCode ?? undefined)}>
+                    <button type="button" className="ui-btn-primary mt-6 w-full sm:w-auto" onClick={() => onStart(plan.code)}>
                       Ativar {plan.name.toLowerCase()}
                       <ArrowRight size={18} />
                     </button>

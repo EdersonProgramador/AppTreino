@@ -35,6 +35,11 @@ export function getEffectivePriceCents(plan: CatalogPlan): number {
   return plan.effectivePriceInCents ?? plan.priceInCents;
 }
 
+export function planHasPromoDiscount(plan: CatalogPlan | null | undefined): boolean {
+  if (!plan) return false;
+  return (plan.discountInCents ?? 0) > 0 && getEffectivePriceCents(plan) < getOriginalPriceCents(plan);
+}
+
 export function getOriginalPriceCents(plan: CatalogPlan): number {
   return plan.originalPriceInCents ?? plan.priceInCents;
 }
@@ -95,7 +100,6 @@ export function formatPlanPriceLines(plan: CatalogPlan, monthlyBaseline: Catalog
   const listPrice = getOriginalPriceCents(plan);
   const effectivePrice = getEffectivePriceCents(plan);
   const hasCouponDiscount = (plan.discountInCents ?? 0) > 0 && effectivePrice < listPrice;
-  const couponSuffix = hasCouponDiscount && plan.couponCode ? ` · cupom ${plan.couponCode}` : "";
 
   if (plan.billingCycle === "YEARLY") {
     const baselineMonthly = monthlyBaseline ? getEffectivePriceCents(monthlyBaseline) : 0;
@@ -106,17 +110,17 @@ export function formatPlanPriceLines(plan: CatalogPlan, monthlyBaseline: Catalog
     const installmentCents = Math.round(effectivePrice / 12);
     return {
       primary: `12× ${formatPriceInBRL(installmentCents)}`,
-      secondary: `ou ${formatPriceInBRL(effectivePrice)} à vista${savingsCents > 0 ? ` · economize ${formatPriceInBRL(savingsCents)}` : ""}${couponSuffix}`,
+      secondary: `ou ${formatPriceInBRL(effectivePrice)} à vista${savingsCents > 0 ? ` · economize ${formatPriceInBRL(savingsCents)}` : ""}`,
       anchor: hasCouponDiscount || (anchorCents > 0 && savingsCents > 0) ? formatPriceInBRL(hasCouponDiscount ? listPrice : anchorCents) : null,
-      discountLabel: hasCouponDiscount ? `−${formatPriceInBRL(plan.discountInCents ?? 0)}` : null
+      discountLabel: hasCouponDiscount ? `Economia de ${formatPriceInBRL(plan.discountInCents ?? 0)}` : null
     };
   }
 
   return {
     primary: formatPriceInBRL(effectivePrice),
-    secondary: `/ mês${couponSuffix}`,
+    secondary: "/ mês",
     anchor: hasCouponDiscount ? formatPriceInBRL(listPrice) : null,
-    discountLabel: hasCouponDiscount ? `−${formatPriceInBRL(plan.discountInCents ?? 0)}` : null
+    discountLabel: hasCouponDiscount ? `Economia de ${formatPriceInBRL(plan.discountInCents ?? 0)}` : null
   };
 }
 
