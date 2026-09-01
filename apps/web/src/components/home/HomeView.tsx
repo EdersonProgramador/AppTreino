@@ -50,11 +50,9 @@ function AtllyLogo({ className = "h-9 w-auto" }: { className?: string }) {
 
 export function HomeView({
   onStart,
-  onDownloadApp,
   onLogin
 }: {
   onStart: (planCode?: string) => void;
-  onDownloadApp: () => void;
   onLogin: () => void;
 }) {
   const [stickyVisible, setStickyVisible] = useState(false);
@@ -119,7 +117,7 @@ export function HomeView({
         <div className="mx-auto flex min-h-[64px] max-w-6xl items-center justify-between gap-3 px-4 sm:min-h-[72px] sm:px-8">
           <a href="#topo" className="flex min-w-0 flex-col no-underline" aria-label={brand.name}>
             <AtllyLogo className="h-8 w-auto max-w-[140px] sm:h-9 sm:max-w-[160px]" />
-            <span className="mt-0.5 hidden text-[9px] font-bold uppercase tracking-[0.22em] text-brand-silver sm:block">
+            <span className="mt-0.5 truncate text-[9px] font-bold uppercase tracking-[0.16em] text-brand-silver sm:tracking-[0.22em]">
               {brand.category}
             </span>
           </a>
@@ -150,8 +148,9 @@ export function HomeView({
           </div>
         </div>
         {mobileNavOpen && (
-          <nav className="border-t border-white/10 px-4 py-4 lg:hidden" aria-label="Navegação mobile">
+          <nav className="home-mobile-nav border-t border-white/10 px-4 py-4 lg:hidden" aria-label="Navegação mobile">
             <div className="mx-auto grid max-w-6xl gap-1">
+              <p className="home-telemetry-label px-3 pb-2">{brand.areaEyebrow}</p>
               {landingNav.map((item) => (
                 <a
                   key={item.href}
@@ -164,6 +163,17 @@ export function HomeView({
               ))}
               <button type="button" className="rounded-lg px-3 py-3 text-left text-sm font-bold text-brand-silver hover:bg-white/5" onClick={() => { setMobileNavOpen(false); onLogin(); }}>
                 Entrar
+              </button>
+              <button
+                type="button"
+                className="ui-btn-primary mx-3 mt-2 !min-h-11"
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  onStart();
+                }}
+              >
+                {PRIMARY_CTA}
+                <ArrowRight size={16} />
               </button>
             </div>
           </nav>

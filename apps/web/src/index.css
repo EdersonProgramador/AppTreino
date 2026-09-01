@@ -5546,8 +5546,8 @@ html.light .finance-hub-tabs button {
   }
 
   .student-bottom-nav button {
-    font-size: 0.58rem;
-    gap: 2px;
+    font-size: var(--st-xs);
+    gap: 3px;
   }
 }
 
@@ -13448,7 +13448,7 @@ html.light .admin-workspace-shell .workspace-logout svg {
   }
 
   .student-bottom-nav button {
-    font-size: 10px;
+    font-size: var(--st-xs);
   }
 }
 
@@ -18320,7 +18320,7 @@ html.light article.student-info-card input {
 
 @media (max-width: 430px) {
   .student-app-shell .student-bottom-nav button {
-    font-size: var(--st-2xs);
+    font-size: var(--st-xs);
   }
 }
 

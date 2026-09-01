@@ -8,6 +8,7 @@ import {
   stopCoachWeb,
   type CoachWebRecording
 } from "../../lib/coach-voice";
+import { brand } from "../../lib/brand";
 import { uiSounds } from "../../lib/ui-sounds";
 import { fetchWeatherHere } from "../../lib/weather";
 
@@ -127,7 +128,7 @@ export function StudentAiCoachChat({
           throw caught;
         }
       }
-      if (!payload) throw lastError instanceof Error ? lastError : new Error("Coach IA indisponível.");
+      if (!payload) throw lastError instanceof Error ? lastError : new Error(`${brand.aiCoach} indisponível.`);
       setMessages((current) => [...current, { role: "coach", text: payload.reply }]);
       if (payload.savedPlanId) onPlanSaved?.();
       if (speak) speakCoachWeb(payload.reply);
@@ -241,7 +242,7 @@ export function StudentAiCoachChat({
             AT
           </span>
           <div>
-            <strong>ATLLY AI Coach</strong>
+            <strong>{brand.aiCoach}</strong>
             <small>{engineLabel}</small>
           </div>
         </div>

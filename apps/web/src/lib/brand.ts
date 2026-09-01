@@ -29,5 +29,6 @@ export const brand = {
   loginTitle: "Entrar no sistema",
   registerTitle: "Ativar conta",
   loginCopy: "Identifique-se com e-mail, telefone ou Google.",
-  registerCopy: "Defina objetivo e disponibilidade para liberar sua jornada."
+  registerCopy: "Defina objetivo e disponibilidade para liberar sua jornada.",
+  aiCoach: "ATLLY AI Coach"
 } as const;

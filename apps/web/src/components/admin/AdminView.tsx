@@ -2976,7 +2976,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     },
     {
       key: "module_ai",
-      label: "Coach IA",
+      label: brand.aiCoach,
       description: "Chat, voz, treino de todas as modalidades e dieta pelo biotipo."
     }
   ];

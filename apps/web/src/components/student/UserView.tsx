@@ -2036,7 +2036,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     },
     {
       icon: Sparkles,
-      title: "Coach IA",
+      title: brand.aiCoach,
       text: "Chat, voz, treinos de todas as modalidades e dieta pelo biotipo."
     }
   ];
@@ -2929,7 +2929,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                       onClick={() => goToSection("ai")}
                     >
                       <Sparkles size={18} />
-                      Coach IA
+                      {brand.aiCoach}
                     </button>
                   )}
                   {publicConfig["module_qr"] !== "false" && publicConfig["qr_checkin_enabled"] !== "false" && (
@@ -4094,8 +4094,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         {studentSection === "ai" && publicConfig["module_ai"] !== "false" && (
           <section className="student-sheet student-ai-sheet">
             <div className="student-sheet-heading">
-              <span>ATLLY AI Coach</span>
-              <h1>ATLLY AI Coach</h1>
+              <span>{brand.aiCoach}</span>
+              <h1>{brand.aiCoach}</h1>
               <p>Orientação tática — chat e voz no mesmo fluxo.</p>
             </div>
             {token ? (
@@ -4603,7 +4603,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 { group: "Treino", icon: Dumbbell, title: trainingCopy.workout, action: () => openTrainingCatalog(), favorite: true },
                 { group: "Treino", icon: CorridaNavIcon, title: "Corrida", action: () => openCorrida(), favorite: true },
                 { group: "Treino", icon: Trophy, title: "Desafios", action: () => goToSection("club"), favorite: true },
-                { group: "Treino", icon: Sparkles, title: "Coach IA", action: () => goToSection("ai"), moduleKey: "module_ai" },
+                { group: "Treino", icon: Sparkles, title: brand.aiCoach, action: () => goToSection("ai"), moduleKey: "module_ai" },
                 { group: "Conta", icon: ShieldCheck, title: "Matrículas", action: () => goToSection("membership") },
                 { group: "Conta", icon: Building2, title: "Minha organização", action: () => goToSection("org") },
                 { group: "Conta", icon: CreditCard, title: "Pagamentos", action: () => goToSection("payments"), favorite: true },

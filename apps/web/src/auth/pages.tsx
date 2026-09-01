@@ -35,7 +35,6 @@ export function HomePage() {
   return (
     <HomeView
       onStart={(planCode) => navigate(loginPath(planCode))}
-      onDownloadApp={() => navigate(paths.download)}
       onLogin={() => navigate(paths.login)}
     />
   );
@@ -160,12 +159,15 @@ export function LoginPage() {
 export function GuestChrome({ variant = "default" }: { variant?: "default" | "login" }) {
   return (
     <header className="guest-chrome sticky top-0 z-20 flex min-h-[56px] items-center justify-between gap-3 border-b px-4 backdrop-blur-md sm:min-h-[64px] sm:px-8 md:px-12">
-      <Link className="inline-flex min-w-0 shrink items-center border-0 bg-transparent p-0" to={paths.home} aria-label="Ir para início">
+      <Link className="inline-flex min-w-0 shrink flex-col no-underline" to={paths.home} aria-label="Ir para início">
         <img
           className="block h-auto w-[clamp(124px,38vw,200px)] max-w-full rounded-lg drop-shadow-lg"
           src={assetUrl("assets/atlly-logo.png")}
           alt={brand.name}
         />
+        <span className="mt-0.5 truncate text-[9px] font-bold uppercase tracking-[0.18em] text-brand-silver sm:tracking-[0.22em]">
+          {brand.category}
+        </span>
       </Link>
       {variant === "login" ? (
         <Link className="guest-chrome-link inline-flex items-center gap-2 border-0 bg-transparent text-sm font-bold no-underline" to={paths.home}>

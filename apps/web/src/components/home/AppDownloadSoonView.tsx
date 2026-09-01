@@ -9,12 +9,15 @@ export function AppDownloadSoonView() {
   return (
     <main className="app-download-soon home-command min-h-screen">
       <header className="guest-chrome sticky top-0 z-20 flex min-h-[72px] items-center justify-between gap-4 border-b px-5 backdrop-blur-md sm:px-8 md:px-12">
-        <Link className="inline-flex items-center border-0 bg-transparent p-0" to={paths.home} aria-label="Ir para início">
+        <Link className="inline-flex min-w-0 flex-col no-underline" to={paths.home} aria-label="Ir para início">
           <img
             className="block h-auto w-[clamp(140px,14vw,190px)]"
             src={assetUrl("assets/atlly-logo.png")}
             alt={brand.name}
           />
+          <span className="mt-0.5 truncate text-[9px] font-bold uppercase tracking-[0.18em] text-brand-silver">
+            {brand.category}
+          </span>
         </Link>
         <div className="flex items-center gap-3">
           <Link className="guest-chrome-link text-sm font-bold no-underline" to={paths.login}>
