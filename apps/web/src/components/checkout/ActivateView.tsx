@@ -1,13 +1,12 @@
 import { Loader2 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { formatPriceInBRL } from "@app-treino/shared";
 import { useAuth } from "../../auth/AuthContext";
 import { paths, studentCheckoutPath } from "../../auth/paths";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
 import { setCheckoutIntent } from "../../lib/checkout-intent";
-import { getEffectivePriceCents, planHasPromoDiscount } from "../../lib/plan-catalog";
-import { brand } from "../../lib/brand";
+import { getEffectivePriceCents, planHasPromoDiscount, plansForCouponDisplay } from "../../lib/plan-catalog";
 import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
 import { SubscriptionCheckoutShell } from "./SubscriptionCheckoutShell";
 import { SubscriptionFunnelPanel, type BillingType } from "./SubscriptionFunnelPanel";
@@ -25,16 +24,31 @@ export function ActivateView() {
   const [couponDraft, setCouponDraft] = useState(couponFromUrl?.toUpperCase() ?? "");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(couponFromUrl?.toUpperCase() ?? null);
   const [couponFeedback, setCouponFeedback] = useState<string | null>(null);
-  const [couponApplying, setCouponApplying] = useState(false);
-
-  const { plans, loading, monthlyBaseline, initialPlanCode } = useCatalogPlans(
-    planFromUrl ?? selectedPlanCode,
-    appliedCoupon
+  const [couponApplying, setCouponApplying] = useState(Boolean(couponFromUrl?.trim()));
+  const [couponValidForSelection, setCouponValidForSelection] = useState<boolean | null>(
+    couponFromUrl?.trim() ? null : false
   );
+
   const [step, setStep] = useState<1 | 2>(initialStep as 1 | 2);
-  const [selectedPlan, setSelectedPlan] = useState(initialPlanCode);
+  const [selectedPlan, setSelectedPlan] = useState(planFromUrl ?? selectedPlanCode ?? "");
   const [accountMode, setAccountMode] = useState<"register" | "login">("register");
   const [billingType, setBillingType] = useState<BillingType>("UNDEFINED");
+
+  const catalogCoupon = useMemo(() => {
+    if (!appliedCoupon) return null;
+    if (couponApplying || couponValidForSelection === null) return appliedCoupon;
+    return couponValidForSelection ? appliedCoupon : null;
+  }, [appliedCoupon, couponApplying, couponValidForSelection]);
+
+  const { plans: catalogPlans, allPlans, loading, monthlyBaseline, initialPlanCode } = useCatalogPlans(
+    planFromUrl ?? selectedPlanCode,
+    catalogCoupon
+  );
+
+  const plans = useMemo(
+    () => plansForCouponDisplay(catalogPlans, appliedCoupon, selectedPlan),
+    [appliedCoupon, catalogPlans, selectedPlan]
+  );
 
   useEffect(() => {
     if (planFromUrl) {
@@ -49,51 +63,57 @@ export function ActivateView() {
     }
   }, [initialPlanCode, plans, selectedPlan]);
 
-  useEffect(() => {
-    setCheckoutIntent({ planCode: selectedPlan, couponCode: appliedCoupon ?? undefined, source: "activate" });
-  }, [appliedCoupon, selectedPlan]);
-
   const selectedPlanRow = useMemo(
     () => plans.find((plan) => plan.code === selectedPlan) ?? plans[0] ?? null,
     [plans, selectedPlan]
   );
   const selectedPlanHasDiscount = planHasPromoDiscount(selectedPlanRow);
+  const checkoutCoupon = selectedPlanHasDiscount ? appliedCoupon : null;
+
+  useEffect(() => {
+    setCheckoutIntent({ planCode: selectedPlan, couponCode: checkoutCoupon ?? undefined, source: "activate" });
+  }, [checkoutCoupon, selectedPlan]);
+
+  useEffect(() => {
+    if (loading || !appliedCoupon) {
+      if (!appliedCoupon) {
+        setCouponValidForSelection(false);
+        setCouponApplying(false);
+      }
+      return;
+    }
+
+    const pricedSelected = allPlans.find((plan) => plan.code === selectedPlan) ?? null;
+    const valid = Boolean(pricedSelected && planHasPromoDiscount(pricedSelected));
+    setCouponValidForSelection(valid);
+    setCouponApplying(false);
+    setCouponFeedback(valid ? null : "Código inválido ou indisponível para este plano.");
+  }, [appliedCoupon, allPlans, loading, selectedPlan]);
 
   const handleApplyCoupon = () => {
     const next = couponDraft.trim().toUpperCase();
     if (!next) {
       setAppliedCoupon(null);
+      setCouponValidForSelection(false);
       setCouponFeedback(null);
       return;
     }
     setCouponApplying(true);
+    setCouponValidForSelection(null);
     setAppliedCoupon(next);
     setCouponDraft("");
   };
 
   const handleRemoveCoupon = () => {
     setAppliedCoupon(null);
+    setCouponValidForSelection(false);
+    setCouponApplying(false);
     setCouponDraft("");
     setCouponFeedback(null);
   };
 
-  useEffect(() => {
-    if (loading) return;
-    if (!couponApplying && !appliedCoupon) return;
-    const selected = plans.find((plan) => plan.code === selectedPlan);
-    if (appliedCoupon && selected && planHasPromoDiscount(selected)) {
-      setCouponFeedback(null);
-      setCouponApplying(false);
-    } else if (appliedCoupon && !loading) {
-      setCouponFeedback("Código inválido ou indisponível para este plano.");
-      setCouponApplying(false);
-    } else if (!appliedCoupon) {
-      setCouponApplying(false);
-    }
-  }, [appliedCoupon, loading, plans, selectedPlan, couponApplying]);
-
   if (user && token && user.role === "USER") {
-    return <Navigate to={studentCheckoutPath(selectedPlan, appliedCoupon ?? undefined)} replace />;
+    return <Navigate to={studentCheckoutPath(selectedPlan, checkoutCoupon ?? undefined)} replace />;
   }
 
   if (user && token) {
@@ -109,7 +129,7 @@ export function ActivateView() {
   }
 
   const handleContinuePlan = () => {
-    setCheckoutIntent({ planCode: selectedPlan, couponCode: appliedCoupon ?? undefined, source: "activate" });
+    setCheckoutIntent({ planCode: selectedPlan, couponCode: checkoutCoupon ?? undefined, source: "activate" });
     setSelectedPlanCode(selectedPlan);
     setStep(2);
     navigate(`${paths.activate}?plan=${encodeURIComponent(selectedPlan)}&step=account`, { replace: true });
@@ -123,7 +143,7 @@ export function ActivateView() {
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSelectedPlanCode(selectedPlan);
-    setCheckoutIntent({ planCode: selectedPlan, couponCode: appliedCoupon ?? undefined, source: "activate" });
+    setCheckoutIntent({ planCode: selectedPlan, couponCode: checkoutCoupon ?? undefined, source: "activate" });
     await submitAuth("login", new FormData(event.currentTarget), "EMAIL");
   };
 
@@ -142,13 +162,12 @@ export function ActivateView() {
         onSelectPlan={(code) => {
           setSelectedPlan(code);
           setSelectedPlanCode(code);
-          setCheckoutIntent({ planCode: code, couponCode: appliedCoupon ?? undefined, source: "activate" });
         }}
         billingType={billingType}
         onBillingTypeChange={setBillingType}
         onContinuePlan={handleContinuePlan}
         error={loginError}
-        couponCode={appliedCoupon}
+        couponCode={checkoutCoupon}
         couponDraft={couponDraft}
         onCouponDraftChange={setCouponDraft}
         onApplyCoupon={handleApplyCoupon}

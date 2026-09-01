@@ -40,6 +40,30 @@ export function planHasPromoDiscount(plan: CatalogPlan | null | undefined): bool
   return (plan.discountInCents ?? 0) > 0 && getEffectivePriceCents(plan) < getOriginalPriceCents(plan);
 }
 
+export function clearPlanPromoDisplay(plan: CatalogPlan): CatalogPlan {
+  const original = getOriginalPriceCents(plan);
+  return {
+    ...plan,
+    effectivePriceInCents: original,
+    discountInCents: 0,
+    couponCode: null
+  };
+}
+
+/** Cards do funil: se cupom não vale para o plano selecionado, nenhum card mostra promo. */
+export function plansForCouponDisplay(
+  plans: CatalogPlan[],
+  appliedCoupon: string | null | undefined,
+  selectedPlanCode: string | null | undefined
+): CatalogPlan[] {
+  if (!appliedCoupon?.trim()) return plans;
+  const selected = plans.find((plan) => plan.code === selectedPlanCode) ?? null;
+  if (!selected || !planHasPromoDiscount(selected)) {
+    return plans.map(clearPlanPromoDisplay);
+  }
+  return plans;
+}
+
 export function getOriginalPriceCents(plan: CatalogPlan): number {
   return plan.originalPriceInCents ?? plan.priceInCents;
 }

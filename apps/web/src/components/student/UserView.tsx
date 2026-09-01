@@ -118,7 +118,7 @@ import { assessmentPerimeterKeys, assessmentPhotoFields } from "../../types/admi
 import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
 import { SubscriptionCheckoutShell } from "../checkout/SubscriptionCheckoutShell";
 import { SubscriptionFunnelPanel } from "../checkout/SubscriptionFunnelPanel";
-import { formatPlanPriceLines, getEffectivePriceCents, planHasPromoDiscount } from "../../lib/plan-catalog";
+import { formatPlanPriceLines, getEffectivePriceCents, planHasPromoDiscount, plansForCouponDisplay } from "../../lib/plan-catalog";
 import { paths } from "../../auth/paths";
 import { clearCheckoutIntent, readCheckoutIntent } from "../../lib/checkout-intent";
 import { resolvePendingPaymentForSelectedPlan } from "../../lib/checkout-pending";
@@ -254,7 +254,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [couponDraft, setCouponDraft] = useState(initialCouponCode ?? "");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(initialCouponCode);
   const [couponFeedback, setCouponFeedback] = useState<string | null>(null);
-  const [couponApplying, setCouponApplying] = useState(false);
+  const [couponApplying, setCouponApplying] = useState(Boolean(initialCouponCode));
+  const [couponValidForSelection, setCouponValidForSelection] = useState<boolean | null>(
+    initialCouponCode ? null : false
+  );
   const [checkoutDraft, setCheckoutDraft] = useState<{
     planCode: PlanCode;
     billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED";
@@ -262,11 +265,21 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     planCode: (initialCheckoutIntent?.planCode as PlanCode | undefined) ?? "monthly",
     billingType: "UNDEFINED"
   });
+  const catalogCoupon = useMemo(() => {
+    if (!appliedCoupon) return null;
+    if (couponApplying || couponValidForSelection === null) return appliedCoupon;
+    return couponValidForSelection ? appliedCoupon : null;
+  }, [appliedCoupon, couponApplying, couponValidForSelection]);
   const {
-    plans: catalogPlans,
+    plans: catalogPlansRaw,
+    allPlans: catalogAllPlans,
     loading: catalogPlansLoading,
     monthlyBaseline: catalogMonthlyBaseline
-  } = useCatalogPlans(checkoutDraft.planCode, appliedCoupon);
+  } = useCatalogPlans(checkoutDraft.planCode, catalogCoupon);
+  const catalogPlans = useMemo(
+    () => plansForCouponDisplay(catalogPlansRaw, appliedCoupon, checkoutDraft.planCode),
+    [appliedCoupon, catalogPlansRaw, checkoutDraft.planCode]
+  );
   const [assessmentForm, setAssessmentForm] = useState<PhysicalAssessmentForm | null>(null);
   const [editingAssessmentId, setEditingAssessmentId] = useState<string | null>(null);
   const [submittingAssessment, setSubmittingAssessment] = useState(false);
@@ -570,25 +583,24 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
   useEffect(() => {
     if (!appliedCoupon || catalogPlansLoading) return;
-    const selected = catalogPlans.find((plan) => plan.code === checkoutDraft.planCode);
-    if (selected && planHasPromoDiscount(selected)) {
-      setCouponFeedback(null);
-      setCouponApplying(false);
-    } else if (appliedCoupon) {
-      setCouponFeedback("Código inválido ou indisponível para este plano.");
-      setCouponApplying(false);
-    }
-  }, [appliedCoupon, catalogPlansLoading, catalogPlans, checkoutDraft.planCode]);
+    const selected = catalogAllPlans.find((plan) => plan.code === checkoutDraft.planCode) ?? null;
+    const valid = Boolean(selected && planHasPromoDiscount(selected));
+    setCouponValidForSelection(valid);
+    setCouponApplying(false);
+    setCouponFeedback(valid ? null : "Código inválido ou indisponível para este plano.");
+  }, [appliedCoupon, catalogAllPlans, catalogPlansLoading, checkoutDraft.planCode]);
 
   const handleApplySubscriptionCoupon = () => {
     const next = couponDraft.trim().toUpperCase();
     if (!next) {
       setAppliedCoupon(null);
+      setCouponValidForSelection(false);
       setCouponFeedback(null);
       setCheckoutPayment(null);
       return;
     }
     setCouponApplying(true);
+    setCouponValidForSelection(null);
     setAppliedCoupon(next);
     setCouponDraft("");
     setCheckoutPayment(null);
@@ -596,17 +608,20 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
   const handleRemoveSubscriptionCoupon = () => {
     setAppliedCoupon(null);
+    setCouponValidForSelection(false);
+    setCouponApplying(false);
     setCouponDraft("");
     setCouponFeedback(null);
     setCheckoutPayment(null);
   };
 
   const selectedCatalogPlan = catalogPlans.find((plan) => plan.code === checkoutDraft.planCode) ?? null;
+  const checkoutCoupon = planHasPromoDiscount(selectedCatalogPlan) ? appliedCoupon : null;
 
   function resolveCheckoutCoupon(planCode: PlanCode): string | null {
     const plan = catalogPlans.find((item) => item.code === planCode);
-    if (appliedCoupon) {
-      return planHasPromoDiscount(plan) ? appliedCoupon : null;
+    if (checkoutCoupon) {
+      return planHasPromoDiscount(plan) ? checkoutCoupon : null;
     }
     return null;
   }
@@ -2527,7 +2542,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               onOpenPendingCheckout={() => void submitSubscriptionCheckout()}
               onConfirmSandbox={() => void handleConfirmSandboxPayment()}
               showSandbox={Boolean(isSandboxCheckoutEnabled() && currentCheckoutPayment && !currentCheckoutPayment.paymentUrl)}
-              couponCode={appliedCoupon}
+              couponCode={checkoutCoupon}
               couponDraft={couponDraft}
               onCouponDraftChange={setCouponDraft}
               onApplyCoupon={handleApplySubscriptionCoupon}
