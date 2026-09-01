@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Loader2, Pencil, Save, Tag, Trash2, X } from "lucide-react";
 import { formatPriceInBRL, parseBRLMoneyToCents } from "@app-treino/shared";
-import { apiDelete, apiGet, apiPost, apiPut } from "../../api";
+import { apiDelete, apiGet, apiPost, apiPut, ApiError } from "../../api";
 import { formatBenefitsInput, parseBenefitsInput } from "../../lib/plan-catalog";
 import type { CouponRow, PlanRow } from "../../types/shared";
 import {
@@ -181,6 +181,7 @@ function PlanFormFields({
             </option>
           ))}
         </select>
+        <span className="text-xs text-sand-muted">Cupom aplicado automaticamente no funil deste plano. O aluno ainda pode digitar outro cupom no checkout.</span>
       </label>
       <label className="finance-form-span">
         Subtítulo do card
@@ -248,6 +249,7 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
   const [editDraft, setEditDraft] = useState<PlanDraft>(emptyDraft);
   const [savingEdit, setSavingEdit] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [couponFeedback, setCouponFeedback] = useState<string | null>(null);
   const [coupons, setCoupons] = useState<CouponRow[]>([]);
   const [couponDraft, setCouponDraft] = useState<CouponDraft>(emptyCouponDraft);
   const [creatingCoupon, setCreatingCoupon] = useState(false);
@@ -277,15 +279,26 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
   const handleCreateCoupon = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setCreatingCoupon(true);
-    setFeedback(null);
+    setCouponFeedback(null);
     try {
-      const percentOff = couponDraft.percentOff.trim() ? Number.parseInt(couponDraft.percentOff, 10) : null;
-      const amountOffCents = couponDraft.amountOff.trim() ? parseBRLMoneyToCents(couponDraft.amountOff) : null;
+      const hasPercent = couponDraft.percentOff.trim().length > 0;
+      const hasAmount = couponDraft.amountOff.trim().length > 0;
+
+      if (hasPercent && hasAmount) {
+        throw new Error("Informe apenas % off ou R$ off, não os dois ao mesmo tempo.");
+      }
+
+      const percentOff = hasPercent ? Number.parseInt(couponDraft.percentOff, 10) : null;
+      const amountOffCents = hasAmount ? parseBRLMoneyToCents(couponDraft.amountOff) : null;
       const minOrderCents = couponDraft.minOrder.trim() ? parseBRLMoneyToCents(couponDraft.minOrder) ?? 0 : 0;
       const maxUses = couponDraft.maxUses.trim() ? Number.parseInt(couponDraft.maxUses, 10) : null;
 
       if (!percentOff && (amountOffCents == null || amountOffCents < 1)) {
-        throw new Error("Informe desconto percentual ou valor fixo.");
+        throw new Error("Informe desconto percentual ou valor fixo em R$.");
+      }
+
+      if (percentOff != null && (!Number.isFinite(percentOff) || percentOff < 1 || percentOff > 100)) {
+        throw new Error("Desconto percentual deve estar entre 1 e 100.");
       }
 
       await apiPost(
@@ -303,10 +316,16 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
       setCouponDraft(emptyCouponDraft());
       const response = await apiGet<{ coupons: CouponRow[] }>("/admin/subscription-coupons", token);
       setCoupons(response.coupons ?? []);
-      setFeedback(null);
+      setCouponFeedback("Cupom criado. Vincule ao plano em “Cupom automático no funil”.");
       await onChanged("Cupom de assinatura criado.");
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Não foi possível criar o cupom.");
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "Não foi possível criar o cupom.";
+      setCouponFeedback(message);
     } finally {
       setCreatingCoupon(false);
     }
@@ -357,10 +376,16 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
         <div className={panelTitleClass}>
           <div>
             <h2>Cupons de assinatura</h2>
-            <p>Crie cupons e vincule ao plano para desconto automático no funil e no checkout.</p>
+            <p>Crie cupons reutilizáveis e vincule ao plano em “Cupom automático no funil”. Use % ou R$, não os dois.</p>
           </div>
           <span>{coupons.length}</span>
         </div>
+
+        {couponFeedback ? (
+          <p className={`mb-3 text-sm ${couponFeedback.startsWith("Cupom criado") ? "text-emerald-400" : "text-red-400"}`}>
+            {couponFeedback}
+          </p>
+        ) : null}
 
         <form className={`${crudFormClass} finance-form finance-form--plans`} onSubmit={handleCreateCoupon}>
           <label>
@@ -384,7 +409,13 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
             % off
             <input
               value={couponDraft.percentOff}
-              onChange={(event) => setCouponDraft((current) => ({ ...current, percentOff: event.target.value }))}
+              onChange={(event) =>
+                setCouponDraft((current) => ({
+                  ...current,
+                  percentOff: event.target.value,
+                  amountOff: event.target.value.trim() ? "" : current.amountOff
+                }))
+              }
               type="number"
               min={1}
               max={100}
@@ -395,7 +426,13 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
             R$ off
             <input
               value={couponDraft.amountOff}
-              onChange={(event) => setCouponDraft((current) => ({ ...current, amountOff: event.target.value }))}
+              onChange={(event) =>
+                setCouponDraft((current) => ({
+                  ...current,
+                  amountOff: event.target.value,
+                  percentOff: event.target.value.trim() ? "" : current.percentOff
+                }))
+              }
               placeholder="10,00"
             />
           </label>

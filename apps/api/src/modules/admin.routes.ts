@@ -3858,6 +3858,12 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           message: "Informe desconto percentual ou valor fixo."
         });
       }
+      if (data.percentOff && data.amountOffCents) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Informe apenas desconto percentual ou valor fixo, não os dois."
+        });
+      }
     });
 
   app.get("/admin/subscription-coupons", async () => {
