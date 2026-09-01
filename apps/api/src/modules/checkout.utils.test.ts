@@ -78,6 +78,15 @@ describe("assinatura: ativação e ciclo", () => {
   });
 });
 
+describe("valor mínimo Asaas", () => {
+  it("bloqueia valores abaixo de R$ 5,00", () => {
+    const { getAsaasCheckoutAmountError, ASAAS_MIN_CHECKOUT_CENTS } = require("./checkout.utils.js");
+    assert.equal(ASAAS_MIN_CHECKOUT_CENTS, 500);
+    assert.match(getAsaasCheckoutAmountError(10) ?? "", /R\$\s*5,00/);
+    assert.equal(getAsaasCheckoutAmountError(500), null);
+  });
+});
+
 describe("marca nos itens Asaas", () => {
   it("usa App Treino Social nos textos de checkout", () => {
     assert.equal(asaasCheckoutItemName("Mensal"), "App Treino Social - Mensal");

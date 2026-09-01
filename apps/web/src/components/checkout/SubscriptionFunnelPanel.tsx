@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { formatPriceInBRL } from "@app-treino/shared";
 import { brand } from "../../lib/brand";
 import { heroTrustItems } from "../../lib/home-content";
-import { formatPlanPriceLines, getEffectivePriceCents, type CatalogPlan } from "../../lib/plan-catalog";
+import { formatPlanPriceLines, getCheckoutMinimumAmountMessage, getEffectivePriceCents, isCheckoutEligiblePlan, type CatalogPlan } from "../../lib/plan-catalog";
 
 export type BillingType = "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED";
 
@@ -53,11 +53,12 @@ function PlanCard({
   const priceLines = formatPlanPriceLines(plan, monthlyBaseline);
   const benefits = plan.cardBenefits.length > 0 ? plan.cardBenefits : ["Acesso completo ao ecossistema ATLLY"];
   const featured = plan.isFeatured || Boolean(plan.badgeLabel);
+  const minimumMessage = getCheckoutMinimumAmountMessage(plan);
 
   return (
     <button
       type="button"
-      className={`activate-plan-card${featured ? " is-featured" : ""}${selected ? " is-selected" : ""}`}
+      className={`activate-plan-card${featured ? " is-featured" : ""}${selected ? " is-selected" : ""}${minimumMessage ? " is-below-minimum" : ""}`}
       onClick={onSelect}
     >
       {plan.badgeLabel ? <span className="activate-plan-card__badge">{plan.badgeLabel}</span> : null}
@@ -73,6 +74,7 @@ function PlanCard({
         {priceLines.discountLabel ? <span className="activate-plan-card__discount">{priceLines.discountLabel}</span> : null}
         <span className="activate-plan-card__amount">{priceLines.primary}</span>
         <span className="activate-plan-card__cycle">{priceLines.secondary}</span>
+        {minimumMessage ? <span className="activate-plan-card__minimum">{minimumMessage}</span> : null}
       </div>
       <ul className="activate-plan-perks">
         {benefits.map((perk) => (
@@ -112,6 +114,8 @@ export function SubscriptionFunnelPanel({
   couponFeedback
 }: SubscriptionFunnelPanelProps) {
   const selectedPlan = plans.find((plan) => plan.code === selectedPlanCode) ?? plans[0] ?? null;
+  const selectedPlanCheckoutError = selectedPlan ? getCheckoutMinimumAmountMessage(selectedPlan) : null;
+  const canCheckoutSelectedPlan = selectedPlan ? isCheckoutEligiblePlan(selectedPlan) : false;
 
   return (
     <div className="activate-funnel-panel">
@@ -177,10 +181,18 @@ export function SubscriptionFunnelPanel({
           ) : null}
 
           {step === 1 && onContinuePlan ? (
-            <button type="button" className="ui-btn-primary activate-funnel-cta" onClick={onContinuePlan} disabled={!selectedPlan}>
-              Ativar agora
-              <ArrowRight size={18} />
-            </button>
+            <>
+              {selectedPlanCheckoutError ? <p className="activate-coupon-feedback is-error">{selectedPlanCheckoutError}</p> : null}
+              <button
+                type="button"
+                className="ui-btn-primary activate-funnel-cta"
+                onClick={onContinuePlan}
+                disabled={!selectedPlan || !canCheckoutSelectedPlan}
+              >
+                Ativar agora
+                <ArrowRight size={18} />
+              </button>
+            </>
           ) : null}
         </section>
       )}
@@ -233,7 +245,12 @@ export function SubscriptionFunnelPanel({
             </select>
           </label>
 
-          <button type="button" className="ui-btn-primary activate-funnel-cta" onClick={onSubmitCheckout} disabled={Boolean(checkoutLoading)}>
+          <button
+            type="button"
+            className="ui-btn-primary activate-funnel-cta"
+            onClick={onSubmitCheckout}
+            disabled={Boolean(checkoutLoading) || !canCheckoutSelectedPlan}
+          >
             {checkoutLoading ? <Loader2 className="spin" size={18} /> : <CreditCard size={18} />}
             Ativar agora
           </button>

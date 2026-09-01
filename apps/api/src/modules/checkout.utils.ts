@@ -44,6 +44,26 @@ export function asaasCheckoutItemDescription(userName: string, brandName = "App 
   return `Assinatura ${brandName} - ${userName}`;
 }
 
+/** Asaas Checkout exige valor líquido mínimo de R$ 5,00 em produção. */
+export const ASAAS_MIN_CHECKOUT_CENTS = 500;
+
+export function getAsaasCheckoutAmountError(amountInCents: number): string | null {
+  if (amountInCents >= ASAAS_MIN_CHECKOUT_CENTS) return null;
+
+  const formatBRL = (cents: number) =>
+    (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  return `O valor mínimo para pagamento online é ${formatBRL(ASAAS_MIN_CHECKOUT_CENTS)}. O plano selecionado está em ${formatBRL(amountInCents)} — escolha outro plano ou ajuste o preço no admin.`;
+}
+
+export function assertAsaasCheckoutAmount(amountInCents: number) {
+  const message = getAsaasCheckoutAmountError(amountInCents);
+  if (!message) return;
+  const error = new Error(message) as Error & { statusCode: number };
+  error.statusCode = 400;
+  throw error;
+}
+
 export function buildSubscriptionPricingFromCoupon(
   originalAmountInCents: number,
   coupon: Coupon | null,

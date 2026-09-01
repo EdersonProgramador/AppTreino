@@ -19,6 +19,18 @@ export type CatalogPlan = {
   discountInCents?: number;
 };
 
+export const ASAAS_MIN_CHECKOUT_CENTS = 500;
+
+export function isCheckoutEligiblePlan(plan: CatalogPlan): boolean {
+  return getEffectivePriceCents(plan) >= ASAAS_MIN_CHECKOUT_CENTS;
+}
+
+export function getCheckoutMinimumAmountMessage(plan: CatalogPlan): string | null {
+  const amount = getEffectivePriceCents(plan);
+  if (amount >= ASAAS_MIN_CHECKOUT_CENTS) return null;
+  return `Pagamento online exige no mínimo ${formatPriceInBRL(ASAAS_MIN_CHECKOUT_CENTS)}. Este plano está em ${formatPriceInBRL(amount)}.`;
+}
+
 export function getEffectivePriceCents(plan: CatalogPlan): number {
   return plan.effectivePriceInCents ?? plan.priceInCents;
 }
@@ -66,14 +78,17 @@ export function getAnnualSavingsCents(plan: CatalogPlan, monthlyBaseline: Catalo
 
 export function getDefaultPlanCode(plans: CatalogPlan[], preferredCode?: string | null): string {
   const visible = getFunnelPlans(plans);
-  if (preferredCode && visible.some((plan) => plan.code === preferredCode)) {
+  const eligible = visible.filter(isCheckoutEligiblePlan);
+  const pool = eligible.length > 0 ? eligible : visible;
+
+  if (preferredCode && pool.some((plan) => plan.code === preferredCode)) {
     return preferredCode;
   }
-  const featured = visible.find((plan) => plan.isFeatured);
+  const featured = pool.find((plan) => plan.isFeatured);
   if (featured) return featured.code;
-  const yearly = visible.find((plan) => plan.billingCycle === "YEARLY");
+  const yearly = pool.find((plan) => plan.billingCycle === "YEARLY");
   if (yearly) return yearly.code;
-  return visible[0]?.code ?? "monthly";
+  return pool[0]?.code ?? "monthly";
 }
 
 export function formatPlanPriceLines(plan: CatalogPlan, monthlyBaseline: CatalogPlan | null) {

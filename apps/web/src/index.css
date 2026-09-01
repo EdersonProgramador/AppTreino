@@ -27314,6 +27314,18 @@ html.light .student-app-shell .student-hero-card {
   color: #b8c4d4;
 }
 
+.activate-plan-card.is-below-minimum {
+  border-color: rgba(255, 120, 120, 0.35);
+}
+
+.activate-plan-card__minimum {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: #ff9a9a;
+}
+
 .activate-plan-perks {
   display: grid;
   gap: 0.35rem;

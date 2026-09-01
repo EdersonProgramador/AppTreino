@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { hashPassword, isAdminStudentPreview, requireAuth, toAuthUser } from "../auth.js";
 import { env } from "../env.js";
@@ -10,6 +10,7 @@ import {
   asaasCheckoutItemName,
   evaluateSandboxConfirmGate,
   incrementSubscriptionCouponUsage,
+  getAsaasCheckoutAmountError,
   resolveSubscriptionCheckoutPricing
 } from "./checkout.utils.js";
 
@@ -107,6 +108,12 @@ function todayUtcOnly() {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
+function checkoutAmountErrorReply(amountInCents: number, reply: FastifyReply) {
+  const message = getAsaasCheckoutAmountError(amountInCents);
+  if (!message) return null;
+  return reply.code(400).send({ message, paymentProviderError: message });
+}
+
 export async function registerCheckoutRoutes(app: FastifyInstance) {
   app.post("/checkout/session", async (request, reply) => {
     requireDatabase();
@@ -179,6 +186,9 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       let payment = pendingMembership.payments[0];
 
       if (!payment.paymentUrl) {
+        const amountError = checkoutAmountErrorReply(payment.amountInCents, reply);
+        if (amountError) return amountError;
+
         const { checkout: asaasPayment, providerError } = await tryCreateAsaasCheckout({
           externalReference: payment.id,
           itemName: asaasCheckoutItemName(pendingMembership.plan?.name ?? planSeed.name),
@@ -217,6 +227,8 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     const startsAt = todayUtcOnly();
     const plan = planSeed;
     const pricing = await resolveSubscriptionCheckoutPricing(plan, body.couponCode);
+    const amountError = checkoutAmountErrorReply(pricing.amountInCents, reply);
+    if (amountError) return amountError;
 
     const { user, membership, payment } = await prisma.$transaction(async (tx) => {
       const user = await tx.user.findUniqueOrThrow({
@@ -374,6 +386,8 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     const startsAt = todayUtcOnly();
     const plan = planSeed;
     const pricing = await resolveSubscriptionCheckoutPricing(plan, body.couponCode);
+    const registerAmountError = checkoutAmountErrorReply(pricing.amountInCents, reply);
+    if (registerAmountError) return registerAmountError;
 
     const birthDate = body.birthDate ? new Date(body.birthDate) : null;
     const consentAt = new Date();
