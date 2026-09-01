@@ -80,6 +80,25 @@ export function buildSubscriptionPricingFromCoupon(
   };
 }
 
+export function previewLinkedCouponPricing(plan: Pick<Plan, "priceInCents">, coupon: Coupon | null) {
+  if (!coupon) {
+    return {
+      originalAmountInCents: plan.priceInCents,
+      discountInCents: 0,
+      amountInCents: plan.priceInCents
+    };
+  }
+
+  let discountInCents = 0;
+  if (coupon.percentOff != null && coupon.percentOff > 0) {
+    discountInCents = Math.round((plan.priceInCents * coupon.percentOff) / 100);
+  } else if (coupon.amountOffCents != null && coupon.amountOffCents > 0) {
+    discountInCents = coupon.amountOffCents;
+  }
+
+  return buildSubscriptionPricingFromCoupon(plan.priceInCents, coupon, discountInCents);
+}
+
 export type PaymentPricingSnapshot = {
   amountInCents: number;
   originalAmountInCents?: number | null;
@@ -129,20 +148,29 @@ export async function resolveSubscriptionCheckoutPricing(
 ): Promise<SubscriptionCheckoutPricing> {
   const originalAmountInCents = plan.priceInCents;
   const trimmedExplicit = explicitCouponCode?.trim().toUpperCase() || null;
-  const autoCode = !trimmedExplicit && plan.coupon ? plan.coupon.code : null;
-  const couponCode = trimmedExplicit ?? autoCode;
 
-  if (!couponCode) {
+  if (!trimmedExplicit) {
     return buildSubscriptionPricingFromCoupon(originalAmountInCents, null, 0);
   }
 
-  const resolved = await findValidCoupon(couponCode, originalAmountInCents, {
+  const resolved = await findValidCoupon(trimmedExplicit, originalAmountInCents, {
     scope: "SUBSCRIPTION",
-    silent: options?.forgiveInvalidExplicitCoupon || !trimmedExplicit
+    silent: options?.forgiveInvalidExplicitCoupon
   });
 
   if (!resolved) {
     return buildSubscriptionPricingFromCoupon(originalAmountInCents, null, 0);
+  }
+
+  if (plan.couponId && resolved.coupon.id !== plan.couponId) {
+    if (options?.forgiveInvalidExplicitCoupon) {
+      return buildSubscriptionPricingFromCoupon(originalAmountInCents, null, 0);
+    }
+    const error = new Error("Código promocional inválido ou indisponível para este plano.") as Error & {
+      statusCode: number;
+    };
+    error.statusCode = 400;
+    throw error;
   }
 
   return buildSubscriptionPricingFromCoupon(originalAmountInCents, resolved.coupon, resolved.discountInCents);
@@ -158,7 +186,7 @@ export function normalizeCheckoutCouponInput(raw?: string | null): string | null
   }
 }
 
-/** Pricing for checkout — normaliza código e cai na promo do plano se o cupom explícito falhar. */
+/** Pricing for checkout — só aplica cupom quando o código é enviado explicitamente. */
 export async function resolveCheckoutSessionPricing(
   plan: Plan & { coupon?: Coupon | null },
   explicitCouponCode?: string | null
@@ -168,25 +196,7 @@ export async function resolveCheckoutSessionPricing(
     return resolveSubscriptionCheckoutPricing(plan, null);
   }
 
-  try {
-    return await resolveSubscriptionCheckoutPricing(plan, normalizedExplicit);
-  } catch (error) {
-    const statusCode = (error as { statusCode?: number }).statusCode;
-    if (statusCode !== 400) throw error;
-
-    const fallback = await resolveSubscriptionCheckoutPricing(plan, null);
-    if (fallback.discountInCents > 0) {
-      return fallback;
-    }
-
-    const message =
-      error instanceof Error && error.message
-        ? error.message
-        : "Código promocional inválido ou indisponível para este plano.";
-    const err = new Error(message) as Error & { statusCode: number };
-    err.statusCode = 400;
-    throw err;
-  }
+  return resolveSubscriptionCheckoutPricing(plan, normalizedExplicit);
 }
 
 export async function incrementSubscriptionCouponUsage(couponId: string | null | undefined) {

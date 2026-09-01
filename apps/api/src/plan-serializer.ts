@@ -1,5 +1,5 @@
 import type { Coupon, Plan } from "@prisma/client";
-import { resolveSubscriptionCheckoutPricing } from "./modules/checkout.utils.js";
+import { resolveSubscriptionCheckoutPricing, previewLinkedCouponPricing } from "./modules/checkout.utils.js";
 import { prisma } from "./prisma.js";
 
 export type SerializedPlan = {
@@ -61,8 +61,12 @@ export async function serializePlanRecord(
   explicitCouponCode?: string | null,
   options?: { forgiveInvalidExplicitCoupon?: boolean; adminView?: boolean }
 ): Promise<SerializedPlan> {
-  const pricing = await resolveSubscriptionCheckoutPricing(plan, explicitCouponCode ?? undefined, options);
   const linkedCoupon = activeLinkedCoupon(plan);
+  const pricing = await resolveSubscriptionCheckoutPricing(plan, explicitCouponCode ?? undefined, options);
+  const adminPreview =
+    options?.adminView && !explicitCouponCode?.trim() && linkedCoupon
+      ? previewLinkedCouponPricing(plan, linkedCoupon)
+      : null;
   const couponCode = options?.adminView
     ? linkedCoupon?.code ?? plan.coupon?.code ?? pricing.couponCode
     : pricing.couponCode;
@@ -83,9 +87,9 @@ export async function serializePlanRecord(
     couponPercentOff: linkedCoupon?.percentOff ?? plan.coupon?.percentOff ?? null,
     couponAmountOffCents: linkedCoupon?.amountOffCents ?? plan.coupon?.amountOffCents ?? null,
     couponMaxUses: linkedCoupon?.maxUses ?? plan.coupon?.maxUses ?? null,
-    originalPriceInCents: pricing.originalAmountInCents,
-    effectivePriceInCents: pricing.amountInCents,
-    discountInCents: pricing.discountInCents
+    originalPriceInCents: adminPreview?.originalAmountInCents ?? pricing.originalAmountInCents,
+    effectivePriceInCents: adminPreview?.amountInCents ?? pricing.amountInCents,
+    discountInCents: adminPreview?.discountInCents ?? pricing.discountInCents
   };
 }
 
