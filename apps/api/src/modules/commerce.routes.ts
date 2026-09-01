@@ -59,6 +59,7 @@ const couponSchema = z
   .object({
     code: z.string().trim().min(2).max(40),
     description: z.string().trim().max(200).optional().or(z.literal("")),
+    scope: z.enum(["STORE", "SUBSCRIPTION", "ALL"]).default("STORE"),
     percentOff: z.number().int().min(1).max(100).nullable().optional(),
     amountOffCents: z.number().int().min(1).nullable().optional(),
     minOrderCents: z.number().int().min(0).default(0),
@@ -79,6 +80,7 @@ const couponSchema = z
 const updateCouponSchema = z.object({
   code: z.string().trim().min(2).max(40).optional(),
   description: z.string().trim().max(200).optional().or(z.literal("")),
+  scope: z.enum(["STORE", "SUBSCRIPTION", "ALL"]).optional(),
   percentOff: z.number().int().min(1).max(100).nullable().optional(),
   amountOffCents: z.number().int().min(1).nullable().optional(),
   minOrderCents: z.number().int().min(0).optional(),
@@ -372,7 +374,7 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
 
     if (code) {
       const subtotal = cart.items.reduce((sum, item) => sum + item.product.priceInCents * item.quantity, 0);
-      await findValidCoupon(code, subtotal);
+      await findValidCoupon(code, subtotal, { scope: "STORE" });
     }
 
     await prisma.cart.update({
@@ -704,6 +706,7 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
       data: {
         code: body.code.trim().toUpperCase(),
         description: body.description || null,
+        scope: body.scope,
         percentOff: body.percentOff ?? null,
         amountOffCents: body.amountOffCents ?? null,
         minOrderCents: body.minOrderCents,

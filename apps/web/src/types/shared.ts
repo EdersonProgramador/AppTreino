@@ -30,6 +30,17 @@ export interface PlanRow {
   name: string;
   priceInCents: number;
   billingCycle: "MONTHLY" | "YEARLY";
+  description?: string | null;
+  cardBenefits?: string[];
+  badgeLabel?: string | null;
+  isFeatured?: boolean;
+  sortOrder?: number;
+  showOnFunnel?: boolean;
+  couponId?: string | null;
+  couponCode?: string | null;
+  originalPriceInCents?: number;
+  effectivePriceInCents?: number;
+  discountInCents?: number;
 }
 
 export interface MembershipRow {
@@ -288,6 +299,7 @@ export interface CouponRow {
   id: string;
   code: string;
   description?: string | null;
+  scope?: "STORE" | "SUBSCRIPTION" | "ALL";
   percentOff?: number | null;
   amountOffCents?: number | null;
   minOrderCents: number;
@@ -429,6 +441,7 @@ export interface CheckoutSessionResponse {
   membership: StudentMembershipRow;
   payment: PaymentRow | null;
   alreadyActive: boolean;
+  paymentProviderError?: string;
 }
 
 export interface UploadResponse {

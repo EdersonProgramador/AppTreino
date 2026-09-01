@@ -123,3 +123,22 @@ export async function createAsaasCheckout(input: {
     status: data.status
   };
 }
+
+export function humanizeAsaasCheckoutError(raw: string) {
+  if (raw.includes("invalid_access_token")) {
+    return "Chave Asaas inválida. Atualize ASAAS_API_KEY no .env ou use a confirmação sandbox (dev).";
+  }
+  return "Pagamento online indisponível no momento. Tente novamente em instantes.";
+}
+
+/** Não propaga falha do Asaas — usado após persistir membership/pagamento. */
+export async function tryCreateAsaasCheckout(input: Parameters<typeof createAsaasCheckout>[0]) {
+  try {
+    const checkout = await createAsaasCheckout(input);
+    return { checkout, providerError: null as string | null };
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error);
+    console.error("[Asaas Checkout] Falha não fatal:", raw);
+    return { checkout: null, providerError: humanizeAsaasCheckoutError(raw) };
+  }
+}

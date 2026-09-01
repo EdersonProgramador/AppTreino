@@ -163,6 +163,7 @@
 
   html {
     scroll-behavior: smooth;
+    overflow-x: clip;
   }
 
   body {
@@ -750,6 +751,8 @@
 @layer components {
   .ui-shell {
     min-height: 100vh;
+    overflow-x: clip;
+    overflow-y: visible;
     background-color: var(--app-bg);
     background-image: var(--shell-bg);
     color: var(--app-text);
@@ -787,13 +790,16 @@
 
   .app-view-stage {
     opacity: 0;
-    transform: translateY(6px);
-    transition: opacity 160ms ease, transform 160ms ease;
+    transition: opacity 160ms ease;
   }
 
   .app-view-stage.is-visible {
     opacity: 1;
-    transform: translateY(0);
+  }
+
+  .ui-shell:has(.activate-page) {
+    background-color: #05070c;
+    background-image: none;
   }
 
   .login-submit-button {
@@ -26617,4 +26623,990 @@ html.light .student-app-shell .student-hero-card {
 .student-app-shell button:focus-visible {
   outline: 2px solid rgba(212, 175, 55, 0.55);
   outline-offset: 2px;
+}
+
+/* ===== ATLLY — funil de ativação / checkout ===== */
+/* Cinema palette — /ativar stays dark even when the app theme is light */
+.activate-page.home-command {
+  color-scheme: dark;
+  --app-bg: #05070c;
+  --app-bg-soft: #0b101c;
+  --app-panel: #0e1422;
+  --app-elev: #121a2a;
+  --app-text: #ecf2fa;
+  --app-text-muted: #b8c4d4;
+  --app-text-faint: #8a98ae;
+  --app-border: rgba(180, 210, 255, 0.1);
+  --app-border-strong: rgba(180, 210, 255, 0.18);
+  --app-fill: rgba(255, 255, 255, 0.05);
+  --on-accent: #05070c;
+}
+
+.activate-page {
+  position: relative;
+  min-height: 100svh;
+  overflow-x: clip;
+  color: #ecf2fa;
+  background-color: #05070c;
+  background-image: var(--activate-bg);
+  background-size: cover;
+  background-position: 68% center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+.activate-page__media {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: transparent;
+  background-image: var(--activate-bg);
+  background-size: cover;
+  background-position: 68% center;
+  background-repeat: no-repeat;
+}
+
+.activate-page__veil {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      105deg,
+      rgba(5, 7, 12, 0.78) 0%,
+      rgba(5, 7, 12, 0.52) 36%,
+      rgba(5, 7, 12, 0.22) 62%,
+      rgba(5, 7, 12, 0.08) 100%
+    ),
+    linear-gradient(to top, rgba(5, 7, 12, 0.65) 0%, transparent 42%);
+}
+
+.activate-page__scan {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.12;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 2px,
+    rgba(72, 180, 220, 0.04) 3px,
+    transparent 4px
+  );
+  mask-image: linear-gradient(to bottom, transparent, #000 20%, #000 80%, transparent);
+}
+
+.activate-page-shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-height: 100svh;
+  flex-direction: column;
+}
+
+.activate-page-hero-band {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .activate-page-hero-band {
+    display: block;
+    min-height: clamp(96px, 24vw, 140px);
+    flex-shrink: 0;
+  }
+}
+
+.activate-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid rgba(180, 210, 255, 0.1);
+  background: rgba(5, 7, 12, 0.28);
+  backdrop-filter: blur(12px);
+}
+
+.activate-page-brand {
+  display: inline-flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+  text-decoration: none;
+}
+
+.activate-page-brand img {
+  width: clamp(118px, 28vw, 168px);
+  height: auto;
+}
+
+.activate-page-brand span {
+  font-size: 0.5625rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #a4b2c6;
+}
+
+.activate-page-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.activate-page-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 0;
+  background: transparent;
+  color: #c8d0dc;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.activate-page-link:hover {
+  color: #d4af37;
+}
+
+.activate-page-grid {
+  display: grid;
+  flex: 1;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 1.25rem 1.25rem 2.5rem;
+  align-items: center;
+}
+
+.activate-page-panel-wrap {
+  order: -1;
+  min-width: 0;
+}
+
+.activate-page-story {
+  max-width: 34rem;
+}
+
+@media (min-width: 640px) {
+  .activate-page-grid {
+    padding: 1.5rem 1.5rem 3rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .activate-page-grid {
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+    gap: 2.5rem;
+    padding: 2rem 2rem 3.5rem;
+  }
+
+  .activate-page-panel-wrap {
+    order: 0;
+  }
+
+  .activate-page-story {
+    padding-top: 0.5rem;
+  }
+}
+
+@media (max-width: 1023px) {
+  .activate-page {
+    background-attachment: scroll;
+  }
+
+  .activate-page,
+  .activate-page__media {
+    background-position: 84% 32%;
+  }
+
+  .activate-page-header {
+    background: rgba(5, 7, 12, 0.12);
+    border-bottom-color: rgba(180, 210, 255, 0.06);
+    backdrop-filter: blur(8px);
+  }
+
+  .activate-page__veil {
+    background:
+      linear-gradient(to bottom, rgba(5, 7, 12, 0.08) 0%, rgba(5, 7, 12, 0.28) 24%, rgba(5, 7, 12, 0.62) 100%),
+      linear-gradient(90deg, rgba(5, 7, 12, 0.72) 0%, rgba(5, 7, 12, 0.18) 55%, transparent 100%);
+  }
+
+  .activate-page-grid {
+    padding-top: 0.35rem;
+  }
+
+  .activate-page-panel-wrap {
+    margin-top: 0.25rem;
+  }
+
+  .activate-funnel-panel {
+    background: rgba(8, 12, 22, 0.48);
+  }
+
+  .activate-page-story__list {
+    display: none;
+  }
+
+  .activate-page-story__title {
+    font-size: clamp(1.65rem, 6vw, 2.25rem);
+    text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
+  }
+
+  .activate-page-story__copy {
+    margin-top: 0.65rem;
+    font-size: 0.9375rem;
+    text-shadow: 0 1px 12px rgba(0, 0, 0, 0.45);
+  }
+
+  .activate-page-grid:has(.activate-account-stage) .activate-page-story,
+  .activate-page-grid:has(.activate-payment-stage) .activate-page-story {
+    display: none;
+  }
+
+  .activate-page-grid:has(.activate-account-stage),
+  .activate-page-grid:has(.activate-payment-stage) {
+    align-items: start;
+    padding-top: 0.75rem;
+  }
+
+  .activate-page:has(.activate-account-stage),
+  .activate-page:has(.activate-payment-stage) {
+    background-position: 80% 28%;
+  }
+
+  .activate-page:has(.activate-account-stage) .activate-page__media,
+  .activate-page:has(.activate-payment-stage) .activate-page__media {
+    background-position: 80% 28%;
+  }
+
+  .activate-page:has(.activate-account-stage) .activate-page__veil,
+  .activate-page:has(.activate-payment-stage) .activate-page__veil {
+    background:
+      linear-gradient(to bottom, rgba(5, 7, 12, 0.06) 0%, rgba(5, 7, 12, 0.26) 22%, rgba(5, 7, 12, 0.68) 100%),
+      linear-gradient(90deg, rgba(5, 7, 12, 0.65) 0%, rgba(5, 7, 12, 0.15) 52%, transparent 100%);
+  }
+}
+
+.activate-page-story__title {
+  margin: 0.75rem 0 0;
+  font-family: "Oxanium", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  color: #ecf2fa;
+  text-shadow: 0 2px 22px rgba(0, 0, 0, 0.55);
+}
+
+.activate-page-story__copy {
+  margin: 1rem 0 0;
+  max-width: 34rem;
+  color: #b8c4d4;
+  line-height: 1.65;
+}
+
+.activate-page-story__list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  color: #c8d0dc;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.activate-page-story__list li {
+  position: relative;
+  padding-left: 1.1rem;
+}
+
+.activate-page-story__list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55rem;
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 999px;
+  background: #d4af37;
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.65);
+}
+
+.activate-funnel-panel {
+  display: grid;
+  gap: 1.25rem;
+  padding: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 1.5rem;
+  background: rgba(8, 12, 22, 0.58);
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  -webkit-backdrop-filter: blur(22px) saturate(1.15);
+  backdrop-filter: blur(22px) saturate(1.15);
+}
+
+@media (min-width: 640px) {
+  .activate-funnel-panel {
+    padding: 1.5rem;
+  }
+}
+
+.activate-funnel-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.activate-funnel-step {
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  opacity: 0.45;
+}
+
+.activate-funnel-step.is-active {
+  opacity: 1;
+}
+
+.activate-funnel-step__dot {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(180, 210, 255, 0.18);
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #a4b2c6;
+}
+
+.activate-funnel-step.is-active .activate-funnel-step__dot {
+  border-color: rgba(212, 175, 55, 0.55);
+  background: rgba(212, 175, 55, 0.12);
+  color: #e8c547;
+}
+
+.activate-funnel-step.is-current .activate-funnel-step__dot {
+  background: linear-gradient(145deg, #e06a3c, #c73d2e);
+  border-color: transparent;
+  color: #fff;
+}
+
+.activate-funnel-step__label {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a98ae;
+}
+
+.activate-funnel-step.is-active .activate-funnel-step__label {
+  color: #c7d3e3;
+}
+
+.activate-funnel-error {
+  border: 1px solid rgba(199, 61, 46, 0.45);
+  border-radius: 0.75rem;
+  padding: 0.75rem 0.875rem;
+  background: rgba(199, 61, 46, 0.12);
+  color: #ffb4a8;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.activate-plan-stage__title {
+  margin: 0.5rem 0 0;
+  font-family: "Oxanium", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(1.35rem, 3vw, 1.75rem);
+  color: #ecf2fa;
+}
+
+.activate-plan-stage__copy {
+  margin: 0.35rem 0 0;
+  color: #b8c4d4;
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.activate-plan-loading {
+  margin: 0;
+  color: #b8c4d4;
+  font-size: 0.875rem;
+}
+
+.activate-plan-grid {
+  display: grid;
+  gap: 0.875rem;
+  margin-top: 1rem;
+  align-items: stretch;
+}
+
+@media (min-width: 640px) {
+  .activate-plan-grid {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+}
+
+.home-plan-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.finance-form--plans {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.finance-form-span {
+  grid-column: 1 / -1;
+}
+
+.finance-form-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  align-self: end;
+}
+
+.finance-plan-edit {
+  margin: 0.75rem 0 1rem;
+  padding: 1rem;
+  border: 1px solid rgba(180, 210, 255, 0.12);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.finance-plan-edit__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.finance-row-actions {
+  display: flex;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.finance-coupon-list {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.finance-coupon-list .data-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.finance-form--plans textarea {
+  min-height: 7rem;
+  resize: vertical;
+}
+
+.activate-plan-card {
+  position: relative;
+  display: grid;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 1rem;
+  border: 1px solid rgba(180, 210, 255, 0.12);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.activate-plan-card:hover {
+  border-color: rgba(212, 175, 55, 0.35);
+  transform: translateY(-1px);
+}
+
+.activate-plan-card.is-selected {
+  border-color: rgba(212, 175, 55, 0.65);
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.18), 0 16px 40px rgba(0, 0, 0, 0.28);
+}
+
+.activate-plan-card.is-featured {
+  background:
+    linear-gradient(160deg, rgba(212, 175, 55, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.activate-plan-card__badge {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+  background: #d4af37;
+  color: #05070c;
+  font-size: 0.625rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.activate-plan-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.activate-plan-card__head strong {
+  font-size: 1rem;
+  color: #ecf2fa;
+}
+
+.activate-plan-card__head span {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7ad4f0;
+}
+
+.activate-plan-card__price {
+  display: grid;
+  gap: 0.15rem;
+  min-height: 3.5rem;
+}
+
+.activate-plan-card__coupon {
+  display: inline-flex;
+  width: fit-content;
+  margin-bottom: 0.1rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.1);
+  color: #86efac;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.activate-coupon-box {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  max-width: 16rem;
+}
+
+.activate-coupon-field {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.activate-coupon-field__hint {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #8a98ae;
+}
+
+.activate-coupon-field__row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.activate-coupon-field__row input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid rgba(180, 210, 255, 0.1);
+  border-radius: 0.4rem;
+  background: rgba(255, 255, 255, 0.03);
+  color: #c7d3e3;
+  font-size: 0.75rem;
+}
+
+.activate-coupon-field__row input::placeholder {
+  color: #6e7c94;
+}
+
+.activate-coupon-field__row input:focus {
+  outline: none;
+  border-color: rgba(180, 210, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.activate-coupon-apply {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  padding: 0.2rem 0.1rem;
+  color: #8a98ae;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.activate-coupon-apply:hover {
+  color: #b8c4d4;
+}
+
+.activate-page .ui-btn-secondary {
+  border-color: rgba(180, 210, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+  color: #ecf2fa;
+}
+
+.activate-page .ui-btn-secondary:hover {
+  border-color: rgba(212, 175, 55, 0.35);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.activate-coupon-applied {
+  margin: 0;
+  font-size: 0.6875rem;
+  color: #86efac;
+}
+
+.activate-coupon-feedback {
+  margin: 0;
+  font-size: 0.6875rem;
+  color: #8a98ae;
+}
+
+.activate-plan-card__discount {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.14);
+  color: #86efac;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.activate-plan-card__anchor {
+  font-size: 0.8125rem;
+  text-decoration: line-through;
+  color: #6e7c94;
+}
+
+.activate-plan-card__amount {
+  font-family: "Oxanium", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #e8c547;
+}
+
+.activate-plan-card__cycle {
+  font-size: 0.75rem;
+  color: #b8c4d4;
+}
+
+.activate-plan-perks {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activate-plan-perks li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: #c8d0dc;
+}
+
+.activate-plan-perks svg {
+  margin-top: 0.1rem;
+  flex-shrink: 0;
+  color: #d4af37;
+}
+
+.activate-funnel-cta {
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+.activate-funnel-secondary {
+  width: 100%;
+}
+
+.activate-funnel-trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  color: #b8c4d4;
+}
+
+.activate-funnel-trust span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.activate-funnel-trust svg {
+  color: #d4af37;
+}
+
+.activate-funnel-guarantee {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.875rem;
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  border-radius: 0.875rem;
+  background: rgba(212, 175, 55, 0.06);
+}
+
+.activate-funnel-guarantee svg {
+  flex-shrink: 0;
+  color: #e8c547;
+}
+
+.activate-funnel-guarantee strong {
+  display: block;
+  font-size: 0.8125rem;
+  color: #ecf2fa;
+}
+
+.activate-funnel-guarantee span {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  color: #b8c4d4;
+  line-height: 1.45;
+}
+
+.activate-funnel-ai-note {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #7ad4f0;
+}
+
+.activate-account-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.activate-account-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding: 0.25rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.activate-account-tab {
+  min-height: 2.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #b8c4d4;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.activate-account-tab.is-active {
+  background: rgba(212, 175, 55, 0.16);
+  color: #ecf2fa;
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.25);
+}
+
+.activate-login-form {
+  display: grid;
+  gap: 0.875rem;
+}
+
+.activate-login-hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: #b8c4d4;
+  line-height: 1.5;
+}
+
+.activate-back-step {
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  color: #b8c4d4;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.activate-back-step:hover {
+  color: #d4af37;
+}
+
+.activate-billing-field {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.activate-billing-field span {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: #ecf2fa;
+}
+
+.activate-billing-field select {
+  min-height: 3rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(180, 210, 255, 0.18);
+  background: rgba(5, 7, 12, 0.72);
+  padding: 0 0.875rem;
+  color: #ecf2fa;
+  font-weight: 700;
+}
+
+.activate-pending-payment {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.875rem;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  border-radius: 0.875rem;
+  background: rgba(212, 175, 55, 0.08);
+}
+
+.activate-pending-payment strong {
+  color: #e8c547;
+  font-size: 0.875rem;
+}
+
+.activate-pending-payment span {
+  color: #b8c4d4;
+  font-size: 0.8125rem;
+}
+
+.activate-paywall-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.activate-paywall-tabs button {
+  min-height: 2.25rem;
+  padding: 0 0.875rem;
+  border: 1px solid rgba(180, 210, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #a4b2c6;
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.activate-paywall-tabs button.is-active {
+  border-color: rgba(212, 175, 55, 0.45);
+  background: rgba(212, 175, 55, 0.12);
+  color: #ecf2fa;
+}
+
+.activate-locked-panel {
+  margin-top: 0.5rem;
+}
+
+.activate-page .ui-label > span,
+.activate-page .ui-label span {
+  color: #c7d3e3;
+}
+
+.activate-page .ui-input {
+  border-color: rgba(180, 210, 255, 0.18);
+  background: rgba(0, 0, 0, 0.28);
+  color: #ecf2fa;
+}
+
+.activate-page .ui-input::placeholder {
+  color: #8a98ae;
+}
+
+/* Keep /ativar readable when the global app theme is light */
+html.light .activate-page.home-command,
+html.light .activate-page.home-command .activate-funnel-panel {
+  color: #ecf2fa;
+}
+
+html.light .activate-page.home-command :is(h1, h2, h3, h4, h5, h6),
+html.light .activate-page.home-command .activate-page-story__title,
+html.light .activate-page.home-command .activate-plan-stage__title,
+html.light .activate-page.home-command .activate-plan-card__head strong,
+html.light .activate-page.home-command .activate-funnel-guarantee strong,
+html.light .activate-page.home-command .activate-billing-field span,
+html.light .activate-page.home-command .activate-pending-payment strong,
+html.light .activate-page.home-command .ui-label > span,
+html.light .activate-page.home-command .ui-label span {
+  color: #ecf2fa !important;
+}
+
+html.light .activate-page.home-command p,
+html.light .activate-page.home-command .activate-page-story__copy,
+html.light .activate-page.home-command .activate-plan-stage__copy,
+html.light .activate-page.home-command .activate-plan-loading,
+html.light .activate-page.home-command .activate-funnel-step__label,
+html.light .activate-page.home-command .activate-coupon-feedback,
+html.light .activate-page.home-command .activate-login-hint,
+html.light .activate-page.home-command .activate-back-step,
+html.light .activate-page.home-command .activate-funnel-trust,
+html.light .activate-page.home-command .activate-funnel-guarantee span,
+html.light .activate-page.home-command .activate-pending-payment span,
+html.light .activate-page.home-command .activate-plan-card__cycle,
+html.light .activate-page.home-command .activate-plan-perks li,
+html.light .activate-page.home-command .activate-page-story__list,
+html.light .activate-page.home-command .activate-account-tab {
+  color: #b8c4d4 !important;
+}
+
+html.light .activate-page.home-command .activate-funnel-step.is-active .activate-funnel-step__label,
+html.light .activate-page.home-command .activate-account-tab.is-active,
+html.light .activate-page.home-command .activate-page-link {
+  color: #ecf2fa !important;
+}
+
+html.light .activate-page.home-command .activate-coupon-field__hint,
+html.light .activate-page.home-command .activate-coupon-apply,
+html.light .activate-page.home-command .activate-coupon-feedback {
+  color: #8a98ae !important;
+}
+
+html.light .activate-page.home-command .activate-coupon-field__row input {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(180, 210, 255, 0.1) !important;
+  color: #c7d3e3 !important;
+}
+
+html.light .activate-page.home-command .ui-btn-secondary,
+html.light .activate-page.home-command .activate-page .ui-btn-secondary {
+  border-color: rgba(180, 210, 255, 0.22) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #ecf2fa !important;
+}
+
+html.light .activate-page.home-command .ui-input,
+html.light .activate-page.home-command .activate-billing-field select {
+  background: rgba(0, 0, 0, 0.28) !important;
+  border-color: rgba(180, 210, 255, 0.18) !important;
+  color: #ecf2fa !important;
 }

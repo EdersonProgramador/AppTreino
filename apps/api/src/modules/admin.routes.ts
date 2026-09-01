@@ -12,6 +12,7 @@ import { isVideoUploadExtension, saveValidatedUpload, uploadsDir } from "../uplo
 import type { UploadGroup } from "../upload-security.js";
 import { persistUploadedFile } from "../upload-persist.js";
 import { ensureUploadedVideoIsMp4 } from "../video-transcode.js";
+import { serializePlanRecord } from "../plan-serializer.js";
 import { autoCloseStaleTickets, FINALIZE_PROMPT, ticketInclude } from "./ticket.utils.js";
 import { buildPaginationMeta, parsePagination } from "./pagination.js";
 import { calculateBodyFatEstimate, physicalAssessmentFormSchema } from "./physical-assessment.utils.js";
@@ -362,8 +363,19 @@ const planSchema = z.object({
   code: z.string().min(2),
   name: z.string().min(2),
   priceInCents: z.coerce.number().int().positive(),
-  billingCycle: z.enum(["MONTHLY", "YEARLY"])
+  billingCycle: z.enum(["MONTHLY", "YEARLY"]),
+  description: z.string().max(500).optional().nullable(),
+  cardBenefits: z.array(z.string().min(1).max(200)).optional(),
+  badgeLabel: z.string().max(60).optional().nullable(),
+  isFeatured: z.boolean().optional(),
+  sortOrder: z.coerce.number().int().optional(),
+  showOnFunnel: z.boolean().optional(),
+  couponId: z.string().nullable().optional()
 });
+
+const planInclude = {
+  coupon: true
+} as const;
 
 const membershipSchema = z.object({
   userId: z.string().min(1),
@@ -3781,23 +3793,40 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
   app.get("/admin/plans", async () => {
     requireDatabase();
-    const plans = await prisma.plan.findMany({ where: { deletedAt: null }, orderBy: { priceInCents: "asc" } });
-    return { plans };
+    const plans = await prisma.plan.findMany({
+      where: { deletedAt: null },
+      orderBy: [{ sortOrder: "asc" }, { priceInCents: "asc" }],
+      include: planInclude
+    });
+    return { plans: await Promise.all(plans.map((plan) => serializePlanRecord(plan))) };
   });
 
   app.post("/admin/plans", async (request, reply) => {
     requireDatabase();
     const body = planSchema.parse(request.body);
-    const plan = await prisma.plan.create({ data: body });
-    return reply.code(201).send({ plan });
+    const plan = await prisma.plan.create({
+      data: {
+        ...body,
+        cardBenefits: body.cardBenefits ?? []
+      },
+      include: planInclude
+    });
+    return reply.code(201).send({ plan: await serializePlanRecord(plan) });
   });
 
   app.put("/admin/plans/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
     const body = planSchema.partial().parse(request.body);
-    const plan = await prisma.plan.update({ where: { id }, data: body });
-    return { plan };
+    const plan = await prisma.plan.update({
+      where: { id },
+      data: {
+        ...body,
+        ...(body.cardBenefits !== undefined ? { cardBenefits: body.cardBenefits } : {})
+      },
+      include: planInclude
+    });
+    return { plan: await serializePlanRecord(plan) };
   });
 
   app.delete("/admin/plans/:id", async (request) => {
@@ -3806,6 +3835,70 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     await prisma.plan.update({
       where: { id },
       data: { deletedAt: new Date() }
+    });
+    return { ok: true };
+  });
+
+  const subscriptionCouponSchema = z
+    .object({
+      code: z.string().trim().min(2).max(40),
+      description: z.string().trim().max(200).optional().nullable(),
+      percentOff: z.number().int().min(1).max(100).nullable().optional(),
+      amountOffCents: z.number().int().min(1).nullable().optional(),
+      minOrderCents: z.number().int().min(0).default(0),
+      maxUses: z.number().int().min(1).nullable().optional(),
+      isActive: z.boolean().default(true),
+      startsAt: z.coerce.date().nullable().optional(),
+      endsAt: z.coerce.date().nullable().optional()
+    })
+    .superRefine((data, ctx) => {
+      if (!data.percentOff && !data.amountOffCents) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Informe desconto percentual ou valor fixo."
+        });
+      }
+    });
+
+  app.get("/admin/subscription-coupons", async () => {
+    requireDatabase();
+    const coupons = await prisma.coupon.findMany({
+      where: {
+        deletedAt: null,
+        scope: { in: ["SUBSCRIPTION", "ALL"] }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+    return { coupons };
+  });
+
+  app.post("/admin/subscription-coupons", async (request, reply) => {
+    requireDatabase();
+    const body = subscriptionCouponSchema.parse(request.body);
+    const coupon = await prisma.coupon.create({
+      data: {
+        code: body.code.trim().toUpperCase(),
+        description: body.description || null,
+        scope: "SUBSCRIPTION",
+        percentOff: body.percentOff ?? null,
+        amountOffCents: body.amountOffCents ?? null,
+        minOrderCents: body.minOrderCents,
+        maxUses: body.maxUses ?? null,
+        isActive: body.isActive,
+        startsAt: body.startsAt ?? null,
+        endsAt: body.endsAt ?? null
+      }
+    });
+    return reply.code(201).send({ coupon });
+  });
+
+  app.delete("/admin/subscription-coupons/:id", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    await prisma.plan.updateMany({ where: { couponId: id }, data: { couponId: null } });
+    await prisma.coupon.update({
+      where: { id },
+      data: { deletedAt: new Date(), isActive: false }
     });
     return { ok: true };
   });

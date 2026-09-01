@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { SoundProvider, useSoundEnabled as useLibrarySoundEnabled } from "react-sounds";
 import { AuthProvider } from "./auth/AuthContext";
-import { AdminPage, CoachPage, DownloadPage, HomePage, LoginPage, PrivacyPageRoute, RefundPolicyPageRoute, SharedPostRoute, StudentPage, TermsPageRoute } from "./auth/pages";
+import { AdminPage, ActivatePage, CoachPage, DownloadPage, HomePage, LoginPage, PrivacyPageRoute, RefundPolicyPageRoute, SharedPostRoute, StudentPage, TermsPageRoute } from "./auth/pages";
 import { AuthenticatedRoute, GuestRoute, ProtectedRoute, RoleHomeRedirect, SessionGate } from "./auth/RouteGuards";
 import { paths } from "./auth/paths";
 import { applyDocumentTheme, useUiPrefsStore } from "./stores/uiPrefsStore";
@@ -14,6 +14,7 @@ const AppRoutes = () => (
     <div className="app-view-stage is-visible">
       <Routes>
         <Route path={paths.home} element={<HomePage />} />
+        <Route path={paths.activate} element={<ActivatePage />} />
         <Route path={paths.download} element={<DownloadPage />} />
         <Route path={paths.terms} element={<TermsPageRoute />} />
         <Route path={paths.privacy} element={<PrivacyPageRoute />} />
@@ -64,7 +65,7 @@ export const App = () => {
     <SoundProvider initialEnabled={soundEnabled} preload={ALL_UI_SOUND_PRELOAD}>
       <SoundLibrarySync enabled={soundEnabled} />
       <AuthProvider>
-        <div className={`ui-shell min-h-screen overflow-x-hidden ${theme === "dark" ? "theme-dark" : "theme-light"}`}>
+        <div className={`ui-shell min-h-screen ${theme === "dark" ? "theme-dark" : "theme-light"}`}>
           <AppRoutes />
         </div>
       </AuthProvider>

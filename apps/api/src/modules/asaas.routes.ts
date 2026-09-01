@@ -332,6 +332,13 @@ export async function registerAsaasRoutes(app: FastifyInstance) {
 
     const shouldExtendMembership = shouldActivateMembership(status) && payment.status !== "CONFIRMED";
 
+    if (shouldExtendMembership && payment.couponId) {
+      await prisma.coupon.update({
+        where: { id: payment.couponId },
+        data: { usedCount: { increment: 1 } }
+      });
+    }
+
     if (shouldExtendMembership) {
       const membership = await prisma.membership.findUnique({
         where: { id: payment.membershipId },

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, LogIn } from "lucide-react";
+import { ActivateView } from "../components/checkout/ActivateView";
 import { LoginView } from "../components/auth/LoginView";
 import { AppDownloadSoonView } from "../components/home/AppDownloadSoonView";
 import { HomeView } from "../components/home/HomeView";
@@ -10,7 +11,7 @@ import { assetUrl } from "../lib/urls";
 import { brand } from "../lib/brand";
 import { useAuth } from "./AuthContext";
 import { AdminPanel, CoachPanel, StudentPanel, TransitionScreen } from "./RouteGuards";
-import { homePathForRole, loginPath, paths } from "./paths";
+import { activatePath, homePathForRole, loginPath, paths } from "./paths";
 import { setPostLoginDestination } from "./session";
 
 export function HomePage() {
@@ -34,10 +35,14 @@ export function HomePage() {
 
   return (
     <HomeView
-      onStart={(planCode) => navigate(loginPath(planCode))}
+      onStart={(planCode, couponCode) => navigate(activatePath(planCode, couponCode))}
       onLogin={() => navigate(paths.login)}
     />
   );
+}
+
+export function ActivatePage() {
+  return <ActivateView />;
 }
 
 export function DownloadPage() {
@@ -118,9 +123,13 @@ export function LoginPage() {
   useEffect(() => {
     const plan = searchParams.get("plan");
     if (plan && plan.trim()) {
+      navigate(`${paths.activate}?plan=${encodeURIComponent(plan.trim())}`, { replace: true });
+      return;
+    }
+    if (plan) {
       setSelectedPlanCode(plan.trim());
     }
-  }, [searchParams, setSelectedPlanCode]);
+  }, [navigate, searchParams, setSelectedPlanCode]);
 
   const forceRegister = searchParams.get("mode") === "register";
 

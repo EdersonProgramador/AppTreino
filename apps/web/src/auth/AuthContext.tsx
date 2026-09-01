@@ -28,6 +28,8 @@ import {
   readStoredUser
 } from "./session";
 import { paths } from "./paths";
+import { consumeCheckoutIntent, readCheckoutIntent } from "../lib/checkout-intent";
+import { studentCheckoutPath } from "./paths";
 import { preloadAdminPanel, preloadStudentPanel } from "./RouteGuards";
 import { useMusicPlayerStore } from "../stores/musicPlayerStore";
 import { clearStudentPanel } from "../lib/student-panel-persist";
@@ -320,6 +322,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const idToken = String(formData.get("idToken") ?? "").trim();
       const credential = String(formData.get("credential") ?? "").trim();
       const planCode = store.selectedPlanCode ?? (mode === "register" ? "monthly" : null);
+      const checkoutIntent = readCheckoutIntent();
+      const couponForCheckout = checkoutIntent?.couponCode ?? null;
       const isCheckoutRegister = mode === "register" && Boolean(planCode);
       const endpoint =
         provider === "GOOGLE"
@@ -368,6 +372,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   equipmentTags,
                   password,
                   planCode,
+                  couponCode: couponForCheckout,
                   billingType,
                   acceptTerms: acceptTerms ? true : undefined,
                   acceptPrivacy: acceptPrivacy ? true : undefined
@@ -393,12 +398,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw new ApiError(401, "Credencial do Google não recebida. Recarregue a página e tente novamente.");
         }
 
-        const response = await apiPost<{ user: AuthUser; token: string; payment?: { paymentUrl?: string | null } }>(
-          endpoint,
-          payload
-        );
+        const response = await apiPost<{
+          user: AuthUser;
+          token: string;
+          payment?: { paymentUrl?: string | null };
+          paymentProviderError?: string;
+        }>(endpoint, payload);
 
-        const destination = store.establishSession(response);
+        const checkoutIntentAfter = readCheckoutIntent();
+        const planForCheckout = checkoutIntentAfter?.planCode ?? store.selectedPlanCode ?? planCode;
+        let destination = store.establishSession(response);
+        if (response.user.role === "USER" && checkoutIntent) {
+          destination = studentCheckoutPath(planForCheckout ?? undefined);
+        }
         if (response.user.role === "ADMIN") {
           preloadAdminPanel();
         } else {

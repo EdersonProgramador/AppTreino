@@ -3,6 +3,7 @@ import { z } from "zod";
 import { initialPlans } from "@app-treino/shared";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
+import { serializePublicPlan } from "../plan-serializer.js";
 import { buildPublicUploadUrl } from "../upload-security.js";
 import { DEFAULT_SYSTEM_SETTINGS, ensureDefaultSystemSettings, sanitizePublicSystemSettings } from "./commerce.utils.js";
 
@@ -136,19 +137,37 @@ async function loadPublicPost(id: string) {
 }
 
 export async function registerPublicRoutes(app: FastifyInstance) {
-  app.get("/plans", async () => {
+  app.get("/plans", async (request) => {
+    const couponQuery = z.object({ coupon: z.string().trim().max(40).optional() }).parse(request.query ?? {});
+    const explicitCoupon = couponQuery.coupon?.toUpperCase() || null;
+    const fallbackPlans = initialPlans.map((plan, index) => ({
+      code: plan.code,
+      name: plan.name,
+      priceInCents: plan.priceInCents,
+      billingCycle: plan.billingCycle,
+      description: plan.description ?? null,
+      cardBenefits: plan.cardBenefits ?? [],
+      badgeLabel: plan.badgeLabel ?? null,
+      isFeatured: plan.isFeatured ?? plan.billingCycle === "YEARLY",
+      sortOrder: plan.sortOrder ?? index,
+      showOnFunnel: plan.showOnFunnel !== false,
+      featureKeys: plan.featureKeys ?? [],
+      couponId: null,
+      couponCode: null,
+      originalPriceInCents: plan.priceInCents,
+      effectivePriceInCents: plan.priceInCents,
+      discountInCents: 0
+    }));
+
     if (!env.DATABASE_URL) {
-      return {
-        plans: initialPlans
-      };
+      return { plans: fallbackPlans.filter((plan) => plan.showOnFunnel) };
     }
 
     const plans = await prisma.plan.findMany({
-      where: { deletedAt: null },
-      orderBy: {
-        priceInCents: "asc"
-      },
+      where: { deletedAt: null, showOnFunnel: true },
+      orderBy: [{ sortOrder: "asc" }, { priceInCents: "asc" }],
       include: {
+        coupon: true,
         features: { select: { featureKey: true } }
       }
     });
@@ -156,15 +175,8 @@ export async function registerPublicRoutes(app: FastifyInstance) {
     return {
       plans:
         plans.length > 0
-          ? plans.map((plan) => ({
-              id: plan.id,
-              code: plan.code,
-              name: plan.name,
-              priceInCents: plan.priceInCents,
-              billingCycle: plan.billingCycle,
-              featureKeys: plan.features.map((item) => item.featureKey)
-            }))
-          : initialPlans
+          ? await Promise.all(plans.map((plan) => serializePublicPlan(plan, explicitCoupon)))
+          : fallbackPlans.filter((plan) => plan.showOnFunnel)
     };
   });
 

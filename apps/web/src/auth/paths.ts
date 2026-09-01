@@ -9,7 +9,30 @@ export function homePathForRole(role: UserRole) {
 
 export function loginPath(planCode?: string | null) {
   if (planCode && planCode.trim()) {
-    return `${paths.login}?plan=${encodeURIComponent(planCode.trim())}`;
+    return `${paths.activate}?plan=${encodeURIComponent(planCode.trim())}&step=account`;
   }
   return paths.login;
+}
+
+export function activatePath(planCode?: string | null, couponCode?: string | null) {
+  const params = new URLSearchParams();
+  if (planCode && planCode.trim()) {
+    params.set("plan", planCode.trim());
+  }
+  if (couponCode && couponCode.trim()) {
+    params.set("coupon", couponCode.trim());
+  }
+  const query = params.toString();
+  return query ? `${paths.activate}?${query}` : paths.activate;
+}
+
+export function studentCheckoutPath(planCode?: string | null, couponCode?: string | null) {
+  const params = new URLSearchParams({ section: "subscription" });
+  if (planCode && planCode.trim()) {
+    params.set("plan", planCode.trim());
+  }
+  if (couponCode && couponCode.trim()) {
+    params.set("coupon", couponCode.trim());
+  }
+  return `${paths.student}?${params.toString()}`;
 }

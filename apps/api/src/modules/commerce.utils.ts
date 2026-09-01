@@ -305,18 +305,32 @@ export async function resolveShippingQuote(
   return { shippingMethod: "PICKUP" as const, shippingInCents: 0 };
 }
 
-export async function findValidCoupon(code: string, subtotalInCents: number) {
+export async function findValidCoupon(
+  code: string,
+  subtotalInCents: number,
+  options?: { scope?: "STORE" | "SUBSCRIPTION"; silent?: boolean }
+) {
   const normalized = code.trim().toUpperCase();
   if (!normalized) return null;
+
+  const scope = options?.scope;
+  const scopeFilter =
+    scope === "STORE"
+      ? { scope: { in: ["STORE", "ALL"] as const } }
+      : scope === "SUBSCRIPTION"
+        ? { scope: { in: ["SUBSCRIPTION", "ALL"] as const } }
+        : {};
 
   const coupon = await prisma.coupon.findFirst({
     where: {
       code: normalized,
       isActive: true,
-      deletedAt: null
+      deletedAt: null,
+      ...scopeFilter
     }
   });
   if (!coupon) {
+    if (options?.silent) return null;
     const error = new Error("Cupom inválido ou expirado.") as Error & { statusCode: number };
     error.statusCode = 400;
     throw error;
@@ -324,21 +338,25 @@ export async function findValidCoupon(code: string, subtotalInCents: number) {
 
   const now = new Date();
   if (coupon.startsAt && coupon.startsAt > now) {
+    if (options?.silent) return null;
     const error = new Error("Cupom ainda não está válido.") as Error & { statusCode: number };
     error.statusCode = 400;
     throw error;
   }
   if (coupon.endsAt && coupon.endsAt < now) {
+    if (options?.silent) return null;
     const error = new Error("Cupom expirado.") as Error & { statusCode: number };
     error.statusCode = 400;
     throw error;
   }
   if (coupon.maxUses != null && coupon.usedCount >= coupon.maxUses) {
+    if (options?.silent) return null;
     const error = new Error("Cupom esgotado.") as Error & { statusCode: number };
     error.statusCode = 400;
     throw error;
   }
   if (subtotalInCents < coupon.minOrderCents) {
+    if (options?.silent) return null;
     const error = new Error(
       `Cupom válido a partir de R$ ${(coupon.minOrderCents / 100).toFixed(2).replace(".", ",")}.`
     ) as Error & { statusCode: number };
@@ -408,7 +426,7 @@ export async function buildCartTotals(cart: CartWithItems) {
   let couponCode: string | null = null;
   if (cart.couponCode) {
     try {
-      const resolved = await findValidCoupon(cart.couponCode, subtotalInCents);
+      const resolved = await findValidCoupon(cart.couponCode, subtotalInCents, { scope: "STORE" });
       if (resolved) {
         discountInCents = resolved.discountInCents;
         couponId = resolved.coupon.id;

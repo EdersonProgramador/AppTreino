@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Check, ChevronRight, Menu, ShieldCheck, X } from "lucide-react";
 import { formatPriceInBRL } from "@app-treino/shared";
-import { apiGet } from "../../api";
+import { useCatalogPlans } from "../../hooks/useCatalogPlans";
 import { brand } from "../../lib/brand";
 import { isLegalIdentityPublic, legalMeta, legalPublicOperatorName } from "../../lib/legal-content";
 import { paths } from "../../auth/paths";
@@ -21,8 +21,6 @@ import {
   intelligenceFeatures,
   landingNav,
   modalities,
-  monthlyPlanPerks,
-  annualPlanPerks,
   professionalRoles,
   socialProofMetrics,
   telemetryMetrics,
@@ -32,6 +30,7 @@ import {
   workoutPerks,
   workoutRows
 } from "../../lib/home-content";
+import { formatPlanPriceLines, getMonthlyBaseline } from "../../lib/plan-catalog";
 
 const PRIMARY_CTA = "Ativar agora";
 
@@ -52,24 +51,13 @@ export function HomeView({
   onStart,
   onLogin
 }: {
-  onStart: (planCode?: string) => void;
+  onStart: (planCode?: string, couponCode?: string) => void;
   onLogin: () => void;
 }) {
   const [stickyVisible, setStickyVisible] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [catalogPlans, setCatalogPlans] = useState<Array<{ code: string; name: string; priceInCents: number; billingCycle?: string }>>([]);
   const scrollRootRef = useRef<HTMLElement | null>(null);
-  const monthly = catalogPlans.find((plan) => plan.code === "monthly") ?? catalogPlans[0] ?? null;
-  const annual = catalogPlans.find((plan) => plan.code === "annual") ?? catalogPlans[1] ?? null;
-  const annualAnchorCents = monthly && annual ? monthly.priceInCents * 12 : 0;
-  const annualSavingsCents = monthly && annual ? annualAnchorCents - annual.priceInCents : 0;
-  const annualInstallmentCents = annual ? Math.round(annual.priceInCents / 12) : 0;
-
-  useEffect(() => {
-    void apiGet<{ plans: Array<{ code: string; name: string; priceInCents: number; billingCycle?: string }> }>("/plans")
-      .then((response) => setCatalogPlans(response.plans ?? []))
-      .catch(() => setCatalogPlans([]));
-  }, []);
+  const { plans: funnelPlans, loading: plansLoading, monthlyBaseline } = useCatalogPlans();
 
   useEffect(() => {
     const root = scrollRootRef.current;
@@ -537,63 +525,65 @@ export function HomeView({
           <SectionEyebrow>Planos</SectionEyebrow>
           <h2 className="ui-display mt-4 text-[clamp(1.75rem,4vw,2.25rem)] font-bold uppercase">Escolha como você quer começar sua evolução</h2>
           <p className="mt-3 text-sand-muted">Sem complicação. Acesso imediato pelo celular.</p>
-          <div className="mt-10 grid gap-5 lg:grid-cols-2">
-            {monthly ? (
-            <article className="home-plan-card rounded-3xl border border-white/10 p-6 sm:p-8">
-              <h3 className="font-display text-2xl font-bold uppercase">{monthly.name}</h3>
-              <p className="mt-1 text-sm text-sand-muted">Para quem deseja flexibilidade.</p>
-              <div className="mt-4">
-                <strong className="font-display text-4xl text-brand-gold">{formatPriceInBRL(monthly.priceInCents)}</strong>
-                <span className="ml-2 text-sm text-sand-muted">/ mês</span>
-              </div>
-              <ul className="mt-6 grid gap-2">
-                {monthlyPlanPerks.map((perk) => (
-                  <li key={perk} className="flex gap-2 text-sm text-sand-muted">
-                    <Check size={16} className="shrink-0 text-brand-gold" />
-                    {perk}
-                  </li>
-                ))}
-              </ul>
-              <button type="button" className="ui-btn-primary mt-6 w-full sm:w-auto" onClick={() => onStart(monthly.code)}>
-                Ativar plano mensal
-                <ArrowRight size={18} />
-              </button>
-            </article>
-            ) : (
+          <div className="mt-10 grid gap-5 lg:grid-cols-2 home-plan-grid">
+            {plansLoading ? (
               <article className="home-plan-card rounded-3xl border border-white/10 p-6 sm:p-8">
                 <p className="text-sm text-sand-muted">Carregando planos…</p>
               </article>
+            ) : funnelPlans.length > 0 ? (
+              funnelPlans.map((plan) => {
+                const priceLines = formatPlanPriceLines(plan, monthlyBaseline);
+                const benefits = plan.cardBenefits.length > 0 ? plan.cardBenefits : ["Acesso completo ao ecossistema ATLLY"];
+                const featured = plan.isFeatured || Boolean(plan.badgeLabel);
+
+                return (
+                  <article
+                    key={plan.code}
+                    className={`rounded-3xl border p-6 sm:p-8 ${
+                      featured ? "home-plan-featured relative border-brand-gold/50 shadow-glow" : "home-plan-card border-white/10"
+                    }`}
+                  >
+                    {plan.badgeLabel ? (
+                      <span className="absolute right-4 top-4 rounded-full bg-brand-gold px-3 py-1 text-[10px] font-extrabold uppercase text-black">
+                        {plan.badgeLabel}
+                      </span>
+                    ) : null}
+                    <h3 className="font-display text-2xl font-bold uppercase">{plan.name}</h3>
+                    {plan.description ? <p className="mt-1 text-sm text-sand-muted">{plan.description}</p> : null}
+                    <div className="mt-4">
+                      {priceLines.anchor ? <p className="text-sm line-through text-sand-faint">{priceLines.anchor}</p> : null}
+                    {plan.couponCode && (plan.discountInCents ?? 0) > 0 ? (
+                      <span className="mb-2 inline-flex rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold uppercase text-emerald-300">
+                        Cupom {plan.couponCode} · economize {formatPriceInBRL(plan.discountInCents ?? 0)}
+                      </span>
+                    ) : priceLines.discountLabel ? (
+                      <span className="mb-2 inline-flex rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold uppercase text-emerald-300">
+                        {priceLines.discountLabel}
+                      </span>
+                    ) : null}
+                      <strong className="font-display text-4xl text-brand-gold">{priceLines.primary}</strong>
+                      <p className="mt-1 text-sm text-sand-muted">{priceLines.secondary}</p>
+                    </div>
+                    <ul className="mt-6 grid gap-2">
+                      {benefits.map((perk) => (
+                        <li key={perk} className={`flex gap-2 text-sm ${featured ? "text-sand" : "text-sand-muted"}`}>
+                          <Check size={16} className="shrink-0 text-brand-gold" />
+                          {perk}
+                        </li>
+                      ))}
+                    </ul>
+                    <button type="button" className="ui-btn-primary mt-6 w-full sm:w-auto" onClick={() => onStart(plan.code, plan.couponCode ?? undefined)}>
+                      Ativar {plan.name.toLowerCase()}
+                      <ArrowRight size={18} />
+                    </button>
+                  </article>
+                );
+              })
+            ) : (
+              <article className="home-plan-card rounded-3xl border border-white/10 p-6 sm:p-8">
+                <p className="text-sm text-sand-muted">Planos indisponíveis no momento.</p>
+              </article>
             )}
-            {annual ? (
-            <article className="home-plan-featured relative rounded-3xl border border-brand-gold/50 p-6 shadow-glow sm:p-8">
-              <span className="absolute right-4 top-4 rounded-full bg-brand-gold px-3 py-1 text-[10px] font-extrabold uppercase text-black">
-                Mais vantajoso
-              </span>
-              <h3 className="font-display text-2xl font-bold uppercase">{annual.name}</h3>
-              <div className="mt-4">
-                {annualSavingsCents > 0 ? (
-                  <p className="text-sm line-through text-sand-faint">{formatPriceInBRL(annualAnchorCents)}</p>
-                ) : null}
-                <strong className="font-display text-4xl text-brand-gold">12× {formatPriceInBRL(annualInstallmentCents)}</strong>
-                <p className="mt-1 text-sm text-sand-muted">
-                  ou {formatPriceInBRL(annual.priceInCents)} à vista
-                  {annualSavingsCents > 0 ? ` — economize ${formatPriceInBRL(annualSavingsCents)}` : ""}
-                </p>
-              </div>
-              <ul className="mt-6 grid gap-2">
-                {annualPlanPerks.map((perk) => (
-                  <li key={perk} className="flex gap-2 text-sm text-sand">
-                    <Check size={16} className="shrink-0 text-brand-gold" />
-                    {perk}
-                  </li>
-                ))}
-              </ul>
-              <button type="button" className="ui-btn-primary mt-6 w-full sm:w-auto" onClick={() => onStart(annual.code)}>
-                Ativar plano anual
-                <ArrowRight size={18} />
-              </button>
-            </article>
-            ) : null}
           </div>
         </div>
       </section>

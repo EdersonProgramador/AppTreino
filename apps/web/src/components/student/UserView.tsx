@@ -116,6 +116,12 @@ import { StudentOrgSection } from "./StudentOrgSection";
 import type { PlanCode } from "../../types/auth";
 import { assessmentPerimeterKeys, assessmentPhotoFields } from "../../types/admin";
 import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
+import { SubscriptionCheckoutShell } from "../checkout/SubscriptionCheckoutShell";
+import { SubscriptionFunnelPanel } from "../checkout/SubscriptionFunnelPanel";
+import { formatPlanPriceLines } from "../../lib/plan-catalog";
+import { paths } from "../../auth/paths";
+import { clearCheckoutIntent, readCheckoutIntent } from "../../lib/checkout-intent";
+import { useCatalogPlans } from "../../hooks/useCatalogPlans";
 import { LockedOverlay } from "./LockedOverlay";
 import { StudentSettingsPanel } from "./StudentSettingsPanel";
 import { StudentMusicPlayerHost } from "./StudentMusicPlayerHost";
@@ -237,18 +243,26 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [showAddCardForm, setShowAddCardForm] = useState(false);
   const [checkoutPayment, setCheckoutPayment] = useState<PaymentRow | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState<PlanCode | "sandbox" | null>(null);
-  const [catalogPlans, setCatalogPlans] = useState<
-    Array<{ code: string; name: string; priceInCents: number; billingCycle: string }>
-  >([]);
   const [streakCalendarOpen, setStreakCalendarOpen] = useState(false);
   const [streakCalendarMonth, setStreakCalendarMonth] = useState(() => new Date().getMonth() + 1);
+  const initialCheckoutIntent = readCheckoutIntent();
+  const initialCouponCode =
+    searchParams.get("coupon")?.toUpperCase() ?? initialCheckoutIntent?.couponCode?.toUpperCase() ?? null;
+  const [couponDraft, setCouponDraft] = useState(initialCouponCode ?? "");
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(initialCouponCode);
+  const [couponFeedback, setCouponFeedback] = useState<string | null>(null);
   const [checkoutDraft, setCheckoutDraft] = useState<{
     planCode: PlanCode;
     billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED";
   }>({
-    planCode: "monthly",
+    planCode: (initialCheckoutIntent?.planCode as PlanCode | undefined) ?? "monthly",
     billingType: "UNDEFINED"
   });
+  const {
+    plans: catalogPlans,
+    loading: catalogPlansLoading,
+    monthlyBaseline: catalogMonthlyBaseline
+  } = useCatalogPlans(checkoutDraft.planCode, appliedCoupon);
   const [assessmentForm, setAssessmentForm] = useState<PhysicalAssessmentForm | null>(null);
   const [editingAssessmentId, setEditingAssessmentId] = useState<string | null>(null);
   const [submittingAssessment, setSubmittingAssessment] = useState(false);
@@ -539,19 +553,50 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     apiGet<{ config: Record<string, string> }>("/public/config")
       .then((response) => setPublicConfig(response.config))
       .catch(() => {});
-    apiGet<{
-      plans: Array<{ code: string; name: string; priceInCents: number; billingCycle: string }>;
-    }>("/plans")
-      .then((response) => {
-        const plans = response.plans ?? [];
-        setCatalogPlans(plans);
-        if (plans[0] && !plans.some((plan) => plan.code === checkoutDraft.planCode)) {
-          setCheckoutDraft((current) => ({ ...current, planCode: plans[0].code }));
-        }
-      })
-      .catch(() => setCatalogPlans([]));
     loadStudentCards();
   }, [token]);
+
+  useEffect(() => {
+    if (catalogPlansLoading) return;
+    if (catalogPlans[0] && !catalogPlans.some((plan) => plan.code === checkoutDraft.planCode)) {
+      setCheckoutDraft((current) => ({ ...current, planCode: catalogPlans[0].code }));
+    }
+  }, [catalogPlans, catalogPlansLoading, checkoutDraft.planCode]);
+
+  useEffect(() => {
+    const selected = catalogPlans.find((plan) => plan.code === checkoutDraft.planCode);
+    if (selected?.couponCode && !appliedCoupon) {
+      setAppliedCoupon(selected.couponCode);
+      setCouponDraft(selected.couponCode);
+    }
+  }, [appliedCoupon, catalogPlans, checkoutDraft.planCode]);
+
+  useEffect(() => {
+    if (!appliedCoupon || catalogPlansLoading) return;
+    const selected = catalogPlans.find((plan) => plan.code === checkoutDraft.planCode);
+    if (selected && (selected.discountInCents ?? 0) > 0) {
+      setCouponFeedback(`Cupom ${appliedCoupon} aplicado com sucesso.`);
+    } else if (appliedCoupon) {
+      setCouponFeedback("Cupom inválido ou indisponível para este plano.");
+    }
+  }, [appliedCoupon, catalogPlansLoading, catalogPlans, checkoutDraft.planCode]);
+
+  const handleApplySubscriptionCoupon = () => {
+    const next = couponDraft.trim().toUpperCase();
+    if (!next) {
+      setAppliedCoupon(null);
+      setCouponFeedback("Cupom removido.");
+      return;
+    }
+    setAppliedCoupon(next);
+    setCouponFeedback(null);
+  };
+
+  function resolveCheckoutCoupon(planCode: PlanCode): string | null {
+    if (appliedCoupon) return appliedCoupon;
+    const plan = catalogPlans.find((item) => item.code === planCode);
+    return plan?.couponCode ?? null;
+  }
 
   useEffect(() => {
     writeStudentPanel({
@@ -781,6 +826,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
   useEffect(() => {
     const raw = searchParams.get("section");
+    const planParam = searchParams.get("plan");
+    const couponParam = searchParams.get("coupon");
     const storeTabParam = searchParams.get("storeTab");
     const paymentParam = searchParams.get("payment");
     if (storeTabParam === "catalog" || storeTabParam === "cart" || storeTabParam === "orders") {
@@ -795,7 +842,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       );
       setStoreTab("orders");
     }
-    if (!raw && !storeTabParam && !paymentParam) return;
+    if (planParam && catalogPlans.some((plan) => plan.code === planParam)) {
+      setCheckoutDraft((current) => ({ ...current, planCode: planParam as PlanCode }));
+      setStudentSection("subscription");
+    }
+    if (couponParam) {
+      const normalized = couponParam.toUpperCase();
+      setAppliedCoupon(normalized);
+      setCouponDraft(normalized);
+      setStudentSection("subscription");
+    }
+    if (!raw && !storeTabParam && !paymentParam && !planParam) return;
     const next = (raw === "home" ? "feed" : raw === "favorites" ? "ratings" : raw) as StudentPanelSection;
     const allowed: StudentPanelSection[] = [
       "feed",
@@ -827,7 +884,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       "live",
       "messages",
       "chat",
-      "requests"
+      "requests",
+      "subscription"
     ];
     const resolved =
       next === "cart" || next === "orders" || next === "purchases"
@@ -854,8 +912,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     cleaned.delete("payment");
     cleaned.delete("orderId");
     cleaned.delete("purchaseId");
+    cleaned.delete("plan");
     setSearchParams(cleaned, { replace: true });
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, catalogPlans]);
 
   const openTrainingCatalog = () => {
     setSelectedWorkoutModality(null);
@@ -1030,6 +1089,61 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     }
   }
 
+  async function submitSubscriptionCheckout() {
+    if (!token) return;
+
+    const planCode = checkoutDraft.planCode;
+    const billingType = checkoutDraft.billingType;
+
+    setError(null);
+    setCheckoutLoading(planCode);
+    setCheckoutDraft({
+      planCode,
+      billingType
+    });
+
+    try {
+      const response = await apiPost<CheckoutSessionResponse>(
+        "/checkout/session",
+        {
+          planCode,
+          billingType,
+          couponCode: resolveCheckoutCoupon(planCode)
+        },
+        token
+      );
+
+      setMembership(response.membership);
+      setCheckoutPayment(response.payment);
+      if (response.payment) {
+        setPayments((current) => {
+          const others = current.filter((item) => item.id !== response.payment?.id);
+          return [response.payment, ...others].filter(Boolean) as PaymentRow[];
+        });
+      }
+
+      if (response.alreadyActive) {
+        uiSounds.paymentApproved();
+        clearCheckoutIntent();
+        await loadUserData();
+        return;
+      }
+
+      if (response.paymentProviderError && !response.payment?.paymentUrl) {
+        setError(response.paymentProviderError);
+      }
+
+      if (response.payment?.paymentUrl) {
+        window.location.href = response.payment.paymentUrl;
+      }
+    } catch (checkoutError) {
+      const message = checkoutError instanceof ApiError ? checkoutError.message : null;
+      setError(message ?? "Não foi possível iniciar o checkout.");
+    } finally {
+      setCheckoutLoading(null);
+    }
+  }
+
   async function handleCreateCheckout(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!token) return;
@@ -1055,7 +1169,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         "/checkout/session",
         {
           planCode,
-          billingType
+          billingType,
+          couponCode: resolveCheckoutCoupon(planCode)
         },
         token
       );
@@ -1073,6 +1188,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         uiSounds.paymentApproved();
         await loadUserData();
         return;
+      }
+
+      if (response.paymentProviderError && !response.payment?.paymentUrl) {
+        setError(response.paymentProviderError);
       }
 
       if (response.payment?.paymentUrl) {
@@ -2281,198 +2400,130 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     return (
       <div className="admin-preview-shell-wrap">
         {adminPreviewBanner}
-      <main className="workspace-shell grid min-h-screen grid-cols-[280px_minmax(0,1fr)] bg-ink text-sand max-[980px]:grid-cols-1">
-        <aside
-          className="workspace-sidebar sticky top-0 grid min-h-0 content-start gap-[22px] self-start border-r border-[color:var(--app-border)] bg-gradient-to-b from-[var(--app-fill)] to-transparent bg-ink-soft px-[18px] py-[22px] min-[981px]:min-h-screen"
-          aria-label={brand.menuAria}
+        <SubscriptionCheckoutShell
+          title={`Olá, ${profile?.name?.split(" ")[0] ?? brand.athlete}`}
+          subtitle="Confirme seu plano para liberar treinos, corrida, IA e comunidade."
+          onLogout={() => {
+            uiSounds.toggleOff();
+            onLogout();
+          }}
+          backHref={paths.home}
         >
-          <div className="workspace-sidebar-brand flex min-w-0 items-center gap-3 border-b border-[color:var(--app-border)] pb-[18px]">
-            <img
-              className="h-[42px] w-[42px] shrink-0 rounded-lg bg-brand-gold/10"
-              src={assetUrl("assets/atlly-mark.png")}
-              alt=""
-              aria-hidden="true"
-            />
-            <div className="grid min-w-0 gap-0.5">
-              <strong className="text-base text-sand">{brand.athlete}</strong>
-              <span className="truncate text-[13px] font-extrabold text-sand-faint">{profile?.name ?? brand.name}</span>
-            </div>
-          </div>
-          <nav className="workspace-nav grid gap-1.5">
-            <button className={studentSection === "subscription" ? "active" : ""} onClick={() => goToSection("subscription")}>
-              <CreditCard size={18} />Assinatura
+          <nav className="activate-paywall-tabs" aria-label="Áreas da ativação">
+            <button
+              type="button"
+              className={studentSection === "subscription" ? "is-active" : ""}
+              onClick={() => goToSection("subscription")}
+            >
+              Ativação
             </button>
-            <button className={studentSection === "locked" ? "active" : ""} onClick={() => goToSection("locked")}>
-              <LockKeyhole size={18} />Conteúdos
+            <button
+              type="button"
+              className={studentSection === "locked" ? "is-active" : ""}
+              onClick={() => goToSection("locked")}
+            >
+              Prévia
             </button>
-            <button className={studentSection === "settings" ? "active" : ""} onClick={() => goToSection("settings")}>
-              <Settings size={18} />Configurações
+            <button
+              type="button"
+              className={studentSection === "settings" ? "is-active" : ""}
+              onClick={() => goToSection("settings")}
+            >
+              Configurações
             </button>
           </nav>
-          <button
-            className="workspace-logout mt-3 flex w-full min-h-[44px] items-center justify-start gap-2.5 rounded-lg border border-brand-ember/20 bg-brand-ember/10 px-3 text-left font-extrabold transition hover:border-brand-ember/35 hover:bg-brand-ember/15"
-            onClick={() => {
-              uiSounds.toggleOff();
-              onLogout();
-            }}
-          >
-            <LogOut size={18} />
-            Sair
-          </button>
-        </aside>
-        <section className="workspace-content min-w-0 p-[clamp(28px,4vw,48px)]">
-        <section className="dashboard-heading grid items-start gap-3">
-          <span className="eyebrow w-fit">{brand.areaEyebrow}</span>
-          <h1 className="font-display m-0 text-[clamp(38px,5.4vw,72px)] leading-[0.95] tracking-tight text-sand">
-            {profile?.name ?? "Comece a treinar"}
-          </h1>
-        </section>
-        {error && <div className="error-box">{error}</div>}
-        {success && <div className="success-box">{success}</div>}
-        {(studentSection === "subscription") && <section className="subscription-flow">
-          <article className="table-panel checkout-panel">
-            <span className="eyebrow">Assinatura</span>
-            <h2>Ative seu sistema e comece a treinar.</h2>
-            <p>
-              Escolha seu plano e finalize o pagamento com Pix ou cartão no checkout seguro do Asaas.
-              O acesso é liberado automaticamente assim que o pagamento for confirmado.
-            </p>
-            {currentCheckoutPayment && (
-              <div className="pending-payment-note">
-                <strong>Pagamento pendente de {formatPriceInBRL(currentCheckoutPayment.amountInCents)}</strong>
-                <span>Continue no checkout do Asaas para concluir sua assinatura.</span>
+
+          {error ? <div className="activate-funnel-error">{error}</div> : null}
+          {success ? <div className="success-box">{success}</div> : null}
+
+          {studentSection === "subscription" ? (
+            <SubscriptionFunnelPanel
+              step={3}
+              showPaymentStep
+              plans={catalogPlans}
+              plansLoading={catalogPlansLoading}
+              monthlyBaseline={catalogMonthlyBaseline}
+              selectedPlanCode={checkoutDraft.planCode}
+              onSelectPlan={(code) => {
+                uiSounds.radioSelect();
+                setCheckoutDraft((current) => ({ ...current, planCode: code }));
+              }}
+              billingType={checkoutDraft.billingType}
+              onBillingTypeChange={(value) => setCheckoutDraft((current) => ({ ...current, billingType: value }))}
+              checkoutLoading={Boolean(checkoutLoading)}
+              pendingPayment={currentCheckoutPayment}
+              onSubmitCheckout={() => void submitSubscriptionCheckout()}
+              onOpenPendingCheckout={openAsaasCheckout}
+              onConfirmSandbox={() => void handleConfirmSandboxPayment()}
+              showSandbox={Boolean(isSandboxCheckoutEnabled() && currentCheckoutPayment && !currentCheckoutPayment.paymentUrl)}
+              couponCode={appliedCoupon}
+              couponDraft={couponDraft}
+              onCouponDraftChange={setCouponDraft}
+              onApplyCoupon={handleApplySubscriptionCoupon}
+              couponFeedback={couponFeedback}
+            />
+          ) : null}
+
+          {studentSection === "locked" ? (
+            <section className="locked-content activate-locked-panel" aria-label="Funcionalidades bloqueadas">
+              <LockedOverlay onCheckout={() => goToSection("subscription")} />
+              <div className="section-heading locked-heading">
+                <span className="eyebrow">Prévia do app</span>
+                <h2>Modalidades disponíveis para o seu perfil</h2>
+                <p className="locked-heading-copy">
+                  Conteúdo filtrado pelo seu sexo cadastrado. Ative o plano para liberar os treinos.
+                </p>
               </div>
-            )}
-            <form className="checkout-form" onSubmit={handleCreateCheckout}>
-              <div className="checkout-plan-grid">
-                {(catalogPlans.length > 0 ? catalogPlans : []).map((plan) => (
-                  <label className="checkout-plan-option" key={plan.code}>
-                    <input
-                      name="planCode"
-                      type="radio"
-                      value={plan.code}
-                      checked={checkoutDraft.planCode === plan.code}
-                      onChange={() => {
-                        uiSounds.radioSelect();
-                        setCheckoutDraft((current) => ({
-                          ...current,
-                          planCode: plan.code
-                        }));
+              {lockedPreviewModalities.length > 0 ? (
+                <div className="student-modality-list locked-modality-preview">
+                  {lockedPreviewModalities.map((item) => (
+                    <button
+                      className="student-modality-card is-locked"
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        uiSounds.blocked();
+                        goToSection("subscription");
                       }}
-                    />
-                    <span>
-                      <strong>{plan.name}</strong>
-                      {formatPriceInBRL(plan.priceInCents)}
-                    </span>
-                  </label>
-                ))}
-                {catalogPlans.length === 0 && (
-                  <p className="text-sm text-sand-muted">Carregando planos…</p>
-                )}
-              </div>
-              <label>
-                Pagamento
-                <select
-                  name="billingType"
-                  value={checkoutDraft.billingType}
-                  onChange={(event) =>
-                    setCheckoutDraft((current) => ({
-                      ...current,
-                      billingType: event.target.value as typeof current.billingType
-                    }))
-                  }
-                >
-                  <option value="UNDEFINED">Escolher no checkout</option>
-                  <option value="PIX">Pix</option>
-                  <option value="CREDIT_CARD">Cartão</option>
-                </select>
-              </label>
-              {currentCheckoutPayment?.paymentUrl && (
-                <button
-                  className="outline-button"
-                  type="button"
-                  onClick={() => openAsaasCheckout(currentCheckoutPayment.paymentUrl as string)}
-                >
-                  <ArrowUpRight size={18} />
-                  Abrir checkout do Asaas
-                </button>
+                    >
+                      <span className={`student-modality-media ${item.imageUrl ? "with-image" : ""}`}>
+                        {item.imageUrl ? (
+                          <MediaImg src={item.imageUrl} width={480} alt="" aria-hidden="true" />
+                        ) : (
+                          <Dumbbell size={26} />
+                        )}
+                        <span className="student-modality-lock-badge" aria-hidden="true">
+                          <LockKeyhole size={16} />
+                        </span>
+                      </span>
+                      <span className="student-modality-copy">
+                        <strong>{item.name}</strong>
+                        <small>{item.description?.trim() || "Bloqueado · finalize a assinatura"}</small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="locked-grid">
+                  {lockedFeatures.map((feature) => (
+                    <article className="locked-card" key={feature.title}>
+                      <div className="locked-card-header">
+                        <feature.icon size={22} />
+                        <LockKeyhole size={18} />
+                      </div>
+                      <h3>{feature.title}</h3>
+                      <p>{feature.text}</p>
+                    </article>
+                  ))}
+                </div>
               )}
-              {isSandboxCheckoutEnabled() && currentCheckoutPayment && !currentCheckoutPayment.paymentUrl && (
-                <button
-                  className="outline-button"
-                  type="button"
-                  onClick={handleConfirmSandboxPayment}
-                  disabled={checkoutLoading === "sandbox"}
-                >
-                  {checkoutLoading === "sandbox" ? <Loader2 className="spin" size={18} /> : <CreditCard size={18} />}
-                  Finalizar checkout sandbox
-                </button>
-              )}
-              <button className="primary-button" disabled={Boolean(checkoutLoading)}>
-                {checkoutLoading ? <Loader2 className="spin" size={18} /> : <CreditCard size={18} />}
-                Assinar agora
-              </button>
-            </form>
-          </article>
-        </section>}
-        {studentSection === "locked" && <section className="locked-content" aria-label="Funcionalidades bloqueadas">
-          <LockedOverlay onCheckout={() => goToSection("subscription")} />
-          <div className="section-heading locked-heading">
-            <span className="eyebrow">Prévia do app</span>
-            <h2>Modalidades disponíveis para o seu perfil</h2>
-            <p className="locked-heading-copy">
-              Conteúdo filtrado pelo seu sexo cadastrado. Assine para liberar os treinos.
-            </p>
-          </div>
-          {lockedPreviewModalities.length > 0 ? (
-            <div className="student-modality-list locked-modality-preview">
-              {lockedPreviewModalities.map((item) => (
-                <button
-                  className="student-modality-card is-locked"
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    uiSounds.blocked();
-                    goToSection("subscription");
-                  }}
-                >
-                  <span className={`student-modality-media ${item.imageUrl ? "with-image" : ""}`}>
-                    {item.imageUrl ? (
-                      <MediaImg src={item.imageUrl} width={480} alt="" aria-hidden="true" />
-                    ) : (
-                      <Dumbbell size={26} />
-                    )}
-                    <span className="student-modality-lock-badge" aria-hidden="true">
-                      <LockKeyhole size={16} />
-                    </span>
-                  </span>
-                  <span className="student-modality-copy">
-                    <strong>{item.name}</strong>
-                    <small>{item.description?.trim() || "Bloqueado · finalize a assinatura"}</small>
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="locked-grid">
-              {lockedFeatures.map((feature) => (
-                <article className="locked-card" key={feature.title}>
-                  <div className="locked-card-header">
-                    <feature.icon size={22} />
-                    <LockKeyhole size={18} />
-                  </div>
-                  <h3>{feature.title}</h3>
-                  <p>{feature.text}</p>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>}
-        {studentSection === "settings" && (
-          <StudentSettingsPanel onBack={() => goToSection("subscription")} />
-        )}
-        </section>
-      </main>
+            </section>
+          ) : null}
+
+          {studentSection === "settings" ? (
+            <StudentSettingsPanel onBack={() => goToSection("subscription")} />
+          ) : null}
+        </SubscriptionCheckoutShell>
       </div>
     );
   }

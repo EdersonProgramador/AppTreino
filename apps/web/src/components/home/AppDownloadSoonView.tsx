@@ -58,7 +58,7 @@ export function AppDownloadSoonView() {
         </div>
 
         <div className="flex flex-col items-center gap-3 sm:flex-row">
-          <Link className="ui-btn-primary no-underline" to={paths.login}>
+          <Link className="ui-btn-primary no-underline" to={paths.activate}>
             Criar conta / Entrar
           </Link>
           <Link className="ui-btn-secondary no-underline" to={paths.home}>

@@ -3,12 +3,14 @@ import { z } from "zod";
 import { hashPassword, isAdminStudentPreview, requireAuth, toAuthUser } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
-import { createAsaasCheckout } from "./asaas.client.js";
+import { tryCreateAsaasCheckout } from "./asaas.client.js";
 import { asaasStatusToPaymentStatus } from "./asaas.routes.js";
 import {
   asaasCheckoutItemDescription,
   asaasCheckoutItemName,
-  evaluateSandboxConfirmGate
+  evaluateSandboxConfirmGate,
+  incrementSubscriptionCouponUsage,
+  resolveSubscriptionCheckoutPricing
 } from "./checkout.utils.js";
 
 const planCodeSchema = z.string().trim().min(1).max(80);
@@ -29,6 +31,7 @@ const checkoutRegisterSchema = z
     equipmentTags: z.array(z.string().min(1)).optional(),
     planCode: planCodeSchema,
     billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED"),
+    couponCode: z.string().trim().max(40).optional().nullable(),
     acceptTerms: z.literal(true, {
       errorMap: () => ({ message: "Aceite os Termos de Uso para continuar." })
     }),
@@ -47,7 +50,8 @@ const checkoutRegisterSchema = z
 
 const checkoutSessionSchema = z.object({
   planCode: planCodeSchema,
-  billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED")
+  billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED"),
+  couponCode: z.string().trim().max(40).optional().nullable()
 });
 
 const checkoutSandboxConfirmationSchema = z.object({
@@ -66,7 +70,8 @@ function requireDatabase() {
 
 async function resolveCheckoutPlan(planCode: string) {
   const plan = await prisma.plan.findFirst({
-    where: { code: planCode, deletedAt: null }
+    where: { code: planCode, deletedAt: null },
+    include: { coupon: true }
   });
   if (!plan) {
     const error = new Error("Plano inválido ou indisponível.") as Error & { statusCode: number };
@@ -74,6 +79,17 @@ async function resolveCheckoutPlan(planCode: string) {
     throw error;
   }
   return plan;
+}
+
+function buildPaymentData(pricing: Awaited<ReturnType<typeof resolveSubscriptionCheckoutPricing>>, dueDate: Date) {
+  return {
+    amountInCents: pricing.amountInCents,
+    originalAmountInCents: pricing.originalAmountInCents,
+    discountInCents: pricing.discountInCents,
+    couponId: pricing.couponId,
+    couponCode: pricing.couponCode,
+    dueDate
+  };
 }
 
 function addCycleDate(start: Date, cycle: "MONTHLY" | "YEARLY") {
@@ -163,7 +179,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       let payment = pendingMembership.payments[0];
 
       if (!payment.paymentUrl) {
-        const asaasPayment = await createAsaasCheckout({
+        const { checkout: asaasPayment, providerError } = await tryCreateAsaasCheckout({
           externalReference: payment.id,
           itemName: asaasCheckoutItemName(pendingMembership.plan?.name ?? planSeed.name),
           itemDescription: asaasCheckoutItemDescription(authUser.name),
@@ -181,6 +197,13 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
             }
           });
         }
+
+        return reply.send({
+          membership: pendingMembership,
+          payment,
+          alreadyActive: false,
+          paymentProviderError: providerError ?? undefined
+        });
       }
 
       return reply.send({
@@ -192,6 +215,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
 
     const startsAt = todayUtcOnly();
     const plan = planSeed;
+    const pricing = await resolveSubscriptionCheckoutPricing(plan, body.couponCode);
 
     const { user, membership, payment } = await prisma.$transaction(async (tx) => {
       const user = await tx.user.findUniqueOrThrow({
@@ -216,15 +240,14 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       const payment = await tx.payment.create({
         data: {
           membershipId: membership.id,
-          amountInCents: plan.priceInCents,
-          dueDate: startsAt
+          ...buildPaymentData(pricing, startsAt)
         }
       });
 
       return { user, membership, payment };
     });
 
-    const asaasPayment = await createAsaasCheckout({
+    const { checkout: asaasPayment, providerError } = await tryCreateAsaasCheckout({
       externalReference: payment.id,
       itemName: asaasCheckoutItemName(planSeed.name),
       itemDescription: asaasCheckoutItemDescription(user.name),
@@ -246,7 +269,8 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     return reply.code(201).send({
       membership,
       payment: updatedPayment,
-      alreadyActive: false
+      alreadyActive: false,
+      paymentProviderError: providerError ?? undefined
     });
   });
 
@@ -297,6 +321,10 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       }
     });
 
+    if (payment.status !== "CONFIRMED" && confirmedPayment.couponId) {
+      await incrementSubscriptionCouponUsage(confirmedPayment.couponId);
+    }
+
     const membership = await prisma.membership.update({
       where: {
         id: confirmedPayment.membershipId
@@ -343,6 +371,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
 
     const startsAt = todayUtcOnly();
     const plan = planSeed;
+    const pricing = await resolveSubscriptionCheckoutPricing(plan, body.couponCode);
 
     const birthDate = body.birthDate ? new Date(body.birthDate) : null;
     const consentAt = new Date();
@@ -384,8 +413,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       const payment = await tx.payment.create({
         data: {
           membershipId: membership.id,
-          amountInCents: plan.priceInCents,
-          dueDate: startsAt
+          ...buildPaymentData(pricing, startsAt)
         }
       });
 
@@ -399,7 +427,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       return { user, payment };
     });
 
-    const asaasPayment = await createAsaasCheckout({
+    const { checkout: asaasPayment, providerError } = await tryCreateAsaasCheckout({
       externalReference: payment.id,
       itemName: asaasCheckoutItemName(planSeed.name),
       itemDescription: asaasCheckoutItemDescription(user.name),
@@ -424,7 +452,8 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     return reply.code(201).send({
       token,
       user: authUser,
-      payment: updatedPayment
+      payment: updatedPayment,
+      paymentProviderError: providerError ?? undefined
     });
     }
   );

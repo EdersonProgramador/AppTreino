@@ -34,13 +34,20 @@ export type PaymentStatus =
   | "REFUNDED"
   | "CANCELED";
 
-export type PlanCode = "monthly" | "annual";
+export type PlanCode = string;
 
 export interface Plan {
-  code: PlanCode;
+  code: string;
   name: string;
   priceInCents: number;
   billingCycle: "MONTHLY" | "YEARLY";
+  description?: string | null;
+  cardBenefits?: string[];
+  badgeLabel?: string | null;
+  isFeatured?: boolean;
+  sortOrder?: number;
+  showOnFunnel?: boolean;
+  featureKeys?: string[];
 }
 
 export interface AuthUser {
@@ -89,13 +96,31 @@ export const initialPlans: Plan[] = [
     code: "monthly",
     name: "Mensal",
     priceInCents: 9700,
-    billingCycle: "MONTHLY"
+    billingCycle: "MONTHLY",
+    description: "Flexível",
+    cardBenefits: [
+      "Treinos personalizados com IA",
+      "Corrida, caminhada e ciclismo GPS",
+      "Acompanhamento de progresso",
+      "Histórico completo de atividades"
+    ],
+    sortOrder: 0
   },
   {
     code: "annual",
     name: "Anual",
     priceInCents: 104700,
-    billingCycle: "YEARLY"
+    billingCycle: "YEARLY",
+    description: "12 meses",
+    badgeLabel: "Melhor valor",
+    isFeatured: true,
+    cardBenefits: [
+      "Tudo do plano mensal",
+      "Economia no pagamento anual",
+      "Prioridade em novos recursos",
+      "Suporte dedicado"
+    ],
+    sortOrder: 1
   }
 ];
 

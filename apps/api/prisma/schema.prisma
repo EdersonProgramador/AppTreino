@@ -152,12 +152,28 @@ model Profile {
   @@map("profiles")
 }
 
+enum CouponScope {
+  STORE
+  SUBSCRIPTION
+  ALL
+
+  @@map("coupon_scope")
+}
+
 model Plan {
   id           String       @id @default(cuid())
   code         String       @unique
   name         String
   priceInCents Int          @map("price_in_cents")
   billingCycle BillingCycle @map("billing_cycle")
+  description  String?
+  cardBenefits Json         @default("[]") @map("card_benefits")
+  badgeLabel   String?      @map("badge_label")
+  isFeatured   Boolean      @default(false) @map("is_featured")
+  sortOrder    Int          @default(0) @map("sort_order")
+  showOnFunnel Boolean      @default(true) @map("show_on_funnel")
+  couponId     String?      @map("coupon_id")
+  coupon       Coupon?      @relation(fields: [couponId], references: [id], onDelete: SetNull)
   deletedAt    DateTime?    @map("deleted_at")
   memberships  Membership[]
   features     PlanFeature[]
@@ -187,18 +203,23 @@ model Membership {
 }
 
 model Payment {
-  id             String        @id @default(cuid())
-  membershipId   String        @map("membership_id")
-  membership     Membership    @relation(fields: [membershipId], references: [id])
-  amountInCents  Int           @map("amount_in_cents")
-  status         PaymentStatus @default(PENDING)
-  dueDate        DateTime      @map("due_date")
-  paidAt         DateTime?     @map("paid_at")
-  asaasPaymentId String?       @unique @map("asaas_payment_id")
-  paymentUrl     String?       @map("payment_url")
-  deletedAt      DateTime?     @map("deleted_at")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
+  id                    String        @id @default(cuid())
+  membershipId          String        @map("membership_id")
+  membership            Membership    @relation(fields: [membershipId], references: [id])
+  amountInCents         Int           @map("amount_in_cents")
+  originalAmountInCents Int?          @map("original_amount_in_cents")
+  discountInCents       Int           @default(0) @map("discount_in_cents")
+  couponId              String?       @map("coupon_id")
+  couponCode            String?       @map("coupon_code")
+  coupon                Coupon?       @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  status                PaymentStatus @default(PENDING)
+  dueDate               DateTime      @map("due_date")
+  paidAt                DateTime?     @map("paid_at")
+  asaasPaymentId        String?       @unique @map("asaas_payment_id")
+  paymentUrl            String?       @map("payment_url")
+  deletedAt             DateTime?     @map("deleted_at")
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
 
   @@index([membershipId])
   @@map("payments")
@@ -930,22 +951,25 @@ enum ShippingMethod {
 }
 
 model Coupon {
-  id             String    @id @default(cuid())
-  code           String    @unique
+  id             String      @id @default(cuid())
+  code           String      @unique
   description    String?
-  percentOff     Int?      @map("percent_off")
-  amountOffCents Int?      @map("amount_off_cents")
-  minOrderCents  Int       @default(0) @map("min_order_cents")
-  maxUses        Int?      @map("max_uses")
-  usedCount      Int       @default(0) @map("used_count")
-  isActive       Boolean   @default(true) @map("is_active")
-  startsAt       DateTime? @map("starts_at")
-  endsAt         DateTime? @map("ends_at")
-  deletedAt      DateTime? @map("deleted_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  scope          CouponScope @default(STORE)
+  percentOff     Int?        @map("percent_off")
+  amountOffCents Int?        @map("amount_off_cents")
+  minOrderCents  Int         @default(0) @map("min_order_cents")
+  maxUses        Int?        @map("max_uses")
+  usedCount      Int         @default(0) @map("used_count")
+  isActive       Boolean     @default(true) @map("is_active")
+  startsAt       DateTime?   @map("starts_at")
+  endsAt         DateTime?   @map("ends_at")
+  deletedAt      DateTime?   @map("deleted_at")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
 
-  orders Order[]
+  orders   Order[]
+  plans    Plan[]
+  payments Payment[]
 
   @@map("coupons")
 }

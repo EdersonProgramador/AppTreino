@@ -38,6 +38,7 @@ export const paths = {
   admin: "/admin",
   student: "/aluno",
   coach: "/coach",
+  activate: "/ativar",
   app: "/app",
   sharedPost: "/p/:postId"
 } as const;
@@ -65,6 +66,7 @@ export function isGuestPath(pathname: string) {
   return (
     pathname === paths.home ||
     pathname === paths.login ||
+    pathname === paths.activate ||
     pathname === paths.download ||
     pathname === paths.terms ||
     pathname === paths.privacy ||

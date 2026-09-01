@@ -181,6 +181,7 @@ import { MusicAdminPanel } from "./MusicAdminPanel";
 import { OutdoorModerationAdminPanel } from "./OutdoorModerationAdminPanel";
 import { OrgAdminPanel } from "./OrgAdminPanel";
 import { PlanFeaturesAdminPanel } from "./PlanFeaturesAdminPanel";
+import { SubscriptionPlansAdminPanel } from "./SubscriptionPlansAdminPanel";
 
 type AdminSelfProfile = {
   id: string;
@@ -2180,44 +2181,6 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     const totalWorkouts = Number(data.get("totalWorkouts") ?? 30);
 
     await handleAssignCmsProgram(programId, userId ? [userId] : undefined, currentDay, totalWorkouts);
-  }
-
-  async function handleCreatePlan(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const data = new FormData(form);
-    const priceInCents = parseBRLMoneyToCents(String(data.get("price") ?? ""));
-
-    if (priceInCents == null || priceInCents < 1) {
-      setFeedback("Informe um valor válido (ex.: 0,10 ou 29,90).");
-      return;
-    }
-
-    try {
-      await apiPost(
-        "/admin/plans",
-        {
-          code: String(data.get("code") ?? ""),
-          name: String(data.get("name") ?? ""),
-          priceInCents,
-          billingCycle: String(data.get("billingCycle") ?? "MONTHLY")
-        },
-        token
-      );
-      form.reset();
-      await applyAdminChange(["plans"], "Plano cadastrado com sucesso.");
-    } catch {
-      setFeedback("Não foi possível cadastrar o plano.");
-    }
-  }
-
-  async function handleUpdatePlanBilling(planId: string, billingCycle: PlanRow["billingCycle"]) {
-    try {
-      await apiPut(`/admin/plans/${planId}`, { billingCycle }, token);
-      await applyAdminChange(["plans"]);
-    } catch (error) {
-      setFeedback(getApiErrorMessage(error, "Não foi possível atualizar o plano."));
-    }
   }
 
   async function handleCreateMembership(event: FormEvent<HTMLFormElement>) {
@@ -5788,82 +5751,14 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
             ))}
           </nav>
 
-          {financeTab === "plans" && (
-            <article className="table-panel finance-panel" id="admin-plans">
-              <div className={panelTitleClass}>
-                <div>
-                  <h2>Planos de assinatura</h2>
-                  <p>Configure valores e ciclo de cobrança.</p>
-                </div>
-                <span>{plans.length}</span>
-              </div>
-              <form className={`${crudFormClass} finance-form`} onSubmit={handleCreatePlan}>
-                <label>
-                  Código
-                  <input name="code" placeholder="monthly" required />
-                </label>
-                <label>
-                  Nome
-                  <input name="name" placeholder="Plano Mensal" required />
-                </label>
-                <label>
-                  Valor (R$)
-                  <input
-                    name="price"
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="29,90"
-                    title="Use vírgula para centavos, ex.: 0,10 ou 29,90"
-                    required
-                  />
-                </label>
-                <label>
-                  Ciclo
-                  <select name="billingCycle" defaultValue="MONTHLY">
-                    <option value="MONTHLY">Mensal</option>
-                    <option value="YEARLY">Anual</option>
-                  </select>
-                </label>
-                <button className="primary-button" type="submit">
-                  <Save size={18} />
-                  Salvar plano
-                </button>
-              </form>
-              <div className="finance-table-head finance-table-head--plans" aria-hidden="true">
-                <span>Plano</span>
-                <span>Valor</span>
-                <span>Ciclo</span>
-                <span>Ações</span>
-              </div>
-              {plans.length > 0 ? (
-                plans.map((item) => (
-                  <div className={`${dataRowClass} finance-row finance-row--plans`} key={item.id}>
-                    <span>
-                      <strong>{item.name}</strong>
-                      <small className="finance-mono">{item.code}</small>
-                    </span>
-                    <strong className="finance-money">{formatPriceInBRL(item.priceInCents)}</strong>
-                    <select
-                      aria-label="Ciclo do plano"
-                      value={item.billingCycle}
-                      onChange={(event) => handleUpdatePlanBilling(item.id, event.target.value as PlanRow["billingCycle"])}
-                    >
-                      <option value="MONTHLY">{billingCycleLabel.MONTHLY}</option>
-                      <option value="YEARLY">{billingCycleLabel.YEARLY}</option>
-                    </select>
-                    <button className={deleteActionButtonClass} aria-label="Excluir plano" onClick={() => setPendingCmsDelete({ kind: "plans", id: item.id, name: item.name })}>
-                      <Trash2 size={17} />
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <div className="dash-empty">
-                  <Wallet size={18} />
-                  Nenhum plano cadastrado.
-                </div>
-              )}
-            </article>
-          )}
+          {financeTab === "plans" && token ? (
+            <SubscriptionPlansAdminPanel
+              token={token}
+              plans={plans}
+              onChanged={(message) => applyAdminChange(["plans"], message)}
+              onDelete={(id, name) => setPendingCmsDelete({ kind: "plans", id, name })}
+            />
+          ) : null}
 
           {financeTab === "plans" && token && (
             <PlanFeaturesAdminPanel
