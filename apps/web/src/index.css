@@ -92,6 +92,8 @@
     --st-weight-body: 600;
     --st-weight-title: 800;
     --st-weight-label: 700;
+    --student-cream: #ecf2fa;
+    --student-activity-surface: var(--app-elev);
   }
 
   html.light {
@@ -155,6 +157,8 @@
       linear-gradient(145deg, var(--brand-coral) 0%, var(--brand-ember) 48%, var(--brand-ember-deep) 100%);
     --cinema-rest-surface: radial-gradient(circle at 50% 42%, rgba(72, 180, 220, 0.1), transparent 48%),
       linear-gradient(145deg, #e8eef6 0%, #dce6f2 52%, #cfdced 100%);
+    --student-cream: #f4f7fc;
+    --student-activity-surface: var(--app-elev);
   }
 
   html {
@@ -834,7 +838,8 @@
   }
 
   .ui-panel,
-  .table-panel {
+  .table-panel,
+  .panel-card {
     border-radius: 1.5rem;
     border: 1px solid var(--app-border);
     background-color: color-mix(in srgb, var(--app-panel) 92%, transparent);
@@ -3073,7 +3078,7 @@ button.delete-action-button:hover,
 }
 
 .cms-execution-actions button:first-child {
-  border-color: rgba(53, 212, 95, 0.38);
+  border-color: rgba(212, 175, 55, 0.38);
   color: #67e58a;
 }
 
@@ -3113,9 +3118,9 @@ button.delete-action-button:hover,
   height: 34px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid rgba(53, 212, 95, 0.35);
+  border: 1px solid rgba(212, 175, 55, 0.35);
   border-radius: 50%;
-  background: rgba(53, 212, 95, 0.12);
+  background: rgba(212, 175, 55, 0.12);
   color: #67e58a;
   font-size: 12px;
   font-weight: 900;
@@ -3174,10 +3179,10 @@ button.delete-action-button:hover,
 
 .cms-form-section-title > span {
   flex: 0 0 auto;
-  border: 1px solid rgba(53, 212, 95, 0.38);
+  border: 1px solid rgba(212, 175, 55, 0.38);
   border-radius: 6px;
   padding: 6px 9px;
-  background: rgba(53, 212, 95, 0.12);
+  background: rgba(212, 175, 55, 0.12);
   color: #67e58a;
   font-size: 11px;
   font-weight: 900;
@@ -4538,7 +4543,7 @@ button.delete-action-button:hover,
 }
 
 .finance-status-badge.tone-success {
-  background: rgba(53, 212, 95, 0.16);
+  background: rgba(212, 175, 55, 0.16);
   color: #35d45f;
 }
 
@@ -12397,16 +12402,16 @@ html.dark .student-rating-done {
 }
 
 .admin-workspace-shell {
-  --admin-green: #35d45f;
-  --admin-green-strong: #1f9d44;
-  --admin-green-soft: rgba(53, 212, 95, 0.16);
+  --admin-green: var(--brand-gold);
+  --admin-green-strong: #b8922e;
+  --admin-green-soft: rgba(212, 175, 55, 0.16);
   --admin-panel: var(--app-fill);
   --admin-panel-strong: var(--app-fill-strong);
   --admin-border: var(--app-border);
   --admin-text: var(--app-text);
   --admin-muted: var(--app-text-muted);
   background:
-    radial-gradient(circle at 78% -8%, rgba(53, 212, 95, 0.18), transparent 28rem),
+    radial-gradient(circle at 78% -8%, rgba(212, 175, 55, 0.18), transparent 28rem),
     radial-gradient(circle at 20% 12%, var(--app-fill), transparent 24rem),
     var(--app-bg);
   color: var(--admin-text);
@@ -12422,7 +12427,7 @@ html.dark .student-rating-done {
   background:
     linear-gradient(160deg, color-mix(in srgb, var(--admin-green) 18%, var(--app-bg-soft)), var(--app-bg) 48%),
     var(--app-bg);
-  box-shadow: inset -1px 0 rgba(53, 212, 95, 0.08);
+  box-shadow: inset -1px 0 rgba(212, 175, 55, 0.08);
 }
 
 .admin-workspace-shell .workspace-sidebar-brand {
@@ -12478,11 +12483,11 @@ html.dark .student-rating-done {
 .admin-workspace-shell .workspace-nav a:hover,
 .admin-workspace-shell .workspace-nav button:hover,
 .admin-workspace-shell .workspace-nav button.active {
-  border-color: rgba(53, 212, 95, 0.46);
-  background: linear-gradient(90deg, rgba(53, 212, 95, 0.24), rgba(53, 212, 95, 0.12));
+  border-color: rgba(212, 175, 55, 0.46);
+  background: linear-gradient(90deg, rgba(212, 175, 55, 0.24), rgba(212, 175, 55, 0.12));
   color: var(--admin-text);
   transform: none;
-  box-shadow: inset 0 0 0 1px rgba(53, 212, 95, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.1);
 }
 
 .admin-workspace-shell .workspace-logout {
@@ -12531,7 +12536,7 @@ html.light .admin-workspace-shell .workspace-logout svg {
   place-items: center;
   border: 1px solid var(--app-border-strong);
   border-radius: 50%;
-  background: linear-gradient(135deg, rgba(53, 212, 95, 0.22), var(--app-border));
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.22), var(--app-border));
 }
 
 .admin-workspace-shell .workspace-sidebar-user div {
@@ -12556,7 +12561,7 @@ html.light .admin-workspace-shell .workspace-logout svg {
 
 .admin-workspace-content {
   background:
-    radial-gradient(circle at 92% 0%, rgba(53, 212, 95, 0.16), transparent 24rem),
+    radial-gradient(circle at 92% 0%, rgba(212, 175, 55, 0.16), transparent 24rem),
     linear-gradient(180deg, var(--app-fill), transparent 18rem),
     var(--app-bg);
 }
@@ -12589,7 +12594,7 @@ html.light .admin-workspace-shell .workspace-logout svg {
 
 .admin-workspace-shell .admin-publish-shortcut,
 .admin-workspace-shell .primary-button {
-  border-color: rgba(53, 212, 95, 0.46);
+  border-color: rgba(212, 175, 55, 0.46);
   background: linear-gradient(180deg, #229f4a, #177934);
   color: #ffffff;
   box-shadow: 0 12px 28px rgba(27, 142, 62, 0.22);
@@ -12632,7 +12637,7 @@ html.light .admin-workspace-shell .workspace-logout svg {
   grid-template-columns: minmax(360px, 0.9fr) minmax(460px, 1fr);
   align-items: center;
   min-height: 190px;
-  border-color: rgba(53, 212, 95, 0.26);
+  border-color: rgba(212, 175, 55, 0.26);
   background:
     linear-gradient(90deg, rgba(13, 37, 24, 0.95), rgba(23, 47, 32, 0.72) 46%, rgba(9, 13, 11, 0.8)),
     var(--app-fill);
@@ -12644,7 +12649,7 @@ html.light .admin-workspace-shell .workspace-logout svg {
   inset: 0;
   background:
     linear-gradient(90deg, rgba(9, 13, 11, 0.04), rgba(9, 13, 11, 0.18)),
-    url("/assets/hero-banner-app-treino.png") center right 34% / auto 118% no-repeat;
+    url("/assets/atlly-hero.png") center right 34% / auto 118% no-repeat;
   opacity: 0.72;
   pointer-events: none;
 }
@@ -12687,7 +12692,7 @@ html.light .admin-workspace-shell .workspace-logout svg {
   height: 34px;
   border-radius: 8px;
   padding: 7px;
-  background: rgba(53, 212, 95, 0.2);
+  background: rgba(212, 175, 55, 0.2);
   color: var(--admin-green);
 }
 
@@ -12724,7 +12729,7 @@ html.light .admin-workspace-shell .workspace-logout svg {
 .admin-workspace-shell .cms-workflow button:hover,
 .admin-workspace-shell .cms-workflow button.active {
   background:
-    linear-gradient(180deg, rgba(53, 212, 95, 0.16), rgba(53, 212, 95, 0.055)),
+    linear-gradient(180deg, rgba(212, 175, 55, 0.16), rgba(212, 175, 55, 0.055)),
     var(--app-fill);
   transform: none;
 }
@@ -12742,7 +12747,7 @@ html.light .admin-workspace-shell .workspace-logout svg {
   height: 34px;
   border-radius: 8px;
   padding: 7px;
-  background: rgba(53, 212, 95, 0.18);
+  background: rgba(212, 175, 55, 0.18);
   color: var(--admin-green);
 }
 
@@ -12774,14 +12779,14 @@ html.light .admin-workspace-shell .workspace-logout svg {
 
 .admin-workspace-shell .cms-upload-field {
   border-style: dashed;
-  border-color: rgba(53, 212, 95, 0.48);
+  border-color: rgba(212, 175, 55, 0.48);
 }
 
 .admin-workspace-shell .crud-form input:focus,
 .admin-workspace-shell .crud-form select:focus,
 .admin-workspace-shell .crud-form textarea:focus {
-  border-color: rgba(53, 212, 95, 0.72);
-  box-shadow: 0 0 0 3px rgba(53, 212, 95, 0.14);
+  border-color: rgba(212, 175, 55, 0.72);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.14);
 }
 
 .admin-workspace-shell .data-row,
@@ -13076,7 +13081,7 @@ html.light .admin-workspace-shell .workspace-logout svg {
   .admin-workspace-shell .cms-hero::before {
     background:
       linear-gradient(180deg, rgba(9, 13, 11, 0.24), rgba(9, 13, 11, 0.74)),
-      url("/assets/hero-banner-app-treino.png") center right / auto 100% no-repeat;
+      url("/assets/atlly-hero.png") center right / auto 100% no-repeat;
     opacity: 0.44;
   }
 
@@ -13525,14 +13530,14 @@ html.light .admin-workspace-shell .workspace-logout svg {
   border-radius: 14px;
   padding: 16px 18px;
   background:
-    linear-gradient(135deg, rgba(240, 180, 90, 0.12), rgba(53, 212, 95, 0.06)),
+    linear-gradient(135deg, rgba(240, 180, 90, 0.12), rgba(212, 175, 55, 0.06)),
     var(--app-panel);
 }
 
 .dash-b2b-goal.is-complete {
-  border-color: rgba(53, 212, 95, 0.4);
+  border-color: rgba(212, 175, 55, 0.4);
   background:
-    linear-gradient(135deg, rgba(53, 212, 95, 0.14), rgba(240, 180, 90, 0.08)),
+    linear-gradient(135deg, rgba(212, 175, 55, 0.14), rgba(240, 180, 90, 0.08)),
     var(--app-panel);
 }
 
@@ -13555,8 +13560,8 @@ html.light .admin-workspace-shell .workspace-logout svg {
 }
 
 .dash-b2b-goal.is-complete .dash-b2b-goal-icon {
-  border-color: rgba(53, 212, 95, 0.4);
-  background: rgba(53, 212, 95, 0.16);
+  border-color: rgba(212, 175, 55, 0.4);
+  background: rgba(212, 175, 55, 0.16);
   color: #35d45f;
 }
 
@@ -13636,7 +13641,7 @@ html.light .admin-workspace-shell .workspace-logout svg {
 
 .dash-b2b-goal.is-complete .dash-b2b-goal-track span {
   background: linear-gradient(90deg, #2bbd55, #35d45f);
-  box-shadow: 0 0 16px rgba(53, 212, 95, 0.35);
+  box-shadow: 0 0 16px rgba(212, 175, 55, 0.35);
 }
 
 .dash-b2b-goal-meta {
@@ -13651,14 +13656,14 @@ html.light .admin-workspace-shell .workspace-logout svg {
 
 html.light .dash-b2b-goal {
   background:
-    linear-gradient(135deg, rgba(240, 180, 90, 0.1), rgba(53, 212, 95, 0.05)),
+    linear-gradient(135deg, rgba(240, 180, 90, 0.1), rgba(212, 175, 55, 0.05)),
     #fff;
   border-color: rgba(180, 83, 9, 0.22);
 }
 
 html.light .dash-b2b-goal.is-complete {
   background:
-    linear-gradient(135deg, rgba(53, 212, 95, 0.1), rgba(240, 180, 90, 0.06)),
+    linear-gradient(135deg, rgba(212, 175, 55, 0.1), rgba(240, 180, 90, 0.06)),
     #fff;
   border-color: rgba(22, 163, 74, 0.28);
 }
@@ -14071,7 +14076,7 @@ html.light .dash-quick-actions button {
 }
 
 .workspace-sidebar-brand .sidebar-toggle:hover {
-  background: rgba(53, 212, 95, 0.12);
+  background: rgba(212, 175, 55, 0.12);
   color: var(--admin-green);
   transform: translateX(-1px);
 }
@@ -14615,7 +14620,7 @@ html.light .admin-profile-function-card {
   max-height: 100vh;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(53, 212, 95, 0.4) transparent;
+  scrollbar-color: rgba(212, 175, 55, 0.4) transparent;
 }
 
 .admin-nav-group-label {
@@ -14658,7 +14663,7 @@ html.light .admin-profile-function-card {
 }
 
 .admin-field-label input:focus {
-  border-color: rgba(53, 212, 95, 0.6);
+  border-color: rgba(212, 175, 55, 0.6);
   outline: none;
 }
 
@@ -17189,27 +17194,27 @@ html.light .cms-workflow button.active {
 }
 
 html.light .admin-workspace-shell {
-  --admin-green: #1f9d44;
-  --admin-green-strong: #167a34;
-  --admin-green-soft: rgba(31, 157, 68, 0.14);
+  --admin-green: var(--brand-gold);
+  --admin-green-strong: #b8922e;
+  --admin-green-soft: rgba(212, 175, 55, 0.14);
   --admin-panel: rgba(255, 255, 255, 0.88);
   --admin-panel-strong: rgba(255, 255, 255, 0.96);
   --admin-border: rgba(21, 26, 34, 0.12);
   --admin-text: #0e1116;
   --admin-muted: #44403a;
   background:
-    radial-gradient(circle at 78% -8%, rgba(31, 157, 68, 0.12), transparent 28rem),
+    radial-gradient(circle at 78% -8%, rgba(212, 175, 55, 0.12), transparent 28rem),
     radial-gradient(circle at 20% 12%, rgba(240, 180, 90, 0.12), transparent 24rem),
-    linear-gradient(180deg, #f7f2ea 0%, #ebe4d8 100%);
+    linear-gradient(180deg, #f4f7fc 0%, #e8eef6 100%);
   color: var(--admin-text);
 }
 
 html.light .admin-workspace-shell .workspace-sidebar {
   border-right-color: var(--admin-border);
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(235, 228, 216, 0.98) 48%),
-    #f3eee6;
-  box-shadow: inset -1px 0 rgba(31, 157, 68, 0.1);
+    linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(232, 238, 246, 0.98) 48%),
+    #eef3fa;
+  box-shadow: inset -1px 0 rgba(212, 175, 55, 0.1);
 }
 
 html.light .admin-workspace-shell .workspace-sidebar-brand strong {
@@ -17228,10 +17233,10 @@ html.light .admin-workspace-shell .workspace-nav button {
 html.light .admin-workspace-shell .workspace-nav a:hover,
 html.light .admin-workspace-shell .workspace-nav button:hover,
 html.light .admin-workspace-shell .workspace-nav button.active {
-  border-color: rgba(31, 157, 68, 0.4);
-  background: linear-gradient(90deg, rgba(31, 157, 68, 0.16), rgba(31, 157, 68, 0.08));
-  color: #0f3d1f;
-  box-shadow: inset 0 0 0 1px rgba(31, 157, 68, 0.08);
+  border-color: rgba(212, 175, 55, 0.4);
+  background: linear-gradient(90deg, rgba(212, 175, 55, 0.16), rgba(212, 175, 55, 0.08));
+  color: #8a5a12;
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.08);
 }
 
 html.light .admin-workspace-shell .table-panel,
@@ -17254,7 +17259,7 @@ html.light .admin-workspace-shell textarea {
 html.light .student-app-shell {
   background:
     radial-gradient(circle at 78% 0%, rgba(212, 175, 55, 0.16), transparent 26rem),
-    linear-gradient(180deg, #f7f2ea 0%, #ebe4d8 100%);
+    linear-gradient(180deg, #f4f7fc 0%, #e8eef6 100%);
   color: var(--app-text);
   box-shadow: 0 0 0 1px var(--app-border), var(--shadow-soft);
 }
@@ -17727,7 +17732,7 @@ html.light .outline-button {
 
 html.light .outline-button:hover {
   border-color: rgba(21, 26, 34, 0.42);
-  background: #f3eee6;
+  background: #eef3fa;
   color: #0e1116;
 }
 
@@ -17739,7 +17744,7 @@ html.light .student-outline-button {
 
 html.light .student-outline-button:hover {
   border-color: rgba(21, 26, 34, 0.42);
-  background: #f3eee6;
+  background: #eef3fa;
 }
 
 html.light .student-green-button,
@@ -17834,7 +17839,7 @@ html.light .cms-confirm-actions .outline-button {
 
 html.light .cms-confirm-actions .outline-button:hover {
   border-color: rgba(21, 26, 34, 0.32);
-  background: #f3eee6;
+  background: #eef3fa;
   color: #0e1116;
 }
 
@@ -17877,7 +17882,7 @@ html.light .admin-users-table-wrap {
 }
 
 html.light .admin-users-table th {
-  background: #f3eee6;
+  background: #eef3fa;
   color: #605a52;
   border-bottom-color: rgba(21, 26, 34, 0.12);
 }
@@ -18104,24 +18109,24 @@ html.light .student-rating-heading span {
 
 /* Absolute: remove black from student surfaces in Claro */
 html.light {
-  --app-bg: #f7f2ea !important;
-  --app-bg-soft: #ebe4d8 !important;
+  --app-bg: #f4f7fc !important;
+  --app-bg-soft: #e8eef6 !important;
   --app-panel: #ffffff !important;
-  --app-elev: #f3eee6 !important;
+  --app-elev: #eef3fa !important;
   --app-card-bg: #ffffff !important;
   --app-card-shine: none !important;
   --app-input: #ffffff !important;
-  --ink-rgb: 247 242 234 !important;
-  --ink-soft-rgb: 235 228 216 !important;
+  --ink-rgb: 244 247 252 !important;
+  --ink-soft-rgb: 232 238 246 !important;
   --ink-panel-rgb: 255 255 255 !important;
-  --ink-elev-rgb: 243 238 230 !important;
+  --ink-elev-rgb: 238 243 250 !important;
 }
 
 html.light .student-app-shell,
 html.light .ui-shell .student-app-shell {
-  background: #f7f2ea !important;
+  background: #f4f7fc !important;
   background-image: radial-gradient(circle at 78% 0%, rgba(212, 175, 55, 0.14), transparent 26rem) !important;
-  color: #0e1116 !important;
+  color: #0a0e16 !important;
 }
 
 html.light .student-app-shell article,
@@ -18492,7 +18497,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   border: 1px solid rgba(255, 247, 236, 0.16);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.04);
-  color: #fff7ec;
+  color: var(--student-cream);
   font-size: 13px;
   font-weight: 800;
   cursor: pointer;
@@ -18519,7 +18524,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   width: 100%;
   border: 0;
   background: transparent;
-  color: #fff7ec;
+  color: var(--student-cream);
   font-size: 14px;
   outline: none;
 }
@@ -18561,7 +18566,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
 
 .student-play-album-hero h2 {
   margin: 6px 0 8px;
-  color: #fff7ec;
+  color: var(--student-cream);
   font-size: 1.6rem;
   line-height: 1.1;
 }
@@ -18643,7 +18648,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
 
 .student-play-block-head h3 {
   margin: 0;
-  color: #fff7ec;
+  color: var(--student-cream);
   font-size: 1.15rem;
   font-weight: 900;
   letter-spacing: -0.02em;
@@ -18675,7 +18680,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   border: 1px solid transparent;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.04);
-  color: #fff7ec;
+  color: var(--student-cream);
   text-align: left;
   transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
 }
@@ -18731,7 +18736,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   border: 0;
   border-radius: 12px;
   background: linear-gradient(180deg, transparent 35%, rgba(0, 0, 0, 0.55));
-  color: #fff7ec;
+  color: var(--student-cream);
   opacity: 0;
   cursor: pointer;
   transition: opacity 160ms ease;
@@ -18785,7 +18790,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   border: 0;
   border-radius: 12px;
   background: transparent;
-  color: #fff7ec;
+  color: var(--student-cream);
   text-align: left;
   transition: background 140ms ease;
 }
@@ -19044,7 +19049,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
 }
 
 .student-play-dock-meta strong {
-  color: #fff7ec;
+  color: var(--student-cream);
   font-size: 13px;
   font-weight: 800;
 }
@@ -19078,7 +19083,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #fff7ec;
+  color: var(--student-cream);
   cursor: pointer;
 }
 
@@ -19126,7 +19131,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #fff7ec;
+  color: var(--student-cream);
   cursor: pointer;
 }
 
@@ -19246,7 +19251,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   border: 0;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
-  color: #fff7ec;
+  color: var(--student-cream);
   cursor: pointer;
 }
 
@@ -19365,7 +19370,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   height: 46px;
   border: 0;
   background: transparent;
-  color: #fff7ec;
+  color: var(--student-cream);
   cursor: pointer;
 }
 
@@ -19377,7 +19382,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   width: 72px !important;
   height: 72px !important;
   border-radius: 999px;
-  background: #fff7ec !important;
+  background: var(--student-cream) !important;
   color: #15100b !important;
   box-shadow: 0 16px 32px rgba(0, 0, 0, 0.35);
 }
@@ -19395,7 +19400,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   height: 36px;
   border: 0;
   background: transparent;
-  color: #fff7ec;
+  color: var(--student-cream);
   cursor: pointer;
 }
 
@@ -19435,7 +19440,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
   border: 0;
   border-radius: 12px;
   background: transparent;
-  color: #fff7ec;
+  color: var(--student-cream);
   text-align: left;
   cursor: pointer;
 }
@@ -19491,7 +19496,7 @@ html.light .student-app-shell .student-notification-panel-head > div > span {
 }
 
 .student-play-now-meta strong {
-  color: #fff7ec;
+  color: var(--student-cream);
   font-size: 14px;
   font-weight: 850;
 }
@@ -24113,7 +24118,7 @@ html.is-native-app.keyboard-open .login-shell {
   margin: 0;
   min-width: 0;
   background: rgba(8, 10, 14, 0.08);
-  color: #fff7ec;
+  color: var(--student-cream);
   border: 1px solid rgba(255, 247, 236, 0.2);
   border-radius: 18px;
   padding: 10px 12px 10px;
@@ -24133,7 +24138,7 @@ html.is-native-app.keyboard-open .login-shell {
   justify-self: start;
   border: 0;
   background: transparent;
-  color: #fff7ec;
+  color: var(--student-cream);
   font-weight: 700;
   font-size: clamp(9px, 2.6vw, 10px);
   text-transform: uppercase;
@@ -24151,7 +24156,7 @@ html.is-native-app.keyboard-open .login-shell {
   top: 50%;
   transform: translate(-50%, -50%);
   margin: 0;
-  color: #fff7ec;
+  color: var(--student-cream);
   font-weight: 800;
   font-size: clamp(9px, 2.6vw, 10px);
   letter-spacing: 0.1em;
@@ -24253,7 +24258,7 @@ button.student-activity-metric.is-on small {
   letter-spacing: -0.05em;
   line-height: 1.05;
   font-variant-numeric: tabular-nums;
-  color: #fff7ec;
+  color: var(--student-cream);
   white-space: nowrap;
 }
 
@@ -24298,7 +24303,7 @@ button.student-activity-metric.is-on small {
   font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #fff7ec;
+  color: var(--student-cream);
 }
 
 .student-activity-run-btn:disabled {
@@ -24345,7 +24350,7 @@ button.student-activity-metric.is-on small {
 .student-activity-run-playmark svg {
   width: 11px;
   height: 11px;
-  fill: #fff7ec;
+  fill: var(--student-cream);
   margin-left: 1px;
   display: block;
 }
@@ -24366,7 +24371,7 @@ button.student-activity-metric.is-on small {
   border-radius: 50%;
   border: 1px solid rgba(255, 247, 236, 0.16);
   background: rgba(255, 247, 236, 0.08);
-  color: #fff7ec;
+  color: var(--student-cream);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -24400,7 +24405,7 @@ button.student-activity-metric.is-on small {
   justify-self: center;
   border: 1px solid rgba(255, 247, 236, 0.28);
   background: rgba(255, 247, 236, 0.1);
-  color: #fff7ec;
+  color: var(--student-cream);
   border-radius: 999px;
   padding: 5px 14px;
   font-size: clamp(9px, 2.5vw, 10px);
@@ -24513,7 +24518,7 @@ button.student-activity-metric.is-on small {
   padding: 6px 10px;
   border-radius: 999px;
   background: rgba(21, 16, 11, 0.72);
-  color: #fff7ec;
+  color: var(--student-cream);
   font-size: 12px;
   font-weight: 800;
   backdrop-filter: blur(12px);
@@ -24566,7 +24571,7 @@ button.student-activity-metric.is-on small {
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #fff7ec;
+  color: var(--student-cream);
 }
 
 .student-activity-segments-head button,
@@ -24591,7 +24596,7 @@ html.light .student-activity-dock strong,
 html.light .student-activity-sport,
 html.light .student-activity-stats strong,
 html.light .student-activity-distance {
-  color: #fff7ec !important;
+  color: var(--student-cream) !important;
 }
 
 html.light .student-activity-stats small,
@@ -24605,7 +24610,7 @@ html.light .student-activity-segments p {
 }
 
 html.light .student-activity-segments-head strong {
-  color: #fff7ec !important;
+  color: var(--student-cream) !important;
 }
 
 html.light .student-activity-segments-head button,
@@ -24614,7 +24619,7 @@ html.light .student-activity-segments > button {
 }
 
 html.light .student-activity-side {
-  color: #fff7ec !important;
+  color: var(--student-cream) !important;
   background: rgba(255, 247, 236, 0.1);
   border-color: rgba(255, 247, 236, 0.28);
 }
@@ -24700,7 +24705,7 @@ html.light .student-activity-side {
   border-radius: 16px;
   padding: 14px;
   background: #1a140c;
-  color: #fff7ec;
+  color: var(--student-cream);
   display: grid;
   gap: 10px;
   text-align: center;
@@ -25641,7 +25646,7 @@ body:has(.student-app-shell) {
   padding: 6px 10px;
   border-radius: 999px;
   background: rgba(12, 14, 18, 0.78);
-  color: #fff7ec;
+  color: var(--student-cream);
   font-size: 12px;
   font-weight: 700;
 }

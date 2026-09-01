@@ -27,8 +27,8 @@ export const applyDocumentTheme = (theme: UiTheme) => {
   root.dataset.theme = theme;
   root.style.colorScheme = theme;
   document.body.classList.remove("bg-ink", "bg-sand", "text-sand", "text-ink");
-  document.body.style.backgroundColor = theme === "dark" ? "#07080a" : "#f7f2ea";
-  document.body.style.color = theme === "dark" ? "#f4ebe0" : "#0e1116";
+  document.body.style.backgroundColor = theme === "dark" ? "#05070c" : "#f4f7fc";
+  document.body.style.color = theme === "dark" ? "#ecf2fa" : "#0a0e16";
 };
 
 type UiPrefsState = {

@@ -188,7 +188,7 @@ export function MusicAdminPanel({ token }: Props) {
 
   return (
     <section className="admin-grid music-admin-panel" id="admin-music">
-      <article className="panel-card">
+      <article className="table-panel panel-card">
         <div className="panel-title">
           <div>
             <h2>Play — Albuns</h2>
@@ -257,7 +257,7 @@ export function MusicAdminPanel({ token }: Props) {
         </div>
       </article>
 
-      <article className="panel-card">
+      <article className="table-panel panel-card">
         <div className="panel-title">
           <div>
             <h2>Play — Faixas</h2>

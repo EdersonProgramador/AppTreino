@@ -57,6 +57,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { formatPriceInBRL, parseBRLMoneyToCents } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { BRAZILIAN_STATES, CITIES_BY_STATE } from "../../brazil-data";
@@ -96,6 +97,8 @@ import {
   orderStatusTone,
   shippingMethodLabel
 } from "../../lib/commerce";
+import { brand } from "../../lib/brand";
+import { paths } from "../../auth/paths";
 import { assetUrl, mediaUrl, retryVideoAsCompatible } from "../../lib/urls";
 import {
   labelLocationType,
@@ -3148,7 +3151,13 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         className="workspace-sidebar sticky top-0 grid max-h-screen min-h-0 content-stretch gap-[22px] self-start overflow-y-auto border-r border-[color:var(--app-border)] bg-gradient-to-br from-ink-panel/90 to-ink px-[18px] py-[22px] shadow-[inset_-1px_0_rgba(240,180,90,0.08)] min-[981px]:min-h-screen min-[981px]:grid-rows-[auto_1fr_auto]"
         aria-label="Menu administrativo"
       >
-        <div className="workspace-sidebar-brand flex min-w-0 items-center gap-3 border-b-0 pb-2">
+        <div className="workspace-sidebar-brand flex min-w-0 flex-col gap-3 border-b-0 pb-2">
+          <Link to={paths.home} className="inline-flex min-w-0 items-center gap-2 no-underline" aria-label={brand.name}>
+            <img src={assetUrl("assets/atlly-logo.png")} alt="" className="h-7 w-auto max-w-[120px]" />
+            <span className="truncate text-[10px] font-extrabold uppercase tracking-[0.18em] text-brand-telemetry-soft">
+              {brand.areaEyebrow}
+            </span>
+          </Link>
           <button
             type="button"
             className="admin-brand-profile flex min-w-0 flex-1 items-center gap-3 border-0 bg-transparent p-0 text-left text-sand transition hover:text-brand-gold"
@@ -3316,7 +3325,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
         id="admin-overview"
       >
         <div className="grid gap-3">
-          <span className="eyebrow w-fit">Painel administrativo</span>
+          <span className="eyebrow w-fit">{brand.areaEyebrow}</span>
           <h1 className="font-display m-0 text-[clamp(28px,3vw,40px)] font-semibold uppercase leading-tight tracking-tight text-sand">
             Operação ATLLY
           </h1>

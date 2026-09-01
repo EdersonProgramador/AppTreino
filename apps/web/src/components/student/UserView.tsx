@@ -412,6 +412,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       setAccessReady(true);
 
       if (!hasAccess) {
+        setStudentSection((current) =>
+          ["subscription", "locked", "settings"].includes(current) ? current : "subscription"
+        );
         setWorkout(null);
         setTodayWorkout(null);
         setPublishedWorkouts([]);
@@ -2326,10 +2329,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         </section>
         {error && <div className="error-box">{error}</div>}
         {success && <div className="success-box">{success}</div>}
-        {(studentSection === "subscription" || !["subscription", "locked", "settings"].includes(studentSection)) && <section className="subscription-flow">
+        {(studentSection === "subscription") && <section className="subscription-flow">
           <article className="table-panel checkout-panel">
             <span className="eyebrow">Assinatura</span>
-            <h2>Assine agora e comece a treinar.</h2>
+            <h2>Ative seu sistema e comece a treinar.</h2>
             <p>
               Escolha seu plano e finalize o pagamento com Pix ou cartão no checkout seguro do Asaas.
               O acesso é liberado automaticamente assim que o pagamento for confirmado.
@@ -4091,9 +4094,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         {studentSection === "ai" && publicConfig["module_ai"] !== "false" && (
           <section className="student-sheet student-ai-sheet">
             <div className="student-sheet-heading">
-              <span>Coach IA</span>
-              <h1>Coach AppTreino</h1>
-              <p>Chat e voz no mesmo fluxo — como um especialista ao seu lado.</p>
+              <span>ATLLY AI Coach</span>
+              <h1>ATLLY AI Coach</h1>
+              <p>Orientação tática — chat e voz no mesmo fluxo.</p>
             </div>
             {token ? (
               <StudentAiCoachChat

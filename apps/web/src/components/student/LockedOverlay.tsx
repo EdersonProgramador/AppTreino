@@ -17,10 +17,10 @@ export const LockedOverlay = ({ onCheckout }: LockedOverlayProps) => {
         <LockKeyhole size={34} />
       </div>
       <h2 className="font-display m-0 text-[clamp(28px,4vw,42px)] leading-tight text-sand">
-        Este treino esta bloqueado
+        Este treino está bloqueado
       </h2>
       <p className="mb-2 max-w-[520px] text-sand-muted leading-relaxed">
-        Finalize a assinatura pendente para liberar o player e as funcionalidades do aluno.
+        Finalize a assinatura para liberar o player e todas as funcionalidades do atleta.
       </p>
       <button
         className="primary-button"

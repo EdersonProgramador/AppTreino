@@ -11,6 +11,7 @@ import { apiGet } from "../../api";
 import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
 import type { AuthMode, PlanCode } from "../../types/auth";
 import { googleClientId } from "../../lib/urls";
+import { brand } from "../../lib/brand";
 import { uiSounds } from "../../lib/ui-sounds";
 
 export const LoginView = ({
@@ -156,16 +157,16 @@ export const LoginView = ({
       : mode === "forgot"
         ? "Recuperar acesso"
         : mode === "register"
-          ? "Criar conta"
-          : "Entrar";
+          ? brand.registerTitle
+          : brand.loginTitle;
   const description =
     mode === "reset"
       ? "Defina uma nova senha para acessar sua conta."
       : mode === "forgot"
         ? "Informe o e-mail ou telefone cadastrado para receber o link."
         : mode === "register"
-          ? "Conte seu objetivo e disponibilidade para liberar os treinos certos."
-          : "Acesse com e-mail, telefone ou Google.";
+          ? brand.registerCopy
+          : brand.loginCopy;
 
   return (
     <main className="login-page">
@@ -174,7 +175,7 @@ export const LoginView = ({
           <div className="login-panel-icon" aria-hidden="true">
             <Play size={20} />
           </div>
-          <span className="ui-eyebrow">Área de acesso</span>
+          <span className="ui-eyebrow">{brand.accessEyebrow}</span>
           <h1 className="ui-display login-panel-title">{title}</h1>
           <p className="login-panel-copy">{description}</p>
         </header>

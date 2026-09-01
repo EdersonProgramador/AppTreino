@@ -32,9 +32,13 @@ import {
   workoutPerks,
   workoutRows
 } from "../../lib/home-content";
-import { ThemeModeSwitch } from "../shared/ThemeModeSwitch";
 
-function SectionEyebrow({ children }: { children: React.ReactNode }) {
+const PRIMARY_CTA = "Ativar agora";
+
+function SectionEyebrow({ children, telemetry = false }: { children: React.ReactNode; telemetry?: boolean }) {
+  if (telemetry) {
+    return <span className="home-telemetry-label">{children}</span>;
+  }
   return (
     <span className="inline-block text-xs font-extrabold uppercase tracking-[0.16em] text-brand-gold">{children}</span>
   );
@@ -96,7 +100,7 @@ export function HomeView({
   }, []);
 
   return (
-    <main ref={scrollRootRef} className="home-landing bg-black text-sand">
+    <main ref={scrollRootRef} className="home-landing home-command text-sand">
       {/* Barra de oportunidade */}
       <div className="home-topbar border-b border-brand-gold/30 bg-gradient-to-r from-black via-[#1a1208] to-black px-4 py-2.5 text-center">
         <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-brand-gold sm:text-xs">
@@ -105,7 +109,7 @@ export function HomeView({
         <p className="mt-0.5 text-[11px] text-brand-silver sm:text-xs">
           Acesso imediato ao sistema + 7 dias de garantia sem risco.{" "}
           <button type="button" className="font-bold text-brand-amber underline-offset-2 hover:underline" onClick={() => onStart()}>
-            Começar agora
+            {PRIMARY_CTA}
           </button>
         </p>
       </div>
@@ -127,12 +131,11 @@ export function HomeView({
             ))}
           </nav>
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-            <ThemeModeSwitch compact />
             <button type="button" className="hidden text-sm font-bold text-brand-silver transition hover:text-brand-gold sm:inline-flex" onClick={onLogin}>
               Entrar
             </button>
             <button type="button" className="ui-btn-primary !min-h-10 !px-3 !text-xs sm:!min-h-11 sm:!px-5 sm:!text-sm" onClick={() => onStart()}>
-              Começar agora
+              {PRIMARY_CTA}
               <ArrowRight size={16} />
             </button>
             <button
@@ -167,35 +170,35 @@ export function HomeView({
         )}
       </header>
 
-      {/* Hero */}
-      <section id="topo" className="relative isolate overflow-hidden">
-        <div className="absolute inset-0 bg-cover bg-center opacity-40" style={{ backgroundImage: `url(${assetUrl("assets/atlly-hero.png")})` }} aria-hidden="true" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/80 to-black" aria-hidden="true" />
-        <div className="relative z-10 mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-8 sm:py-20 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:py-24">
-          <div className="animate-fade-up max-w-2xl">
-            <SectionEyebrow>Inteligência · Ciência · Performance</SectionEyebrow>
-            <h1 className="mt-5 font-display text-[clamp(2.2rem,6vw,4rem)] font-bold uppercase leading-[0.95] tracking-tight text-sand">
-              <span className="block bg-gradient-to-br from-brand-gold via-brand-chrome to-brand-silver bg-clip-text text-transparent">
-                Comande sua mente.
-              </span>
-              <span className="mt-1 block text-sand">Evolua seu corpo.</span>
+      {/* Hero Command */}
+      <section id="topo" className="home-hero-command">
+        <div
+          className="home-hero-command__media"
+          style={{ backgroundImage: `url(${assetUrl("assets/atlly-hero.png")})` }}
+          aria-hidden="true"
+        />
+        <div className="home-hero-command__veil" aria-hidden="true" />
+        <div className="home-hero-command__scan" aria-hidden="true" />
+        <div className="home-hero-command__frame" aria-hidden="true" />
+        <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col px-4 pb-16 pt-24 sm:px-8 sm:pb-20 sm:pt-28 lg:min-h-[min(100svh,920px)] lg:justify-center lg:pb-24 lg:pt-32">
+          <div className="animate-fade-up max-w-3xl">
+            <SectionEyebrow telemetry>{brand.areaEyebrow}</SectionEyebrow>
+            <h1 className="home-brand-signal mt-6 text-[clamp(2.4rem,7.5vw,4.75rem)] leading-[0.92]">
+              Comande sua mente.
+              <span className="mt-2 block text-[0.72em] tracking-[0.12em] text-sand">Evolua seu corpo.</span>
             </h1>
-            <p className="mt-4 text-lg font-semibold text-brand-silver">A nova forma de treinar, correr e evoluir.</p>
-            <p className="mt-5 text-base leading-relaxed text-sand-muted">
-              A ATLLY é uma plataforma de performance humana que conecta treino, corrida, caminhada, ciclismo, dados,
-              evolução e comunidade em uma única experiência.
-            </p>
-            <p className="mt-3 text-sm leading-relaxed text-sand-faint">
-              Tenha clareza sobre o que fazer, acompanhe sua performance e transforme cada atividade em parte da sua
-              evolução.
+            <p className="mt-5 max-w-2xl text-lg font-semibold text-brand-silver">{brand.commandLine}</p>
+            <p className="mt-4 max-w-2xl text-base leading-relaxed text-sand-muted">
+              A ATLLY conecta treino, corrida, caminhada, ciclismo, dados, evolução e comunidade em uma única experiência
+              de performance humana.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <button type="button" className="ui-btn-primary shadow-glow" onClick={() => onStart()}>
-                Começar minha evolução
+                {PRIMARY_CTA}
                 <ArrowRight size={18} />
               </button>
               <a href="#sistema" className="inline-flex items-center gap-2 text-sm font-extrabold text-brand-silver transition hover:text-brand-gold">
-                Conhecer a ATLLY
+                Conhecer o sistema
                 <ChevronRight size={18} />
               </a>
             </div>
@@ -208,25 +211,17 @@ export function HomeView({
               ))}
             </ul>
           </div>
-          <div className="animate-fade-up home-panel rounded-3xl border border-brand-gold/20 p-5 shadow-panel backdrop-blur-sm" style={{ animationDelay: "120ms" }}>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-brand-gold">Performance level</p>
-            <div className="mt-4 grid gap-3">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <div className="flex items-end justify-between">
-                  <span className="text-sm font-bold text-brand-silver">Readiness</span>
-                  <strong className="font-display text-3xl text-brand-gold">87%</strong>
-                </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
-                  <div className="h-full w-[87%] rounded-full bg-gradient-to-r from-brand-gold to-brand-amber" />
-                </div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <div className="flex items-end justify-between">
-                  <span className="text-sm font-bold text-brand-silver">Evolução</span>
-                  <strong className="font-display text-2xl text-brand-gold">+12,4%</strong>
-                </div>
-                <p className="mt-1 text-xs text-sand-faint">vs. última semana</p>
-              </div>
+          <div className="animate-fade-up mt-10 max-w-3xl lg:mt-12" style={{ animationDelay: "120ms" }}>
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-brand-telemetry-soft">Telemetria integrada</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {telemetryMetrics.slice(0, 8).map((metric) => (
+                <span
+                  key={metric}
+                  className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-brand-silver"
+                >
+                  {metric}
+                </span>
+              ))}
             </div>
           </div>
         </div>
@@ -550,7 +545,7 @@ export function HomeView({
                 ))}
               </ul>
               <button type="button" className="ui-btn-primary mt-6 w-full sm:w-auto" onClick={() => onStart(monthly.code)}>
-                Começar no plano mensal
+                Ativar plano mensal
                 <ArrowRight size={18} />
               </button>
             </article>
@@ -584,7 +579,7 @@ export function HomeView({
                 ))}
               </ul>
               <button type="button" className="ui-btn-primary mt-6 w-full sm:w-auto" onClick={() => onStart(annual.code)}>
-                Garantir plano anual
+                Ativar plano anual
                 <ArrowRight size={18} />
               </button>
             </article>
@@ -644,7 +639,7 @@ export function HomeView({
           </p>
           <p className="mt-6 font-display text-lg font-bold uppercase tracking-wide text-brand-gold">Comande sua mente. Evolua seu corpo.</p>
           <button type="button" className="ui-btn-primary mx-auto mt-8 shadow-glow" onClick={() => onStart()}>
-            Começar minha evolução
+            {PRIMARY_CTA}
             <ArrowRight size={18} />
           </button>
           <p className="mt-4 text-xs text-sand-faint">Acesso imediato · Pagamento seguro · Garantia de 7 dias</p>
@@ -717,7 +712,7 @@ export function HomeView({
             <p className="truncate text-xs text-sand-muted">Acesso imediato · ATLLY Human Performance System</p>
           </div>
           <button type="button" className="ui-btn-primary w-full !min-h-11 shrink-0 !px-4 !text-sm sm:ml-auto sm:w-auto" onClick={() => onStart()}>
-            Começar agora
+            {PRIMARY_CTA}
             <ArrowRight size={16} />
           </button>
         </div>

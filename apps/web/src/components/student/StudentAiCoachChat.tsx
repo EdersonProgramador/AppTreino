@@ -241,7 +241,7 @@ export function StudentAiCoachChat({
             AT
           </span>
           <div>
-            <strong>Coach AppTreino</strong>
+            <strong>ATLLY AI Coach</strong>
             <small>{engineLabel}</small>
           </div>
         </div>
