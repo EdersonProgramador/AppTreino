@@ -63,7 +63,7 @@ app.setErrorHandler((error, _request, reply) => {
     const first = error.issues[0];
     const path = first?.path?.length ? ` (${first.path.join(".")})` : "";
     return reply.code(400).send({
-      message: `Dados inválidos${path}.`,
+      message: first?.message ?? `Dados inválidos${path}.`,
       issues: error.issues.map((issue) => ({
         path: issue.path.join("."),
         message: issue.message
@@ -85,9 +85,12 @@ app.setErrorHandler((error, _request, reply) => {
     }
 
     if (error.code === "P2002") {
-      return reply.code(409).send({
-        message: "Registro já cadastrado."
-      });
+      const target = error.meta?.target;
+      const fields = Array.isArray(target) ? target.map(String) : [];
+      const message = fields.includes("code")
+        ? "Já existe um cupom com este código."
+        : "Registro já cadastrado.";
+      return reply.code(409).send({ message });
     }
   }
 

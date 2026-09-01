@@ -3881,20 +3881,54 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.post("/admin/subscription-coupons", async (request, reply) => {
     requireDatabase();
     const body = subscriptionCouponSchema.parse(request.body);
-    const coupon = await prisma.coupon.create({
-      data: {
-        code: body.code.trim().toUpperCase(),
-        description: body.description || null,
-        scope: "SUBSCRIPTION",
-        percentOff: body.percentOff ?? null,
-        amountOffCents: body.amountOffCents ?? null,
-        minOrderCents: body.minOrderCents,
-        maxUses: body.maxUses ?? null,
-        isActive: body.isActive,
-        startsAt: body.startsAt ?? null,
-        endsAt: body.endsAt ?? null
-      }
-    });
+    const code = body.code.trim().toUpperCase();
+    const couponData = {
+      description: body.description || null,
+      percentOff: body.percentOff ?? null,
+      amountOffCents: body.amountOffCents ?? null,
+      minOrderCents: body.minOrderCents,
+      maxUses: body.maxUses ?? null,
+      isActive: body.isActive,
+      startsAt: body.startsAt ?? null,
+      endsAt: body.endsAt ?? null,
+      deletedAt: null
+    };
+
+    const existing = await prisma.coupon.findUnique({ where: { code } });
+    let coupon;
+
+    if (!existing) {
+      coupon = await prisma.coupon.create({
+        data: {
+          code,
+          scope: "SUBSCRIPTION",
+          ...couponData
+        }
+      });
+    } else if (existing.deletedAt) {
+      coupon = await prisma.coupon.update({
+        where: { id: existing.id },
+        data: {
+          ...couponData,
+          scope: existing.scope === "STORE" ? "ALL" : "SUBSCRIPTION"
+        }
+      });
+    } else if (existing.scope === "STORE") {
+      coupon = await prisma.coupon.update({
+        where: { id: existing.id },
+        data: {
+          ...couponData,
+          scope: "ALL"
+        }
+      });
+    } else {
+      const error = new Error(`Já existe um cupom ativo com o código "${code}".`) as Error & {
+        statusCode: number;
+      };
+      error.statusCode = 409;
+      throw error;
+    }
+
     return reply.code(201).send({ coupon });
   });
 

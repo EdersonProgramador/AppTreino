@@ -139,10 +139,10 @@ function buildCouponPayload(draft: CouponDraft) {
   return {
     code: draft.code.trim(),
     description: draft.description.trim() || null,
-    percentOff,
-    amountOffCents,
+    ...(percentOff != null ? { percentOff } : {}),
+    ...(amountOffCents != null ? { amountOffCents } : {}),
     minOrderCents,
-    maxUses
+    ...(maxUses != null ? { maxUses } : {})
   };
 }
 
@@ -405,7 +405,10 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
 
   async function createSubscriptionCoupon(draft: CouponDraft) {
     const payload = buildCouponPayload(draft);
-    const response = await apiPost<{ coupon: CouponRow }>("/admin/subscription-coupons", payload, token);
+    const response = await apiPost<{ coupon?: CouponRow }>("/admin/subscription-coupons", payload, token);
+    if (!response.coupon?.id) {
+      throw new Error("A API não retornou o cupom criado. Recarregue a página e tente novamente.");
+    }
     await refreshCoupons();
     return response.coupon;
   }
@@ -452,8 +455,7 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
     setFeedback(null);
     try {
       const coupon = await createSubscriptionCoupon(inlineCouponDraft);
-      const payload = buildPayload(editDraft);
-      await apiPut(`/admin/plans/${planId}`, { ...payload, couponId: coupon.id }, token);
+      await apiPut(`/admin/plans/${planId}`, { couponId: coupon.id }, token);
       setEditDraft((current) => ({ ...current, couponId: coupon.id }));
       setInlineCouponDraft(emptyCouponDraft());
       setInlineCouponFeedback("Cupom criado e vinculado ao plano.");

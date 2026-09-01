@@ -65,7 +65,12 @@ export class ApiError extends Error {
 async function getErrorMessage(response: Response) {
   try {
     const data = (await response.json()) as { message?: string; error?: string; issues?: Array<{ message: string }> };
-    const detail = data.message ?? data.error ?? data.issues?.[0]?.message;
+    const issueMessage = data.issues?.[0]?.message;
+    const baseMessage = data.message ?? data.error;
+    const detail =
+      baseMessage && !baseMessage.startsWith("Dados inválidos")
+        ? baseMessage
+        : issueMessage ?? baseMessage;
     if (detail) return detail;
   } catch {
     // ignore
