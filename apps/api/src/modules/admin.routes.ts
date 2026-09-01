@@ -13,6 +13,7 @@ import type { UploadGroup } from "../upload-security.js";
 import { persistUploadedFile } from "../upload-persist.js";
 import { ensureUploadedVideoIsMp4 } from "../video-transcode.js";
 import { serializePlanRecord } from "../plan-serializer.js";
+import { buildPlanPromoCouponCode, resolvePlanPromoDiscount } from "@app-treino/shared";
 import { autoCloseStaleTickets, FINALIZE_PROMPT, ticketInclude } from "./ticket.utils.js";
 import { buildPaginationMeta, parsePagination } from "./pagination.js";
 import { calculateBodyFatEstimate, physicalAssessmentFormSchema } from "./physical-assessment.utils.js";
@@ -3930,6 +3931,102 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     }
 
     return reply.code(201).send({ coupon });
+  });
+
+  const planPromoCouponSchema = z
+    .object({
+      mode: z.enum(["PERCENT", "AMOUNT_OFF", "TARGET_PRICE"]),
+      percentOff: z.number().int().min(1).max(100).optional(),
+      amountOffCents: z.number().int().min(1).optional(),
+      targetPriceInCents: z.number().int().min(1).optional(),
+      planCode: z.string().trim().min(2).max(40).optional(),
+      planPriceInCents: z.number().int().positive().optional()
+    })
+    .superRefine((data, ctx) => {
+      const valid =
+        (data.mode === "PERCENT" && data.percentOff != null) ||
+        (data.mode === "AMOUNT_OFF" && data.amountOffCents != null) ||
+        (data.mode === "TARGET_PRICE" && data.targetPriceInCents != null);
+      if (!valid) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Informe o valor do desconto conforme o modo selecionado."
+        });
+      }
+    });
+
+  app.put("/admin/plans/:id/promo-coupon", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const body = planPromoCouponSchema.parse(request.body);
+    const plan = await prisma.plan.findFirst({ where: { id, deletedAt: null } });
+    if (!plan) {
+      const error = new Error("Plano não encontrado.") as Error & { statusCode: number };
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const planCode = body.planCode?.trim() || plan.code;
+    const planPriceInCents = body.planPriceInCents ?? plan.priceInCents;
+    const resolved = resolvePlanPromoDiscount({
+      planPriceInCents,
+      mode: body.mode,
+      percentOff: body.percentOff,
+      amountOffCents: body.amountOffCents,
+      targetPriceInCents: body.targetPriceInCents
+    });
+
+    const code = buildPlanPromoCouponCode(planCode);
+    const couponData = {
+      description: `Promo automática · ${plan.name}`,
+      percentOff: resolved.percentOff,
+      amountOffCents: resolved.amountOffCents,
+      minOrderCents: resolved.minOrderCents,
+      maxUses: null as number | null,
+      isActive: true,
+      startsAt: null as Date | null,
+      endsAt: null as Date | null,
+      deletedAt: null as Date | null
+    };
+
+    const existing = await prisma.coupon.findUnique({ where: { code } });
+    let coupon;
+
+    if (!existing) {
+      coupon = await prisma.coupon.create({
+        data: { code, scope: "SUBSCRIPTION", ...couponData }
+      });
+    } else if (existing.deletedAt) {
+      coupon = await prisma.coupon.update({
+        where: { id: existing.id },
+        data: {
+          ...couponData,
+          scope: existing.scope === "STORE" ? "ALL" : "SUBSCRIPTION"
+        }
+      });
+    } else if (existing.scope === "STORE") {
+      coupon = await prisma.coupon.update({
+        where: { id: existing.id },
+        data: { ...couponData, scope: "ALL" }
+      });
+    } else {
+      coupon = await prisma.coupon.update({
+        where: { id: existing.id },
+        data: couponData
+      });
+    }
+
+    const updatedPlan = await prisma.plan.update({
+      where: { id },
+      data: { couponId: coupon.id },
+      include: planInclude
+    });
+
+    return {
+      coupon,
+      plan: await serializePlanRecord(updatedPlan),
+      pricing: resolved
+    };
   });
 
   app.delete("/admin/subscription-coupons/:id", async (request) => {

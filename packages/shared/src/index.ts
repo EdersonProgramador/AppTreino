@@ -155,3 +155,15 @@ export function parseBRLMoneyToCents(raw: string | number | null | undefined): n
   if (reais == null) return null;
   return Math.round(reais * 100);
 }
+
+export type {
+  PlanPromoDiscountMode,
+  ResolvePlanPromoDiscountInput,
+  ResolvedPlanPromoDiscount
+} from "./plan-promo-coupon.js";
+export {
+  PLAN_PROMO_COUPON_SUFFIX,
+  DEFAULT_MIN_CHECKOUT_CENTS,
+  buildPlanPromoCouponCode,
+  resolvePlanPromoDiscount
+} from "./plan-promo-coupon.js";
