@@ -12,7 +12,7 @@ import { isVideoUploadExtension, saveValidatedUpload, uploadsDir } from "../uplo
 import type { UploadGroup } from "../upload-security.js";
 import { persistUploadedFile } from "../upload-persist.js";
 import { ensureUploadedVideoIsMp4 } from "../video-transcode.js";
-import { serializePlanRecord } from "../plan-serializer.js";
+import { serializePlanRecord, hydratePlanCouponRelations } from "../plan-serializer.js";
 import { clearPlanPromoCoupon, syncPlanPromoCoupon } from "./plan-promo.service.js";
 import { autoCloseStaleTickets, FINALIZE_PROMPT, ticketInclude } from "./ticket.utils.js";
 import { buildPaginationMeta, parsePagination } from "./pagination.js";
@@ -3829,11 +3829,13 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
   app.get("/admin/plans", async () => {
     requireDatabase();
-    const plans = await prisma.plan.findMany({
-      where: { deletedAt: null },
-      orderBy: [{ sortOrder: "asc" }, { priceInCents: "asc" }],
-      include: planInclude
-    });
+    const plans = await hydratePlanCouponRelations(
+      await prisma.plan.findMany({
+        where: { deletedAt: null },
+        orderBy: [{ sortOrder: "asc" }, { priceInCents: "asc" }],
+        include: planInclude
+      })
+    );
     return { plans: await Promise.all(plans.map((plan) => serializePlanRecord(plan, undefined, adminPlanSerializeOptions))) };
   });
 
@@ -3853,10 +3855,16 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       await syncPlanPromoCoupon(plan, promo);
     }
 
-    const updatedPlan = await prisma.plan.findFirst({
-      where: { id: plan.id },
-      include: planInclude
-    });
+    const updatedPlan = (
+      await hydratePlanCouponRelations(
+        (
+          await prisma.plan.findMany({
+            where: { id: plan.id },
+            include: planInclude
+          })
+        )
+      )
+    )[0];
     return reply.code(201).send({ plan: await serializePlanRecord(updatedPlan!, undefined, adminPlanSerializeOptions) });
   });
 
@@ -3892,10 +3900,16 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       await syncPlanPromoCoupon(planForPromo!, promo);
     }
 
-    const plan = await prisma.plan.findFirst({
-      where: { id },
-      include: planInclude
-    });
+    const plan = (
+      await hydratePlanCouponRelations(
+        (
+          await prisma.plan.findMany({
+            where: { id },
+            include: planInclude
+          })
+        )
+      )
+    )[0];
     return { plan: await serializePlanRecord(plan!, undefined, adminPlanSerializeOptions) };
   });
 
@@ -3943,9 +3957,32 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         deletedAt: null,
         scope: { in: ["SUBSCRIPTION", "ALL"] }
       },
+      include: {
+        plans: {
+          where: { deletedAt: null },
+          select: { id: true, name: true, code: true }
+        }
+      },
       orderBy: { createdAt: "desc" }
     });
-    return { coupons };
+    return {
+      coupons: coupons.map((coupon) => ({
+        id: coupon.id,
+        code: coupon.code,
+        description: coupon.description,
+        scope: coupon.scope,
+        percentOff: coupon.percentOff,
+        amountOffCents: coupon.amountOffCents,
+        minOrderCents: coupon.minOrderCents,
+        maxUses: coupon.maxUses,
+        usedCount: coupon.usedCount,
+        isActive: coupon.isActive,
+        startsAt: coupon.startsAt,
+        endsAt: coupon.endsAt,
+        createdAt: coupon.createdAt,
+        linkedPlans: coupon.plans.map((plan) => ({ id: plan.id, name: plan.name, code: plan.code }))
+      }))
+    };
   });
 
   app.post("/admin/subscription-coupons", async (request, reply) => {

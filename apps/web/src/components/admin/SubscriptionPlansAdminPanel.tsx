@@ -1,10 +1,10 @@
-import { useState, type FormEvent } from "react";
-import { Loader2, Pencil, Save, Trash2, X } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { Loader2, Pencil, Save, Tag, Trash2, X } from "lucide-react";
 import { formatPriceInBRL, parseBRLMoneyToCents, resolvePlanPromoDiscount } from "@app-treino/shared";
 import type { PlanPromoDiscountMode } from "@app-treino/shared";
-import { apiPost, apiPut, ApiError } from "../../api";
+import { apiDelete, apiGet, apiPost, apiPut, ApiError } from "../../api";
 import { formatBenefitsInput, parseBenefitsInput } from "../../lib/plan-catalog";
-import type { PlanRow } from "../../types/shared";
+import type { CouponRow, PlanRow } from "../../types/shared";
 import {
   crudFormClass,
   dataRowClass,
@@ -246,6 +246,22 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : error instanceof Error ? error.message : fallback;
 }
 
+function planCouponLabel(plan: PlanRow) {
+  if (plan.couponCode?.trim()) return plan.couponCode.trim();
+  return "—";
+}
+
+function formatCouponValue(coupon: CouponRow) {
+  if (coupon.percentOff) return `${coupon.percentOff}% off`;
+  if (coupon.amountOffCents) return `${formatPriceInBRL(coupon.amountOffCents)} off`;
+  return "Promo";
+}
+
+function formatCouponPlanLinks(coupon: CouponRow) {
+  if (!coupon.linkedPlans?.length) return "Sem plano vinculado";
+  return coupon.linkedPlans.map((plan) => plan.name).join(", ");
+}
+
 function PromoModePicker({
   mode,
   onChange
@@ -480,6 +496,41 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
   const [hadPromoOnEdit, setHadPromoOnEdit] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [coupons, setCoupons] = useState<CouponRow[]>([]);
+  const [loadingCoupons, setLoadingCoupons] = useState(false);
+  const [couponFeedback, setCouponFeedback] = useState<string | null>(null);
+
+  async function refreshCoupons() {
+    setLoadingCoupons(true);
+    try {
+      const response = await apiGet<{ coupons: CouponRow[] }>("/admin/subscription-coupons", token);
+      setCoupons(response.coupons ?? []);
+      setCouponFeedback(null);
+    } catch (error) {
+      setCouponFeedback(errorMessage(error, "Não foi possível carregar o histórico de cupons."));
+    } finally {
+      setLoadingCoupons(false);
+    }
+  }
+
+  useEffect(() => {
+    void refreshCoupons();
+  }, [token]);
+
+  async function handleChanged(message?: string) {
+    await onChanged(message);
+    await refreshCoupons();
+  }
+
+  async function removeCoupon(couponId: string) {
+    setCouponFeedback(null);
+    try {
+      await apiDelete(`/admin/subscription-coupons/${couponId}`, token);
+      await handleChanged("Cupom removido.");
+    } catch (error) {
+      setCouponFeedback(errorMessage(error, "Não foi possível remover o cupom."));
+    }
+  }
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -489,7 +540,7 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
       const payload = buildPlanWritePayload(createDraft);
       await apiPost<{ plan: PlanRow }>("/admin/plans", payload, token);
       setCreateDraft(emptyDraft());
-      await onChanged("Plano cadastrado com sucesso.");
+      await handleChanged("Plano cadastrado com sucesso.");
     } catch (error) {
       setFeedback(errorMessage(error, "Não foi possível cadastrar o plano."));
     } finally {
@@ -522,7 +573,7 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
       await apiPut(`/admin/plans/${editingId}`, payload, token);
       setEditingId(null);
       setHadPromoOnEdit(false);
-      await onChanged("Plano atualizado.");
+      await handleChanged("Plano atualizado.");
     } catch (error) {
       setFeedback(errorMessage(error, "Não foi possível atualizar o plano."));
     } finally {
@@ -531,7 +582,8 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
   };
 
   return (
-    <article className="table-panel finance-panel" id="admin-plans">
+    <>
+      <article className="table-panel finance-panel" id="admin-plans">
       <div className={panelTitleClass}>
         <div>
           <h2>Planos de assinatura</h2>
@@ -574,7 +626,7 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
                   </small>
                 ) : null}
               </span>
-              <span className="text-sm text-sand-muted finance-mono">{item.couponCode ?? "—"}</span>
+              <span className="text-sm text-sand-muted finance-mono">{planCouponLabel(item)}</span>
               <span className="finance-row-actions">
                 <button type="button" className="admin-icon-button" aria-label="Editar plano" onClick={() => startEdit(item)}>
                   <Pencil size={17} />
@@ -610,6 +662,55 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
       ) : (
         <div className="dash-empty">Nenhum plano cadastrado.</div>
       )}
-    </article>
+      </article>
+
+      <article className="table-panel finance-panel" id="admin-subscription-coupons">
+        <div className={panelTitleClass}>
+          <div>
+            <h2>Cupons de assinatura</h2>
+            <p>Histórico dos cupons criados nos planos. Cada cupom fica vinculado ao plano onde foi configurado.</p>
+          </div>
+          <span>{coupons.length}</span>
+        </div>
+
+        {couponFeedback ? <p className="mb-3 text-sm text-red-400">{couponFeedback}</p> : null}
+
+        {loadingCoupons ? (
+          <div className="dash-empty">
+            <Loader2 size={18} className="animate-spin" />
+            Carregando cupons...
+          </div>
+        ) : coupons.length > 0 ? (
+          <div className="finance-coupon-list">
+            {coupons.map((coupon) => (
+              <div className={dataRowClass} key={coupon.id}>
+                <span>
+                  <strong className="finance-mono">{coupon.code}</strong> · {formatCouponValue(coupon)}
+                  {" · "}
+                  usados {coupon.usedCount}
+                  {coupon.maxUses != null ? `/${coupon.maxUses}` : ""}
+                  {" · "}
+                  {formatCouponPlanLinks(coupon)}
+                  {coupon.description ? ` · ${coupon.description}` : ""}
+                </span>
+                <button
+                  type="button"
+                  className={deleteActionButtonClass}
+                  aria-label="Excluir cupom"
+                  onClick={() => void removeCoupon(coupon.id)}
+                >
+                  <Trash2 size={17} />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="dash-empty">
+            <Tag size={18} />
+            Nenhum cupom cadastrado. Ative a promo ao salvar um plano acima.
+          </div>
+        )}
+      </article>
+    </>
   );
 }

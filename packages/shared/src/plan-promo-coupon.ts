@@ -98,7 +98,7 @@ export function resolvePlanPromoDiscount(input: ResolvePlanPromoDiscountInput): 
     amountOffCents,
     discountInCents,
     finalPriceInCents,
-    minOrderCents: planPriceInCents
+    minOrderCents: 0
   };
 }
 

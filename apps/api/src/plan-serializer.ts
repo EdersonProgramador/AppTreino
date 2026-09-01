@@ -1,5 +1,6 @@
 import type { Coupon, Plan } from "@prisma/client";
 import { resolveSubscriptionCheckoutPricing } from "./modules/checkout.utils.js";
+import { prisma } from "./prisma.js";
 
 export type SerializedPlan = {
   id: string;
@@ -33,6 +34,28 @@ function activeLinkedCoupon(plan: Plan & { coupon?: Coupon | null }) {
   return plan.coupon;
 }
 
+export async function hydratePlanCouponRelations<T extends Plan & { coupon?: Coupon | null }>(plans: T[]): Promise<T[]> {
+  const missingIds = [
+    ...new Set(
+      plans
+        .filter((plan) => plan.couponId && (!plan.coupon || plan.coupon.deletedAt))
+        .map((plan) => plan.couponId as string)
+    )
+  ];
+  if (missingIds.length === 0) return plans;
+
+  const coupons = await prisma.coupon.findMany({
+    where: { id: { in: missingIds }, deletedAt: null }
+  });
+  const byId = new Map(coupons.map((coupon) => [coupon.id, coupon]));
+
+  return plans.map((plan) => {
+    if (!plan.couponId) return plan;
+    const coupon = byId.get(plan.couponId);
+    return coupon ? { ...plan, coupon } : plan;
+  });
+}
+
 export async function serializePlanRecord(
   plan: Plan & { coupon?: Coupon | null },
   explicitCouponCode?: string | null,
@@ -41,7 +64,7 @@ export async function serializePlanRecord(
   const pricing = await resolveSubscriptionCheckoutPricing(plan, explicitCouponCode ?? undefined, options);
   const linkedCoupon = activeLinkedCoupon(plan);
   const couponCode = options?.adminView
-    ? linkedCoupon?.code ?? pricing.couponCode
+    ? linkedCoupon?.code ?? plan.coupon?.code ?? pricing.couponCode
     : pricing.couponCode;
   return {
     id: plan.id,

@@ -312,6 +312,7 @@ export interface CouponRow {
   startsAt?: string | null;
   endsAt?: string | null;
   createdAt: string;
+  linkedPlans?: Array<{ id: string; name: string; code: string }>;
 }
 
 export interface ShippingServiceOption {
