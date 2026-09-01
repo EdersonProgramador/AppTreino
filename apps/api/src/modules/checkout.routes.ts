@@ -12,6 +12,8 @@ import {
   incrementSubscriptionCouponUsage,
   canReusePendingCheckoutPayment,
   getAsaasCheckoutAmountError,
+  normalizeCheckoutCouponInput,
+  resolveCheckoutSessionPricing,
   resolveSubscriptionCheckoutPricing
 } from "./checkout.utils.js";
 
@@ -175,7 +177,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     }
     const body = checkoutSessionSchema.parse(request.body);
     const planSeed = await resolveCheckoutPlan(body.planCode);
-    const requestedCouponCode = body.couponCode?.trim().toUpperCase() || null;
+    const requestedCouponCode = normalizeCheckoutCouponInput(body.couponCode);
 
     const activeMembership = await prisma.membership.findFirst({
       where: {
@@ -208,7 +210,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     const pendingMembership = await findPendingMembershipForCheckout(authUser.id, planSeed.id);
 
     if (pendingMembership?.payments[0]) {
-      const pricing = await resolveSubscriptionCheckoutPricing(planSeed, body.couponCode);
+      const pricing = await resolveCheckoutSessionPricing(planSeed, body.couponCode);
       const amountError = checkoutAmountErrorReply(pricing.amountInCents, reply);
       if (amountError) return amountError;
 
@@ -302,7 +304,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
 
     const startsAt = todayUtcOnly();
     const plan = planSeed;
-    const pricing = await resolveSubscriptionCheckoutPricing(plan, body.couponCode);
+    const pricing = await resolveCheckoutSessionPricing(plan, body.couponCode);
     const amountError = checkoutAmountErrorReply(pricing.amountInCents, reply);
     if (amountError) return amountError;
 
@@ -461,7 +463,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
 
     const startsAt = todayUtcOnly();
     const plan = planSeed;
-    const pricing = await resolveSubscriptionCheckoutPricing(plan, body.couponCode);
+    const pricing = await resolveCheckoutSessionPricing(plan, body.couponCode);
     const registerAmountError = checkoutAmountErrorReply(pricing.amountInCents, reply);
     if (registerAmountError) return registerAmountError;
 

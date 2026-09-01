@@ -1,4 +1,5 @@
 import type { Coupon, Plan } from "@prisma/client";
+import { normalizePromoCouponCode } from "@app-treino/shared";
 import { prisma } from "../prisma.js";
 import { findValidCoupon } from "./commerce.utils.js";
 
@@ -145,6 +146,47 @@ export async function resolveSubscriptionCheckoutPricing(
   }
 
   return buildSubscriptionPricingFromCoupon(originalAmountInCents, resolved.coupon, resolved.discountInCents);
+}
+
+export function normalizeCheckoutCouponInput(raw?: string | null): string | null {
+  const trimmed = raw?.trim();
+  if (!trimmed) return null;
+  try {
+    return normalizePromoCouponCode(trimmed);
+  } catch {
+    return null;
+  }
+}
+
+/** Pricing for checkout — normaliza código e cai na promo do plano se o cupom explícito falhar. */
+export async function resolveCheckoutSessionPricing(
+  plan: Plan & { coupon?: Coupon | null },
+  explicitCouponCode?: string | null
+): Promise<SubscriptionCheckoutPricing> {
+  const normalizedExplicit = normalizeCheckoutCouponInput(explicitCouponCode);
+  if (!normalizedExplicit) {
+    return resolveSubscriptionCheckoutPricing(plan, null);
+  }
+
+  try {
+    return await resolveSubscriptionCheckoutPricing(plan, normalizedExplicit);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode;
+    if (statusCode !== 400) throw error;
+
+    const fallback = await resolveSubscriptionCheckoutPricing(plan, null);
+    if (fallback.discountInCents > 0) {
+      return fallback;
+    }
+
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : "Código promocional inválido ou indisponível para este plano.";
+    const err = new Error(message) as Error & { statusCode: number };
+    err.statusCode = 400;
+    throw err;
+  }
 }
 
 export async function incrementSubscriptionCouponUsage(couponId: string | null | undefined) {

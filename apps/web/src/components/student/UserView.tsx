@@ -604,9 +604,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const selectedCatalogPlan = catalogPlans.find((plan) => plan.code === checkoutDraft.planCode) ?? null;
 
   function resolveCheckoutCoupon(planCode: PlanCode): string | null {
-    if (appliedCoupon) return appliedCoupon;
     const plan = catalogPlans.find((item) => item.code === planCode);
-    return plan?.couponCode ?? null;
+    if (appliedCoupon) {
+      return planHasPromoDiscount(plan) ? appliedCoupon : null;
+    }
+    return null;
   }
 
   useEffect(() => {

@@ -1,4 +1,5 @@
 import type { OrderStatus, ProductKind, PurchaseStatus, ShippingMethod } from "@prisma/client";
+import { normalizePromoCouponCode } from "@app-treino/shared";
 import { prisma } from "../prisma.js";
 import { productToShippingInput, quoteShipping } from "./shipping.service.js";
 
@@ -311,7 +312,15 @@ export async function findValidCoupon(
   options?: { scope?: "STORE" | "SUBSCRIPTION"; silent?: boolean }
 ) {
   const normalized = code.trim().toUpperCase();
-  if (!normalized) return null;
+  let lookupCode = normalized;
+  try {
+    lookupCode = normalizePromoCouponCode(normalized);
+  } catch {
+    if (options?.silent) return null;
+    const error = new Error("Código promocional inválido.") as Error & { statusCode: number };
+    error.statusCode = 400;
+    throw error;
+  }
 
   const scope = options?.scope;
   const scopeFilter =
@@ -323,7 +332,7 @@ export async function findValidCoupon(
 
   const coupon = await prisma.coupon.findFirst({
     where: {
-      code: normalized,
+      code: lookupCode,
       isActive: true,
       deletedAt: null,
       ...scopeFilter
