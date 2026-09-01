@@ -10,8 +10,8 @@ import {
   asaasCheckoutItemName,
   evaluateSandboxConfirmGate,
   incrementSubscriptionCouponUsage,
+  canReusePendingCheckoutPayment,
   getAsaasCheckoutAmountError,
-  paymentMatchesSubscriptionPricing,
   resolveSubscriptionCheckoutPricing
 } from "./checkout.utils.js";
 
@@ -213,13 +213,19 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
 
       let membership = pendingMembership;
       let payment = pendingMembership.payments[0];
-      const planChanged = pendingMembership.planId !== planSeed.id;
-      const pricingStale = !paymentMatchesSubscriptionPricing(payment, pricing);
-      const needsPaymentRefresh = planChanged || pricingStale;
+      const canReuseCheckout = canReusePendingCheckoutPayment({
+        payment,
+        membershipPlanId: pendingMembership.planId,
+        membershipPlanCode: pendingMembership.plan?.code,
+        selectedPlanId: planSeed.id,
+        selectedPlanCode: body.planCode,
+        pricing
+      });
 
-      if (needsPaymentRefresh) {
+      if (!canReuseCheckout) {
         const startsAt = todayUtcOnly();
         const pendingPayment = pendingMembership.payments[0];
+        const planChanged = pendingMembership.planId !== planSeed.id;
         const refreshed = await prisma.$transaction(async (tx) => {
           const membership = planChanged
             ? await tx.membership.update({
@@ -248,7 +254,14 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
         payment = refreshed.payment;
       }
 
-      if (!payment.paymentUrl || needsPaymentRefresh) {
+      if (!canReusePendingCheckoutPayment({
+        payment,
+        membershipPlanId: membership.planId,
+        membershipPlanCode: membership.plan?.code ?? planSeed.code,
+        selectedPlanId: planSeed.id,
+        selectedPlanCode: body.planCode,
+        pricing
+      })) {
         const { checkout: asaasPayment, providerError } = await tryCreateAsaasCheckout({
           externalReference: payment.id,
           itemName: asaasCheckoutItemName(membership.plan?.name ?? planSeed.name),

@@ -118,7 +118,7 @@ import { assessmentPerimeterKeys, assessmentPhotoFields } from "../../types/admi
 import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
 import { SubscriptionCheckoutShell } from "../checkout/SubscriptionCheckoutShell";
 import { SubscriptionFunnelPanel } from "../checkout/SubscriptionFunnelPanel";
-import { formatPlanPriceLines } from "../../lib/plan-catalog";
+import { formatPlanPriceLines, getEffectivePriceCents } from "../../lib/plan-catalog";
 import { paths } from "../../auth/paths";
 import { clearCheckoutIntent, readCheckoutIntent } from "../../lib/checkout-intent";
 import { resolvePendingPaymentForSelectedPlan } from "../../lib/checkout-pending";
@@ -1091,6 +1091,33 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     }
   }
 
+  function shouldOpenSubscriptionCheckout(
+    planCode: PlanCode,
+    response: CheckoutSessionResponse
+  ): { ok: true } | { ok: false; message: string } {
+    if (!response.payment?.paymentUrl) return { ok: false, message: "Checkout indisponível." };
+
+    const responsePlanCode = response.membership?.plan?.code;
+    const selectedPlan = catalogPlans.find((plan) => plan.code === planCode);
+    const expectedAmount = selectedPlan ? getEffectivePriceCents(selectedPlan) : null;
+
+    if (responsePlanCode && responsePlanCode !== planCode) {
+      return {
+        ok: false,
+        message: `O checkout abriu o plano ${response.membership?.plan?.name ?? responsePlanCode}. Selecione o plano desejado e clique em Ativar agora novamente.`
+      };
+    }
+
+    if (expectedAmount != null && response.payment.amountInCents !== expectedAmount) {
+      return {
+        ok: false,
+        message: `O checkout foi gerado em ${formatPriceInBRL(response.payment.amountInCents)}, mas o plano selecionado está em ${formatPriceInBRL(expectedAmount)}. Clique em Ativar agora novamente.`
+      };
+    }
+
+    return { ok: true };
+  }
+
   async function submitSubscriptionCheckout() {
     if (!token) return;
 
@@ -1133,10 +1160,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
       if (response.paymentProviderError && !response.payment?.paymentUrl) {
         setError(response.paymentProviderError);
+        return;
       }
 
       if (response.payment?.paymentUrl) {
-        window.location.href = response.payment.paymentUrl;
+        const checkoutGate = shouldOpenSubscriptionCheckout(planCode, response);
+        if (!checkoutGate.ok) {
+          setError(checkoutGate.message);
+          return;
+        }
+
+        openAsaasCheckout(response.payment.paymentUrl);
       }
     } catch (checkoutError) {
       const message = checkoutError instanceof ApiError ? checkoutError.message : null;
@@ -1194,10 +1228,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
       if (response.paymentProviderError && !response.payment?.paymentUrl) {
         setError(response.paymentProviderError);
+        return;
       }
 
       if (response.payment?.paymentUrl) {
-        window.location.href = response.payment.paymentUrl;
+        const checkoutGate = shouldOpenSubscriptionCheckout(planCode, response);
+        if (!checkoutGate.ok) {
+          setError(checkoutGate.message);
+          return;
+        }
+
+        openAsaasCheckout(response.payment.paymentUrl);
       }
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;
@@ -2468,7 +2509,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               checkoutLoading={Boolean(checkoutLoading)}
               pendingPayment={currentCheckoutPayment}
               onSubmitCheckout={() => void submitSubscriptionCheckout()}
-              onOpenPendingCheckout={openAsaasCheckout}
+              onOpenPendingCheckout={() => void submitSubscriptionCheckout()}
               onConfirmSandbox={() => void handleConfirmSandboxPayment()}
               showSandbox={Boolean(isSandboxCheckoutEnabled() && currentCheckoutPayment && !currentCheckoutPayment.paymentUrl)}
               couponCode={appliedCoupon}

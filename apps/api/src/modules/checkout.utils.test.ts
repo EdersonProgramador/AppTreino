@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   asaasCheckoutItemDescription,
   asaasCheckoutItemName,
+  canReusePendingCheckoutPayment,
   evaluateSandboxConfirmGate,
   getAsaasCheckoutAmountError,
   ASAAS_MIN_CHECKOUT_CENTS,
@@ -125,6 +126,35 @@ describe("pagamento pendente vs preço atual", () => {
         pricing
       ),
       true
+    );
+  });
+
+  it("não reutiliza checkout antigo de outro plano", () => {
+    const pricing = {
+      originalAmountInCents: 500,
+      discountInCents: 0,
+      amountInCents: 500,
+      couponId: null,
+      couponCode: null
+    };
+
+    assert.equal(
+      canReusePendingCheckoutPayment({
+        payment: {
+          paymentUrl: "https://www.asaas.com/checkoutSession/show/old",
+          amountInCents: 9700,
+          originalAmountInCents: 9700,
+          discountInCents: 0,
+          couponId: null,
+          couponCode: null
+        },
+        membershipPlanId: "plan-monthly",
+        membershipPlanCode: "monthly",
+        selectedPlanId: "plan-start",
+        selectedPlanCode: "start10",
+        pricing
+      }),
+      false
     );
   });
 });

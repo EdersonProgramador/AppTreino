@@ -100,6 +100,20 @@ export function paymentMatchesSubscriptionPricing(
   );
 }
 
+export function canReusePendingCheckoutPayment(input: {
+  payment: PaymentPricingSnapshot & { paymentUrl?: string | null };
+  membershipPlanId: string;
+  membershipPlanCode?: string | null;
+  selectedPlanId: string;
+  selectedPlanCode: string;
+  pricing: SubscriptionCheckoutPricing;
+}): boolean {
+  if (!input.payment.paymentUrl) return false;
+  if (input.membershipPlanId !== input.selectedPlanId) return false;
+  if (input.membershipPlanCode && input.membershipPlanCode !== input.selectedPlanCode) return false;
+  return paymentMatchesSubscriptionPricing(input.payment, input.pricing);
+}
+
 export async function resolveSubscriptionCheckoutPricing(
   plan: Plan & { coupon?: Coupon | null },
   explicitCouponCode?: string | null
