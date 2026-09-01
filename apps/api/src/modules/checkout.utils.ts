@@ -123,7 +123,8 @@ export function canReusePendingCheckoutPayment(input: {
 
 export async function resolveSubscriptionCheckoutPricing(
   plan: Plan & { coupon?: Coupon | null },
-  explicitCouponCode?: string | null
+  explicitCouponCode?: string | null,
+  options?: { forgiveInvalidExplicitCoupon?: boolean }
 ): Promise<SubscriptionCheckoutPricing> {
   const originalAmountInCents = plan.priceInCents;
   const trimmedExplicit = explicitCouponCode?.trim().toUpperCase() || null;
@@ -136,7 +137,7 @@ export async function resolveSubscriptionCheckoutPricing(
 
   const resolved = await findValidCoupon(couponCode, originalAmountInCents, {
     scope: "SUBSCRIPTION",
-    silent: !trimmedExplicit
+    silent: options?.forgiveInvalidExplicitCoupon || !trimmedExplicit
   });
 
   if (!resolved) {

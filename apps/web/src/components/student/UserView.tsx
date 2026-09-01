@@ -122,6 +122,7 @@ import { formatPlanPriceLines, getEffectivePriceCents } from "../../lib/plan-cat
 import { paths } from "../../auth/paths";
 import { clearCheckoutIntent, readCheckoutIntent } from "../../lib/checkout-intent";
 import { resolvePendingPaymentForSelectedPlan } from "../../lib/checkout-pending";
+import { hasStudentWorkoutAccess, hasValidActiveMembership } from "../../lib/student-access";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
 import { LockedOverlay } from "./LockedOverlay";
 import { StudentSettingsPanel } from "./StudentSettingsPanel";
@@ -403,16 +404,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     if (!token) return;
 
     try {
-      const [profileResponse, membershipResponse, paymentsResponse, workoutProgramsResponse] = await Promise.all([
+      const [profileResponse, membershipResponse, paymentsResponse] = await Promise.all([
         apiGet<{ profile: StudentProfile }>("/user/profile", token),
         apiGet<{ membership: StudentMembershipRow | null }>("/user/membership", token),
-        apiGet<{ payments: PaymentRow[] }>("/user/payments", token),
-        apiGet<StudentWorkoutProgramsResponse>("/student/workout/programs", token).catch(() => ({ workouts: [] }))
+        apiGet<{ payments: PaymentRow[] }>("/user/payments", token)
       ]);
 
-      const activeMembership = membershipResponse.membership?.status === "ACTIVE";
-      const enrollmentActive = profileResponse.profile.enrollmentStatus === "ACTIVE";
-      const hasAccess = activeMembership || enrollmentActive;
+      const hasAccess =
+        isAdminPreview || hasStudentWorkoutAccess(profileResponse.profile, membershipResponse.membership);
+      const workoutProgramsResponse = hasAccess
+        ? await apiGet<StudentWorkoutProgramsResponse>("/student/workout/programs", token)
+        : { workouts: [] as StudentWorkoutProgramsResponse["workouts"] };
       const firstPublishedWorkout = workoutProgramsResponse.workouts[0] ?? null;
       const restoredProgramId = selectedWorkoutProgramId ?? restoredPanel?.programId ?? null;
       const restoredWorkout = restoredProgramId
@@ -689,11 +691,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         }
 
         if (refreshTypes.includes("AVALIACAO_SUBMETIDA")) {
-          const workoutProgramsResponse = await apiGet<StudentWorkoutProgramsResponse>(
-            "/student/workout/programs",
-            token
-          ).catch(() => ({ workouts: [] as TodayWorkoutResponse["workout"][] }));
-          setPublishedWorkouts(workoutProgramsResponse.workouts);
+          const [profileResponse, membershipResponse] = await Promise.all([
+            apiGet<{ profile: StudentProfile }>("/user/profile", token),
+            apiGet<{ membership: StudentMembershipRow | null }>("/user/membership", token)
+          ]);
+          if (hasStudentWorkoutAccess(profileResponse.profile, membershipResponse.membership)) {
+            const workoutProgramsResponse = await apiGet<StudentWorkoutProgramsResponse>(
+              "/student/workout/programs",
+              token
+            );
+            setPublishedWorkouts(workoutProgramsResponse.workouts);
+          }
           setSuccess("Feedback sincronizado com Avaliação física / Treino.");
         }
 
@@ -2146,7 +2154,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     : null;
   const computedBodyFatPct = computedBodyFat?.value ?? null;
   const latestAiPlan = aiPlans[0];
-  const hasActiveMembership = membership?.status === "ACTIVE";
+  const hasActiveMembership = hasValidActiveMembership(membership);
   const hasAdminEnrollment = profile?.enrollmentStatus === "ACTIVE";
   /** Liberação: membership/enrollment ativos, ou admin em modo preview blindado. */
   const hasStudentAreaAccess = hasActiveMembership || hasAdminEnrollment || isAdminPreview;

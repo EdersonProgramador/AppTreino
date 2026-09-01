@@ -30,9 +30,10 @@ export function parseCardBenefits(value: unknown): string[] {
 
 export async function serializePlanRecord(
   plan: Plan & { coupon?: Coupon | null },
-  explicitCouponCode?: string | null
+  explicitCouponCode?: string | null,
+  options?: { forgiveInvalidExplicitCoupon?: boolean }
 ): Promise<SerializedPlan> {
-  const pricing = await resolveSubscriptionCheckoutPricing(plan, explicitCouponCode ?? undefined);
+  const pricing = await resolveSubscriptionCheckoutPricing(plan, explicitCouponCode ?? undefined, options);
   return {
     id: plan.id,
     code: plan.code,
@@ -60,7 +61,9 @@ export async function serializePublicPlan(
   plan: Plan & { coupon?: Coupon | null; features?: Array<{ featureKey: string }> },
   explicitCouponCode?: string | null
 ): Promise<SerializedPlan & { featureKeys?: string[] }> {
-  const base = await serializePlanRecord(plan, explicitCouponCode);
+  const base = await serializePlanRecord(plan, explicitCouponCode, {
+    forgiveInvalidExplicitCoupon: Boolean(explicitCouponCode?.trim())
+  });
   if (!plan.features) return base;
   return {
     ...base,
