@@ -234,6 +234,13 @@ export function SubscriptionFunnelPanel({
                 </button>
               ) : null}
             </div>
+          ) : selectedPlan ? (
+            <div className="activate-pending-payment">
+              <strong>
+                {selectedPlan.name} · {formatPriceInBRL(getEffectivePriceCents(selectedPlan))}
+              </strong>
+              <span>Confirme abaixo para gerar o pagamento deste plano.</span>
+            </div>
           ) : null}
 
           <label className="activate-billing-field">

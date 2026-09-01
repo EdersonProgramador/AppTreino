@@ -121,6 +121,7 @@ import { SubscriptionFunnelPanel } from "../checkout/SubscriptionFunnelPanel";
 import { formatPlanPriceLines } from "../../lib/plan-catalog";
 import { paths } from "../../auth/paths";
 import { clearCheckoutIntent, readCheckoutIntent } from "../../lib/checkout-intent";
+import { resolvePendingPaymentForSelectedPlan } from "../../lib/checkout-pending";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
 import { LockedOverlay } from "./LockedOverlay";
 import { StudentSettingsPanel } from "./StudentSettingsPanel";
@@ -2077,6 +2078,16 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
   const firstDay = workout?.days[0];
   const pendingPayment = payments.find((item) => item.status === "PENDING");
+  const pendingPaymentForSelectedPlan = useMemo(
+    () =>
+      resolvePendingPaymentForSelectedPlan(
+        checkoutDraft.planCode,
+        membership,
+        payments,
+        checkoutPayment
+      ),
+    [checkoutDraft.planCode, checkoutPayment, membership, payments]
+  );
   const latestAssessment = assessments[0];
   const latestAssessmentForm = latestAssessment?.details?.formulario_avaliacao_fisica ?? null;
   const computedBodyFat = latestAssessmentForm
@@ -2132,7 +2143,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     </div>
   ) : null;
   const needsOnboarding = Boolean(profile && (!profile.gender || !profile.objective || !profile.level));
-  const currentCheckoutPayment = checkoutPayment ?? pendingPayment;
+  const currentCheckoutPayment = pendingPaymentForSelectedPlan;
   const lockedFeatures = [
     {
       icon: Dumbbell,
@@ -2448,6 +2459,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               onSelectPlan={(code) => {
                 uiSounds.radioSelect();
                 setCheckoutDraft((current) => ({ ...current, planCode: code }));
+                if (membership?.plan?.code !== code) {
+                  setCheckoutPayment(null);
+                }
               }}
               billingType={checkoutDraft.billingType}
               onBillingTypeChange={(value) => setCheckoutDraft((current) => ({ ...current, billingType: value }))}

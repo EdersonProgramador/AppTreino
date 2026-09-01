@@ -115,6 +115,54 @@ function checkoutAmountErrorReply(amountInCents: number, reply: FastifyReply) {
   return reply.code(400).send({ message, paymentProviderError: message });
 }
 
+const pendingMembershipInclude = {
+  plan: true,
+  payments: {
+    where: {
+      status: {
+        in: ["PENDING", "OVERDUE"] as const
+      }
+    },
+    orderBy: {
+      dueDate: "desc" as const
+    },
+    take: 1
+  }
+} as const;
+
+async function findPendingMembershipForCheckout(userId: string, planId: string) {
+  const forSelectedPlan = await prisma.membership.findFirst({
+    where: {
+      userId,
+      planId,
+      deletedAt: null,
+      status: {
+        in: ["PENDING", "OVERDUE"]
+      }
+    },
+    include: pendingMembershipInclude,
+    orderBy: {
+      createdAt: "desc"
+    }
+  });
+
+  if (forSelectedPlan) return forSelectedPlan;
+
+  return prisma.membership.findFirst({
+    where: {
+      userId,
+      deletedAt: null,
+      status: {
+        in: ["PENDING", "OVERDUE"]
+      }
+    },
+    include: pendingMembershipInclude,
+    orderBy: {
+      createdAt: "desc"
+    }
+  });
+}
+
 export async function registerCheckoutRoutes(app: FastifyInstance) {
   app.post("/checkout/session", async (request, reply) => {
     requireDatabase();
@@ -156,32 +204,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       });
     }
 
-    const pendingMembership = await prisma.membership.findFirst({
-      where: {
-        userId: authUser.id,
-        deletedAt: null,
-        status: {
-          in: ["PENDING", "OVERDUE"]
-        }
-      },
-      include: {
-        plan: true,
-        payments: {
-          where: {
-            status: {
-              in: ["PENDING", "OVERDUE"]
-            }
-          },
-          orderBy: {
-            dueDate: "desc"
-          },
-          take: 1
-        }
-      },
-      orderBy: {
-        createdAt: "desc"
-      }
-    });
+    const pendingMembership = await findPendingMembershipForCheckout(authUser.id, planSeed.id);
 
     if (pendingMembership?.payments[0]) {
       const pricing = await resolveSubscriptionCheckoutPricing(planSeed, body.couponCode);
@@ -192,8 +215,9 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       let payment = pendingMembership.payments[0];
       const planChanged = pendingMembership.planId !== planSeed.id;
       const pricingStale = !paymentMatchesSubscriptionPricing(payment, pricing);
+      const needsPaymentRefresh = planChanged || pricingStale;
 
-      if (planChanged || pricingStale) {
+      if (needsPaymentRefresh) {
         const startsAt = todayUtcOnly();
         const pendingPayment = pendingMembership.payments[0];
         const refreshed = await prisma.$transaction(async (tx) => {
@@ -224,7 +248,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
         payment = refreshed.payment;
       }
 
-      if (!payment.paymentUrl) {
+      if (!payment.paymentUrl || needsPaymentRefresh) {
         const { checkout: asaasPayment, providerError } = await tryCreateAsaasCheckout({
           externalReference: payment.id,
           itemName: asaasCheckoutItemName(membership.plan?.name ?? planSeed.name),
