@@ -175,6 +175,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     }
     const body = checkoutSessionSchema.parse(request.body);
     const planSeed = await resolveCheckoutPlan(body.planCode);
+    const requestedCouponCode = body.couponCode?.trim().toUpperCase() || null;
 
     const activeMembership = await prisma.membership.findFirst({
       where: {
@@ -219,6 +220,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
         membershipPlanCode: pendingMembership.plan?.code,
         selectedPlanId: planSeed.id,
         selectedPlanCode: body.planCode,
+        requestedCouponCode,
         pricing
       });
 
@@ -260,6 +262,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
         membershipPlanCode: membership.plan?.code ?? planSeed.code,
         selectedPlanId: planSeed.id,
         selectedPlanCode: body.planCode,
+        requestedCouponCode,
         pricing
       })) {
         const { checkout: asaasPayment, providerError } = await tryCreateAsaasCheckout({

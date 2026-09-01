@@ -152,7 +152,38 @@ describe("pagamento pendente vs preço atual", () => {
         membershipPlanCode: "monthly",
         selectedPlanId: "plan-start",
         selectedPlanCode: "start10",
+        requestedCouponCode: null,
         pricing
+      }),
+      false
+    );
+  });
+
+  it("não reutiliza checkout quando o cupom muda", () => {
+    const pricingWithCoupon = {
+      originalAmountInCents: 500,
+      discountInCents: 100,
+      amountInCents: 400,
+      couponId: "coupon-1",
+      couponCode: "ATLLY10"
+    };
+
+    assert.equal(
+      canReusePendingCheckoutPayment({
+        payment: {
+          paymentUrl: "https://www.asaas.com/checkoutSession/show/old",
+          amountInCents: 500,
+          originalAmountInCents: 500,
+          discountInCents: 0,
+          couponId: null,
+          couponCode: null
+        },
+        membershipPlanId: "plan-start",
+        membershipPlanCode: "start10",
+        selectedPlanId: "plan-start",
+        selectedPlanCode: "start10",
+        requestedCouponCode: "ATLLY10",
+        pricing: pricingWithCoupon
       }),
       false
     );

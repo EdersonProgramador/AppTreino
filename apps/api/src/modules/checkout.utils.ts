@@ -106,11 +106,18 @@ export function canReusePendingCheckoutPayment(input: {
   membershipPlanCode?: string | null;
   selectedPlanId: string;
   selectedPlanCode: string;
+  requestedCouponCode?: string | null;
   pricing: SubscriptionCheckoutPricing;
 }): boolean {
   if (!input.payment.paymentUrl) return false;
   if (input.membershipPlanId !== input.selectedPlanId) return false;
   if (input.membershipPlanCode && input.membershipPlanCode !== input.selectedPlanCode) return false;
+
+  const requestedCoupon = input.requestedCouponCode?.trim().toUpperCase() || null;
+  const pricedCoupon = input.pricing.couponCode?.trim().toUpperCase() || null;
+  const storedCoupon = input.payment.couponCode?.trim().toUpperCase() || null;
+  if (requestedCoupon !== pricedCoupon || pricedCoupon !== storedCoupon) return false;
+
   return paymentMatchesSubscriptionPricing(input.payment, input.pricing);
 }
 

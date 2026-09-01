@@ -240,6 +240,7 @@ export function SubscriptionFunnelPanel({
                 {selectedPlan.name} · {formatPriceInBRL(getEffectivePriceCents(selectedPlan))}
               </strong>
               <span>Confirme abaixo para gerar o pagamento deste plano.</span>
+              <span className="activate-plan-stage__copy">Alterou plano ou cupom? Gere um checkout novo em Ativar agora.</span>
             </div>
           ) : null}
 

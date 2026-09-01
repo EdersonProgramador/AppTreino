@@ -587,11 +587,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     const next = couponDraft.trim().toUpperCase();
     if (!next) {
       setAppliedCoupon(null);
-      setCouponFeedback("Cupom removido.");
+      setCouponFeedback("Cupom removido. Gere um novo checkout para atualizar o valor.");
+      setCheckoutPayment(null);
       return;
     }
     setAppliedCoupon(next);
-    setCouponFeedback(null);
+    setCouponFeedback("Cupom aplicado. Clique em Ativar agora para gerar o checkout com o novo valor.");
+    setCheckoutPayment(null);
   };
 
   function resolveCheckoutCoupon(planCode: PlanCode): string | null {
@@ -2500,9 +2502,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               onSelectPlan={(code) => {
                 uiSounds.radioSelect();
                 setCheckoutDraft((current) => ({ ...current, planCode: code }));
-                if (membership?.plan?.code !== code) {
-                  setCheckoutPayment(null);
-                }
+                setCheckoutPayment(null);
               }}
               billingType={checkoutDraft.billingType}
               onBillingTypeChange={(value) => setCheckoutDraft((current) => ({ ...current, billingType: value }))}
