@@ -3,7 +3,7 @@ import { z } from "zod";
 import { hashPassword, isAdminStudentPreview, requireAuth, toAuthUser } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
-import { tryCreateAsaasCheckout } from "./asaas.client.js";
+import { subscriptionCheckoutCallbacks, tryCreateAsaasCheckout } from "./asaas.client.js";
 import { asaasStatusToPaymentStatus } from "./asaas.routes.js";
 import {
   asaasCheckoutItemDescription,
@@ -184,7 +184,8 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
           itemName: asaasCheckoutItemName(pendingMembership.plan?.name ?? planSeed.name),
           itemDescription: asaasCheckoutItemDescription(authUser.name),
           amountInCents: payment.amountInCents,
-          billingType: body.billingType
+          billingType: body.billingType,
+          callbacks: subscriptionCheckoutCallbacks()
         });
 
         if (asaasPayment) {
@@ -252,7 +253,8 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       itemName: asaasCheckoutItemName(planSeed.name),
       itemDescription: asaasCheckoutItemDescription(user.name),
       amountInCents: payment.amountInCents,
-      billingType: body.billingType
+      billingType: body.billingType,
+      callbacks: subscriptionCheckoutCallbacks()
     });
 
     const updatedPayment = asaasPayment
@@ -432,7 +434,8 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       itemName: asaasCheckoutItemName(planSeed.name),
       itemDescription: asaasCheckoutItemDescription(user.name),
       amountInCents: payment.amountInCents,
-      billingType: body.billingType
+      billingType: body.billingType,
+      callbacks: subscriptionCheckoutCallbacks()
     });
 
     const updatedPayment = asaasPayment

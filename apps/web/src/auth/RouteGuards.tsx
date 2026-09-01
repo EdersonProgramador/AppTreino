@@ -1,9 +1,10 @@
 import { Loader2 } from "lucide-react";
-import { lazy, Suspense, type ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { can, canAccessPanel, type UserRole } from "@app-treino/shared";
 import { assetUrl } from "../lib/urls";
 import { brand } from "../lib/brand";
+import { importWithChunkRetry, lazyWithChunkRetry } from "../lib/lazy-retry";
 import { useAuth } from "./AuthContext";
 import { canAccessRoleRoute, homePathForRole, isGuestPath, isRoleHomePath, mustRedirectForRole } from "./session";
 import { paths } from "./paths";
@@ -127,29 +128,29 @@ export function RoleHomeRedirect() {
   return <Navigate to={homePathForRole(user.role)} replace />;
 }
 
-const AdminViewLazy = lazy(() =>
+const AdminViewLazy = lazyWithChunkRetry(() =>
   import("../components/admin/AdminView").then((module) => ({ default: module.AdminView }))
 );
 
-const UserViewLazy = lazy(() =>
+const UserViewLazy = lazyWithChunkRetry(() =>
   import("../components/student/UserView").then((module) => ({ default: module.UserView }))
 );
 
-const CoachViewLazy = lazy(() =>
+const CoachViewLazy = lazyWithChunkRetry(() =>
   import("../components/coach/CoachView").then((module) => ({ default: module.CoachView }))
 );
 
 /** Warm the student chunk as soon as a USER session is established. */
 export function preloadStudentPanel() {
-  void import("../components/student/UserView");
+  void importWithChunkRetry(() => import("../components/student/UserView"));
 }
 
 export function preloadAdminPanel() {
-  void import("../components/admin/AdminView");
+  void importWithChunkRetry(() => import("../components/admin/AdminView"));
 }
 
 export function preloadCoachPanel() {
-  void import("../components/coach/CoachView");
+  void importWithChunkRetry(() => import("../components/coach/CoachView"));
 }
 
 export function AdminPanel() {

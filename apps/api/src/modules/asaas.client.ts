@@ -29,11 +29,23 @@ export function asaasBillingTypes(billingType: AsaasBillingType) {
   return ["PIX", "CREDIT_CARD"] as const;
 }
 
-export function vitrineCheckoutCallbacks(input: { orderId?: string; purchaseId?: string }) {
+function resolveCallbackBase() {
   const webOrigin =
     env.ASAAS_CALLBACK_URL?.split(",")[0]?.trim() ?? env.WEB_ORIGIN.split(",")[0]?.trim() ?? env.WEB_ORIGIN;
-  const isHttps = webOrigin.startsWith("https://");
-  const callbackBase = isHttps ? webOrigin : "https://example.com";
+  return webOrigin.startsWith("https://") ? webOrigin.replace(/\/$/, "") : "https://www.atlly.com.br";
+}
+
+export function subscriptionCheckoutCallbacks() {
+  const studentUrl = `${resolveCallbackBase()}/aluno`;
+  return {
+    successUrl: `${studentUrl}?payment=success`,
+    cancelUrl: `${studentUrl}?payment=cancel`,
+    expiredUrl: `${studentUrl}?payment=expired`
+  };
+}
+
+export function vitrineCheckoutCallbacks(input: { orderId?: string; purchaseId?: string }) {
+  const callbackBase = resolveCallbackBase();
 
   const successParams = new URLSearchParams();
   successParams.set("section", "products");
@@ -73,7 +85,7 @@ export async function createAsaasCheckout(input: {
   const webOrigin =
     env.ASAAS_CALLBACK_URL?.split(",")[0]?.trim() ?? env.WEB_ORIGIN.split(",")[0]?.trim() ?? env.WEB_ORIGIN;
   const isHttps = webOrigin.startsWith("https://");
-  const callbackBase = isHttps ? webOrigin : "https://example.com";
+  const callbackBase = isHttps ? webOrigin.replace(/\/$/, "") : resolveCallbackBase();
   const callback = input.callbacks ?? {
     successUrl: `${callbackBase}/`,
     cancelUrl: `${callbackBase}/`,
@@ -125,9 +137,31 @@ export async function createAsaasCheckout(input: {
 }
 
 export function humanizeAsaasCheckoutError(raw: string) {
-  if (raw.includes("invalid_access_token")) {
-    return "Chave Asaas inválida. Atualize ASAAS_API_KEY no .env ou use a confirmação sandbox (dev).";
+  const normalized = raw.toLowerCase();
+
+  if (normalized.includes("invalid_access_token")) {
+    return "Chave Asaas inválida ou ambiente incorreto (sandbox vs produção). Verifique ASAAS_API_KEY e ASAAS_API_URL no Render.";
   }
+
+  if (normalized.includes("chave pix") || normalized.includes("pix key") || normalized.includes("chave de pix")) {
+    return "Conta Asaas sem chave Pix cadastrada. Cadastre em Configurações → Pix no painel Asaas.";
+  }
+
+  try {
+    const jsonStart = raw.indexOf("{");
+    if (jsonStart >= 0) {
+      const parsed = JSON.parse(raw.slice(jsonStart)) as {
+        errors?: Array<{ code?: string; description?: string }>;
+      };
+      const first = parsed.errors?.[0];
+      if (first?.description) {
+        return `Asaas: ${first.description}`;
+      }
+    }
+  } catch {
+    // ignore JSON parse errors
+  }
+
   return "Pagamento online indisponível no momento. Tente novamente em instantes.";
 }
 

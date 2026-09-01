@@ -8,6 +8,7 @@ import { wireStudentSyncBus } from "./stores/studentSyncStore";
 import { wireEventBusBroadcast } from "./lib/event-bus";
 import { wireNativeKeyboardViewport } from "./lib/native-keyboard";
 import { useUiPrefsStore } from "./stores/uiPrefsStore";
+import { isChunkLoadError, reloadForStaleChunk } from "./lib/lazy-retry";
 import "./index.css";
 
 wireStudentSyncBus();
@@ -34,6 +35,15 @@ if (typeof navigator !== "undefined") {
     document.documentElement.classList.add("is-native-app");
     wireNativeKeyboardViewport();
   }
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("unhandledrejection", (event) => {
+    if (isChunkLoadError(event.reason)) {
+      event.preventDefault();
+      reloadForStaleChunk();
+    }
+  });
 }
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";

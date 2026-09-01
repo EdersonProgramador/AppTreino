@@ -316,9 +316,9 @@ export async function findValidCoupon(
   const scope = options?.scope;
   const scopeFilter =
     scope === "STORE"
-      ? { scope: { in: ["STORE", "ALL"] as const } }
+      ? { scope: { in: ["STORE", "ALL"] as ("STORE" | "ALL")[] } }
       : scope === "SUBSCRIPTION"
-        ? { scope: { in: ["SUBSCRIPTION", "ALL"] as const } }
+        ? { scope: { in: ["SUBSCRIPTION", "ALL"] as ("SUBSCRIPTION" | "ALL")[] } }
         : {};
 
   const coupon = await prisma.coupon.findFirst({

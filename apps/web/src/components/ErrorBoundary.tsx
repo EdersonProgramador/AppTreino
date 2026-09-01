@@ -1,4 +1,5 @@
 import React from "react";
+import { isChunkLoadError, reloadForStaleChunk } from "../lib/lazy-retry";
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -24,6 +25,10 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("[ErrorBoundary]", error, errorInfo.componentStack);
+
+    if (isChunkLoadError(error)) {
+      reloadForStaleChunk();
+    }
   }
 
   handleReload = () => {
@@ -32,12 +37,16 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   render() {
     if (this.state.hasError) {
+      const staleDeploy = isChunkLoadError(new Error(this.state.message));
+
       return (
         <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "inherit" }}>
           <div style={{ maxWidth: 480, textAlign: "center" }}>
             <h1 style={{ fontSize: 28, marginBottom: 12 }}>Algo deu errado</h1>
             <p style={{ color: "#666", marginBottom: 20 }}>
-              Ocorreu um erro inesperado na aplicação. Recarregue a página para continuar.
+              {staleDeploy
+                ? "Uma atualização do site foi publicada. Recarregue a página para continuar."
+                : "Ocorreu um erro inesperado na aplicação. Recarregue a página para continuar."}
             </p>
             <button
               onClick={this.handleReload}

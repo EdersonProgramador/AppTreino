@@ -48,7 +48,7 @@ import {
   Video,
   X
 } from "lucide-react";
-import { lazy, Suspense, type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { formatPriceInBRL } from "@app-treino/shared";
@@ -148,11 +148,12 @@ import { isNativeAppShell } from "../../lib/native-bridge";
 import { readStudentPanel, writeStudentPanel } from "../../lib/student-panel-persist";
 import { clearWorkoutRunner } from "../../lib/workout-runner-persist";
 import { flushShellStateToNative } from "../../lib/shell-persist";
+import { lazyWithChunkRetry } from "../../lib/lazy-retry";
 import { PhysicalAssessmentFormView } from "../shared/PhysicalAssessmentFormView";
 import { uiSounds } from "../../lib/ui-sounds";
 import type { WorkoutSharePayload } from "./WorkoutShareFlow";
 
-const WorkoutPlayer = lazy(async () => {
+const WorkoutPlayer = lazyWithChunkRetry(async () => {
   const module = await import("./WorkoutPlayer");
   return { default: module.WorkoutPlayer };
 });
