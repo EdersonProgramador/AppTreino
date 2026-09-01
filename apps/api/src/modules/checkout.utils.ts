@@ -162,7 +162,7 @@ export async function resolveSubscriptionCheckoutPricing(
     return buildSubscriptionPricingFromCoupon(originalAmountInCents, null, 0);
   }
 
-  if (plan.couponId && resolved.coupon.id !== plan.couponId) {
+  if (resolved.coupon.id !== plan.couponId) {
     if (options?.forgiveInvalidExplicitCoupon) {
       return buildSubscriptionPricingFromCoupon(originalAmountInCents, null, 0);
     }
