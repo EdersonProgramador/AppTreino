@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
+import type { PaymentStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { hashPassword, isAdminStudentPreview, requireAuth, toAuthUser } from "../auth.js";
 import { env } from "../env.js";
@@ -117,20 +118,22 @@ function checkoutAmountErrorReply(amountInCents: number, reply: FastifyReply) {
   return reply.code(400).send({ message, paymentProviderError: message });
 }
 
+const pendingPaymentStatuses: PaymentStatus[] = ["PENDING", "OVERDUE"];
+
 const pendingMembershipInclude = {
   plan: true,
   payments: {
     where: {
       status: {
-        in: ["PENDING", "OVERDUE"] as const
+        in: pendingPaymentStatuses
       }
     },
     orderBy: {
-      dueDate: "desc" as const
+      dueDate: "desc"
     },
     take: 1
   }
-} as const;
+} satisfies Prisma.MembershipInclude;
 
 async function findPendingMembershipForCheckout(userId: string, planId: string) {
   const forSelectedPlan = await prisma.membership.findFirst({
@@ -238,7 +241,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
                   planId: planSeed.id,
                   endsAt: addCycleDate(startsAt, planSeed.billingCycle)
                 },
-                include: { plan: true }
+                include: pendingMembershipInclude
               })
             : pendingMembership;
 
