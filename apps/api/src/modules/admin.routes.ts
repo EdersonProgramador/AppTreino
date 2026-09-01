@@ -13,7 +13,7 @@ import type { UploadGroup } from "../upload-security.js";
 import { persistUploadedFile } from "../upload-persist.js";
 import { ensureUploadedVideoIsMp4 } from "../video-transcode.js";
 import { serializePlanRecord } from "../plan-serializer.js";
-import { normalizePromoCouponCode, resolvePlanPromoDiscount } from "@app-treino/shared";
+import { clearPlanPromoCoupon, syncPlanPromoCoupon } from "./plan-promo.service.js";
 import { autoCloseStaleTickets, FINALIZE_PROMPT, ticketInclude } from "./ticket.utils.js";
 import { buildPaginationMeta, parsePagination } from "./pagination.js";
 import { calculateBodyFatEstimate, physicalAssessmentFormSchema } from "./physical-assessment.utils.js";
@@ -372,6 +372,39 @@ const planSchema = z.object({
   sortOrder: z.coerce.number().int().optional(),
   showOnFunnel: z.boolean().optional(),
   couponId: z.string().nullable().optional()
+});
+
+const planPromoCouponSchema = z
+  .object({
+    couponCode: z.string().trim().min(2).max(40),
+    mode: z.enum(["PERCENT", "AMOUNT_OFF", "TARGET_PRICE"]),
+    percentOff: z.number().int().min(1).max(100).optional(),
+    amountOffCents: z.number().int().min(1).optional(),
+    targetPriceInCents: z.number().int().min(1).optional(),
+    planPriceInCents: z.number().int().positive().optional(),
+    maxUses: z.number().int().min(1).nullable().optional()
+  })
+  .superRefine((data, ctx) => {
+    const valid =
+      (data.mode === "PERCENT" && data.percentOff != null) ||
+      (data.mode === "AMOUNT_OFF" && data.amountOffCents != null) ||
+      (data.mode === "TARGET_PRICE" && data.targetPriceInCents != null);
+    if (!valid) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Informe o valor do desconto conforme o modo selecionado."
+      });
+    }
+  });
+
+const planWriteSchema = planSchema.extend({
+  promo: planPromoCouponSchema.optional(),
+  clearPromo: z.boolean().optional()
+});
+
+const planPatchSchema = planSchema.partial().extend({
+  promo: planPromoCouponSchema.optional(),
+  clearPromo: z.boolean().optional()
 });
 
 const planInclude = {
@@ -3804,30 +3837,64 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
   app.post("/admin/plans", async (request, reply) => {
     requireDatabase();
-    const body = planSchema.parse(request.body);
+    const body = planWriteSchema.parse(request.body);
+    const { promo, clearPromo, ...planFields } = body;
     const plan = await prisma.plan.create({
       data: {
-        ...body,
-        cardBenefits: body.cardBenefits ?? []
+        ...planFields,
+        cardBenefits: planFields.cardBenefits ?? []
       },
       include: planInclude
     });
-    return reply.code(201).send({ plan: await serializePlanRecord(plan) });
+
+    if (!clearPromo && promo) {
+      await syncPlanPromoCoupon(plan, promo);
+    }
+
+    const updatedPlan = await prisma.plan.findFirst({
+      where: { id: plan.id },
+      include: planInclude
+    });
+    return reply.code(201).send({ plan: await serializePlanRecord(updatedPlan!) });
   });
 
   app.put("/admin/plans/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    const body = planSchema.partial().parse(request.body);
-    const plan = await prisma.plan.update({
-      where: { id },
-      data: {
-        ...body,
-        ...(body.cardBenefits !== undefined ? { cardBenefits: body.cardBenefits } : {})
-      },
+    const body = planPatchSchema.parse(request.body);
+    const { promo, clearPromo, ...planFields } = body;
+
+    const existing = await prisma.plan.findFirst({
+      where: { id, deletedAt: null },
       include: planInclude
     });
-    return { plan: await serializePlanRecord(plan) };
+    if (!existing) {
+      throw httpError(404, "Plano não encontrado.");
+    }
+
+    await prisma.plan.update({
+      where: { id },
+      data: {
+        ...planFields,
+        ...(planFields.cardBenefits !== undefined ? { cardBenefits: planFields.cardBenefits } : {})
+      }
+    });
+
+    if (clearPromo) {
+      await clearPlanPromoCoupon(id, existing.couponId);
+    } else if (promo) {
+      const planForPromo = await prisma.plan.findFirst({
+        where: { id },
+        include: planInclude
+      });
+      await syncPlanPromoCoupon(planForPromo!, promo);
+    }
+
+    const plan = await prisma.plan.findFirst({
+      where: { id },
+      include: planInclude
+    });
+    return { plan: await serializePlanRecord(plan!) };
   });
 
   app.delete("/admin/plans/:id", async (request) => {
@@ -3933,120 +4000,28 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return reply.code(201).send({ coupon });
   });
 
-  const planPromoCouponSchema = z
-    .object({
-      couponCode: z.string().trim().min(2).max(40),
-      mode: z.enum(["PERCENT", "AMOUNT_OFF", "TARGET_PRICE"]),
-      percentOff: z.number().int().min(1).max(100).optional(),
-      amountOffCents: z.number().int().min(1).optional(),
-      targetPriceInCents: z.number().int().min(1).optional(),
-      planPriceInCents: z.number().int().positive().optional(),
-      maxUses: z.number().int().min(1).nullable().optional()
-    })
-    .superRefine((data, ctx) => {
-      const valid =
-        (data.mode === "PERCENT" && data.percentOff != null) ||
-        (data.mode === "AMOUNT_OFF" && data.amountOffCents != null) ||
-        (data.mode === "TARGET_PRICE" && data.targetPriceInCents != null);
-      if (!valid) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Informe o valor do desconto conforme o modo selecionado."
-        });
-      }
-    });
-
   app.put("/admin/plans/:id/promo-coupon", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
     const body = planPromoCouponSchema.parse(request.body);
     const plan = await prisma.plan.findFirst({
       where: { id, deletedAt: null },
-      include: { coupon: true }
+      include: planInclude
     });
     if (!plan) {
-      const error = new Error("Plano não encontrado.") as Error & { statusCode: number };
-      error.statusCode = 404;
-      throw error;
+      throw httpError(404, "Plano não encontrado.");
     }
 
-    const code = normalizePromoCouponCode(body.couponCode);
-    const planPriceInCents = body.planPriceInCents ?? plan.priceInCents;
-    const resolved = resolvePlanPromoDiscount({
-      planPriceInCents,
-      mode: body.mode,
-      percentOff: body.percentOff,
-      amountOffCents: body.amountOffCents,
-      targetPriceInCents: body.targetPriceInCents
-    });
-
-    const couponData = {
-      code,
-      description: `Promo · ${plan.name}`,
-      percentOff: resolved.percentOff,
-      amountOffCents: resolved.amountOffCents,
-      minOrderCents: resolved.minOrderCents,
-      maxUses: body.maxUses ?? null,
-      isActive: true,
-      startsAt: null as Date | null,
-      endsAt: null as Date | null,
-      deletedAt: null as Date | null,
-      scope: "SUBSCRIPTION" as const
-    };
-
-    const existingByCode = await prisma.coupon.findUnique({ where: { code } });
-    if (
-      existingByCode &&
-      existingByCode.deletedAt === null &&
-      existingByCode.id !== plan.couponId
-    ) {
-      const otherPlan = await prisma.plan.findFirst({
-        where: { couponId: existingByCode.id, deletedAt: null, id: { not: id } }
-      });
-      if (otherPlan) {
-        const error = new Error(
-          `O cupom "${code}" já está em uso no plano "${otherPlan.name}". Cada plano precisa de um nome exclusivo.`
-        ) as Error & { statusCode: number };
-        error.statusCode = 409;
-        throw error;
-      }
-    }
-
-    let coupon;
-    if (plan.couponId) {
-      coupon = await prisma.coupon.update({
-        where: { id: plan.couponId },
-        data: couponData
-      });
-    } else if (existingByCode?.deletedAt) {
-      coupon = await prisma.coupon.update({
-        where: { id: existingByCode.id },
-        data: couponData
-      });
-    } else if (existingByCode && existingByCode.scope === "STORE") {
-      coupon = await prisma.coupon.update({
-        where: { id: existingByCode.id },
-        data: { ...couponData, scope: "ALL" }
-      });
-    } else if (existingByCode) {
-      coupon = await prisma.coupon.update({
-        where: { id: existingByCode.id },
-        data: couponData
-      });
-    } else {
-      coupon = await prisma.coupon.create({ data: couponData });
-    }
-
-    const updatedPlan = await prisma.plan.update({
+    const { coupon, pricing } = await syncPlanPromoCoupon(plan, body);
+    const updatedPlan = await prisma.plan.findFirst({
       where: { id },
-      data: { couponId: coupon.id },
       include: planInclude
     });
 
     return {
       coupon,
-      plan: await serializePlanRecord(updatedPlan),
-      pricing: resolved
+      plan: await serializePlanRecord(updatedPlan!),
+      pricing
     };
   });
 
@@ -4055,17 +4030,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     const { id } = idParamSchema.parse(request.params);
     const plan = await prisma.plan.findFirst({ where: { id, deletedAt: null } });
     if (!plan) {
-      const error = new Error("Plano não encontrado.") as Error & { statusCode: number };
-      error.statusCode = 404;
-      throw error;
+      throw httpError(404, "Plano não encontrado.");
     }
-    if (plan.couponId) {
-      await prisma.plan.update({ where: { id }, data: { couponId: null } });
-      await prisma.coupon.update({
-        where: { id: plan.couponId },
-        data: { deletedAt: new Date(), isActive: false }
-      });
-    }
+
+    await clearPlanPromoCoupon(plan.id, plan.couponId);
     const updatedPlan = await prisma.plan.findFirst({
       where: { id },
       include: planInclude

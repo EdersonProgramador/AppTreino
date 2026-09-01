@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Loader2, Pencil, Save, Trash2, X } from "lucide-react";
 import { formatPriceInBRL, parseBRLMoneyToCents, resolvePlanPromoDiscount } from "@app-treino/shared";
 import type { PlanPromoDiscountMode } from "@app-treino/shared";
-import { apiDelete, apiPost, apiPut, ApiError } from "../../api";
+import { apiPost, apiPut, ApiError } from "../../api";
 import { formatBenefitsInput, parseBenefitsInput } from "../../lib/plan-catalog";
 import type { PlanRow } from "../../types/shared";
 import {
@@ -146,6 +146,18 @@ function buildPlanPayload(draft: PlanDraft) {
     sortOrder: Number.parseInt(draft.sortOrder, 10) || 0,
     showOnFunnel: draft.showOnFunnel
   };
+}
+
+function buildPlanWritePayload(draft: PlanDraft, options?: { clearPromo?: boolean }) {
+  const base = buildPlanPayload(draft);
+  const promoBody = buildPromoApiBody(draft.promo, draft);
+  if (promoBody) {
+    return { ...base, promo: promoBody };
+  }
+  if (options?.clearPromo) {
+    return { ...base, clearPromo: true };
+  }
+  return base;
 }
 
 function buildPromoApiBody(promo: PlanPromoDraft, planDraft: PlanDraft) {
@@ -467,29 +479,13 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
   const [savingEdit, setSavingEdit] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  async function syncPlanPromo(planId: string, draft: PlanDraft, hadPromo: boolean) {
-    const promoBody = buildPromoApiBody(draft.promo, draft);
-    if (promoBody) {
-      await apiPut(`/admin/plans/${planId}/promo-coupon`, promoBody, token);
-      return;
-    }
-    if (hadPromo) {
-      await apiDelete(`/admin/plans/${planId}/promo-coupon`, token);
-    }
-  }
-
-  const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
+  async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setCreating(true);
     setFeedback(null);
     try {
-      const payload = buildPlanPayload(createDraft);
-      const response = await apiPost<{ plan: PlanRow }>("/admin/plans", payload, token);
-      const planId = response.plan?.id;
-      if (!planId) {
-        throw new Error("Plano criado, mas a API não retornou o identificador.");
-      }
-      await syncPlanPromo(planId, createDraft, false);
+      const payload = buildPlanWritePayload(createDraft);
+      await apiPost<{ plan: PlanRow }>("/admin/plans", payload, token);
       setCreateDraft(emptyDraft());
       await onChanged("Plano cadastrado com sucesso.");
     } catch (error) {
@@ -497,7 +493,7 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
     } finally {
       setCreating(false);
     }
-  };
+  }
 
   const startEdit = (plan: PlanRow) => {
     setEditingId(plan.id);
@@ -518,9 +514,10 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
     setSavingEdit(true);
     setFeedback(null);
     try {
-      const payload = buildPlanPayload(editDraft);
+      const payload = buildPlanWritePayload(editDraft, {
+        clearPromo: hadPromoOnEdit && !editDraft.promo.enabled
+      });
       await apiPut(`/admin/plans/${editingId}`, payload, token);
-      await syncPlanPromo(editingId, editDraft, hadPromoOnEdit);
       setEditingId(null);
       setHadPromoOnEdit(false);
       await onChanged("Plano atualizado.");
