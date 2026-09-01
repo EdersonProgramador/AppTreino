@@ -111,6 +111,146 @@ function formatCouponValue(coupon: CouponRow) {
   return "—";
 }
 
+function buildCouponPayload(draft: CouponDraft) {
+  const hasPercent = draft.percentOff.trim().length > 0;
+  const hasAmount = draft.amountOff.trim().length > 0;
+
+  if (hasPercent && hasAmount) {
+    throw new Error("Informe apenas % off ou R$ off, não os dois ao mesmo tempo.");
+  }
+
+  const percentOff = hasPercent ? Number.parseInt(draft.percentOff, 10) : null;
+  const amountOffCents = hasAmount ? parseBRLMoneyToCents(draft.amountOff) : null;
+  const minOrderCents = draft.minOrder.trim() ? parseBRLMoneyToCents(draft.minOrder) ?? 0 : 0;
+  const maxUses = draft.maxUses.trim() ? Number.parseInt(draft.maxUses, 10) : null;
+
+  if (!percentOff && (amountOffCents == null || amountOffCents < 1)) {
+    throw new Error("Informe desconto percentual ou valor fixo em R$.");
+  }
+
+  if (percentOff != null && (!Number.isFinite(percentOff) || percentOff < 1 || percentOff > 100)) {
+    throw new Error("Desconto percentual deve estar entre 1 e 100.");
+  }
+
+  if (!draft.code.trim()) {
+    throw new Error("Informe o código do cupom.");
+  }
+
+  return {
+    code: draft.code.trim(),
+    description: draft.description.trim() || null,
+    percentOff,
+    amountOffCents,
+    minOrderCents,
+    maxUses
+  };
+}
+
+function couponErrorMessage(error: unknown) {
+  return error instanceof ApiError
+    ? error.message
+    : error instanceof Error
+      ? error.message
+      : "Não foi possível criar o cupom.";
+}
+
+function InlinePlanCouponForm({
+  draft,
+  onDraftChange,
+  onSubmit,
+  submitting,
+  feedback
+}: {
+  draft: CouponDraft;
+  onDraftChange: (next: CouponDraft) => void;
+  onSubmit: () => void;
+  submitting: boolean;
+  feedback: string | null;
+}) {
+  return (
+    <div className="finance-inline-coupon finance-form-span">
+      <div className="finance-inline-coupon__head">
+        <strong>Criar e vincular cupom</strong>
+        <span className="text-xs text-sand-muted">Aplica desconto automático neste plano no funil e checkout.</span>
+      </div>
+      {feedback ? (
+        <p className={`text-sm ${feedback.startsWith("Cupom criado") ? "text-emerald-400" : "text-red-400"}`}>{feedback}</p>
+      ) : null}
+      <div className={`${crudFormClass} finance-form finance-form--plans finance-inline-coupon__grid`}>
+        <label>
+          Código
+          <input
+            value={draft.code}
+            onChange={(event) => onDraftChange({ ...draft, code: event.target.value.toUpperCase() })}
+            placeholder="LANCAMENTO10"
+          />
+        </label>
+        <label>
+          Descrição
+          <input
+            value={draft.description}
+            onChange={(event) => onDraftChange({ ...draft, description: event.target.value })}
+            placeholder="Promo de lançamento"
+          />
+        </label>
+        <label>
+          % off
+          <input
+            value={draft.percentOff}
+            onChange={(event) =>
+              onDraftChange({
+                ...draft,
+                percentOff: event.target.value,
+                amountOff: event.target.value.trim() ? "" : draft.amountOff
+              })
+            }
+            type="number"
+            min={1}
+            max={100}
+            placeholder="10"
+          />
+        </label>
+        <label>
+          R$ off
+          <input
+            value={draft.amountOff}
+            onChange={(event) =>
+              onDraftChange({
+                ...draft,
+                amountOff: event.target.value,
+                percentOff: event.target.value.trim() ? "" : draft.percentOff
+              })
+            }
+            placeholder="10,00"
+          />
+        </label>
+        <label>
+          Pedido mínimo
+          <input
+            value={draft.minOrder}
+            onChange={(event) => onDraftChange({ ...draft, minOrder: event.target.value })}
+            placeholder="5,00"
+          />
+        </label>
+        <label>
+          Máx. usos
+          <input
+            value={draft.maxUses}
+            onChange={(event) => onDraftChange({ ...draft, maxUses: event.target.value })}
+            type="number"
+            min={1}
+            placeholder="100"
+          />
+        </label>
+        <button type="button" className="primary-button finance-form-span" disabled={submitting} onClick={onSubmit}>
+          {submitting ? <Loader2 size={18} className="animate-spin" /> : <Tag size={18} />}
+          Criar e vincular ao plano
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PlanFormFields({
   draft,
   onChange,
@@ -253,11 +393,25 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
   const [coupons, setCoupons] = useState<CouponRow[]>([]);
   const [couponDraft, setCouponDraft] = useState<CouponDraft>(emptyCouponDraft);
   const [creatingCoupon, setCreatingCoupon] = useState(false);
+  const [inlineCouponDraft, setInlineCouponDraft] = useState<CouponDraft>(emptyCouponDraft);
+  const [inlineCouponFeedback, setInlineCouponFeedback] = useState<string | null>(null);
+  const [linkingInlineCoupon, setLinkingInlineCoupon] = useState(false);
+
+  async function refreshCoupons() {
+    const response = await apiGet<{ coupons: CouponRow[] }>("/admin/subscription-coupons", token);
+    setCoupons(response.coupons ?? []);
+    return response.coupons ?? [];
+  }
+
+  async function createSubscriptionCoupon(draft: CouponDraft) {
+    const payload = buildCouponPayload(draft);
+    const response = await apiPost<{ coupon: CouponRow }>("/admin/subscription-coupons", payload, token);
+    await refreshCoupons();
+    return response.coupon;
+  }
 
   useEffect(() => {
-    void apiGet<{ coupons: CouponRow[] }>("/admin/subscription-coupons", token)
-      .then((response) => setCoupons(response.coupons ?? []))
-      .catch(() => setCoupons([]));
+    void refreshCoupons().catch(() => setCoupons([]));
   }, [token, plans.length]);
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
@@ -281,53 +435,33 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
     setCreatingCoupon(true);
     setCouponFeedback(null);
     try {
-      const hasPercent = couponDraft.percentOff.trim().length > 0;
-      const hasAmount = couponDraft.amountOff.trim().length > 0;
-
-      if (hasPercent && hasAmount) {
-        throw new Error("Informe apenas % off ou R$ off, não os dois ao mesmo tempo.");
-      }
-
-      const percentOff = hasPercent ? Number.parseInt(couponDraft.percentOff, 10) : null;
-      const amountOffCents = hasAmount ? parseBRLMoneyToCents(couponDraft.amountOff) : null;
-      const minOrderCents = couponDraft.minOrder.trim() ? parseBRLMoneyToCents(couponDraft.minOrder) ?? 0 : 0;
-      const maxUses = couponDraft.maxUses.trim() ? Number.parseInt(couponDraft.maxUses, 10) : null;
-
-      if (!percentOff && (amountOffCents == null || amountOffCents < 1)) {
-        throw new Error("Informe desconto percentual ou valor fixo em R$.");
-      }
-
-      if (percentOff != null && (!Number.isFinite(percentOff) || percentOff < 1 || percentOff > 100)) {
-        throw new Error("Desconto percentual deve estar entre 1 e 100.");
-      }
-
-      await apiPost(
-        "/admin/subscription-coupons",
-        {
-          code: couponDraft.code.trim(),
-          description: couponDraft.description.trim() || null,
-          percentOff,
-          amountOffCents,
-          minOrderCents,
-          maxUses
-        },
-        token
-      );
+      await createSubscriptionCoupon(couponDraft);
       setCouponDraft(emptyCouponDraft());
-      const response = await apiGet<{ coupons: CouponRow[] }>("/admin/subscription-coupons", token);
-      setCoupons(response.coupons ?? []);
       setCouponFeedback("Cupom criado. Vincule ao plano em “Cupom automático no funil”.");
       await onChanged("Cupom de assinatura criado.");
     } catch (error) {
-      const message =
-        error instanceof ApiError
-          ? error.message
-          : error instanceof Error
-            ? error.message
-            : "Não foi possível criar o cupom.";
-      setCouponFeedback(message);
+      setCouponFeedback(couponErrorMessage(error));
     } finally {
       setCreatingCoupon(false);
+    }
+  };
+
+  const handleCreateAndLinkCoupon = async (planId: string) => {
+    setLinkingInlineCoupon(true);
+    setInlineCouponFeedback(null);
+    setFeedback(null);
+    try {
+      const coupon = await createSubscriptionCoupon(inlineCouponDraft);
+      const payload = buildPayload(editDraft);
+      await apiPut(`/admin/plans/${planId}`, { ...payload, couponId: coupon.id }, token);
+      setEditDraft((current) => ({ ...current, couponId: coupon.id }));
+      setInlineCouponDraft(emptyCouponDraft());
+      setInlineCouponFeedback("Cupom criado e vinculado ao plano.");
+      await onChanged(`Cupom ${coupon.code} vinculado ao plano.`);
+    } catch (error) {
+      setInlineCouponFeedback(couponErrorMessage(error));
+    } finally {
+      setLinkingInlineCoupon(false);
     }
   };
 
@@ -335,8 +469,7 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
     setFeedback(null);
     try {
       await apiDelete(`/admin/subscription-coupons/${couponId}`, token);
-      const response = await apiGet<{ coupons: CouponRow[] }>("/admin/subscription-coupons", token);
-      setCoupons(response.coupons ?? []);
+      await refreshCoupons();
       await onChanged("Cupom removido.");
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Não foi possível remover o cupom.");
@@ -347,11 +480,15 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
     setEditingId(plan.id);
     setEditDraft(draftFromPlan(plan));
     setFeedback(null);
+    setInlineCouponDraft(emptyCouponDraft());
+    setInlineCouponFeedback(null);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setEditDraft(emptyDraft());
+    setInlineCouponDraft(emptyCouponDraft());
+    setInlineCouponFeedback(null);
   };
 
   const saveEdit = async () => {
@@ -542,6 +679,13 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
               {editingId === item.id ? (
                 <div className={`${crudFormClass} finance-form finance-form--plans finance-plan-edit`}>
                   <PlanFormFields draft={editDraft} onChange={setEditDraft} idPrefix={`edit-${item.id}`} coupons={coupons} />
+                  <InlinePlanCouponForm
+                    draft={inlineCouponDraft}
+                    onDraftChange={setInlineCouponDraft}
+                    submitting={linkingInlineCoupon}
+                    feedback={inlineCouponFeedback}
+                    onSubmit={() => void handleCreateAndLinkCoupon(item.id)}
+                  />
                   <div className="finance-form-span finance-plan-edit__actions">
                     <button type="button" className="primary-button" disabled={savingEdit} onClick={() => void saveEdit()}>
                       {savingEdit ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
