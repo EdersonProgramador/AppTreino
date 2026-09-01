@@ -411,6 +411,8 @@ const planInclude = {
   coupon: true
 } as const;
 
+const adminPlanSerializeOptions = { adminView: true } as const;
+
 const membershipSchema = z.object({
   userId: z.string().min(1),
   planId: z.string().min(1),
@@ -3832,7 +3834,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       orderBy: [{ sortOrder: "asc" }, { priceInCents: "asc" }],
       include: planInclude
     });
-    return { plans: await Promise.all(plans.map((plan) => serializePlanRecord(plan))) };
+    return { plans: await Promise.all(plans.map((plan) => serializePlanRecord(plan, undefined, adminPlanSerializeOptions))) };
   });
 
   app.post("/admin/plans", async (request, reply) => {
@@ -3855,7 +3857,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       where: { id: plan.id },
       include: planInclude
     });
-    return reply.code(201).send({ plan: await serializePlanRecord(updatedPlan!) });
+    return reply.code(201).send({ plan: await serializePlanRecord(updatedPlan!, undefined, adminPlanSerializeOptions) });
   });
 
   app.put("/admin/plans/:id", async (request) => {
@@ -3894,7 +3896,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       where: { id },
       include: planInclude
     });
-    return { plan: await serializePlanRecord(plan!) };
+    return { plan: await serializePlanRecord(plan!, undefined, adminPlanSerializeOptions) };
   });
 
   app.delete("/admin/plans/:id", async (request) => {
@@ -4020,7 +4022,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
     return {
       coupon,
-      plan: await serializePlanRecord(updatedPlan!),
+      plan: await serializePlanRecord(updatedPlan!, undefined, adminPlanSerializeOptions),
       pricing
     };
   });
@@ -4038,7 +4040,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       where: { id },
       include: planInclude
     });
-    return { plan: updatedPlan ? await serializePlanRecord(updatedPlan) : null, ok: true };
+    return { plan: updatedPlan ? await serializePlanRecord(updatedPlan, undefined, adminPlanSerializeOptions) : null, ok: true };
   });
 
   app.delete("/admin/subscription-coupons/:id", async (request) => {

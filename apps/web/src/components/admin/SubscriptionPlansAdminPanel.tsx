@@ -68,14 +68,16 @@ function emptyDraft(): PlanDraft {
 }
 
 function promoDraftFromPlan(plan: PlanRow): PlanPromoDraft {
-  if (!plan.couponId || !plan.couponCode) {
+  if (!plan.couponId) {
     return emptyPromoDraft();
   }
+
+  const couponCode = plan.couponCode ?? "";
 
   if (plan.couponPercentOff) {
     return {
       enabled: true,
-      couponCode: plan.couponCode,
+      couponCode,
       mode: "PERCENT",
       value: String(plan.couponPercentOff),
       maxUses: plan.couponMaxUses != null ? String(plan.couponMaxUses) : ""
@@ -86,7 +88,7 @@ function promoDraftFromPlan(plan: PlanRow): PlanPromoDraft {
   if ((plan.discountInCents ?? 0) > 0 && effective < plan.priceInCents) {
     return {
       enabled: true,
-      couponCode: plan.couponCode,
+      couponCode,
       mode: "TARGET_PRICE",
       value: formatPriceInBRL(effective).replace(/^R\$\s?/, ""),
       maxUses: plan.couponMaxUses != null ? String(plan.couponMaxUses) : ""
@@ -96,7 +98,7 @@ function promoDraftFromPlan(plan: PlanRow): PlanPromoDraft {
   if (plan.couponAmountOffCents) {
     return {
       enabled: true,
-      couponCode: plan.couponCode,
+      couponCode,
       mode: "AMOUNT_OFF",
       value: formatPriceInBRL(plan.couponAmountOffCents).replace(/^R\$\s?/, ""),
       maxUses: plan.couponMaxUses != null ? String(plan.couponMaxUses) : ""
@@ -105,7 +107,7 @@ function promoDraftFromPlan(plan: PlanRow): PlanPromoDraft {
 
   return {
     enabled: true,
-    couponCode: plan.couponCode,
+    couponCode,
     mode: "TARGET_PRICE",
     value: "",
     maxUses: plan.couponMaxUses != null ? String(plan.couponMaxUses) : ""
@@ -572,7 +574,7 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
                   </small>
                 ) : null}
               </span>
-              <span className="text-sm text-sand-muted">{item.couponCode ?? "—"}</span>
+              <span className="text-sm text-sand-muted finance-mono">{item.couponCode ?? "—"}</span>
               <span className="finance-row-actions">
                 <button type="button" className="admin-icon-button" aria-label="Editar plano" onClick={() => startEdit(item)}>
                   <Pencil size={17} />

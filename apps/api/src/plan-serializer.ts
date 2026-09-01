@@ -28,12 +28,21 @@ export function parseCardBenefits(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
+function activeLinkedCoupon(plan: Plan & { coupon?: Coupon | null }) {
+  if (!plan.coupon || plan.coupon.deletedAt) return null;
+  return plan.coupon;
+}
+
 export async function serializePlanRecord(
   plan: Plan & { coupon?: Coupon | null },
   explicitCouponCode?: string | null,
-  options?: { forgiveInvalidExplicitCoupon?: boolean }
+  options?: { forgiveInvalidExplicitCoupon?: boolean; adminView?: boolean }
 ): Promise<SerializedPlan> {
   const pricing = await resolveSubscriptionCheckoutPricing(plan, explicitCouponCode ?? undefined, options);
+  const linkedCoupon = activeLinkedCoupon(plan);
+  const couponCode = options?.adminView
+    ? linkedCoupon?.code ?? pricing.couponCode
+    : pricing.couponCode;
   return {
     id: plan.id,
     code: plan.code,
@@ -46,11 +55,11 @@ export async function serializePlanRecord(
     isFeatured: plan.isFeatured,
     sortOrder: plan.sortOrder,
     showOnFunnel: plan.showOnFunnel,
-    couponId: plan.couponId,
-    couponCode: pricing.couponCode,
-    couponPercentOff: plan.coupon?.percentOff ?? null,
-    couponAmountOffCents: plan.coupon?.amountOffCents ?? null,
-    couponMaxUses: plan.coupon?.maxUses ?? null,
+    couponId: linkedCoupon?.id ?? plan.couponId,
+    couponCode,
+    couponPercentOff: linkedCoupon?.percentOff ?? plan.coupon?.percentOff ?? null,
+    couponAmountOffCents: linkedCoupon?.amountOffCents ?? plan.coupon?.amountOffCents ?? null,
+    couponMaxUses: linkedCoupon?.maxUses ?? plan.coupon?.maxUses ?? null,
     originalPriceInCents: pricing.originalAmountInCents,
     effectivePriceInCents: pricing.amountInCents,
     discountInCents: pricing.discountInCents
