@@ -165,5 +165,6 @@ export {
   PLAN_PROMO_COUPON_SUFFIX,
   DEFAULT_MIN_CHECKOUT_CENTS,
   buildPlanPromoCouponCode,
+  normalizePromoCouponCode,
   resolvePlanPromoDiscount
 } from "./plan-promo-coupon.js";

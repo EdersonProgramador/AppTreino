@@ -38,6 +38,9 @@ export interface PlanRow {
   showOnFunnel?: boolean;
   couponId?: string | null;
   couponCode?: string | null;
+  couponPercentOff?: number | null;
+  couponAmountOffCents?: number | null;
+  couponMaxUses?: number | null;
   originalPriceInCents?: number;
   effectivePriceInCents?: number;
   discountInCents?: number;

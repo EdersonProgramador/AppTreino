@@ -13,7 +13,7 @@ import type { UploadGroup } from "../upload-security.js";
 import { persistUploadedFile } from "../upload-persist.js";
 import { ensureUploadedVideoIsMp4 } from "../video-transcode.js";
 import { serializePlanRecord } from "../plan-serializer.js";
-import { buildPlanPromoCouponCode, resolvePlanPromoDiscount } from "@app-treino/shared";
+import { normalizePromoCouponCode, resolvePlanPromoDiscount } from "@app-treino/shared";
 import { autoCloseStaleTickets, FINALIZE_PROMPT, ticketInclude } from "./ticket.utils.js";
 import { buildPaginationMeta, parsePagination } from "./pagination.js";
 import { calculateBodyFatEstimate, physicalAssessmentFormSchema } from "./physical-assessment.utils.js";
@@ -3935,12 +3935,13 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
   const planPromoCouponSchema = z
     .object({
+      couponCode: z.string().trim().min(2).max(40),
       mode: z.enum(["PERCENT", "AMOUNT_OFF", "TARGET_PRICE"]),
       percentOff: z.number().int().min(1).max(100).optional(),
       amountOffCents: z.number().int().min(1).optional(),
       targetPriceInCents: z.number().int().min(1).optional(),
-      planCode: z.string().trim().min(2).max(40).optional(),
-      planPriceInCents: z.number().int().positive().optional()
+      planPriceInCents: z.number().int().positive().optional(),
+      maxUses: z.number().int().min(1).nullable().optional()
     })
     .superRefine((data, ctx) => {
       const valid =
@@ -3959,14 +3960,17 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
     const body = planPromoCouponSchema.parse(request.body);
-    const plan = await prisma.plan.findFirst({ where: { id, deletedAt: null } });
+    const plan = await prisma.plan.findFirst({
+      where: { id, deletedAt: null },
+      include: { coupon: true }
+    });
     if (!plan) {
       const error = new Error("Plano não encontrado.") as Error & { statusCode: number };
       error.statusCode = 404;
       throw error;
     }
 
-    const planCode = body.planCode?.trim() || plan.code;
+    const code = normalizePromoCouponCode(body.couponCode);
     const planPriceInCents = body.planPriceInCents ?? plan.priceInCents;
     const resolved = resolvePlanPromoDiscount({
       planPriceInCents,
@@ -3976,44 +3980,61 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       targetPriceInCents: body.targetPriceInCents
     });
 
-    const code = buildPlanPromoCouponCode(planCode);
     const couponData = {
-      description: `Promo automática · ${plan.name}`,
+      code,
+      description: `Promo · ${plan.name}`,
       percentOff: resolved.percentOff,
       amountOffCents: resolved.amountOffCents,
       minOrderCents: resolved.minOrderCents,
-      maxUses: null as number | null,
+      maxUses: body.maxUses ?? null,
       isActive: true,
       startsAt: null as Date | null,
       endsAt: null as Date | null,
-      deletedAt: null as Date | null
+      deletedAt: null as Date | null,
+      scope: "SUBSCRIPTION" as const
     };
 
-    const existing = await prisma.coupon.findUnique({ where: { code } });
-    let coupon;
+    const existingByCode = await prisma.coupon.findUnique({ where: { code } });
+    if (
+      existingByCode &&
+      existingByCode.deletedAt === null &&
+      existingByCode.id !== plan.couponId
+    ) {
+      const otherPlan = await prisma.plan.findFirst({
+        where: { couponId: existingByCode.id, deletedAt: null, id: { not: id } }
+      });
+      if (otherPlan) {
+        const error = new Error(
+          `O cupom "${code}" já está em uso no plano "${otherPlan.name}". Cada plano precisa de um nome exclusivo.`
+        ) as Error & { statusCode: number };
+        error.statusCode = 409;
+        throw error;
+      }
+    }
 
-    if (!existing) {
-      coupon = await prisma.coupon.create({
-        data: { code, scope: "SUBSCRIPTION", ...couponData }
-      });
-    } else if (existing.deletedAt) {
+    let coupon;
+    if (plan.couponId) {
       coupon = await prisma.coupon.update({
-        where: { id: existing.id },
-        data: {
-          ...couponData,
-          scope: existing.scope === "STORE" ? "ALL" : "SUBSCRIPTION"
-        }
-      });
-    } else if (existing.scope === "STORE") {
-      coupon = await prisma.coupon.update({
-        where: { id: existing.id },
-        data: { ...couponData, scope: "ALL" }
-      });
-    } else {
-      coupon = await prisma.coupon.update({
-        where: { id: existing.id },
+        where: { id: plan.couponId },
         data: couponData
       });
+    } else if (existingByCode?.deletedAt) {
+      coupon = await prisma.coupon.update({
+        where: { id: existingByCode.id },
+        data: couponData
+      });
+    } else if (existingByCode && existingByCode.scope === "STORE") {
+      coupon = await prisma.coupon.update({
+        where: { id: existingByCode.id },
+        data: { ...couponData, scope: "ALL" }
+      });
+    } else if (existingByCode) {
+      coupon = await prisma.coupon.update({
+        where: { id: existingByCode.id },
+        data: couponData
+      });
+    } else {
+      coupon = await prisma.coupon.create({ data: couponData });
     }
 
     const updatedPlan = await prisma.plan.update({
@@ -4027,6 +4048,29 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       plan: await serializePlanRecord(updatedPlan),
       pricing: resolved
     };
+  });
+
+  app.delete("/admin/plans/:id/promo-coupon", async (request) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const plan = await prisma.plan.findFirst({ where: { id, deletedAt: null } });
+    if (!plan) {
+      const error = new Error("Plano não encontrado.") as Error & { statusCode: number };
+      error.statusCode = 404;
+      throw error;
+    }
+    if (plan.couponId) {
+      await prisma.plan.update({ where: { id }, data: { couponId: null } });
+      await prisma.coupon.update({
+        where: { id: plan.couponId },
+        data: { deletedAt: new Date(), isActive: false }
+      });
+    }
+    const updatedPlan = await prisma.plan.findFirst({
+      where: { id },
+      include: planInclude
+    });
+    return { plan: updatedPlan ? await serializePlanRecord(updatedPlan) : null, ok: true };
   });
 
   app.delete("/admin/subscription-coupons/:id", async (request) => {

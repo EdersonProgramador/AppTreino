@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { buildPlanPromoCouponCode, resolvePlanPromoDiscount } from "./plan-promo-coupon.js";
+import { buildPlanPromoCouponCode, normalizePromoCouponCode, resolvePlanPromoDiscount } from "./plan-promo-coupon.js";
 
 assert.equal(buildPlanPromoCouponCode("cinco"), "CINCO-PROMO");
-assert.equal(buildPlanPromoCouponCode("Start"), "START-PROMO");
+assert.equal(normalizePromoCouponCode(" lancamento-10 "), "LANCAMENTO-10");
 
 const percent = resolvePlanPromoDiscount({
   planPriceInCents: 1000,

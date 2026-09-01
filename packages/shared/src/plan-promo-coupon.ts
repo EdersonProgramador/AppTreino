@@ -3,6 +3,19 @@ export type PlanPromoDiscountMode = "PERCENT" | "AMOUNT_OFF" | "TARGET_PRICE";
 export const PLAN_PROMO_COUPON_SUFFIX = "-PROMO";
 export const DEFAULT_MIN_CHECKOUT_CENTS = 500;
 
+export function normalizePromoCouponCode(raw: string): string {
+  const code = raw
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, "")
+    .slice(0, 40);
+  if (code.length < 2) {
+    throw new Error("Nome do cupom deve ter ao menos 2 caracteres (letras, números, _ ou -).");
+  }
+  return code;
+}
+
+/** @deprecated Prefer normalizePromoCouponCode — cupom agora tem nome definido no plano. */
 export function buildPlanPromoCouponCode(planCode: string): string {
   const base = planCode
     .trim()

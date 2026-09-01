@@ -15,6 +15,9 @@ export type SerializedPlan = {
   showOnFunnel: boolean;
   couponId: string | null;
   couponCode: string | null;
+  couponPercentOff?: number | null;
+  couponAmountOffCents?: number | null;
+  couponMaxUses?: number | null;
   originalPriceInCents: number;
   effectivePriceInCents: number;
   discountInCents: number;
@@ -44,6 +47,9 @@ export async function serializePlanRecord(
     showOnFunnel: plan.showOnFunnel,
     couponId: plan.couponId,
     couponCode: pricing.couponCode,
+    couponPercentOff: plan.coupon?.percentOff ?? null,
+    couponAmountOffCents: plan.coupon?.amountOffCents ?? null,
+    couponMaxUses: plan.coupon?.maxUses ?? null,
     originalPriceInCents: pricing.originalAmountInCents,
     effectivePriceInCents: pricing.amountInCents,
     discountInCents: pricing.discountInCents
