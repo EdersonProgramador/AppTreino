@@ -79,6 +79,27 @@ export function buildSubscriptionPricingFromCoupon(
   };
 }
 
+export type PaymentPricingSnapshot = {
+  amountInCents: number;
+  originalAmountInCents?: number | null;
+  discountInCents: number;
+  couponId?: string | null;
+  couponCode?: string | null;
+};
+
+export function paymentMatchesSubscriptionPricing(
+  payment: PaymentPricingSnapshot,
+  pricing: SubscriptionCheckoutPricing
+): boolean {
+  return (
+    payment.amountInCents === pricing.amountInCents &&
+    (payment.originalAmountInCents ?? payment.amountInCents) === pricing.originalAmountInCents &&
+    payment.discountInCents === pricing.discountInCents &&
+    (payment.couponId ?? null) === pricing.couponId &&
+    (payment.couponCode ?? null) === (pricing.couponCode ?? null)
+  );
+}
+
 export async function resolveSubscriptionCheckoutPricing(
   plan: Plan & { coupon?: Coupon | null },
   explicitCouponCode?: string | null

@@ -11,6 +11,7 @@ import {
   evaluateSandboxConfirmGate,
   incrementSubscriptionCouponUsage,
   getAsaasCheckoutAmountError,
+  paymentMatchesSubscriptionPricing,
   resolveSubscriptionCheckoutPricing
 } from "./checkout.utils.js";
 
@@ -183,15 +184,50 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     });
 
     if (pendingMembership?.payments[0]) {
+      const pricing = await resolveSubscriptionCheckoutPricing(planSeed, body.couponCode);
+      const amountError = checkoutAmountErrorReply(pricing.amountInCents, reply);
+      if (amountError) return amountError;
+
+      let membership = pendingMembership;
       let payment = pendingMembership.payments[0];
+      const planChanged = pendingMembership.planId !== planSeed.id;
+      const pricingStale = !paymentMatchesSubscriptionPricing(payment, pricing);
+
+      if (planChanged || pricingStale) {
+        const startsAt = todayUtcOnly();
+        const pendingPayment = pendingMembership.payments[0];
+        const refreshed = await prisma.$transaction(async (tx) => {
+          const membership = planChanged
+            ? await tx.membership.update({
+                where: { id: pendingMembership.id },
+                data: {
+                  planId: planSeed.id,
+                  endsAt: addCycleDate(startsAt, planSeed.billingCycle)
+                },
+                include: { plan: true }
+              })
+            : pendingMembership;
+
+          const payment = await tx.payment.update({
+            where: { id: pendingPayment.id },
+            data: {
+              ...buildPaymentData(pricing, pendingPayment.dueDate ?? startsAt),
+              asaasPaymentId: null,
+              paymentUrl: null
+            }
+          });
+
+          return { membership, payment };
+        });
+
+        membership = refreshed.membership;
+        payment = refreshed.payment;
+      }
 
       if (!payment.paymentUrl) {
-        const amountError = checkoutAmountErrorReply(payment.amountInCents, reply);
-        if (amountError) return amountError;
-
         const { checkout: asaasPayment, providerError } = await tryCreateAsaasCheckout({
           externalReference: payment.id,
-          itemName: asaasCheckoutItemName(pendingMembership.plan?.name ?? planSeed.name),
+          itemName: asaasCheckoutItemName(membership.plan?.name ?? planSeed.name),
           itemDescription: asaasCheckoutItemDescription(authUser.name),
           amountInCents: payment.amountInCents,
           billingType: body.billingType,
@@ -210,7 +246,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
         }
 
         return reply.send({
-          membership: pendingMembership,
+          membership,
           payment,
           alreadyActive: false,
           paymentProviderError: providerError ?? undefined
@@ -218,7 +254,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       }
 
       return reply.send({
-        membership: pendingMembership,
+        membership,
         payment,
         alreadyActive: false
       });

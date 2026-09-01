@@ -3,7 +3,10 @@ import { describe, it } from "node:test";
 import {
   asaasCheckoutItemDescription,
   asaasCheckoutItemName,
-  evaluateSandboxConfirmGate
+  evaluateSandboxConfirmGate,
+  getAsaasCheckoutAmountError,
+  ASAAS_MIN_CHECKOUT_CENTS,
+  paymentMatchesSubscriptionPricing
 } from "./checkout.utils.js";
 import { shouldActivateMembership, asaasStatusToPaymentStatus, addCycleDate } from "./asaas.routes.js";
 
@@ -80,10 +83,49 @@ describe("assinatura: ativação e ciclo", () => {
 
 describe("valor mínimo Asaas", () => {
   it("bloqueia valores abaixo de R$ 5,00", () => {
-    const { getAsaasCheckoutAmountError, ASAAS_MIN_CHECKOUT_CENTS } = require("./checkout.utils.js");
     assert.equal(ASAAS_MIN_CHECKOUT_CENTS, 500);
     assert.match(getAsaasCheckoutAmountError(10) ?? "", /R\$\s*5,00/);
     assert.equal(getAsaasCheckoutAmountError(500), null);
+  });
+});
+
+describe("pagamento pendente vs preço atual", () => {
+  it("detecta quando o valor salvo ficou desatualizado", () => {
+    const pricing = {
+      originalAmountInCents: 500,
+      discountInCents: 0,
+      amountInCents: 500,
+      couponId: null,
+      couponCode: null
+    };
+
+    assert.equal(
+      paymentMatchesSubscriptionPricing(
+        {
+          amountInCents: 10,
+          originalAmountInCents: 10,
+          discountInCents: 0,
+          couponId: null,
+          couponCode: null
+        },
+        pricing
+      ),
+      false
+    );
+
+    assert.equal(
+      paymentMatchesSubscriptionPricing(
+        {
+          amountInCents: 500,
+          originalAmountInCents: 500,
+          discountInCents: 0,
+          couponId: null,
+          couponCode: null
+        },
+        pricing
+      ),
+      true
+    );
   });
 });
 
