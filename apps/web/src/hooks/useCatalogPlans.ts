@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "../api";
 import {
   getDefaultPlanCode,
@@ -20,13 +20,10 @@ export function useCatalogPlans(defaultPlanCode?: string | null, couponCode?: st
   const [plans, setPlans] = useState<CatalogPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
-    if (!hasLoadedRef.current) {
-      setLoading(true);
-    }
+    setLoading(true);
     setError(null);
     void apiGet<{ plans: CatalogPlan[] }>(buildPlansPath(couponCode))
       .then((response) => {
@@ -35,12 +32,11 @@ export function useCatalogPlans(defaultPlanCode?: string | null, couponCode?: st
       })
       .catch(() => {
         if (cancelled) return;
-        if (!hasLoadedRef.current) setPlans([]);
+        setPlans([]);
         setError("Não foi possível carregar os planos.");
       })
       .finally(() => {
         if (cancelled) return;
-        hasLoadedRef.current = true;
         setLoading(false);
       });
     return () => {

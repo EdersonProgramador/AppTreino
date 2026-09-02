@@ -269,9 +269,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   });
   const catalogCoupon = useMemo(() => {
     if (!appliedCoupon) return null;
-    if (couponApplying || couponValidForSelection === null) return appliedCoupon;
+    if (catalogPlansLoading || couponApplying || couponValidForSelection === null) return appliedCoupon;
     return couponValidForSelection ? appliedCoupon : null;
-  }, [appliedCoupon, couponApplying, couponValidForSelection]);
+  }, [appliedCoupon, catalogPlansLoading, couponApplying, couponValidForSelection]);
   const {
     plans: catalogPlansRaw,
     allPlans: catalogAllPlans,
@@ -584,7 +584,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   }, [catalogPlans, catalogPlansLoading, checkoutDraft.planCode]);
 
   useEffect(() => {
-    if (!appliedCoupon || catalogPlansLoading) return;
+    if (!appliedCoupon) {
+      setCouponValidForSelection(false);
+      setCouponApplying(false);
+      return;
+    }
+    if (catalogPlansLoading) return;
+
     const selected = catalogAllPlans.find((plan) => plan.code === checkoutDraft.planCode) ?? null;
     const valid = Boolean(selected && planHasPromoDiscount(selected));
     setCouponValidForSelection(valid);
@@ -604,6 +610,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     }
     setCouponApplying(true);
     setCouponValidForSelection(null);
+    setCouponFeedback(null);
     setAppliedCoupon(next);
     setCouponDraft("");
     setCheckoutPayment(null);

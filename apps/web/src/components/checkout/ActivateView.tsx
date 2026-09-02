@@ -36,9 +36,9 @@ export function ActivateView() {
 
   const catalogCoupon = useMemo(() => {
     if (!appliedCoupon) return null;
-    if (couponApplying || couponValidForSelection === null) return appliedCoupon;
+    if (loading || couponApplying || couponValidForSelection === null) return appliedCoupon;
     return couponValidForSelection ? appliedCoupon : null;
-  }, [appliedCoupon, couponApplying, couponValidForSelection]);
+  }, [appliedCoupon, couponApplying, couponValidForSelection, loading]);
 
   const { plans: catalogPlans, allPlans, loading, monthlyBaseline, initialPlanCode } = useCatalogPlans(
     planFromUrl ?? selectedPlanCode,
@@ -75,13 +75,12 @@ export function ActivateView() {
   }, [checkoutCoupon, selectedPlan]);
 
   useEffect(() => {
-    if (loading || !appliedCoupon) {
-      if (!appliedCoupon) {
-        setCouponValidForSelection(false);
-        setCouponApplying(false);
-      }
+    if (!appliedCoupon) {
+      setCouponValidForSelection(false);
+      setCouponApplying(false);
       return;
     }
+    if (loading) return;
 
     const pricedSelected = allPlans.find((plan) => plan.code === selectedPlan) ?? null;
     const valid = Boolean(pricedSelected && planHasPromoDiscount(pricedSelected));
@@ -100,6 +99,7 @@ export function ActivateView() {
     }
     setCouponApplying(true);
     setCouponValidForSelection(null);
+    setCouponFeedback(null);
     setAppliedCoupon(next);
     setCouponDraft("");
   };
