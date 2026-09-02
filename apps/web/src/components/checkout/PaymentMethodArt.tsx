@@ -2,7 +2,8 @@ import { assetUrl } from "../../lib/urls";
 
 export const paymentAssets = {
   pixLogo: assetUrl("assets/payments/pix-logo.png"),
-  cardBrands: assetUrl("assets/payments/card-brands.png")
+  cardBrands: assetUrl("assets/payments/card-brands.png"),
+  trustBadges: assetUrl("assets/payments/trust-badges.png")
 } as const;
 
 type ImageProps = {
@@ -25,4 +26,11 @@ export function CardMethodPreview({ className }: { className?: string }) {
       alt="Cartões de crédito aceitos"
     />
   );
+}
+
+export function TrustBadgesImage({
+  className,
+  alt = "Compra segura, satisfação garantida e privacidade protegida"
+}: ImageProps) {
+  return <img className={className} src={paymentAssets.trustBadges} alt={alt} loading="lazy" decoding="async" />;
 }

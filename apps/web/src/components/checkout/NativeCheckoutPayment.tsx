@@ -1,10 +1,10 @@
-import { Check, Copy, Loader2, Lock, ShieldCheck } from "lucide-react";
+import { Check, Copy, Loader2, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { formatPriceInBRL } from "@app-treino/shared";
 import { apiGet, apiPost } from "../../api";
 import type { CheckoutSessionResponse, NativeCheckoutPayload, PaymentRow } from "../../types/shared";
 import { brand } from "../../lib/brand";
-import { CardBrandsImage, CardMethodPreview, PixBrandImage } from "./PaymentMethodArt";
+import { CardBrandsImage, CardMethodPreview, PixBrandImage, TrustBadgesImage } from "./PaymentMethodArt";
 
 export type NativeBillingType = "PIX" | "CREDIT_CARD";
 
@@ -194,10 +194,6 @@ export function NativeCheckoutPayment({
         <span className="native-checkout__eyebrow">{brand.name} Checkout</span>
         <strong>{summaryLine}</strong>
         <p>Pagamento seguro sem sair do {brand.name}.</p>
-        <span className="native-checkout__secure">
-          <Lock size={14} />
-          Conexão criptografada
-        </span>
       </div>
 
       <div className="native-checkout__methods" role="tablist" aria-label="Forma de pagamento">
@@ -421,6 +417,8 @@ export function NativeCheckoutPayment({
           </button>
         </form>
       )}
+
+      <TrustBadgesImage className="native-checkout__trust-badges" />
     </div>
   );
 }
