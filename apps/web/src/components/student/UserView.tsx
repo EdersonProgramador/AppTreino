@@ -267,17 +267,22 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     planCode: (initialCheckoutIntent?.planCode as PlanCode | undefined) ?? "monthly",
     billingType: "PIX"
   });
-  const catalogCoupon = useMemo(() => {
+  const catalogCouponQuery = useMemo(() => {
     if (!appliedCoupon) return null;
-    if (catalogPlansLoading || couponApplying || couponValidForSelection === null) return appliedCoupon;
+    if (couponApplying || couponValidForSelection === null) return appliedCoupon;
     return couponValidForSelection ? appliedCoupon : null;
-  }, [appliedCoupon, catalogPlansLoading, couponApplying, couponValidForSelection]);
+  }, [appliedCoupon, couponApplying, couponValidForSelection]);
   const {
     plans: catalogPlansRaw,
     allPlans: catalogAllPlans,
     loading: catalogPlansLoading,
     monthlyBaseline: catalogMonthlyBaseline
-  } = useCatalogPlans(checkoutDraft.planCode, catalogCoupon);
+  } = useCatalogPlans(checkoutDraft.planCode, catalogCouponQuery);
+  const catalogCoupon = useMemo(() => {
+    if (!appliedCoupon) return null;
+    if (catalogPlansLoading || couponApplying || couponValidForSelection === null) return appliedCoupon;
+    return couponValidForSelection ? appliedCoupon : null;
+  }, [appliedCoupon, catalogPlansLoading, couponApplying, couponValidForSelection]);
   const catalogPlans = useMemo(
     () => plansForCouponDisplay(catalogPlansRaw, appliedCoupon, checkoutDraft.planCode),
     [appliedCoupon, catalogPlansRaw, checkoutDraft.planCode]

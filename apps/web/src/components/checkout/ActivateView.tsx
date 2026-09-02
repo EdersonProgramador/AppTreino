@@ -34,16 +34,22 @@ export function ActivateView() {
   const [accountMode, setAccountMode] = useState<"register" | "login">("register");
   const [billingType, setBillingType] = useState<BillingType>("UNDEFINED");
 
+  const catalogCouponQuery = useMemo(() => {
+    if (!appliedCoupon) return null;
+    if (couponApplying || couponValidForSelection === null) return appliedCoupon;
+    return couponValidForSelection ? appliedCoupon : null;
+  }, [appliedCoupon, couponApplying, couponValidForSelection]);
+
+  const { plans: catalogPlans, allPlans, loading, monthlyBaseline, initialPlanCode } = useCatalogPlans(
+    planFromUrl ?? selectedPlanCode,
+    catalogCouponQuery
+  );
+
   const catalogCoupon = useMemo(() => {
     if (!appliedCoupon) return null;
     if (loading || couponApplying || couponValidForSelection === null) return appliedCoupon;
     return couponValidForSelection ? appliedCoupon : null;
   }, [appliedCoupon, couponApplying, couponValidForSelection, loading]);
-
-  const { plans: catalogPlans, allPlans, loading, monthlyBaseline, initialPlanCode } = useCatalogPlans(
-    planFromUrl ?? selectedPlanCode,
-    catalogCoupon
-  );
 
   const plans = useMemo(
     () => plansForCouponDisplay(catalogPlans, appliedCoupon, selectedPlan),
