@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { homePathForRole, permissionsFor, type UserRole } from "@app-treino/shared";
+import { homePathForRole, isValidCpf, normalizeCpfDigits, permissionsFor, type UserRole } from "@app-treino/shared";
 import { getAuthUser, hashPassword, isAdminStudentPreview, toAuthUser, verifyPassword } from "../auth.js";
 import { buildPasswordResetUrl, isDeliverableEmail, sendPasswordResetEmail } from "../email.js";
 import { env } from "../env.js";
@@ -58,6 +58,11 @@ const registerSchema = z
     name: z.string().min(2),
     email: z.string().email().optional().or(z.literal("")),
     phone: z.string().min(8).optional().or(z.literal("")),
+    document: z
+      .string()
+      .trim()
+      .min(11, "Informe um CPF valido.")
+      .refine((value) => isValidCpf(value), "Informe um CPF valido."),
     password: z.string().min(6).optional(),
     gender: z.enum(["MALE", "FEMALE"], {
       required_error: "Selecione o sexo para continuar."
@@ -326,6 +331,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         profile: {
           create: {
             phone,
+            document: normalizeCpfDigits(body.document),
             gender: body.gender,
             birthDate: birthDate && !Number.isNaN(birthDate.getTime()) ? birthDate : null,
             objective: body.objective ?? null,

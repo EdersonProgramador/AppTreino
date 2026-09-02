@@ -168,3 +168,4 @@ export {
   normalizePromoCouponCode,
   resolvePlanPromoDiscount
 } from "./plan-promo-coupon.js";
+export { formatCpf, isValidCpf, normalizeCpfDigits } from "./cpf.js";

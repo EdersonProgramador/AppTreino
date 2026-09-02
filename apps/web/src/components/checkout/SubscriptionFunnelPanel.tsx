@@ -32,9 +32,10 @@ type SubscriptionFunnelPanelProps = {
   payerName?: string | null;
   payerEmail?: string | null;
   payerPhone?: string | null;
+  payerDocument?: string | null;
   error?: string | null;
   onContinuePlan?: () => void;
-  onPrepareCheckout?: () => void;
+  onPrepareCheckout?: (input?: { cpfCnpj?: string }) => void;
   onCheckoutSessionResponse?: (response: CheckoutSessionResponse) => void;
   onPaymentConfirmed?: () => void;
   onCheckoutError?: (message: string) => void;
@@ -129,6 +130,7 @@ export function SubscriptionFunnelPanel({
   payerName,
   payerEmail,
   payerPhone,
+  payerDocument,
   error,
   onContinuePlan,
   onPrepareCheckout,
@@ -280,13 +282,14 @@ export function SubscriptionFunnelPanel({
           <header className="activate-plan-stage__head">
             <span className="home-telemetry-label">Passo 3</span>
             <h2 className="activate-plan-stage__title">Finalize sua ativação</h2>
-            <p className="activate-plan-stage__copy">Pagamento 100% {brand.name} · Pix ou cartão na mesma tela.</p>
+            <p className="activate-plan-stage__copy">Pagamento 100% {brand.name} · Pix ou cartão de crédito na mesma tela.</p>
           </header>
 
           <NativeCheckoutPayment
             token={checkoutToken}
             planName={selectedPlan.name}
             amountInCents={pendingPayment?.amountInCents ?? getEffectivePriceCents(selectedPlan)}
+            billingCycle={selectedPlan.billingCycle}
             payment={pendingPayment ?? null}
             nativeCheckout={nativeCheckout}
             billingType={nativeBillingType}
@@ -296,6 +299,7 @@ export function SubscriptionFunnelPanel({
             defaultEmail={payerEmail}
             defaultPhone={payerPhone}
             defaultName={payerName}
+            defaultDocument={payerDocument}
             onPrepareCheckout={onPrepareCheckout}
             onSessionResponse={(response) => onCheckoutSessionResponse?.(response)}
             onPaymentConfirmed={() => onPaymentConfirmed?.()}

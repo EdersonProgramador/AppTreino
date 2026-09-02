@@ -1158,14 +1158,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     }
   }
 
-  async function submitSubscriptionCheckout() {
+  async function submitSubscriptionCheckout(input?: { cpfCnpj?: string }) {
     if (!token) return;
 
     const planCode = checkoutDraft.planCode;
     const billingType = checkoutDraft.billingType;
 
     if (billingType !== "PIX" && billingType !== "CREDIT_CARD") {
-      setError("Escolha Pix ou cartão para continuar.");
+      setError("Escolha Pix ou cartão de crédito para continuar.");
       return;
     }
 
@@ -1182,12 +1182,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         {
           planCode,
           billingType,
-          couponCode: resolveCheckoutCoupon(planCode)
+          couponCode: resolveCheckoutCoupon(planCode),
+          cpfCnpj: input?.cpfCnpj
         },
         token
       );
 
       applyCheckoutSessionResponse(response);
+
+      if (input?.cpfCnpj) {
+        await loadUserData();
+      }
 
       if (response.alreadyActive) {
         uiSounds.paymentApproved();
@@ -2536,7 +2541,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               payerName={profile?.name ?? null}
               payerEmail={profile?.email ?? null}
               payerPhone={profile?.phone ?? null}
-              onPrepareCheckout={() => void submitSubscriptionCheckout()}
+              payerDocument={profile?.document ?? null}
+              onPrepareCheckout={(input) => void submitSubscriptionCheckout(input)}
               onCheckoutSessionResponse={applyCheckoutSessionResponse}
               onPaymentConfirmed={() => void handleNativePaymentConfirmed()}
               onCheckoutError={setError}

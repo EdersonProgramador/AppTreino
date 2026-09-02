@@ -267,6 +267,26 @@ export async function createAsaasCustomer(input: {
   });
 }
 
+export async function updateAsaasCustomer(
+  customerId: string,
+  input: {
+    name?: string;
+    email?: string | null;
+    phone?: string | null;
+    cpfCnpj?: string | null;
+  }
+) {
+  return asaasJsonRequest<AsaasCustomerRecord>(`/customers/${customerId}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      name: input.name ?? undefined,
+      email: input.email ?? undefined,
+      mobilePhone: input.phone ?? undefined,
+      cpfCnpj: input.cpfCnpj?.replace(/\D/g, "") || undefined
+    })
+  });
+}
+
 export type AsaasPaymentRecord = {
   id: string;
   status?: string;
@@ -335,20 +355,30 @@ export async function createAsaasCreditCardPayment(input: {
   creditCard: AsaasCreditCardInput;
   creditCardHolderInfo: AsaasCreditCardHolderInput;
   remoteIp: string;
+  installmentCount?: number;
 }) {
+  const installmentCount = input.installmentCount ?? 1;
+  const payload: Record<string, unknown> = {
+    customer: input.customerId,
+    billingType: "CREDIT_CARD",
+    dueDate: resolveAsaasDueDate(input.dueDate),
+    externalReference: input.externalReference,
+    description: input.description,
+    remoteIp: input.remoteIp,
+    creditCard: input.creditCard,
+    creditCardHolderInfo: input.creditCardHolderInfo
+  };
+
+  if (installmentCount >= 2) {
+    payload.installmentCount = installmentCount;
+    payload.totalValue = input.amountInCents / 100;
+  } else {
+    payload.value = input.amountInCents / 100;
+  }
+
   return asaasJsonRequest<AsaasPaymentRecord & { creditCardToken?: string | null }>("/payments", {
     method: "POST",
-    body: JSON.stringify({
-      customer: input.customerId,
-      billingType: "CREDIT_CARD",
-      value: input.amountInCents / 100,
-      dueDate: resolveAsaasDueDate(input.dueDate),
-      externalReference: input.externalReference,
-      description: input.description,
-      remoteIp: input.remoteIp,
-      creditCard: input.creditCard,
-      creditCardHolderInfo: input.creditCardHolderInfo
-    })
+    body: JSON.stringify(payload)
   });
 }
 

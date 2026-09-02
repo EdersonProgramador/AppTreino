@@ -1,17 +1,27 @@
 import { Check, Copy, CreditCard, Loader2, QrCode, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { formatPriceInBRL } from "@app-treino/shared";
+import { formatCpf, formatPriceInBRL, isValidCpf } from "@app-treino/shared";
 import { apiGet, apiPost } from "../../api";
 import type { CheckoutSessionResponse, NativeCheckoutPayload, PaymentRow } from "../../types/shared";
 import { brand } from "../../lib/brand";
+import {
+  defaultAnnualInstallmentCount,
+  formatCardInstallmentLabel,
+  listAnnualInstallmentCounts
+} from "../../lib/plan-catalog";
 import { CardBrandsImage, TrustBadgesImage } from "./PaymentMethodArt";
 
 export type NativeBillingType = "PIX" | "CREDIT_CARD";
+
+export type NativeCheckoutPrepareInput = {
+  cpfCnpj?: string;
+};
 
 type NativeCheckoutPaymentProps = {
   token: string;
   planName: string;
   amountInCents: number;
+  billingCycle?: "MONTHLY" | "YEARLY";
   payment: PaymentRow | null;
   nativeCheckout: NativeCheckoutPayload | null;
   billingType: NativeBillingType | null;
@@ -21,10 +31,11 @@ type NativeCheckoutPaymentProps = {
   defaultEmail?: string | null;
   defaultPhone?: string | null;
   defaultName?: string | null;
+  defaultDocument?: string | null;
   onSessionResponse: (response: CheckoutSessionResponse) => void;
   onPaymentConfirmed: () => void;
   onError: (message: string) => void;
-  onPrepareCheckout?: () => void;
+  onPrepareCheckout?: (input?: NativeCheckoutPrepareInput) => void;
   prepareDisabled?: boolean;
 };
 
@@ -52,14 +63,6 @@ function formatCardNumber(value: string) {
     .trim();
 }
 
-function formatCpf(value: string) {
-  const digits = onlyDigits(value).slice(0, 11);
-  return digits
-    .replace(/(\d{3})(\d)/, "$1.$2")
-    .replace(/(\d{3})(\d)/, "$1.$2")
-    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-}
-
 function formatPhone(value: string) {
   const digits = onlyDigits(value).slice(0, 11);
   if (digits.length <= 10) {
@@ -77,6 +80,7 @@ export function NativeCheckoutPayment({
   token,
   planName,
   amountInCents,
+  billingCycle = "MONTHLY",
   payment,
   nativeCheckout,
   billingType,
@@ -86,6 +90,7 @@ export function NativeCheckoutPayment({
   defaultEmail,
   defaultPhone,
   defaultName,
+  defaultDocument,
   onSessionResponse,
   onPaymentConfirmed,
   onError,
@@ -94,6 +99,17 @@ export function NativeCheckoutPayment({
 }: NativeCheckoutPaymentProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const [cardSubmitting, setCardSubmitting] = useState(false);
+  const isAnnualPlan = billingCycle === "YEARLY";
+  const installmentOptions = useMemo(
+    () => (isAnnualPlan ? listAnnualInstallmentCounts(amountInCents) : [1]),
+    [amountInCents, isAnnualPlan]
+  );
+  const [installmentCount, setInstallmentCount] = useState(() =>
+    isAnnualPlan ? defaultAnnualInstallmentCount(amountInCents) : 1
+  );
+  const storedDocument = useMemo(() => onlyDigits(defaultDocument ?? ""), [defaultDocument]);
+  const hasStoredDocument = isValidCpf(storedDocument);
+  const [pixCpf, setPixCpf] = useState(() => (hasStoredDocument ? formatCpf(storedDocument) : ""));
   const [cardForm, setCardForm] = useState<CardFormState>({
     holderName: defaultName ?? "",
     number: "",
@@ -101,7 +117,7 @@ export function NativeCheckoutPayment({
     expiryYear: "",
     ccv: "",
     holderEmail: defaultEmail ?? "",
-    holderCpfCnpj: "",
+    holderCpfCnpj: hasStoredDocument ? formatCpf(storedDocument) : "",
     holderPostalCode: "",
     holderAddressNumber: "",
     holderPhone: defaultPhone ?? ""
@@ -109,6 +125,16 @@ export function NativeCheckoutPayment({
 
   const pixPayload = nativeCheckout?.billingType === "PIX" ? nativeCheckout.pix : null;
   const waitingPix = Boolean(payment?.id && pixPayload && payment.status === "PENDING");
+
+  useEffect(() => {
+    if (!isAnnualPlan) {
+      setInstallmentCount(1);
+      return;
+    }
+    setInstallmentCount((current) =>
+      installmentOptions.includes(current) ? current : defaultAnnualInstallmentCount(amountInCents)
+    );
+  }, [amountInCents, installmentOptions, isAnnualPlan]);
 
   useEffect(() => {
     if (!payment?.id || !waitingPix) return;
@@ -139,6 +165,14 @@ export function NativeCheckoutPayment({
     () => `${planName} · ${formatPriceInBRL(amountInCents)}`,
     [amountInCents, planName]
   );
+
+  const cardPayLabel = useMemo(() => {
+    if (!isAnnualPlan || installmentCount === 1) {
+      return `Pagar ${formatPriceInBRL(amountInCents)} com cartão de crédito`;
+    }
+    const installmentValueCents = Math.ceil(amountInCents / installmentCount);
+    return `Pagar ${installmentCount}× de ${formatPriceInBRL(installmentValueCents)}`;
+  }, [amountInCents, installmentCount, isAnnualPlan]);
 
   async function handleCopyPix() {
     if (!pixPayload?.copyPaste) return;
@@ -172,7 +206,8 @@ export function NativeCheckoutPayment({
           holderCpfCnpj: onlyDigits(cardForm.holderCpfCnpj),
           holderPostalCode: onlyDigits(cardForm.holderPostalCode),
           holderAddressNumber: cardForm.holderAddressNumber.trim(),
-          holderPhone: onlyDigits(cardForm.holderPhone)
+          holderPhone: onlyDigits(cardForm.holderPhone),
+          installmentCount: isAnnualPlan ? installmentCount : 1
         },
         token
       );
@@ -194,6 +229,24 @@ export function NativeCheckoutPayment({
 
   const cardReady = Boolean(payment?.id);
   const prepareCheckoutDisabled = loading || prepareDisabled || !onPrepareCheckout;
+  const pixCpfDigits = onlyDigits(pixCpf);
+  const pixCpfReady = hasStoredDocument || isValidCpf(pixCpfDigits);
+  const pixPrepareDisabled = prepareCheckoutDisabled || !pixCpfReady;
+
+  function handlePreparePixCheckout() {
+    if (!onPrepareCheckout) return;
+    if (!pixCpfReady) {
+      onError("Informe um CPF válido para gerar o Pix.");
+      return;
+    }
+    onPrepareCheckout({
+      cpfCnpj: hasStoredDocument ? storedDocument : pixCpfDigits
+    });
+  }
+
+  function handlePrepareCardCheckout() {
+    onPrepareCheckout?.();
+  }
 
   return (
     <div className="native-checkout">
@@ -230,8 +283,8 @@ export function NativeCheckoutPayment({
             <CreditCard size={26} strokeWidth={1.75} />
           </span>
           <span className="native-checkout__method-copy">
-            <strong>Cartão</strong>
-            <small>Crédito à vista</small>
+            <strong>Cartão de crédito</strong>
+            <small>Visa, Master, Elo</small>
           </span>
         </button>
       </div>
@@ -240,7 +293,7 @@ export function NativeCheckoutPayment({
 
       {!billingType ? (
         <div className="native-checkout__panel native-checkout__panel--idle">
-          <p className="native-checkout__idle-copy">Escolha Pix ou cartão para continuar o pagamento.</p>
+          <p className="native-checkout__idle-copy">Escolha Pix ou cartão de crédito para continuar o pagamento.</p>
         </div>
       ) : billingType === "PIX" ? (
         <div className="native-checkout__panel native-checkout__panel--pix">
@@ -248,11 +301,28 @@ export function NativeCheckoutPayment({
             <div className="native-checkout__empty">
               <strong>Pague com Pix</strong>
               <p>Gere o QR Code e conclua no app do seu banco.</p>
+              {!hasStoredDocument ? (
+                <label className="native-checkout__field native-checkout__full">
+                  <span className="native-checkout__label">CPF do titular</span>
+                  <input
+                    className="native-checkout__input"
+                    value={pixCpf}
+                    onChange={(event) => setPixCpf(formatCpf(event.target.value))}
+                    placeholder="000.000.000-00"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    required
+                  />
+                  <span className="native-checkout__hint">Obrigatório para emissão da cobrança Pix.</span>
+                </label>
+              ) : (
+                <p className="native-checkout__hint">CPF cadastrado: {formatCpf(storedDocument)}</p>
+              )}
               <button
                 type="button"
                 className="ui-btn-primary activate-funnel-cta native-checkout__empty-cta native-checkout__cta native-checkout__cta--pix"
-                onClick={onPrepareCheckout}
-                disabled={prepareCheckoutDisabled}
+                onClick={handlePreparePixCheckout}
+                disabled={pixPrepareDisabled}
               >
                 {loading ? <Loader2 className="spin" size={18} /> : null}
                 Gerar QR Code Pix
@@ -296,16 +366,21 @@ export function NativeCheckoutPayment({
       ) : !cardReady ? (
         <div className="native-checkout__panel native-checkout__panel--card">
           <div className="native-checkout__empty">
-            <strong>Pague com cartão</strong>
+            <strong>Pague com cartão de crédito</strong>
             <p>Na próxima etapa, preencha os dados do cartão com segurança.</p>
+            {isAnnualPlan ? (
+              <p className="native-checkout__hint">Plano anual: parcelamento em até 12× no cartão de crédito.</p>
+            ) : (
+              <p className="native-checkout__hint">Débito não está disponível nesta tela. Use Pix para pagamento imediato.</p>
+            )}
             <button
               type="button"
               className="ui-btn-primary activate-funnel-cta native-checkout__empty-cta native-checkout__cta native-checkout__cta--card"
-              onClick={onPrepareCheckout}
+              onClick={handlePrepareCardCheckout}
               disabled={prepareCheckoutDisabled}
             >
               {loading ? <Loader2 className="spin" size={18} /> : <CreditCard size={18} />}
-              Continuar com cartão
+              Continuar com cartão de crédito
             </button>
           </div>
         </div>
@@ -313,10 +388,36 @@ export function NativeCheckoutPayment({
         <form className="native-checkout__panel native-checkout__card-form" onSubmit={(event) => void handleSubmitCard(event)}>
           <div className="native-checkout__form-head">
             <div>
-              <strong>Dados do cartão</strong>
+              <strong>Cartão de crédito</strong>
               <p>Preencha as informações do titular para concluir.</p>
             </div>
           </div>
+          <p className="native-checkout__hint native-checkout__full">
+            {isAnnualPlan
+              ? "Escolha à vista ou parcele em até 12× no cartão de crédito. Débito não está disponível nesta tela."
+              : "Pagamento à vista no cartão de crédito. Débito não está disponível nesta tela."}
+          </p>
+
+          {isAnnualPlan ? (
+            <div className="native-checkout__section">
+              <span className="native-checkout__section-title">Parcelamento</span>
+              <label className="native-checkout__field native-checkout__full">
+                <span className="native-checkout__label">Como deseja pagar?</span>
+                <select
+                  className="native-checkout__input native-checkout__select"
+                  value={installmentCount}
+                  onChange={(event) => setInstallmentCount(Number(event.target.value))}
+                >
+                  {installmentOptions.map((count) => (
+                    <option key={count} value={count}>
+                      {formatCardInstallmentLabel(count, amountInCents)}
+                    </option>
+                  ))}
+                </select>
+                <span className="native-checkout__hint">Cobrança única do plano anual, parcelada na fatura do cartão.</span>
+              </label>
+            </div>
+          ) : null}
 
           <div className="native-checkout__brands-panel">
             <span className="native-checkout__section-title">Bandeiras aceitas</span>
@@ -451,7 +552,7 @@ export function NativeCheckoutPayment({
 
           <button type="submit" className="ui-btn-primary activate-funnel-cta native-checkout__submit" disabled={loading || cardSubmitting}>
             {cardSubmitting || loading ? <Loader2 className="spin" size={18} /> : <ShieldCheck size={18} />}
-            Pagar {formatPriceInBRL(amountInCents)} com cartão
+            {cardPayLabel}
           </button>
         </form>
       )}

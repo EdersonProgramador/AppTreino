@@ -306,6 +306,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const name = String(formData.get("name") ?? "").trim();
       const email = String(formData.get("email") ?? "").trim().toLowerCase();
       const phone = String(formData.get("phone") ?? "").trim();
+      const document = String(formData.get("document") ?? "").trim();
       const gender = String(formData.get("gender") ?? "").trim();
       const birthDate = String(formData.get("birthDate") ?? "").trim();
       const objective = String(formData.get("objective") ?? "").trim();
@@ -364,6 +365,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   name,
                   email: email || undefined,
                   phone: phone || undefined,
+                  document,
                   gender: gender || undefined,
                   birthDate: birthDate || undefined,
                   objective: objective || undefined,
@@ -381,6 +383,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   name,
                   email: email || undefined,
                   phone: phone || undefined,
+                  document,
                   gender: gender || undefined,
                   birthDate: birthDate || undefined,
                   objective: objective || undefined,
@@ -437,6 +440,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       formData.set("name", payload.name);
       formData.set("email", payload.email ?? "");
       formData.set("phone", payload.phone ?? "");
+      formData.set("document", payload.document ?? "");
       formData.set("password", payload.password ?? "");
       formData.set("gender", payload.gender);
       formData.set("birthDate", payload.birthDate);

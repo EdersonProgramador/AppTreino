@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { PaymentStatus, Prisma, Payment } from "@prisma/client";
+import { isValidCpf, normalizeCpfDigits } from "@app-treino/shared";
 import { z } from "zod";
 import { hashPassword, isAdminStudentPreview, requireAuth, toAuthUser } from "../auth.js";
 import { env } from "../env.js";
@@ -7,6 +8,7 @@ import { prisma } from "../prisma.js";
 import {
   buildNativeCheckoutResponse,
   payNativeSubscriptionWithCard,
+  persistUserCheckoutDocument,
   prepareNativeSubscriptionCheckout
 } from "./checkout.native.js";
 import {
@@ -16,6 +18,7 @@ import {
   normalizeCheckoutCouponInput,
   pendingCheckoutPricingMatches,
   resolveCheckoutSessionPricing,
+  resolveCheckoutCardInstallment,
   resolveSubscriptionCheckoutPricing
 } from "./checkout.utils.js";
 
@@ -26,6 +29,11 @@ const checkoutRegisterSchema = z
     name: z.string().trim().min(2, "Informe seu nome."),
     email: z.string().trim().email("Informe um e-mail valido.").optional().or(z.literal("")),
     phone: z.string().trim().min(8, "Informe um telefone valido.").optional().or(z.literal("")),
+    document: z
+      .string()
+      .trim()
+      .min(11, "Informe um CPF valido.")
+      .refine((value) => isValidCpf(value), "Informe um CPF valido."),
     password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
     gender: z.enum(["MALE", "FEMALE"], {
       required_error: "Selecione o sexo para continuar."
@@ -57,7 +65,13 @@ const checkoutRegisterSchema = z
 const checkoutSessionSchema = z.object({
   planCode: planCodeSchema,
   billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED"),
-  couponCode: z.string().trim().max(40).optional().nullable()
+  couponCode: z.string().trim().max(40).optional().nullable(),
+  cpfCnpj: z
+    .string()
+    .trim()
+    .optional()
+    .nullable()
+    .refine((value) => !value || isValidCpf(value), "Informe um CPF valido.")
 });
 
 const checkoutSandboxConfirmationSchema = z.object({
@@ -71,10 +85,15 @@ const checkoutCardPaymentSchema = z.object({
   expiryYear: z.string().trim().min(2).max(4),
   ccv: z.string().trim().min(3).max(4),
   holderEmail: z.string().trim().email("Informe um e-mail válido."),
-  holderCpfCnpj: z.string().trim().min(11, "Informe o CPF do titular."),
+  holderCpfCnpj: z
+    .string()
+    .trim()
+    .min(11, "Informe o CPF do titular.")
+    .refine((value) => isValidCpf(value), "Informe um CPF valido."),
   holderPostalCode: z.string().trim().min(8, "Informe o CEP."),
   holderAddressNumber: z.string().trim().min(1, "Informe o número do endereço."),
-  holderPhone: z.string().trim().min(8, "Informe o telefone do titular.")
+  holderPhone: z.string().trim().min(8, "Informe o telefone do titular."),
+  installmentCount: z.coerce.number().int().min(1).max(12).optional()
 });
 
 function requireDatabase() {
@@ -195,6 +214,7 @@ async function finalizeNativeSubscriptionCheckout(input: {
   userId: string;
   planName: string;
   billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED";
+  cpfCnpj?: string | null;
 }) {
   const user = await loadCheckoutUser(input.userId);
   const native = await prepareNativeSubscriptionCheckout({
@@ -202,7 +222,8 @@ async function finalizeNativeSubscriptionCheckout(input: {
     membership: input.membership as never,
     user,
     planName: input.planName,
-    billingType: input.billingType
+    billingType: input.billingType,
+    cpfCnpj: input.cpfCnpj
   });
 
   return buildNativeCheckoutResponse({
@@ -212,6 +233,33 @@ async function finalizeNativeSubscriptionCheckout(input: {
     nativeCheckout: native.nativeCheckout,
     paymentProviderError: native.providerError
   });
+}
+
+async function resolveSessionCheckoutCpf(
+  userId: string,
+  billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED",
+  cpfCnpj?: string | null
+): Promise<{ cpfCnpj?: string | null; error?: string }> {
+  if (billingType !== "PIX") {
+    return { cpfCnpj: null };
+  }
+
+  const normalizedInput = normalizeCpfDigits(cpfCnpj ?? "");
+  if (normalizedInput) {
+    const persisted = await persistUserCheckoutDocument(userId, normalizedInput);
+    if (!persisted.ok) {
+      return { error: persisted.error };
+    }
+    return { cpfCnpj: persisted.cpfCnpj };
+  }
+
+  const user = await loadCheckoutUser(userId);
+  const profileCpf = normalizeCpfDigits(user.profile?.document ?? "");
+  if (!isValidCpf(profileCpf)) {
+    return { error: "Informe um CPF valido para gerar o Pix." };
+  }
+
+  return { cpfCnpj: profileCpf };
 }
 
 export async function registerCheckoutRoutes(app: FastifyInstance) {
@@ -225,6 +273,11 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       });
     }
     const body = checkoutSessionSchema.parse(request.body);
+    const cpfResolution = await resolveSessionCheckoutCpf(authUser.id, body.billingType, body.cpfCnpj);
+    if (cpfResolution.error) {
+      return reply.code(400).send({ message: cpfResolution.error });
+    }
+    const sessionCpfCnpj = cpfResolution.cpfCnpj ?? null;
     const planSeed = await resolveCheckoutPlan(body.planCode);
     const requestedCouponCode = normalizeCheckoutCouponInput(body.couponCode);
 
@@ -312,7 +365,8 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
         payment,
         userId: authUser.id,
         planName: membership.plan?.name ?? planSeed.name,
-        billingType: body.billingType
+        billingType: body.billingType,
+        cpfCnpj: sessionCpfCnpj
       });
 
       return reply.send(nativeResult);
@@ -359,7 +413,8 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       payment,
       userId: authUser.id,
       planName: planSeed.name,
-      billingType: body.billingType
+      billingType: body.billingType,
+      cpfCnpj: sessionCpfCnpj
     });
 
     return reply.code(201).send(nativeResult);
@@ -444,6 +499,15 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     }
 
     const user = await loadCheckoutUser(authUser.id);
+    const installmentResolution = resolveCheckoutCardInstallment({
+      billingCycle: payment.membership.plan?.billingCycle,
+      installmentCount: body.installmentCount,
+      amountInCents: payment.amountInCents
+    });
+    if (!installmentResolution.ok) {
+      return reply.code(400).send({ message: installmentResolution.error });
+    }
+
     const cardResult = await payNativeSubscriptionWithCard({
       payment,
       membership: payment.membership,
@@ -464,7 +528,8 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
         addressNumber: body.holderAddressNumber,
         phone: body.holderPhone
       },
-      remoteIp: request.ip
+      remoteIp: request.ip,
+      installmentCount: installmentResolution.installmentCount
     });
 
     if (cardResult.payment.status === "CONFIRMED" && cardResult.payment.couponId) {
@@ -622,6 +687,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
             profile: {
               create: {
                 phone,
+                document: normalizeCpfDigits(body.document),
                 gender: body.gender,
                 birthDate: birthDate && !Number.isNaN(birthDate.getTime()) ? birthDate : null,
                 objective: body.objective ?? null,

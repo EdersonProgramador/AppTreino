@@ -1,3 +1,4 @@
+import { formatCpf } from "@app-treino/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { useEffect, useMemo } from "react";
@@ -6,6 +7,7 @@ import { useForm } from "react-hook-form";
 import {
   EQUIPMENT_OPTIONS,
   ONBOARDING_STEP_FIELDS,
+  REGISTER_ONBOARDING_STEP_FIELDS,
   TRAINING_GOALS,
   TRAINING_LEVELS,
   birthDateFromYear,
@@ -61,6 +63,7 @@ export function WorkoutOnboarding({
       name: "",
       email: "",
       phone: "",
+      document: "",
       password: "",
       gender: undefined as unknown as OnboardingFormValues["gender"],
       birthYear: "",
@@ -105,7 +108,8 @@ export function WorkoutOnboarding({
   }, [watch, patchDraft]);
 
   async function handleNext() {
-    const fields = ONBOARDING_STEP_FIELDS[step as 1 | 2 | 3];
+    const stepFields = requirePassword ? REGISTER_ONBOARDING_STEP_FIELDS : ONBOARDING_STEP_FIELDS;
+    const fields = stepFields[step as 1 | 2 | 3 | 4];
     const isValid = await trigger(fields);
     if (isValid) {
       setStep(step + 1);
@@ -190,6 +194,23 @@ export function WorkoutOnboarding({
               />
               {errors.phone && <span className="text-xs font-bold text-[#ff8f7a]">{errors.phone.message}</span>}
             </label>
+            {requirePassword ? (
+              <label className="ui-label">
+                CPF
+                <input
+                  {...register("document")}
+                  className="ui-input"
+                  inputMode="numeric"
+                  placeholder="000.000.000-00"
+                  autoComplete="off"
+                  onChange={(event) => {
+                    event.target.value = formatCpf(event.target.value);
+                    void register("document").onChange(event);
+                  }}
+                />
+                {errors.document && <span className="text-xs font-bold text-[#ff8f7a]">{errors.document.message}</span>}
+              </label>
+            ) : null}
             {requirePassword && (
               <label className="ui-label">
                 Senha

@@ -7,7 +7,8 @@ import {
   evaluateSandboxConfirmGate,
   getAsaasCheckoutAmountError,
   ASAAS_MIN_CHECKOUT_CENTS,
-  paymentMatchesSubscriptionPricing
+  paymentMatchesSubscriptionPricing,
+  resolveCheckoutCardInstallment
 } from "./checkout.utils.js";
 import {
   formatAsaasDate,
@@ -262,6 +263,38 @@ describe("marca nos itens Asaas", () => {
   it("usa ATLLY nos textos de checkout", () => {
     assert.equal(asaasCheckoutItemName("Mensal"), "ATLLY · Mensal");
     assert.equal(asaasCheckoutItemDescription("Start"), "Assinatura ATLLY · Start");
+  });
+});
+
+describe("parcelamento no cartão", () => {
+  it("permite à vista em qualquer plano", () => {
+    assert.deepEqual(
+      resolveCheckoutCardInstallment({
+        billingCycle: "MONTHLY",
+        installmentCount: 1,
+        amountInCents: 4990
+      }),
+      { ok: true, installmentCount: 1 }
+    );
+  });
+
+  it("bloqueia parcelamento em plano mensal", () => {
+    const result = resolveCheckoutCardInstallment({
+      billingCycle: "MONTHLY",
+      installmentCount: 12,
+      amountInCents: 4990
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.match(result.error, /plano anual/i);
+  });
+
+  it("permite até 12x no plano anual", () => {
+    const result = resolveCheckoutCardInstallment({
+      billingCycle: "YEARLY",
+      installmentCount: 12,
+      amountInCents: 104700
+    });
+    assert.deepEqual(result, { ok: true, installmentCount: 12 });
   });
 });
 

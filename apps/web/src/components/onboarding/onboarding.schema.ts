@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidCpf } from "@app-treino/shared";
 
 export const TRAINING_GOALS = [
   { id: "hypertrophy", label: "Ganhar massa muscular (hipertrofia)" },
@@ -28,6 +29,7 @@ export const onboardingSchema = z
     name: z.string().trim().min(2, "Informe seu nome"),
     email: z.string().trim().email("E-mail inválido").optional().or(z.literal("")),
     phone: z.string().trim().min(8, "Telefone inválido").optional().or(z.literal("")),
+    document: z.string().trim().optional().or(z.literal("")),
     password: z.string().min(6, "Mínimo de 6 caracteres").optional().or(z.literal("")),
     gender: z.enum(["MALE", "FEMALE"], {
       required_error: "Selecione o sexo",
@@ -67,6 +69,13 @@ export const onboardingSchema = z
   });
 
 export const registerOnboardingSchema = onboardingSchema.superRefine((data, ctx) => {
+  if (!data.document || !isValidCpf(data.document)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Informe um CPF válido",
+      path: ["document"]
+    });
+  }
   if (!data.password || data.password.length < 6) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -94,6 +103,13 @@ export type OnboardingFormValues = z.infer<typeof onboardingSchema>;
 
 export const ONBOARDING_STEP_FIELDS: Record<1 | 2 | 3 | 4, Array<keyof OnboardingFormValues>> = {
   1: ["name", "email", "phone", "password"],
+  2: ["gender", "birthYear", "goal", "daysPerWeek"],
+  3: ["level", "equipment"],
+  4: ["acceptTerms", "acceptPrivacy"]
+};
+
+export const REGISTER_ONBOARDING_STEP_FIELDS: Record<1 | 2 | 3 | 4, Array<keyof OnboardingFormValues>> = {
+  1: ["name", "email", "phone", "document", "password"],
   2: ["gender", "birthYear", "goal", "daysPerWeek"],
   3: ["level", "equipment"],
   4: ["acceptTerms", "acceptPrivacy"]

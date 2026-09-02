@@ -1,4 +1,5 @@
 import type { Membership, Payment, Plan, Profile } from "@prisma/client";
+import { isValidCpf, normalizeCpfDigits } from "@app-treino/shared";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import {
@@ -10,6 +11,7 @@ import {
   tryFetchAsaasPixQrCode,
   tryPayAsaasCreditCard,
   tryPrepareAsaasPixPayment,
+  updateAsaasCustomer,
   type AsaasCreditCardHolderInput,
   type AsaasCreditCardInput
 } from "./asaas.client.js";
@@ -45,12 +47,77 @@ function onlyDigits(value: string) {
   return value.replace(/\D/g, "");
 }
 
-export async function ensureAsaasCustomerForUser(user: CheckoutUser) {
-  if (user.asaasCustomerId) return user.asaasCustomerId;
+export type PersistCheckoutDocumentResult =
+  | { ok: true; cpfCnpj: string }
+  | { ok: false; error: string };
+
+export async function persistUserCheckoutDocument(
+  userId: string,
+  rawDocument: string
+): Promise<PersistCheckoutDocumentResult> {
+  const cpfCnpj = normalizeCpfDigits(rawDocument);
+  if (!isValidCpf(cpfCnpj)) {
+    return { ok: false, error: "Informe um CPF válido." };
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      profile: {
+        upsert: {
+          create: { document: cpfCnpj },
+          update: { document: cpfCnpj }
+        }
+      }
+    }
+  });
+
+  return { ok: true, cpfCnpj };
+}
+
+function resolveCheckoutCpf(user: CheckoutUser, cpfOverride?: string | null) {
+  const override = normalizeCpfDigits(cpfOverride ?? "");
+  if (override) return override;
+  return normalizeCpfDigits(user.profile?.document ?? "");
+}
+
+export async function ensureAsaasCustomerForUser(user: CheckoutUser, cpfOverride?: string | null) {
   if (!env.ASAAS_API_KEY) return null;
+
+  const cpfCnpj = resolveCheckoutCpf(user, cpfOverride);
+  const phone = user.profile?.phone ?? user.phone ?? null;
+
+  if (user.asaasCustomerId) {
+    if (cpfCnpj) {
+      try {
+        await updateAsaasCustomer(user.asaasCustomerId, {
+          name: user.name,
+          email: user.email,
+          phone,
+          cpfCnpj
+        });
+      } catch (error) {
+        console.error("[Asaas Customer] Erro ao atualizar CPF:", error);
+      }
+    }
+    return user.asaasCustomerId;
+  }
 
   const existing = await findAsaasCustomerByExternalReference(user.id);
   if (existing?.id) {
+    if (cpfCnpj) {
+      try {
+        await updateAsaasCustomer(existing.id, {
+          name: user.name,
+          email: user.email,
+          phone,
+          cpfCnpj
+        });
+      } catch (error) {
+        console.error("[Asaas Customer] Erro ao atualizar CPF:", error);
+      }
+    }
+
     await prisma.user.update({
       where: { id: user.id },
       data: { asaasCustomerId: existing.id }
@@ -61,8 +128,8 @@ export async function ensureAsaasCustomerForUser(user: CheckoutUser) {
   const created = await createAsaasCustomer({
     name: user.name,
     email: user.email,
-    phone: user.profile?.phone ?? user.phone,
-    cpfCnpj: user.profile?.document,
+    phone,
+    cpfCnpj: cpfCnpj || undefined,
     externalReference: user.id
   });
 
@@ -106,6 +173,7 @@ export async function prepareNativeSubscriptionCheckout(input: {
   user: CheckoutUser;
   planName: string;
   billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED";
+  cpfCnpj?: string | null;
 }) {
   const resolvedBillingType = resolveNativeCheckoutBillingType(input.billingType);
 
@@ -119,7 +187,16 @@ export async function prepareNativeSubscriptionCheckout(input: {
     };
   }
 
-  const customerId = await ensureAsaasCustomerForUser(input.user);
+  const cpfCnpj = resolveCheckoutCpf(input.user, input.cpfCnpj);
+  if (!isValidCpf(cpfCnpj)) {
+    return {
+      payment: input.payment,
+      nativeCheckout: null,
+      providerError: "Informe um CPF válido para gerar o Pix."
+    };
+  }
+
+  const customerId = await ensureAsaasCustomerForUser(input.user, cpfCnpj);
   if (!customerId) {
     return {
       payment: input.payment,
@@ -196,8 +273,25 @@ export async function payNativeSubscriptionWithCard(input: {
   creditCard: AsaasCreditCardInput;
   creditCardHolderInfo: AsaasCreditCardHolderInput;
   remoteIp: string;
+  installmentCount?: number;
 }) {
-  const customerId = await ensureAsaasCustomerForUser(input.user);
+  const documentResult = await persistUserCheckoutDocument(
+    input.user.id,
+    input.creditCardHolderInfo.cpfCnpj
+  );
+  if (!documentResult.ok) {
+    return {
+      payment: input.payment,
+      providerError: documentResult.error
+    };
+  }
+
+  const refreshedUser = await prisma.user.findUniqueOrThrow({
+    where: { id: input.user.id },
+    include: { profile: true }
+  });
+
+  const customerId = await ensureAsaasCustomerForUser(refreshedUser, documentResult.cpfCnpj);
   if (!customerId) {
     return {
       payment: input.payment,
@@ -223,7 +317,8 @@ export async function payNativeSubscriptionWithCard(input: {
       postalCode: onlyDigits(input.creditCardHolderInfo.postalCode),
       phone: onlyDigits(input.creditCardHolderInfo.phone)
     },
-    remoteIp: input.remoteIp
+    remoteIp: input.remoteIp,
+    installmentCount: input.installmentCount
   });
 
   if (!asaasPayment) {

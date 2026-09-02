@@ -20,6 +20,34 @@ export type CatalogPlan = {
 };
 
 export const ASAAS_MIN_CHECKOUT_CENTS = 500;
+export const MAX_ANNUAL_CARD_INSTALLMENTS = 12;
+
+export function listAnnualInstallmentCounts(amountInCents: number, max = MAX_ANNUAL_CARD_INSTALLMENTS) {
+  const counts = [1];
+  for (let installmentCount = 2; installmentCount <= max; installmentCount += 1) {
+    const installmentValueCents = Math.ceil(amountInCents / installmentCount);
+    if (installmentValueCents >= ASAAS_MIN_CHECKOUT_CENTS) {
+      counts.push(installmentCount);
+    }
+  }
+  return counts;
+}
+
+export function formatCardInstallmentLabel(installmentCount: number, amountInCents: number) {
+  if (installmentCount === 1) {
+    return `À vista — ${formatPriceInBRL(amountInCents)}`;
+  }
+
+  const installmentValueCents = Math.ceil(amountInCents / installmentCount);
+  return `${installmentCount}× de ${formatPriceInBRL(installmentValueCents)} (total ${formatPriceInBRL(amountInCents)})`;
+}
+
+export function defaultAnnualInstallmentCount(amountInCents: number) {
+  const available = listAnnualInstallmentCounts(amountInCents);
+  return available.includes(MAX_ANNUAL_CARD_INSTALLMENTS)
+    ? MAX_ANNUAL_CARD_INSTALLMENTS
+    : available[available.length - 1] ?? 1;
+}
 
 export function isCheckoutEligiblePlan(plan: CatalogPlan): boolean {
   return getEffectivePriceCents(plan) >= ASAAS_MIN_CHECKOUT_CENTS;

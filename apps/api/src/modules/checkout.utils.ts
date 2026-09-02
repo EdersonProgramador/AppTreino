@@ -55,6 +55,36 @@ export function resolveNativeCheckoutBillingType(
 
 /** Asaas Checkout exige valor líquido mínimo de R$ 5,00 em produção. */
 export const ASAAS_MIN_CHECKOUT_CENTS = 500;
+export const MAX_ANNUAL_CARD_INSTALLMENTS = 12;
+
+export function resolveCheckoutCardInstallment(input: {
+  billingCycle?: string | null;
+  installmentCount?: number | null;
+  amountInCents: number;
+}):
+  | { ok: true; installmentCount: number }
+  | { ok: false; error: string } {
+  const installmentCount = input.installmentCount ?? 1;
+
+  if (installmentCount === 1) {
+    return { ok: true, installmentCount: 1 };
+  }
+
+  if (input.billingCycle !== "YEARLY") {
+    return { ok: false, error: "Parcelamento disponível apenas no plano anual." };
+  }
+
+  if (installmentCount < 2 || installmentCount > MAX_ANNUAL_CARD_INSTALLMENTS) {
+    return { ok: false, error: `Escolha de 2 a ${MAX_ANNUAL_CARD_INSTALLMENTS} parcelas.` };
+  }
+
+  const installmentValueCents = Math.ceil(input.amountInCents / installmentCount);
+  if (installmentValueCents < ASAAS_MIN_CHECKOUT_CENTS) {
+    return { ok: false, error: "Valor mínimo por parcela não atingido." };
+  }
+
+  return { ok: true, installmentCount };
+}
 
 export function getAsaasCheckoutAmountError(amountInCents: number): string | null {
   if (amountInCents >= ASAAS_MIN_CHECKOUT_CENTS) return null;
