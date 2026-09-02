@@ -89,6 +89,7 @@ import type {
   AiWorkoutPlanRow,
   AssessmentPhotoKey,
   CheckoutSessionResponse,
+  NativeCheckoutPayload,
   EventRow,
   NotificationRow,
   PaymentCardRow,
@@ -245,6 +246,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [studentPaymentCards, setStudentPaymentCards] = useState<PaymentCardRow[]>([]);
   const [showAddCardForm, setShowAddCardForm] = useState(false);
   const [checkoutPayment, setCheckoutPayment] = useState<PaymentRow | null>(null);
+  const [nativeCheckout, setNativeCheckout] = useState<NativeCheckoutPayload | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState<PlanCode | "sandbox" | null>(null);
   const [streakCalendarOpen, setStreakCalendarOpen] = useState(false);
   const [streakCalendarMonth, setStreakCalendarMonth] = useState(() => new Date().getMonth() + 1);
@@ -263,7 +265,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED";
   }>({
     planCode: (initialCheckoutIntent?.planCode as PlanCode | undefined) ?? "monthly",
-    billingType: "UNDEFINED"
+    billingType: "PIX"
   });
   const catalogCoupon = useMemo(() => {
     if (!appliedCoupon) return null;
@@ -1123,31 +1125,16 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     }
   }
 
-  function shouldOpenSubscriptionCheckout(
-    planCode: PlanCode,
-    response: CheckoutSessionResponse
-  ): { ok: true } | { ok: false; message: string } {
-    if (!response.payment?.paymentUrl) return { ok: false, message: "Checkout indisponível." };
-
-    const responsePlanCode = response.membership?.plan?.code;
-    const selectedPlan = catalogPlans.find((plan) => plan.code === planCode);
-    const expectedAmount = selectedPlan ? getEffectivePriceCents(selectedPlan) : null;
-
-    if (responsePlanCode && responsePlanCode !== planCode) {
-      return {
-        ok: false,
-        message: `O checkout abriu o plano ${response.membership?.plan?.name ?? responsePlanCode}. Selecione o plano desejado e clique em Ativar agora novamente.`
-      };
+  function applyCheckoutSessionResponse(response: CheckoutSessionResponse) {
+    setMembership(response.membership);
+    setCheckoutPayment(response.payment);
+    setNativeCheckout(response.nativeCheckout ?? null);
+    if (response.payment) {
+      setPayments((current) => {
+        const others = current.filter((item) => item.id !== response.payment?.id);
+        return [response.payment, ...others].filter(Boolean) as PaymentRow[];
+      });
     }
-
-    if (expectedAmount != null && response.payment.amountInCents !== expectedAmount) {
-      return {
-        ok: false,
-        message: `O checkout foi gerado em ${formatPriceInBRL(response.payment.amountInCents)}, mas o plano selecionado está em ${formatPriceInBRL(expectedAmount)}. Clique em Ativar agora novamente.`
-      };
-    }
-
-    return { ok: true };
   }
 
   async function submitSubscriptionCheckout() {
@@ -1174,14 +1161,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         token
       );
 
-      setMembership(response.membership);
-      setCheckoutPayment(response.payment);
-      if (response.payment) {
-        setPayments((current) => {
-          const others = current.filter((item) => item.id !== response.payment?.id);
-          return [response.payment, ...others].filter(Boolean) as PaymentRow[];
-        });
-      }
+      applyCheckoutSessionResponse(response);
 
       if (response.alreadyActive) {
         uiSounds.paymentApproved();
@@ -1190,19 +1170,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         return;
       }
 
-      if (response.paymentProviderError && !response.payment?.paymentUrl) {
+      if (response.paymentProviderError && !response.nativeCheckout?.pix && billingType !== "CREDIT_CARD") {
         setError(response.paymentProviderError);
-        return;
-      }
-
-      if (response.payment?.paymentUrl) {
-        const checkoutGate = shouldOpenSubscriptionCheckout(planCode, response);
-        if (!checkoutGate.ok) {
-          setError(checkoutGate.message);
-          return;
-        }
-
-        openAsaasCheckout(response.payment.paymentUrl);
       }
     } catch (checkoutError) {
       const message = checkoutError instanceof ApiError ? checkoutError.message : null;
@@ -1210,6 +1179,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     } finally {
       setCheckoutLoading(null);
     }
+  }
+
+  async function handleNativePaymentConfirmed() {
+    uiSounds.paymentApproved();
+    clearCheckoutIntent();
+    setNativeCheckout(null);
+    await loadUserData();
   }
 
   async function handleCreateCheckout(event: FormEvent<HTMLFormElement>) {
@@ -1243,14 +1219,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         token
       );
 
-      setMembership(response.membership);
-      setCheckoutPayment(response.payment);
-      if (response.payment) {
-        setPayments((current) => {
-          const others = current.filter((item) => item.id !== response.payment?.id);
-          return [response.payment, ...others].filter(Boolean) as PaymentRow[];
-        });
-      }
+      applyCheckoutSessionResponse(response);
 
       if (response.alreadyActive) {
         uiSounds.paymentApproved();
@@ -1258,19 +1227,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         return;
       }
 
-      if (response.paymentProviderError && !response.payment?.paymentUrl) {
+      if (response.paymentProviderError && !response.nativeCheckout?.pix && billingType !== "CREDIT_CARD") {
         setError(response.paymentProviderError);
-        return;
-      }
-
-      if (response.payment?.paymentUrl) {
-        const checkoutGate = shouldOpenSubscriptionCheckout(planCode, response);
-        if (!checkoutGate.ok) {
-          setError(checkoutGate.message);
-          return;
-        }
-
-        openAsaasCheckout(response.payment.paymentUrl);
       }
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;
@@ -2533,15 +2491,26 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 uiSounds.radioSelect();
                 setCheckoutDraft((current) => ({ ...current, planCode: code }));
                 setCheckoutPayment(null);
+                setNativeCheckout(null);
               }}
               billingType={checkoutDraft.billingType}
-              onBillingTypeChange={(value) => setCheckoutDraft((current) => ({ ...current, billingType: value }))}
+              onBillingTypeChange={(value) => {
+                setCheckoutDraft((current) => ({ ...current, billingType: value }));
+                setNativeCheckout(null);
+              }}
               checkoutLoading={Boolean(checkoutLoading)}
               pendingPayment={currentCheckoutPayment}
-              onSubmitCheckout={() => void submitSubscriptionCheckout()}
-              onOpenPendingCheckout={() => void submitSubscriptionCheckout()}
+              nativeCheckout={nativeCheckout}
+              checkoutToken={token}
+              payerName={profile?.name ?? null}
+              payerEmail={profile?.email ?? null}
+              payerPhone={profile?.phone ?? null}
+              onPrepareCheckout={() => void submitSubscriptionCheckout()}
+              onCheckoutSessionResponse={applyCheckoutSessionResponse}
+              onPaymentConfirmed={() => void handleNativePaymentConfirmed()}
+              onCheckoutError={setError}
               onConfirmSandbox={() => void handleConfirmSandboxPayment()}
-              showSandbox={Boolean(isSandboxCheckoutEnabled() && currentCheckoutPayment && !currentCheckoutPayment.paymentUrl)}
+              showSandbox={Boolean(isSandboxCheckoutEnabled() && currentCheckoutPayment && currentCheckoutPayment.status === "PENDING")}
               couponCode={checkoutCoupon}
               couponDraft={couponDraft}
               onCouponDraftChange={setCouponDraft}

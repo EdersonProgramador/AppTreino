@@ -441,11 +441,23 @@ export interface ContactMessageRow {
 
 import type { StudentMembershipRow } from "./student";
 
+export interface NativeCheckoutPixPayload {
+  qrCodeBase64: string;
+  copyPaste: string;
+  expiresAt: string | null;
+}
+
+export interface NativeCheckoutPayload {
+  billingType: "PIX" | "CREDIT_CARD";
+  pix?: NativeCheckoutPixPayload;
+}
+
 export interface CheckoutSessionResponse {
   membership: StudentMembershipRow;
   payment: PaymentRow | null;
   alreadyActive: boolean;
   paymentProviderError?: string;
+  nativeCheckout?: NativeCheckoutPayload;
 }
 
 export interface UploadResponse {

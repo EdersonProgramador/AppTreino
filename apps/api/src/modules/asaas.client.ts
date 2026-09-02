@@ -176,3 +176,190 @@ export async function tryCreateAsaasCheckout(input: Parameters<typeof createAsaa
     return { checkout: null, providerError: humanizeAsaasCheckoutError(raw) };
   }
 }
+
+function asaasHeaders() {
+  if (!env.ASAAS_API_KEY) {
+    throw new Error("ASAAS_API_KEY não configurada.");
+  }
+  return {
+    "Content-Type": "application/json",
+    access_token: env.ASAAS_API_KEY
+  };
+}
+
+async function asaasJsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${env.ASAAS_API_URL}${path}`, {
+    ...init,
+    headers: {
+      ...asaasHeaders(),
+      ...(init?.headers ?? {})
+    },
+    signal: AbortSignal.timeout(15000)
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Falha na requisição Asaas (${response.status}).`);
+  }
+
+  return (await response.json()) as T;
+}
+
+export function formatAsaasDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+export type AsaasCustomerRecord = {
+  id: string;
+  name?: string;
+  email?: string;
+};
+
+export async function findAsaasCustomerByExternalReference(externalReference: string) {
+  if (!env.ASAAS_API_KEY) return null;
+  const data = await asaasJsonRequest<{ data?: AsaasCustomerRecord[] }>(
+    `/customers?externalReference=${encodeURIComponent(externalReference)}&limit=1`
+  );
+  return data.data?.[0] ?? null;
+}
+
+export async function createAsaasCustomer(input: {
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  cpfCnpj?: string | null;
+  externalReference: string;
+}) {
+  return asaasJsonRequest<AsaasCustomerRecord>("/customers", {
+    method: "POST",
+    body: JSON.stringify({
+      name: input.name,
+      email: input.email ?? undefined,
+      mobilePhone: input.phone ?? undefined,
+      cpfCnpj: input.cpfCnpj?.replace(/\D/g, "") || undefined,
+      externalReference: input.externalReference,
+      notificationDisabled: true
+    })
+  });
+}
+
+export type AsaasPaymentRecord = {
+  id: string;
+  status?: string;
+  invoiceUrl?: string | null;
+  bankSlipUrl?: string | null;
+};
+
+export async function createAsaasPayment(input: {
+  customerId: string;
+  billingType: "PIX" | "CREDIT_CARD";
+  amountInCents: number;
+  dueDate: Date;
+  externalReference: string;
+  description: string;
+}) {
+  return asaasJsonRequest<AsaasPaymentRecord>("/payments", {
+    method: "POST",
+    body: JSON.stringify({
+      customer: input.customerId,
+      billingType: input.billingType,
+      value: input.amountInCents / 100,
+      dueDate: formatAsaasDate(input.dueDate),
+      externalReference: input.externalReference,
+      description: input.description
+    })
+  });
+}
+
+export async function getAsaasPayment(asaasPaymentId: string) {
+  return asaasJsonRequest<AsaasPaymentRecord>(`/payments/${asaasPaymentId}`);
+}
+
+export type AsaasPixQrCode = {
+  encodedImage: string;
+  payload: string;
+  expirationDate?: string | null;
+};
+
+export async function getAsaasPixQrCode(asaasPaymentId: string) {
+  return asaasJsonRequest<AsaasPixQrCode>(`/payments/${asaasPaymentId}/pixQrCode`);
+}
+
+export type AsaasCreditCardInput = {
+  holderName: string;
+  number: string;
+  expiryMonth: string;
+  expiryYear: string;
+  ccv: string;
+};
+
+export type AsaasCreditCardHolderInput = {
+  name: string;
+  email: string;
+  cpfCnpj: string;
+  postalCode: string;
+  addressNumber: string;
+  phone: string;
+};
+
+export async function createAsaasCreditCardPayment(input: {
+  customerId: string;
+  amountInCents: number;
+  dueDate: Date;
+  externalReference: string;
+  description: string;
+  creditCard: AsaasCreditCardInput;
+  creditCardHolderInfo: AsaasCreditCardHolderInput;
+  remoteIp: string;
+}) {
+  return asaasJsonRequest<AsaasPaymentRecord & { creditCardToken?: string | null }>("/payments", {
+    method: "POST",
+    body: JSON.stringify({
+      customer: input.customerId,
+      billingType: "CREDIT_CARD",
+      value: input.amountInCents / 100,
+      dueDate: formatAsaasDate(input.dueDate),
+      externalReference: input.externalReference,
+      description: input.description,
+      remoteIp: input.remoteIp,
+      creditCard: input.creditCard,
+      creditCardHolderInfo: input.creditCardHolderInfo
+    })
+  });
+}
+
+export async function tryPrepareAsaasPixPayment(
+  input: Omit<Parameters<typeof createAsaasPayment>[0], "billingType">
+) {
+  try {
+    const payment = await createAsaasPayment({ ...input, billingType: "PIX" });
+    const pix = await getAsaasPixQrCode(payment.id);
+    return { payment, pix, providerError: null as string | null };
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error);
+    console.error("[Asaas Pix] Falha não fatal:", raw);
+    return { payment: null, pix: null, providerError: humanizeAsaasCheckoutError(raw) };
+  }
+}
+
+export async function tryPayAsaasCreditCard(input: Parameters<typeof createAsaasCreditCardPayment>[0]) {
+  try {
+    const payment = await createAsaasCreditCardPayment(input);
+    return { payment, providerError: null as string | null };
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error);
+    console.error("[Asaas Cartão] Falha não fatal:", raw);
+    return { payment: null, providerError: humanizeAsaasCheckoutError(raw) };
+  }
+}
+
+export async function tryFetchAsaasPixQrCode(asaasPaymentId: string) {
+  try {
+    const pix = await getAsaasPixQrCode(asaasPaymentId);
+    return { pix, providerError: null as string | null };
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error);
+    console.error("[Asaas Pix QR] Falha não fatal:", raw);
+    return { pix: null, providerError: humanizeAsaasCheckoutError(raw) };
+  }
+}

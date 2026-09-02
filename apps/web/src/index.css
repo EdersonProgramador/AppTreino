@@ -27695,3 +27695,155 @@ html.light .activate-page.home-command .activate-billing-field select {
   border-color: rgba(180, 210, 255, 0.18) !important;
   color: #ecf2fa !important;
 }
+
+/* ===== ATLLY — checkout nativo ===== */
+.native-checkout {
+  display: grid;
+  gap: 1rem;
+}
+
+.native-checkout__summary {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(180, 210, 255, 0.14);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.native-checkout__summary strong {
+  font-size: 1.05rem;
+  color: #ecf2fa;
+}
+
+.native-checkout__summary p {
+  margin: 0;
+  color: #b8c4d4;
+  font-size: 0.875rem;
+}
+
+.native-checkout__tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+.native-checkout__tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(180, 210, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+  color: #b8c4d4;
+  font-weight: 600;
+}
+
+.native-checkout__tabs button.is-active {
+  border-color: rgba(72, 180, 220, 0.55);
+  background: rgba(72, 180, 220, 0.12);
+  color: #ecf2fa;
+}
+
+.native-checkout__panel {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid rgba(180, 210, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(5, 7, 12, 0.35);
+}
+
+.native-checkout__empty p,
+.native-checkout__hint {
+  margin: 0;
+  color: #b8c4d4;
+  font-size: 0.875rem;
+}
+
+.native-checkout__qr-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+.native-checkout__qr {
+  width: min(100%, 240px);
+  aspect-ratio: 1;
+  border-radius: 16px;
+  background: #fff;
+  padding: 0.75rem;
+}
+
+.native-checkout__copy-field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.native-checkout__copy-field span {
+  color: #b8c4d4;
+  font-size: 0.8125rem;
+}
+
+.native-checkout__copy-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.55rem;
+}
+
+.native-checkout__copy-row input {
+  min-width: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(180, 210, 255, 0.16);
+  background: rgba(0, 0, 0, 0.28);
+  color: #ecf2fa;
+  padding: 0.75rem 0.85rem;
+  font-size: 0.8125rem;
+}
+
+.native-checkout__waiting {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #9fd8ef;
+  font-size: 0.875rem;
+}
+
+.native-checkout__card-form {
+  gap: 1.1rem;
+}
+
+.native-checkout__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.native-checkout__grid label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.native-checkout__grid label span {
+  color: #b8c4d4;
+  font-size: 0.8125rem;
+}
+
+.native-checkout__grid input {
+  border-radius: 12px;
+  border: 1px solid rgba(180, 210, 255, 0.16);
+  background: rgba(0, 0, 0, 0.28);
+  color: #ecf2fa;
+  padding: 0.75rem 0.85rem;
+}
+
+.native-checkout__full {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 640px) {
+  .native-checkout__grid {
+    grid-template-columns: 1fr;
+  }
+}

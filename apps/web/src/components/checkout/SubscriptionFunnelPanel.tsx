@@ -1,9 +1,18 @@
-import { ArrowRight, Check, CreditCard, Loader2, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, Check, Loader2, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { formatPriceInBRL } from "@app-treino/shared";
 import { brand } from "../../lib/brand";
 import { heroTrustItems } from "../../lib/home-content";
-import { formatPlanPriceLines, getCheckoutMinimumAmountMessage, getEffectivePriceCents, isCheckoutEligiblePlan, planHasPromoDiscount, type CatalogPlan } from "../../lib/plan-catalog";
+import {
+  formatPlanPriceLines,
+  getCheckoutMinimumAmountMessage,
+  getEffectivePriceCents,
+  isCheckoutEligiblePlan,
+  planHasPromoDiscount,
+  type CatalogPlan
+} from "../../lib/plan-catalog";
+import { NativeCheckoutPayment, type NativeBillingType } from "./NativeCheckoutPayment";
+import type { CheckoutSessionResponse, NativeCheckoutPayload, PaymentRow } from "../../types/shared";
 
 export type BillingType = "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED";
 
@@ -17,11 +26,18 @@ type SubscriptionFunnelPanelProps = {
   billingType: BillingType;
   onBillingTypeChange: (value: BillingType) => void;
   checkoutLoading?: boolean;
-  pendingPayment?: { amountInCents: number; paymentUrl?: string | null } | null;
+  pendingPayment?: PaymentRow | null;
+  nativeCheckout?: NativeCheckoutPayload | null;
+  checkoutToken?: string | null;
+  payerName?: string | null;
+  payerEmail?: string | null;
+  payerPhone?: string | null;
   error?: string | null;
   onContinuePlan?: () => void;
-  onSubmitCheckout?: () => void;
-  onOpenPendingCheckout?: (url: string) => void;
+  onPrepareCheckout?: () => void;
+  onCheckoutSessionResponse?: (response: CheckoutSessionResponse) => void;
+  onPaymentConfirmed?: () => void;
+  onCheckoutError?: (message: string) => void;
   onConfirmSandbox?: () => void;
   showSandbox?: boolean;
   showPaymentStep?: boolean;
@@ -41,6 +57,10 @@ const STEPS = [
   { id: 2, label: "Conta" },
   { id: 3, label: "Pagamento" }
 ] as const;
+
+function toNativeBillingType(value: BillingType): NativeBillingType {
+  return value === "CREDIT_CARD" ? "CREDIT_CARD" : "PIX";
+}
 
 function PlanCard({
   plan,
@@ -102,10 +122,17 @@ export function SubscriptionFunnelPanel({
   onBillingTypeChange,
   checkoutLoading,
   pendingPayment,
+  nativeCheckout = null,
+  checkoutToken,
+  payerName,
+  payerEmail,
+  payerPhone,
   error,
   onContinuePlan,
-  onSubmitCheckout,
-  onOpenPendingCheckout,
+  onPrepareCheckout,
+  onCheckoutSessionResponse,
+  onPaymentConfirmed,
+  onCheckoutError,
   onConfirmSandbox,
   showSandbox,
   showPaymentStep = false,
@@ -123,6 +150,7 @@ export function SubscriptionFunnelPanel({
   const selectedPlanCheckoutError = selectedPlan ? getCheckoutMinimumAmountMessage(selectedPlan) : null;
   const canCheckoutSelectedPlan = selectedPlan ? isCheckoutEligiblePlan(selectedPlan) : false;
   const resolvedSelectedPlanHasDiscount = selectedPlanHasDiscount || planHasPromoDiscount(selectedPlan);
+  const nativeBillingType = toNativeBillingType(billingType);
 
   return (
     <div className="activate-funnel-panel">
@@ -243,53 +271,54 @@ export function SubscriptionFunnelPanel({
         </section>
       ) : null}
 
-      {showPaymentStep && step === 3 ? (
+      {showPaymentStep && step === 3 && selectedPlan && checkoutToken ? (
         <section className="activate-payment-stage">
           <header className="activate-plan-stage__head">
             <span className="home-telemetry-label">Passo 3</span>
             <h2 className="activate-plan-stage__title">Finalize sua ativação</h2>
-            <p className="activate-plan-stage__copy">Pagamento seguro via Asaas · Pix ou cartão.</p>
+            <p className="activate-plan-stage__copy">Pagamento 100% {brand.name} · Pix ou cartão na mesma tela.</p>
           </header>
 
-          {pendingPayment ? (
-            <div className="activate-pending-payment">
-              <strong>Pagamento pendente · {formatPriceInBRL(pendingPayment.amountInCents)}</strong>
-              <span>Conclua no checkout seguro para liberar o acesso.</span>
-              {pendingPayment.paymentUrl && onOpenPendingCheckout ? (
-                <button type="button" className="ui-btn-primary" onClick={() => onOpenPendingCheckout(pendingPayment.paymentUrl as string)}>
-                  Continuar pagamento
-                  <ArrowRight size={18} />
-                </button>
-              ) : null}
-            </div>
-          ) : selectedPlan ? (
-            <div className="activate-pending-payment">
-              <strong>
-                {selectedPlan.name} · {formatPriceInBRL(getEffectivePriceCents(selectedPlan))}
-              </strong>
-              <span>Confirme abaixo para gerar o pagamento deste plano.</span>
-              <span className="activate-plan-stage__copy">Alterou plano ou cupom? Gere um checkout novo em Ativar agora.</span>
-            </div>
+          <NativeCheckoutPayment
+            token={checkoutToken}
+            planName={selectedPlan.name}
+            amountInCents={pendingPayment?.amountInCents ?? getEffectivePriceCents(selectedPlan)}
+            payment={pendingPayment ?? null}
+            nativeCheckout={nativeCheckout}
+            billingType={nativeBillingType}
+            onBillingTypeChange={(value) => onBillingTypeChange(value)}
+            loading={Boolean(checkoutLoading)}
+            defaultEmail={payerEmail}
+            defaultPhone={payerPhone}
+            defaultName={payerName}
+            onSessionResponse={(response) => onCheckoutSessionResponse?.(response)}
+            onPaymentConfirmed={() => onPaymentConfirmed?.()}
+            onError={(message) => onCheckoutError?.(message)}
+          />
+
+          {nativeBillingType === "PIX" && !nativeCheckout?.pix ? (
+            <button
+              type="button"
+              className="ui-btn-primary activate-funnel-cta"
+              onClick={onPrepareCheckout}
+              disabled={Boolean(checkoutLoading) || !canCheckoutSelectedPlan}
+            >
+              {checkoutLoading ? <Loader2 className="spin" size={18} /> : null}
+              Gerar Pix
+            </button>
           ) : null}
 
-          <label className="activate-billing-field">
-            <span>Forma de pagamento</span>
-            <select value={billingType} onChange={(event) => onBillingTypeChange(event.target.value as BillingType)}>
-              <option value="UNDEFINED">Escolher no checkout</option>
-              <option value="PIX">Pix</option>
-              <option value="CREDIT_CARD">Cartão de crédito</option>
-            </select>
-          </label>
-
-          <button
-            type="button"
-            className="ui-btn-primary activate-funnel-cta"
-            onClick={onSubmitCheckout}
-            disabled={Boolean(checkoutLoading) || !canCheckoutSelectedPlan}
-          >
-            {checkoutLoading ? <Loader2 className="spin" size={18} /> : <CreditCard size={18} />}
-            Ativar agora
-          </button>
+          {nativeBillingType === "CREDIT_CARD" && !pendingPayment ? (
+            <button
+              type="button"
+              className="ui-btn-primary activate-funnel-cta"
+              onClick={onPrepareCheckout}
+              disabled={Boolean(checkoutLoading) || !canCheckoutSelectedPlan}
+            >
+              {checkoutLoading ? <Loader2 className="spin" size={18} /> : null}
+              Preparar pagamento
+            </button>
+          ) : null}
 
           {showSandbox && onConfirmSandbox ? (
             <button type="button" className="ui-btn-secondary activate-funnel-secondary" onClick={onConfirmSandbox} disabled={Boolean(checkoutLoading)}>
@@ -309,11 +338,8 @@ export function SubscriptionFunnelPanel({
       </div>
 
       <div className="activate-funnel-guarantee">
-        <ShieldCheck size={18} />
-        <div>
-          <strong>Garantia ATLLY · 7 dias</strong>
-          <span>Experimente na sua rotina. Cancele conforme as condições se não fizer sentido.</span>
-        </div>
+        <strong>Garantia {brand.name} · 7 dias</strong>
+        <span>Experimente na sua rotina. Cancele conforme as condições se não fizer sentido.</span>
       </div>
 
       <div className="activate-funnel-ai-note">

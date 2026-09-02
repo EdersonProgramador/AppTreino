@@ -37,12 +37,20 @@ export function evaluateSandboxConfirmGate(input: SandboxConfirmGateInput): Sand
   return { ok: true };
 }
 
-export function asaasCheckoutItemName(productLabel: string, brandName = "App Treino Social") {
-  return `${brandName} - ${productLabel}`;
+export const ATLLY_BRAND_NAME = "ATLLY";
+
+export function asaasCheckoutItemName(productLabel: string, brandName = ATLLY_BRAND_NAME) {
+  return `${brandName} · ${productLabel}`;
 }
 
-export function asaasCheckoutItemDescription(userName: string, brandName = "App Treino Social") {
-  return `Assinatura ${brandName} - ${userName}`;
+export function asaasCheckoutItemDescription(planLabel: string, brandName = ATLLY_BRAND_NAME) {
+  return `Assinatura ${brandName} · ${planLabel}`;
+}
+
+export function resolveNativeCheckoutBillingType(
+  billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED"
+): "PIX" | "CREDIT_CARD" {
+  return billingType === "CREDIT_CARD" ? "CREDIT_CARD" : "PIX";
 }
 
 /** Asaas Checkout exige valor líquido mínimo de R$ 5,00 em produção. */

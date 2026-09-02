@@ -254,8 +254,8 @@ describe("pagamento pendente vs preço atual", () => {
 });
 
 describe("marca nos itens Asaas", () => {
-  it("usa App Treino Social nos textos de checkout", () => {
-    assert.equal(asaasCheckoutItemName("Mensal"), "App Treino Social - Mensal");
-    assert.equal(asaasCheckoutItemDescription("Ana"), "Assinatura App Treino Social - Ana");
+  it("usa ATLLY nos textos de checkout", () => {
+    assert.equal(asaasCheckoutItemName("Mensal"), "ATLLY · Mensal");
+    assert.equal(asaasCheckoutItemDescription("Start"), "Assinatura ATLLY · Start");
   });
 });

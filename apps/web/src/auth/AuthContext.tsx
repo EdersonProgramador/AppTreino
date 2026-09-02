@@ -10,7 +10,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import type { AuthUser } from "@app-treino/shared";
 import { ApiError, apiGet, apiPost, setUnauthorizedHandler } from "../api";
-import type { AuthMode, PlanCode } from "../types/auth";
+import type { NativeCheckoutPayload, PaymentRow } from "../types/shared";
 import type { WorkoutOnboardingSubmitPayload } from "../components/onboarding/WorkoutOnboarding";
 import { levelLabel } from "../components/onboarding/onboarding.schema";
 import {
@@ -401,7 +401,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const response = await apiPost<{
           user: AuthUser;
           token: string;
-          payment?: { paymentUrl?: string | null };
+          payment?: PaymentRow | null;
+          nativeCheckout?: NativeCheckoutPayload;
           paymentProviderError?: string;
         }>(endpoint, payload);
 
@@ -417,11 +418,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           preloadStudentPanel();
         }
         navigate(destination, { replace: true });
-
-        if (isCheckoutRegister && response.payment?.paymentUrl) {
-          window.location.href = response.payment.paymentUrl;
-          return;
-        }
       } catch (error) {
         const message = error instanceof ApiError ? error.message : null;
         store.failSignIn(

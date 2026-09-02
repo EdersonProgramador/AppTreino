@@ -1,17 +1,17 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import type { PaymentStatus, Prisma } from "@prisma/client";
+import type { PaymentStatus, Prisma, Payment } from "@prisma/client";
 import { z } from "zod";
 import { hashPassword, isAdminStudentPreview, requireAuth, toAuthUser } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
-import { subscriptionCheckoutCallbacks, tryCreateAsaasCheckout } from "./asaas.client.js";
-import { asaasStatusToPaymentStatus } from "./asaas.routes.js";
 import {
-  asaasCheckoutItemDescription,
-  asaasCheckoutItemName,
+  buildNativeCheckoutResponse,
+  payNativeSubscriptionWithCard,
+  prepareNativeSubscriptionCheckout
+} from "./checkout.native.js";
+import {
   evaluateSandboxConfirmGate,
   incrementSubscriptionCouponUsage,
-  canReuseAsaasCheckoutUrl,
   getAsaasCheckoutAmountError,
   normalizeCheckoutCouponInput,
   pendingCheckoutPricingMatches,
@@ -62,6 +62,19 @@ const checkoutSessionSchema = z.object({
 
 const checkoutSandboxConfirmationSchema = z.object({
   paymentId: z.string().min(1)
+});
+
+const checkoutCardPaymentSchema = z.object({
+  holderName: z.string().trim().min(3, "Informe o nome impresso no cartão."),
+  number: z.string().trim().min(13, "Informe o número do cartão."),
+  expiryMonth: z.string().trim().min(2).max(2),
+  expiryYear: z.string().trim().min(2).max(4),
+  ccv: z.string().trim().min(3).max(4),
+  holderEmail: z.string().trim().email("Informe um e-mail válido."),
+  holderCpfCnpj: z.string().trim().min(11, "Informe o CPF do titular."),
+  holderPostalCode: z.string().trim().min(8, "Informe o CEP."),
+  holderAddressNumber: z.string().trim().min(1, "Informe o número do endereço."),
+  holderPhone: z.string().trim().min(8, "Informe o telefone do titular.")
 });
 
 function requireDatabase() {
@@ -169,6 +182,38 @@ async function findPendingMembershipForCheckout(userId: string, planId: string) 
   });
 }
 
+async function loadCheckoutUser(userId: string) {
+  return prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    include: { profile: true }
+  });
+}
+
+async function finalizeNativeSubscriptionCheckout(input: {
+  membership: { plan?: { name?: string | null } | null } & Record<string, unknown>;
+  payment: { id: string; amountInCents: number; dueDate: Date; asaasPaymentId?: string | null; status: string };
+  userId: string;
+  planName: string;
+  billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED";
+}) {
+  const user = await loadCheckoutUser(input.userId);
+  const native = await prepareNativeSubscriptionCheckout({
+    payment: input.payment as Payment,
+    membership: input.membership as never,
+    user,
+    planName: input.planName,
+    billingType: input.billingType
+  });
+
+  return buildNativeCheckoutResponse({
+    membership: input.membership as never,
+    payment: native.payment,
+    alreadyActive: false,
+    nativeCheckout: native.nativeCheckout,
+    paymentProviderError: native.providerError
+  });
+}
+
 export async function registerCheckoutRoutes(app: FastifyInstance) {
   app.post("/checkout/session", async (request, reply) => {
     requireDatabase();
@@ -262,40 +307,15 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
         payment = refreshed.payment;
       }
 
-      if (!canReuseAsaasCheckoutUrl(payment)) {
-        const { checkout: asaasPayment, providerError } = await tryCreateAsaasCheckout({
-          externalReference: payment.id,
-          itemName: asaasCheckoutItemName(membership.plan?.name ?? planSeed.name),
-          itemDescription: asaasCheckoutItemDescription(authUser.name),
-          amountInCents: payment.amountInCents,
-          billingType: body.billingType,
-          callbacks: subscriptionCheckoutCallbacks()
-        });
-
-        if (asaasPayment) {
-          payment = await prisma.payment.update({
-            where: { id: payment.id },
-            data: {
-              asaasPaymentId: asaasPayment.id,
-              paymentUrl: asaasPayment.url,
-              status: asaasStatusToPaymentStatus(asaasPayment.status)
-            }
-          });
-        }
-
-        return reply.send({
-          membership,
-          payment,
-          alreadyActive: false,
-          paymentProviderError: providerError ?? undefined
-        });
-      }
-
-      return reply.send({
+      const nativeResult = await finalizeNativeSubscriptionCheckout({
         membership,
         payment,
-        alreadyActive: false
+        userId: authUser.id,
+        planName: membership.plan?.name ?? planSeed.name,
+        billingType: body.billingType
       });
+
+      return reply.send(nativeResult);
     }
 
     const startsAt = todayUtcOnly();
@@ -304,7 +324,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     const amountError = checkoutAmountErrorReply(pricing.amountInCents, reply);
     if (amountError) return amountError;
 
-    const { user, membership, payment } = await prisma.$transaction(async (tx) => {
+    const { membership, payment } = await prisma.$transaction(async (tx) => {
       const user = await tx.user.findUniqueOrThrow({
         where: {
           id: authUser.id
@@ -331,35 +351,160 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
         }
       });
 
-      return { user, membership, payment };
+      return { membership, payment };
     });
 
-    const { checkout: asaasPayment, providerError } = await tryCreateAsaasCheckout({
-      externalReference: payment.id,
-      itemName: asaasCheckoutItemName(planSeed.name),
-      itemDescription: asaasCheckoutItemDescription(user.name),
-      amountInCents: payment.amountInCents,
-      billingType: body.billingType,
-      callbacks: subscriptionCheckoutCallbacks()
-    });
-
-    const updatedPayment = asaasPayment
-      ? await prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            asaasPaymentId: asaasPayment.id,
-            paymentUrl: asaasPayment.url,
-            status: asaasStatusToPaymentStatus(asaasPayment.status)
-          }
-        })
-      : payment;
-
-    return reply.code(201).send({
+    const nativeResult = await finalizeNativeSubscriptionCheckout({
       membership,
-      payment: updatedPayment,
-      alreadyActive: false,
-      paymentProviderError: providerError ?? undefined
+      payment,
+      userId: authUser.id,
+      planName: planSeed.name,
+      billingType: body.billingType
     });
+
+    return reply.code(201).send(nativeResult);
+  });
+
+  app.get("/checkout/payments/:paymentId/status", async (request, reply) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    const params = z.object({ paymentId: z.string().min(1) }).parse(request.params);
+
+    const payment = await prisma.payment.findFirst({
+      where: {
+        id: params.paymentId,
+        membership: {
+          userId: authUser.id
+        }
+      },
+      include: {
+        membership: {
+          include: {
+            plan: true
+          }
+        }
+      }
+    });
+
+    if (!payment) {
+      return reply.code(404).send({ message: "Pagamento não encontrado." });
+    }
+
+    return reply.send({
+      payment,
+      membership: payment.membership,
+      alreadyActive: payment.membership.status === "ACTIVE"
+    });
+  });
+
+  app.post("/checkout/payments/:paymentId/card", async (request, reply) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    if (isAdminStudentPreview(authUser)) {
+      return reply.code(403).send({
+        message: "Checkout indisponível no modo preview do administrador.",
+        code: "ADMIN_PREVIEW_READONLY"
+      });
+    }
+
+    const params = z.object({ paymentId: z.string().min(1) }).parse(request.params);
+    const body = checkoutCardPaymentSchema.parse(request.body);
+
+    const payment = await prisma.payment.findFirst({
+      where: {
+        id: params.paymentId,
+        membership: {
+          userId: authUser.id,
+          status: {
+            in: ["PENDING", "OVERDUE"]
+          }
+        }
+      },
+      include: {
+        membership: {
+          include: {
+            plan: true
+          }
+        }
+      }
+    });
+
+    if (!payment) {
+      return reply.code(404).send({ message: "Pagamento não encontrado." });
+    }
+
+    if (payment.status === "CONFIRMED") {
+      return reply.send(
+        buildNativeCheckoutResponse({
+          membership: payment.membership,
+          payment,
+          alreadyActive: payment.membership.status === "ACTIVE"
+        })
+      );
+    }
+
+    const user = await loadCheckoutUser(authUser.id);
+    const cardResult = await payNativeSubscriptionWithCard({
+      payment,
+      membership: payment.membership,
+      user,
+      planName: payment.membership.plan?.name ?? "Assinatura",
+      creditCard: {
+        holderName: body.holderName,
+        number: body.number,
+        expiryMonth: body.expiryMonth,
+        expiryYear: body.expiryYear,
+        ccv: body.ccv
+      },
+      creditCardHolderInfo: {
+        name: body.holderName,
+        email: body.holderEmail,
+        cpfCnpj: body.holderCpfCnpj,
+        postalCode: body.holderPostalCode,
+        addressNumber: body.holderAddressNumber,
+        phone: body.holderPhone
+      },
+      remoteIp: request.ip
+    });
+
+    if (cardResult.payment.status === "CONFIRMED" && cardResult.payment.couponId) {
+      await incrementSubscriptionCouponUsage(cardResult.payment.couponId);
+    }
+
+    if (cardResult.payment.status === "CONFIRMED") {
+      const membership = await prisma.membership.update({
+        where: { id: payment.membershipId },
+        data: {
+          status: "ACTIVE",
+          user: {
+            update: {
+              enrollmentStatus: "ACTIVE"
+            }
+          }
+        },
+        include: {
+          plan: true
+        }
+      });
+
+      return reply.send(
+        buildNativeCheckoutResponse({
+          membership,
+          payment: cardResult.payment,
+          alreadyActive: true,
+          paymentProviderError: cardResult.providerError
+        })
+      );
+    }
+
+    return reply.send(
+      buildNativeCheckoutResponse({
+        membership: payment.membership,
+        payment: cardResult.payment,
+        alreadyActive: false,
+        paymentProviderError: cardResult.providerError
+      })
+    );
   });
 
   app.post("/checkout/confirm-sandbox", async (request, reply) => {
@@ -517,25 +662,18 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       return { user, payment };
     });
 
-    const { checkout: asaasPayment, providerError } = await tryCreateAsaasCheckout({
-      externalReference: payment.id,
-      itemName: asaasCheckoutItemName(planSeed.name),
-      itemDescription: asaasCheckoutItemDescription(user.name),
-      amountInCents: payment.amountInCents,
-      billingType: body.billingType,
-      callbacks: subscriptionCheckoutCallbacks()
+    const membershipWithPlan = await prisma.membership.findUniqueOrThrow({
+      where: { id: payment.membershipId },
+      include: { plan: true }
     });
 
-    const updatedPayment = asaasPayment
-      ? await prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            asaasPaymentId: asaasPayment.id,
-            paymentUrl: asaasPayment.url,
-            status: asaasStatusToPaymentStatus(asaasPayment.status)
-          }
-        })
-      : payment;
+    const nativeResult = await finalizeNativeSubscriptionCheckout({
+      membership: membershipWithPlan,
+      payment,
+      userId: user.id,
+      planName: planSeed.name,
+      billingType: body.billingType
+    });
 
     const authUser = toAuthUser(user);
     const token = app.jwt.sign(authUser);
@@ -543,8 +681,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     return reply.code(201).send({
       token,
       user: authUser,
-      payment: updatedPayment,
-      paymentProviderError: providerError ?? undefined
+      ...nativeResult
     });
     }
   );

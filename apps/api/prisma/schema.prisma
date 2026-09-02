@@ -19,6 +19,7 @@ model User {
   role                UserRole             @default(USER)
   status              UserStatus           @default(ACTIVE)
   enrollmentStatus    EnrollmentStatus     @default(PENDING) @map("enrollment_status")
+  asaasCustomerId     String?              @unique @map("asaas_customer_id")
   deletedAt           DateTime?            @map("deleted_at")
   profile             Profile?
   memberships         Membership[]
