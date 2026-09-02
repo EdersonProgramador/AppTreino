@@ -21,7 +21,7 @@ export function ActivateView() {
   const stepParam = searchParams.get("step");
   const initialStep = stepParam === "account" ? 2 : 1;
 
-  const [couponDraft, setCouponDraft] = useState(couponFromUrl?.toUpperCase() ?? "");
+  const [couponDraft, setCouponDraft] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(couponFromUrl?.toUpperCase() ?? null);
   const [couponFeedback, setCouponFeedback] = useState<string | null>(null);
   const [couponApplying, setCouponApplying] = useState(Boolean(couponFromUrl?.trim()));

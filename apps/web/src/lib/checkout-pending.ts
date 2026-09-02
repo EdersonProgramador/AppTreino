@@ -1,5 +1,14 @@
 import type { PaymentRow } from "../types/shared";
 import type { StudentMembershipRow } from "../types/student";
+import { getEffectivePriceCents, type CatalogPlan } from "./plan-catalog";
+
+export function paymentMatchesPlanPricing(
+  payment: PaymentRow | null | undefined,
+  plan: CatalogPlan | null | undefined
+): boolean {
+  if (!payment || !plan) return false;
+  return payment.amountInCents === getEffectivePriceCents(plan);
+}
 
 export function resolvePendingPaymentForSelectedPlan(
   selectedPlanCode: string,

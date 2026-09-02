@@ -196,9 +196,11 @@ export function SubscriptionFunnelPanel({
 
           {(step === 1 || showPaymentStep) && onApplyCoupon && onCouponDraftChange ? (
             <div className="activate-coupon-box">
-              {couponCode && resolvedSelectedPlanHasDiscount && !couponDraft.trim() ? (
+              {couponCode && resolvedSelectedPlanHasDiscount ? (
                 <div className="activate-coupon-applied-row">
-                  <span className="activate-coupon-applied">Desconto aplicado</span>
+                  <span className="activate-coupon-applied">
+                    Cupom <strong>{couponCode}</strong> aplicado
+                  </span>
                   {onRemoveCoupon ? (
                     <button type="button" className="activate-coupon-apply" onClick={onRemoveCoupon}>
                       Remover

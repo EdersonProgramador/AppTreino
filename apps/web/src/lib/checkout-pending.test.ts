@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { resolvePendingPaymentForSelectedPlan } from "./checkout-pending.js";
+import { paymentMatchesPlanPricing, resolvePendingPaymentForSelectedPlan } from "./checkout-pending.js";
+import { normalizeCatalogPlan } from "./plan-catalog.js";
 
 describe("resolvePendingPaymentForSelectedPlan", () => {
   const membership = {
@@ -37,6 +38,56 @@ describe("resolvePendingPaymentForSelectedPlan", () => {
     assert.equal(
       resolvePendingPaymentForSelectedPlan("monthly", membership, payments, null)?.id,
       "pay-monthly"
+    );
+  });
+});
+
+describe("paymentMatchesPlanPricing", () => {
+  const plan = normalizeCatalogPlan({
+    code: "monthly",
+    name: "Mensal",
+    priceInCents: 9700,
+    effectivePriceInCents: 500,
+    discountInCents: 9200
+  });
+
+  it("aceita pagamento pendente com o mesmo valor do plano", () => {
+    assert.equal(
+      paymentMatchesPlanPricing(
+        {
+          id: "pay-1",
+          membershipId: "mem-1",
+          amountInCents: 500,
+          status: "PENDING",
+          dueDate: "2026-03-01"
+        },
+        plan
+      ),
+      true
+    );
+  });
+
+  it("rejeita pagamento pendente com valor desatualizado após remover cupom", () => {
+    const fullPricePlan = normalizeCatalogPlan({
+      code: "monthly",
+      name: "Mensal",
+      priceInCents: 9700,
+      effectivePriceInCents: 9700,
+      discountInCents: 0
+    });
+
+    assert.equal(
+      paymentMatchesPlanPricing(
+        {
+          id: "pay-1",
+          membershipId: "mem-1",
+          amountInCents: 500,
+          status: "PENDING",
+          dueDate: "2026-03-01"
+        },
+        fullPricePlan
+      ),
+      false
     );
   });
 });

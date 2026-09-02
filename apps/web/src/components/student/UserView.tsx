@@ -122,7 +122,7 @@ import { SubscriptionFunnelPanel } from "../checkout/SubscriptionFunnelPanel";
 import { formatPlanPriceLines, getEffectivePriceCents, planHasPromoDiscount, plansForCouponDisplay } from "../../lib/plan-catalog";
 import { paths } from "../../auth/paths";
 import { clearCheckoutIntent, readCheckoutIntent } from "../../lib/checkout-intent";
-import { resolvePendingPaymentForSelectedPlan } from "../../lib/checkout-pending";
+import { resolvePendingPaymentForSelectedPlan, paymentMatchesPlanPricing } from "../../lib/checkout-pending";
 import { hasStudentWorkoutAccess, hasValidActiveMembership } from "../../lib/student-access";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
 import { LockedOverlay } from "./LockedOverlay";
@@ -253,7 +253,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const initialCheckoutIntent = readCheckoutIntent();
   const initialCouponCode =
     searchParams.get("coupon")?.toUpperCase() ?? initialCheckoutIntent?.couponCode?.toUpperCase() ?? null;
-  const [couponDraft, setCouponDraft] = useState(initialCouponCode ?? "");
+  const [couponDraft, setCouponDraft] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(initialCouponCode);
   const [couponFeedback, setCouponFeedback] = useState<string | null>(null);
   const [couponApplying, setCouponApplying] = useState(Boolean(initialCouponCode));
@@ -599,6 +599,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       setCouponValidForSelection(false);
       setCouponFeedback(null);
       setCheckoutPayment(null);
+      setNativeCheckout(null);
       return;
     }
     setCouponApplying(true);
@@ -606,6 +607,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     setAppliedCoupon(next);
     setCouponDraft("");
     setCheckoutPayment(null);
+    setNativeCheckout(null);
   };
 
   const handleRemoveSubscriptionCoupon = () => {
@@ -615,6 +617,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     setCouponDraft("");
     setCouponFeedback(null);
     setCheckoutPayment(null);
+    setNativeCheckout(null);
+
+    const cleaned = new URLSearchParams(searchParams);
+    cleaned.delete("coupon");
+    setSearchParams(cleaned, { replace: true });
   };
 
   const selectedCatalogPlan = catalogPlans.find((plan) => plan.code === checkoutDraft.planCode) ?? null;
@@ -885,7 +892,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     if (couponParam) {
       const normalized = couponParam.toUpperCase();
       setAppliedCoupon(normalized);
-      setCouponDraft(normalized);
+      setCouponDraft("");
+      setCouponApplying(true);
+      setCouponValidForSelection(null);
       setStudentSection("subscription");
     }
     if (!raw && !storeTabParam && !paymentParam && !planParam) return;
@@ -2119,6 +2128,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       ),
     [checkoutDraft.planCode, checkoutPayment, membership, payments]
   );
+  const currentCheckoutPayment = useMemo(() => {
+    if (!pendingPaymentForSelectedPlan) return null;
+    const plan = catalogPlans.find((item) => item.code === checkoutDraft.planCode) ?? null;
+    return paymentMatchesPlanPricing(pendingPaymentForSelectedPlan, plan) ? pendingPaymentForSelectedPlan : null;
+  }, [catalogPlans, checkoutDraft.planCode, pendingPaymentForSelectedPlan]);
   const latestAssessment = assessments[0];
   const latestAssessmentForm = latestAssessment?.details?.formulario_avaliacao_fisica ?? null;
   const computedBodyFat = latestAssessmentForm
@@ -2174,7 +2188,6 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     </div>
   ) : null;
   const needsOnboarding = Boolean(profile && (!profile.gender || !profile.objective || !profile.level));
-  const currentCheckoutPayment = pendingPaymentForSelectedPlan;
   const lockedFeatures = [
     {
       icon: Dumbbell,
