@@ -27752,11 +27752,12 @@ html.light .activate-page.home-command .activate-billing-field select {
 
 .activate-page .native-checkout__method {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: 1fr;
   align-items: center;
-  gap: 0.75rem;
-  min-height: 72px;
-  padding: 0.85rem 0.95rem;
+  justify-items: start;
+  gap: 0.65rem;
+  min-height: 108px;
+  padding: 0.95rem 1rem;
   border-radius: 16px;
   border: 1px solid rgba(180, 210, 255, 0.14);
   background: rgba(255, 255, 255, 0.03);
@@ -27766,28 +27767,66 @@ html.light .activate-page.home-command .activate-billing-field select {
   transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
-.activate-page .native-checkout__method:hover {
-  border-color: rgba(180, 210, 255, 0.28);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.activate-page .native-checkout__method.is-active {
+.activate-page .native-checkout__method--pix.is-active {
   border-color: rgba(50, 188, 173, 0.55);
   background: linear-gradient(145deg, rgba(50, 188, 173, 0.14), rgba(72, 180, 220, 0.08));
   box-shadow: 0 0 0 1px rgba(50, 188, 173, 0.18), 0 10px 24px rgba(0, 0, 0, 0.18);
-  color: #ecf2fa;
 }
 
-.activate-page .native-checkout__method.is-active:nth-child(2) {
+.activate-page .native-checkout__method--card.is-active {
   border-color: rgba(212, 175, 55, 0.45);
   background: linear-gradient(145deg, rgba(212, 175, 55, 0.12), rgba(255, 255, 255, 0.04));
   box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.16), 0 10px 24px rgba(0, 0, 0, 0.18);
 }
 
-.activate-page .native-checkout__method-icon {
-  width: 44px;
-  height: 44px;
-  flex-shrink: 0;
+.activate-page .native-checkout__method-logo {
+  display: block;
+  object-fit: contain;
+}
+
+.activate-page .native-checkout__method-logo--pix {
+  height: 38px;
+  width: auto;
+  max-width: 100%;
+}
+
+.activate-page .native-checkout__method-logo--card {
+  width: 100%;
+  max-width: 148px;
+  height: 34px;
+  object-fit: cover;
+  object-position: left top;
+  border-radius: 8px;
+}
+
+.activate-page .native-checkout__hero-logo {
+  width: min(100%, 240px);
+  height: auto;
+  object-fit: contain;
+}
+
+.activate-page .native-checkout__qr-logo {
+  width: min(100%, 160px);
+  height: auto;
+  object-fit: contain;
+}
+
+.activate-page .native-checkout__brands-panel {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 14px;
+  border: 1px solid rgba(180, 210, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.activate-page .native-checkout__brands-strip {
+  width: 100%;
+  max-width: 360px;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+  object-fit: contain;
 }
 
 .activate-page .native-checkout__method-copy {
@@ -27849,15 +27888,12 @@ html.light .activate-page.home-command .activate-billing-field select {
 .activate-page .native-checkout__form-head,
 .activate-page .native-checkout__qr-header {
   display: grid;
-  grid-template-columns: auto 1fr;
   gap: 0.75rem;
   align-items: center;
 }
 
-.activate-page .native-checkout__form-head-icon,
-.activate-page .native-checkout__qr-badge {
-  width: 44px;
-  height: 44px;
+.activate-page .native-checkout__qr-header {
+  grid-template-columns: auto 1fr;
 }
 
 .activate-page .native-checkout__form-head strong,
@@ -27874,42 +27910,9 @@ html.light .activate-page.home-command .activate-billing-field select {
   font-size: 0.8125rem;
 }
 
-.activate-page .native-checkout__brands {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-}
-
-.activate-page .native-checkout__brand {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 24px;
-  padding: 0.15rem 0.55rem;
-  border-radius: 999px;
-  border: 1px solid rgba(180, 210, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-  font-size: 0.625rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #c7d3e3;
-}
-
-.activate-page .native-checkout__brand--visa {
-  color: #dbeafe;
-}
-
-.activate-page .native-checkout__brand--master {
-  color: #fecaca;
-}
-
-.activate-page .native-checkout__brand--elo {
-  color: #fde68a;
-}
-
-.activate-page .native-checkout__brand--amex {
-  color: #bfdbfe;
+.activate-page .native-checkout__method:hover {
+  border-color: rgba(180, 210, 255, 0.28);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .activate-page .native-checkout__section {

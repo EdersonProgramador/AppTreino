@@ -4,7 +4,7 @@ import { formatPriceInBRL } from "@app-treino/shared";
 import { apiGet, apiPost } from "../../api";
 import type { CheckoutSessionResponse, NativeCheckoutPayload, PaymentRow } from "../../types/shared";
 import { brand } from "../../lib/brand";
-import { CardBrandStrip, CardPaymentLogo, PixLogo } from "./PaymentMethodArt";
+import { CardBrandsImage, CardMethodPreview, PixBrandImage } from "./PaymentMethodArt";
 
 export type NativeBillingType = "PIX" | "CREDIT_CARD";
 
@@ -205,10 +205,10 @@ export function NativeCheckoutPayment({
           type="button"
           role="tab"
           aria-selected={billingType === "PIX"}
-          className={`native-checkout__method${billingType === "PIX" ? " is-active" : ""}`}
+          className={`native-checkout__method native-checkout__method--pix${billingType === "PIX" ? " is-active" : ""}`}
           onClick={() => onBillingTypeChange("PIX")}
         >
-          <PixLogo className="native-checkout__method-icon" />
+          <PixBrandImage className="native-checkout__method-logo native-checkout__method-logo--pix" />
           <span className="native-checkout__method-copy">
             <strong>Pix</strong>
             <small>Aprovação imediata</small>
@@ -218,10 +218,10 @@ export function NativeCheckoutPayment({
           type="button"
           role="tab"
           aria-selected={billingType === "CREDIT_CARD"}
-          className={`native-checkout__method${billingType === "CREDIT_CARD" ? " is-active" : ""}`}
+          className={`native-checkout__method native-checkout__method--card${billingType === "CREDIT_CARD" ? " is-active" : ""}`}
           onClick={() => onBillingTypeChange("CREDIT_CARD")}
         >
-          <CardPaymentLogo className="native-checkout__method-icon" />
+          <CardMethodPreview className="native-checkout__method-logo native-checkout__method-logo--card" />
           <span className="native-checkout__method-copy">
             <strong>Cartão</strong>
             <small>Crédito à vista</small>
@@ -235,14 +235,14 @@ export function NativeCheckoutPayment({
         <div className="native-checkout__panel native-checkout__panel--pix">
           {!pixPayload ? (
             <div className="native-checkout__empty">
-              <PixLogo className="native-checkout__empty-icon" />
+              <PixBrandImage className="native-checkout__hero-logo" />
               <strong>Pague com Pix</strong>
               <p>Gere o QR Code abaixo e conclua no app do seu banco.</p>
             </div>
           ) : (
             <>
               <div className="native-checkout__qr-header">
-                <PixLogo className="native-checkout__qr-badge" />
+                <PixBrandImage className="native-checkout__qr-logo" />
                 <div>
                   <strong>Escaneie o QR Code</strong>
                   <p>Abra o app do banco e aponte a câmera.</p>
@@ -278,14 +278,16 @@ export function NativeCheckoutPayment({
       ) : (
         <form className="native-checkout__panel native-checkout__card-form" onSubmit={(event) => void handleSubmitCard(event)}>
           <div className="native-checkout__form-head">
-            <CardPaymentLogo className="native-checkout__form-head-icon" />
             <div>
               <strong>Dados do cartão</strong>
               <p>Preencha as informações do titular para concluir.</p>
             </div>
           </div>
 
-          <CardBrandStrip className="native-checkout__brands" />
+          <div className="native-checkout__brands-panel">
+            <span className="native-checkout__section-title">Bandeiras aceitas</span>
+            <CardBrandsImage className="native-checkout__brands-strip" />
+          </div>
 
           <div className="native-checkout__section">
             <span className="native-checkout__section-title">Cartão</span>
