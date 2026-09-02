@@ -299,24 +299,24 @@ export function SubscriptionFunnelPanel({
           {nativeBillingType === "PIX" && !nativeCheckout?.pix ? (
             <button
               type="button"
-              className="ui-btn-primary activate-funnel-cta"
+              className="ui-btn-primary activate-funnel-cta native-checkout__cta native-checkout__cta--pix"
               onClick={onPrepareCheckout}
               disabled={Boolean(checkoutLoading) || !canCheckoutSelectedPlan}
             >
               {checkoutLoading ? <Loader2 className="spin" size={18} /> : null}
-              Gerar Pix
+              Gerar QR Code Pix
             </button>
           ) : null}
 
           {nativeBillingType === "CREDIT_CARD" && !pendingPayment ? (
             <button
               type="button"
-              className="ui-btn-primary activate-funnel-cta"
+              className="ui-btn-primary activate-funnel-cta native-checkout__cta native-checkout__cta--card"
               onClick={onPrepareCheckout}
               disabled={Boolean(checkoutLoading) || !canCheckoutSelectedPlan}
             >
               {checkoutLoading ? <Loader2 className="spin" size={18} /> : null}
-              Preparar pagamento
+              Continuar para cartão
             </button>
           ) : null}
 

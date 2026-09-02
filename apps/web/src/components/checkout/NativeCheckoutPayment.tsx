@@ -1,9 +1,10 @@
-import { Check, Copy, CreditCard, Loader2, QrCode, ShieldCheck } from "lucide-react";
+import { Check, Copy, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { formatPriceInBRL } from "@app-treino/shared";
 import { apiGet, apiPost } from "../../api";
 import type { CheckoutSessionResponse, NativeCheckoutPayload, PaymentRow } from "../../types/shared";
 import { brand } from "../../lib/brand";
+import { CardBrandStrip, CardPaymentLogo, PixLogo } from "./PaymentMethodArt";
 
 export type NativeBillingType = "PIX" | "CREDIT_CARD";
 
@@ -40,6 +41,34 @@ type CardFormState = {
 
 function onlyDigits(value: string) {
   return value.replace(/\D/g, "");
+}
+
+function formatCardNumber(value: string) {
+  return onlyDigits(value)
+    .slice(0, 16)
+    .replace(/(\d{4})(?=\d)/g, "$1 ")
+    .trim();
+}
+
+function formatCpf(value: string) {
+  const digits = onlyDigits(value).slice(0, 11);
+  return digits
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+}
+
+function formatPhone(value: string) {
+  const digits = onlyDigits(value).slice(0, 11);
+  if (digits.length <= 10) {
+    return digits.replace(/(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3").trim();
+  }
+  return digits.replace(/(\d{2})(\d{5})(\d{0,4})/, "($1) $2-$3").trim();
+}
+
+function formatCep(value: string) {
+  const digits = onlyDigits(value).slice(0, 8);
+  return digits.replace(/(\d{5})(\d{0,3})/, "$1-$2");
 }
 
 export function NativeCheckoutPayment({
@@ -162,44 +191,63 @@ export function NativeCheckoutPayment({
   return (
     <div className="native-checkout">
       <div className="native-checkout__summary">
-        <span className="home-telemetry-label">{brand.name} Checkout</span>
+        <span className="native-checkout__eyebrow">{brand.name} Checkout</span>
         <strong>{summaryLine}</strong>
         <p>Pagamento seguro sem sair do {brand.name}.</p>
+        <span className="native-checkout__secure">
+          <Lock size={14} />
+          Conexão criptografada
+        </span>
       </div>
 
-      <div className="native-checkout__tabs" role="tablist" aria-label="Forma de pagamento">
+      <div className="native-checkout__methods" role="tablist" aria-label="Forma de pagamento">
         <button
           type="button"
           role="tab"
           aria-selected={billingType === "PIX"}
-          className={billingType === "PIX" ? "is-active" : ""}
+          className={`native-checkout__method${billingType === "PIX" ? " is-active" : ""}`}
           onClick={() => onBillingTypeChange("PIX")}
         >
-          <QrCode size={16} />
-          Pix
+          <PixLogo className="native-checkout__method-icon" />
+          <span className="native-checkout__method-copy">
+            <strong>Pix</strong>
+            <small>Aprovação imediata</small>
+          </span>
         </button>
         <button
           type="button"
           role="tab"
           aria-selected={billingType === "CREDIT_CARD"}
-          className={billingType === "CREDIT_CARD" ? "is-active" : ""}
+          className={`native-checkout__method${billingType === "CREDIT_CARD" ? " is-active" : ""}`}
           onClick={() => onBillingTypeChange("CREDIT_CARD")}
         >
-          <CreditCard size={16} />
-          Cartão
+          <CardPaymentLogo className="native-checkout__method-icon" />
+          <span className="native-checkout__method-copy">
+            <strong>Cartão</strong>
+            <small>Crédito à vista</small>
+          </span>
         </button>
       </div>
 
       {error ? <div className="activate-funnel-error">{error}</div> : null}
 
       {billingType === "PIX" ? (
-        <div className="native-checkout__panel">
+        <div className="native-checkout__panel native-checkout__panel--pix">
           {!pixPayload ? (
             <div className="native-checkout__empty">
-              <p>Use o botão abaixo para gerar o QR Code Pix.</p>
+              <PixLogo className="native-checkout__empty-icon" />
+              <strong>Pague com Pix</strong>
+              <p>Gere o QR Code abaixo e conclua no app do seu banco.</p>
             </div>
           ) : (
             <>
+              <div className="native-checkout__qr-header">
+                <PixLogo className="native-checkout__qr-badge" />
+                <div>
+                  <strong>Escaneie o QR Code</strong>
+                  <p>Abra o app do banco e aponte a câmera.</p>
+                </div>
+              </div>
               <div className="native-checkout__qr-wrap">
                 <img
                   className="native-checkout__qr"
@@ -207,11 +255,11 @@ export function NativeCheckoutPayment({
                   alt="QR Code Pix ATLLY"
                 />
               </div>
-              <label className="native-checkout__copy-field">
-                <span>Código Pix copia e cola</span>
+              <label className="native-checkout__field native-checkout__copy-field">
+                <span className="native-checkout__label">Código Pix copia e cola</span>
                 <div className="native-checkout__copy-row">
-                  <input readOnly value={pixPayload.copyPaste} aria-label="Código Pix" />
-                  <button type="button" className="ui-btn-secondary" onClick={() => void handleCopyPix()}>
+                  <input className="native-checkout__input" readOnly value={pixPayload.copyPaste} aria-label="Código Pix" />
+                  <button type="button" className="native-checkout__copy-btn" onClick={() => void handleCopyPix()}>
                     {copyState === "copied" ? <Check size={16} /> : <Copy size={16} />}
                     {copyState === "copied" ? "Copiado" : "Copiar"}
                   </button>
@@ -229,108 +277,145 @@ export function NativeCheckoutPayment({
         </div>
       ) : (
         <form className="native-checkout__panel native-checkout__card-form" onSubmit={(event) => void handleSubmitCard(event)}>
-          <div className="native-checkout__grid">
-            <label>
-              <span>Nome no cartão</span>
-              <input
-                value={cardForm.holderName}
-                onChange={(event) => setCardForm((current) => ({ ...current, holderName: event.target.value }))}
-                autoComplete="cc-name"
-                required
-              />
-            </label>
-            <label className="native-checkout__full">
-              <span>Número do cartão</span>
-              <input
-                value={cardForm.number}
-                onChange={(event) => setCardForm((current) => ({ ...current, number: event.target.value }))}
-                inputMode="numeric"
-                autoComplete="cc-number"
-                required
-              />
-            </label>
-            <label>
-              <span>Mês</span>
-              <input
-                value={cardForm.expiryMonth}
-                onChange={(event) => setCardForm((current) => ({ ...current, expiryMonth: event.target.value }))}
-                placeholder="MM"
-                inputMode="numeric"
-                autoComplete="cc-exp-month"
-                required
-              />
-            </label>
-            <label>
-              <span>Ano</span>
-              <input
-                value={cardForm.expiryYear}
-                onChange={(event) => setCardForm((current) => ({ ...current, expiryYear: event.target.value }))}
-                placeholder="AAAA"
-                inputMode="numeric"
-                autoComplete="cc-exp-year"
-                required
-              />
-            </label>
-            <label>
-              <span>CVV</span>
-              <input
-                value={cardForm.ccv}
-                onChange={(event) => setCardForm((current) => ({ ...current, ccv: event.target.value }))}
-                inputMode="numeric"
-                autoComplete="cc-csc"
-                required
-              />
-            </label>
-            <label>
-              <span>CPF do titular</span>
-              <input
-                value={cardForm.holderCpfCnpj}
-                onChange={(event) => setCardForm((current) => ({ ...current, holderCpfCnpj: event.target.value }))}
-                inputMode="numeric"
-                required
-              />
-            </label>
-            <label>
-              <span>E-mail</span>
-              <input
-                type="email"
-                value={cardForm.holderEmail}
-                onChange={(event) => setCardForm((current) => ({ ...current, holderEmail: event.target.value }))}
-                autoComplete="email"
-                required
-              />
-            </label>
-            <label>
-              <span>Telefone</span>
-              <input
-                value={cardForm.holderPhone}
-                onChange={(event) => setCardForm((current) => ({ ...current, holderPhone: event.target.value }))}
-                inputMode="tel"
-                required
-              />
-            </label>
-            <label>
-              <span>CEP</span>
-              <input
-                value={cardForm.holderPostalCode}
-                onChange={(event) => setCardForm((current) => ({ ...current, holderPostalCode: event.target.value }))}
-                inputMode="numeric"
-                required
-              />
-            </label>
-            <label>
-              <span>Número</span>
-              <input
-                value={cardForm.holderAddressNumber}
-                onChange={(event) => setCardForm((current) => ({ ...current, holderAddressNumber: event.target.value }))}
-                required
-              />
-            </label>
+          <div className="native-checkout__form-head">
+            <CardPaymentLogo className="native-checkout__form-head-icon" />
+            <div>
+              <strong>Dados do cartão</strong>
+              <p>Preencha as informações do titular para concluir.</p>
+            </div>
           </div>
 
-          <button type="submit" className="ui-btn-primary activate-funnel-cta" disabled={loading || cardSubmitting || !payment?.id}>
+          <CardBrandStrip className="native-checkout__brands" />
+
+          <div className="native-checkout__section">
+            <span className="native-checkout__section-title">Cartão</span>
+            <div className="native-checkout__grid">
+              <label className="native-checkout__field native-checkout__full">
+                <span className="native-checkout__label">Nome impresso no cartão</span>
+                <input
+                  className="native-checkout__input"
+                  value={cardForm.holderName}
+                  onChange={(event) => setCardForm((current) => ({ ...current, holderName: event.target.value.toUpperCase() }))}
+                  placeholder="Como aparece no cartão"
+                  autoComplete="cc-name"
+                  required
+                />
+              </label>
+              <label className="native-checkout__field native-checkout__full">
+                <span className="native-checkout__label">Número do cartão</span>
+                <input
+                  className="native-checkout__input native-checkout__input--card"
+                  value={cardForm.number}
+                  onChange={(event) => setCardForm((current) => ({ ...current, number: formatCardNumber(event.target.value) }))}
+                  placeholder="0000 0000 0000 0000"
+                  inputMode="numeric"
+                  autoComplete="cc-number"
+                  required
+                />
+              </label>
+              <label className="native-checkout__field">
+                <span className="native-checkout__label">Mês</span>
+                <input
+                  className="native-checkout__input"
+                  value={cardForm.expiryMonth}
+                  onChange={(event) => setCardForm((current) => ({ ...current, expiryMonth: onlyDigits(event.target.value).slice(0, 2) }))}
+                  placeholder="MM"
+                  inputMode="numeric"
+                  autoComplete="cc-exp-month"
+                  required
+                />
+              </label>
+              <label className="native-checkout__field">
+                <span className="native-checkout__label">Ano</span>
+                <input
+                  className="native-checkout__input"
+                  value={cardForm.expiryYear}
+                  onChange={(event) => setCardForm((current) => ({ ...current, expiryYear: onlyDigits(event.target.value).slice(0, 4) }))}
+                  placeholder="AAAA"
+                  inputMode="numeric"
+                  autoComplete="cc-exp-year"
+                  required
+                />
+              </label>
+              <label className="native-checkout__field">
+                <span className="native-checkout__label">CVV</span>
+                <input
+                  className="native-checkout__input"
+                  value={cardForm.ccv}
+                  onChange={(event) => setCardForm((current) => ({ ...current, ccv: onlyDigits(event.target.value).slice(0, 4) }))}
+                  placeholder="123"
+                  inputMode="numeric"
+                  autoComplete="cc-csc"
+                  required
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="native-checkout__section">
+            <span className="native-checkout__section-title">Titular</span>
+            <div className="native-checkout__grid">
+              <label className="native-checkout__field">
+                <span className="native-checkout__label">CPF</span>
+                <input
+                  className="native-checkout__input"
+                  value={cardForm.holderCpfCnpj}
+                  onChange={(event) => setCardForm((current) => ({ ...current, holderCpfCnpj: formatCpf(event.target.value) }))}
+                  placeholder="000.000.000-00"
+                  inputMode="numeric"
+                  required
+                />
+              </label>
+              <label className="native-checkout__field">
+                <span className="native-checkout__label">Telefone</span>
+                <input
+                  className="native-checkout__input"
+                  value={cardForm.holderPhone}
+                  onChange={(event) => setCardForm((current) => ({ ...current, holderPhone: formatPhone(event.target.value) }))}
+                  placeholder="(00) 00000-0000"
+                  inputMode="tel"
+                  required
+                />
+              </label>
+              <label className="native-checkout__field native-checkout__full">
+                <span className="native-checkout__label">E-mail</span>
+                <input
+                  className="native-checkout__input"
+                  type="email"
+                  value={cardForm.holderEmail}
+                  onChange={(event) => setCardForm((current) => ({ ...current, holderEmail: event.target.value }))}
+                  placeholder="seu@email.com"
+                  autoComplete="email"
+                  required
+                />
+              </label>
+              <label className="native-checkout__field">
+                <span className="native-checkout__label">CEP</span>
+                <input
+                  className="native-checkout__input"
+                  value={cardForm.holderPostalCode}
+                  onChange={(event) => setCardForm((current) => ({ ...current, holderPostalCode: formatCep(event.target.value) }))}
+                  placeholder="00000-000"
+                  inputMode="numeric"
+                  required
+                />
+              </label>
+              <label className="native-checkout__field">
+                <span className="native-checkout__label">Número</span>
+                <input
+                  className="native-checkout__input"
+                  value={cardForm.holderAddressNumber}
+                  onChange={(event) => setCardForm((current) => ({ ...current, holderAddressNumber: event.target.value }))}
+                  placeholder="123"
+                  required
+                />
+              </label>
+            </div>
+          </div>
+
+          <button type="submit" className="ui-btn-primary activate-funnel-cta native-checkout__submit" disabled={loading || cardSubmitting || !payment?.id}>
             {cardSubmitting || loading ? <Loader2 className="spin" size={18} /> : <ShieldCheck size={18} />}
-            Pagar com cartão
+            Pagar {formatPriceInBRL(amountInCents)} com cartão
           </button>
         </form>
       )}
