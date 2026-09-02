@@ -28,7 +28,11 @@
     "prisma:migrate": "npm run prisma:migrate --workspace @app-treino/api",
     "prisma:seed": "npm run prisma:seed --workspace @app-treino/api",
     "push-uploads": "node scripts/push-uploads.mjs",
-    "migrate-uploads-to-r2": "node scripts/migrate-uploads-to-r2.mjs"
+    "migrate-uploads-to-r2": "node scripts/migrate-uploads-to-r2.mjs",
+    "payments:assets": "node scripts/ensure-payment-assets.mjs"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.5"
   },
   "engines": {
     "node": ">=20"

@@ -1,9 +1,14 @@
 import { assetUrl } from "../../lib/urls";
+import { PAYMENT_ASSETS_VERSION } from "./payment-assets.version";
+
+function paymentAssetUrl(path: string) {
+  return `${assetUrl(path)}?v=${PAYMENT_ASSETS_VERSION}`;
+}
 
 export const paymentAssets = {
-  pixLogo: assetUrl("assets/payments/pix-logo.png"),
-  cardBrands: assetUrl("assets/payments/card-brands.png"),
-  trustBadges: assetUrl("assets/payments/trust-badges.png")
+  pixLogo: paymentAssetUrl("assets/payments/pix-logo.png"),
+  cardBrands: paymentAssetUrl("assets/payments/card-brands.png"),
+  trustBadges: paymentAssetUrl("assets/payments/trust-badges.png")
 } as const;
 
 type ImageProps = {

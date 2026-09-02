@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
+    "build": "node ../../scripts/ensure-payment-assets.mjs && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test src/auth/session.test.ts src/lib/workout-runner-persist.test.ts src/lib/sandbox-checkout.test.ts src/lib/gps-filter.test.ts src/lib/activity-geo.test.ts src/stores/authStore.test.ts src/stores/musicPlayerStore.test.ts",
