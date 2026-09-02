@@ -188,6 +188,69 @@ describe("pagamento pendente vs preço atual", () => {
       false
     );
   });
+
+  it("não reutiliza URL Asaas expirada pelo tempo", () => {
+    const pricing = {
+      originalAmountInCents: 500,
+      discountInCents: 0,
+      amountInCents: 500,
+      couponId: null,
+      couponCode: null
+    };
+    const staleUpdatedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+    assert.equal(
+      canReusePendingCheckoutPayment({
+        payment: {
+          paymentUrl: "https://www.asaas.com/checkoutSession/show/old",
+          amountInCents: 500,
+          originalAmountInCents: 500,
+          discountInCents: 0,
+          couponId: null,
+          couponCode: null,
+          updatedAt: staleUpdatedAt
+        },
+        membershipPlanId: "plan-start",
+        membershipPlanCode: "start10",
+        selectedPlanId: "plan-start",
+        selectedPlanCode: "start10",
+        requestedCouponCode: null,
+        pricing
+      }),
+      false
+    );
+  });
+
+  it("reutiliza URL Asaas recém-gerada com o mesmo preço", () => {
+    const pricing = {
+      originalAmountInCents: 500,
+      discountInCents: 0,
+      amountInCents: 500,
+      couponId: null,
+      couponCode: null
+    };
+
+    assert.equal(
+      canReusePendingCheckoutPayment({
+        payment: {
+          paymentUrl: "https://www.asaas.com/checkoutSession/show/fresh",
+          amountInCents: 500,
+          originalAmountInCents: 500,
+          discountInCents: 0,
+          couponId: null,
+          couponCode: null,
+          updatedAt: new Date().toISOString()
+        },
+        membershipPlanId: "plan-start",
+        membershipPlanCode: "start10",
+        selectedPlanId: "plan-start",
+        selectedPlanCode: "start10",
+        requestedCouponCode: null,
+        pricing
+      }),
+      true
+    );
+  });
 });
 
 describe("marca nos itens Asaas", () => {

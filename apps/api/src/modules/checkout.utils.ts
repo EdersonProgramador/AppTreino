@@ -120,16 +120,20 @@ export function paymentMatchesSubscriptionPricing(
   );
 }
 
-export function canReusePendingCheckoutPayment(input: {
-  payment: PaymentPricingSnapshot & { paymentUrl?: string | null };
+/** Links Asaas expiram — só reutiliza URL recém-gerada (evita double-click). */
+export const ASAAS_CHECKOUT_URL_FRESH_MS = 2 * 60 * 1000;
+
+export type PendingCheckoutMatchInput = {
+  payment: PaymentPricingSnapshot;
   membershipPlanId: string;
   membershipPlanCode?: string | null;
   selectedPlanId: string;
   selectedPlanCode: string;
   requestedCouponCode?: string | null;
   pricing: SubscriptionCheckoutPricing;
-}): boolean {
-  if (!input.payment.paymentUrl) return false;
+};
+
+export function pendingCheckoutPricingMatches(input: PendingCheckoutMatchInput): boolean {
   if (input.membershipPlanId !== input.selectedPlanId) return false;
   if (input.membershipPlanCode && input.membershipPlanCode !== input.selectedPlanCode) return false;
 
@@ -139,6 +143,25 @@ export function canReusePendingCheckoutPayment(input: {
   if (requestedCoupon !== pricedCoupon || pricedCoupon !== storedCoupon) return false;
 
   return paymentMatchesSubscriptionPricing(input.payment, input.pricing);
+}
+
+export function canReuseAsaasCheckoutUrl(payment: {
+  paymentUrl?: string | null;
+  updatedAt?: Date | string | null;
+}): boolean {
+  if (!payment.paymentUrl?.trim()) return false;
+  if (!payment.updatedAt) return false;
+  const ageMs = Date.now() - new Date(payment.updatedAt).getTime();
+  return ageMs >= 0 && ageMs <= ASAAS_CHECKOUT_URL_FRESH_MS;
+}
+
+/** @deprecated Prefer pendingCheckoutPricingMatches + canReuseAsaasCheckoutUrl. */
+export function canReusePendingCheckoutPayment(
+  input: PendingCheckoutMatchInput & {
+    payment: PaymentPricingSnapshot & { paymentUrl?: string | null; updatedAt?: Date | string | null };
+  }
+): boolean {
+  return pendingCheckoutPricingMatches(input) && canReuseAsaasCheckoutUrl(input.payment);
 }
 
 export async function resolveSubscriptionCheckoutPricing(

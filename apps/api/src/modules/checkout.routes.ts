@@ -11,9 +11,10 @@ import {
   asaasCheckoutItemName,
   evaluateSandboxConfirmGate,
   incrementSubscriptionCouponUsage,
-  canReusePendingCheckoutPayment,
+  canReuseAsaasCheckoutUrl,
   getAsaasCheckoutAmountError,
   normalizeCheckoutCouponInput,
+  pendingCheckoutPricingMatches,
   resolveCheckoutSessionPricing,
   resolveSubscriptionCheckoutPricing
 } from "./checkout.utils.js";
@@ -219,7 +220,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
 
       let membership = pendingMembership;
       let payment = pendingMembership.payments[0];
-      const canReuseCheckout = canReusePendingCheckoutPayment({
+      const checkoutMatchInput = {
         payment,
         membershipPlanId: pendingMembership.planId,
         membershipPlanCode: pendingMembership.plan?.code,
@@ -227,9 +228,9 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
         selectedPlanCode: body.planCode,
         requestedCouponCode,
         pricing
-      });
+      };
 
-      if (!canReuseCheckout) {
+      if (!pendingCheckoutPricingMatches(checkoutMatchInput)) {
         const startsAt = todayUtcOnly();
         const pendingPayment = pendingMembership.payments[0];
         const planChanged = pendingMembership.planId !== planSeed.id;
@@ -261,15 +262,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
         payment = refreshed.payment;
       }
 
-      if (!canReusePendingCheckoutPayment({
-        payment,
-        membershipPlanId: membership.planId,
-        membershipPlanCode: membership.plan?.code ?? planSeed.code,
-        selectedPlanId: planSeed.id,
-        selectedPlanCode: body.planCode,
-        requestedCouponCode,
-        pricing
-      })) {
+      if (!canReuseAsaasCheckoutUrl(payment)) {
         const { checkout: asaasPayment, providerError } = await tryCreateAsaasCheckout({
           externalReference: payment.id,
           itemName: asaasCheckoutItemName(membership.plan?.name ?? planSeed.name),
