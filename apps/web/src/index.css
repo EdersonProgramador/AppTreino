@@ -27782,6 +27782,8 @@ html.light .activate-page.home-command .activate-billing-field select {
 .activate-page .native-checkout__method-logo {
   display: block;
   object-fit: contain;
+  background: transparent;
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.28));
 }
 
 .activate-page .native-checkout__method-logo--pix {
@@ -27802,12 +27804,16 @@ html.light .activate-page.home-command .activate-billing-field select {
   width: min(100%, 260px);
   height: auto;
   object-fit: contain;
+  background: transparent;
+  filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.32));
 }
 
 .activate-page .native-checkout__qr-logo {
   width: min(100%, 180px);
   height: auto;
   object-fit: contain;
+  background: transparent;
+  filter: drop-shadow(0 3px 12px rgba(0, 0, 0, 0.3));
 }
 
 .activate-page .native-checkout__brands-panel {
@@ -27827,6 +27833,8 @@ html.light .activate-page.home-command .activate-billing-field select {
   display: block;
   margin: 0 auto;
   object-fit: contain;
+  background: transparent;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.24));
 }
 
 .activate-page .native-checkout__method-copy {
