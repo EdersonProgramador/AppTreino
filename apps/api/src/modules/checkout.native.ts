@@ -4,6 +4,9 @@ import { prisma } from "../prisma.js";
 import {
   createAsaasCustomer,
   findAsaasCustomerByExternalReference,
+  formatAsaasDate,
+  parseAsaasDueDate,
+  resolveAsaasDueDate,
   tryFetchAsaasPixQrCode,
   tryPayAsaasCreditCard,
   tryPrepareAsaasPixPayment,
@@ -76,7 +79,25 @@ function paymentDescription(membership: CheckoutMembership, planName: string) {
 }
 
 function canReuseNativePixCharge(payment: Payment) {
+  const dueDateStr = resolveAsaasDueDate(payment.dueDate);
+  const storedDay = formatAsaasDate(payment.dueDate);
+  if (storedDay < dueDateStr) return false;
   return Boolean(payment.asaasPaymentId) && ["PENDING", "OVERDUE"].includes(payment.status);
+}
+
+async function ensurePaymentDueDateForAsaas(payment: Payment) {
+  const dueDateStr = resolveAsaasDueDate(payment.dueDate);
+  const storedDay = formatAsaasDate(payment.dueDate);
+  if (dueDateStr === storedDay) return payment;
+
+  return prisma.payment.update({
+    where: { id: payment.id },
+    data: {
+      dueDate: parseAsaasDueDate(dueDateStr),
+      asaasPaymentId: null,
+      paymentUrl: null
+    }
+  });
 }
 
 export async function prepareNativeSubscriptionCheckout(input: {
@@ -108,12 +129,13 @@ export async function prepareNativeSubscriptionCheckout(input: {
   }
 
   const description = paymentDescription(input.membership, input.planName);
+  let payment = await ensurePaymentDueDateForAsaas(input.payment);
 
-  if (canReuseNativePixCharge(input.payment)) {
-    const { pix, providerError } = await tryFetchAsaasPixQrCode(input.payment.asaasPaymentId as string);
+  if (canReuseNativePixCharge(payment)) {
+    const { pix, providerError } = await tryFetchAsaasPixQrCode(payment.asaasPaymentId as string);
     if (pix) {
       return {
-        payment: input.payment,
+        payment,
         nativeCheckout: {
           billingType: "PIX" as const,
           pix: {
@@ -129,15 +151,15 @@ export async function prepareNativeSubscriptionCheckout(input: {
 
   const { payment: asaasPayment, pix, providerError } = await tryPrepareAsaasPixPayment({
     customerId,
-    amountInCents: input.payment.amountInCents,
-    dueDate: input.payment.dueDate,
-    externalReference: input.payment.id,
+    amountInCents: payment.amountInCents,
+    dueDate: payment.dueDate,
+    externalReference: payment.id,
     description
   });
 
   if (!asaasPayment || !pix) {
     return {
-      payment: input.payment,
+      payment,
       nativeCheckout: null,
       providerError: providerError ?? "Não foi possível gerar o Pix."
     };
@@ -184,11 +206,12 @@ export async function payNativeSubscriptionWithCard(input: {
   }
 
   const description = paymentDescription(input.membership, input.planName);
+  const payment = await ensurePaymentDueDateForAsaas(input.payment);
   const { payment: asaasPayment, providerError } = await tryPayAsaasCreditCard({
     customerId,
-    amountInCents: input.payment.amountInCents,
-    dueDate: input.payment.dueDate,
-    externalReference: input.payment.id,
+    amountInCents: payment.amountInCents,
+    dueDate: payment.dueDate,
+    externalReference: payment.id,
     description,
     creditCard: {
       ...input.creditCard,
@@ -205,7 +228,7 @@ export async function payNativeSubscriptionWithCard(input: {
 
   if (!asaasPayment) {
     return {
-      payment: input.payment,
+      payment,
       providerError: providerError ?? "Não foi possível processar o cartão."
     };
   }

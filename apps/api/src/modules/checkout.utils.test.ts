@@ -9,6 +9,11 @@ import {
   ASAAS_MIN_CHECKOUT_CENTS,
   paymentMatchesSubscriptionPricing
 } from "./checkout.utils.js";
+import {
+  formatAsaasDate,
+  resolveAsaasDueDate,
+  todayAsaasDueDateString
+} from "./asaas.client.js";
 import { shouldActivateMembership, asaasStatusToPaymentStatus, addCycleDate } from "./asaas.routes.js";
 
 describe("evaluateSandboxConfirmGate", () => {
@@ -257,5 +262,14 @@ describe("marca nos itens Asaas", () => {
   it("usa ATLLY nos textos de checkout", () => {
     assert.equal(asaasCheckoutItemName("Mensal"), "ATLLY · Mensal");
     assert.equal(asaasCheckoutItemDescription("Start"), "Assinatura ATLLY · Start");
+  });
+});
+
+describe("vencimento Asaas", () => {
+  it("empurra dueDate para hoje quando está no passado", () => {
+    const yesterday = new Date(`${todayAsaasDueDateString()}T00:00:00.000Z`);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    assert.equal(resolveAsaasDueDate(yesterday), todayAsaasDueDateString());
+    assert.equal(formatAsaasDate(yesterday) < todayAsaasDueDateString(), true);
   });
 });

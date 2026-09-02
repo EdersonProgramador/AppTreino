@@ -205,8 +205,32 @@ async function asaasJsonRequest<T>(path: string, init?: RequestInit): Promise<T>
   return (await response.json()) as T;
 }
 
+const ASAAS_TIMEZONE = "America/Sao_Paulo";
+
 export function formatAsaasDate(date: Date) {
-  return date.toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: ASAAS_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(date);
+}
+
+export function todayAsaasDueDateString() {
+  return formatAsaasDate(new Date());
+}
+
+/** Asaas rejeita vencimento anterior a "hoje" (fuso BR). */
+export function resolveAsaasDueDate(stored?: Date | null) {
+  const today = todayAsaasDueDateString();
+  if (!stored) return today;
+  const storedDay = formatAsaasDate(stored);
+  return storedDay < today ? today : storedDay;
+}
+
+export function parseAsaasDueDate(dateStr: string) {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
 }
 
 export type AsaasCustomerRecord = {
@@ -264,7 +288,7 @@ export async function createAsaasPayment(input: {
       customer: input.customerId,
       billingType: input.billingType,
       value: input.amountInCents / 100,
-      dueDate: formatAsaasDate(input.dueDate),
+      dueDate: resolveAsaasDueDate(input.dueDate),
       externalReference: input.externalReference,
       description: input.description
     })
@@ -318,7 +342,7 @@ export async function createAsaasCreditCardPayment(input: {
       customer: input.customerId,
       billingType: "CREDIT_CARD",
       value: input.amountInCents / 100,
-      dueDate: formatAsaasDate(input.dueDate),
+      dueDate: resolveAsaasDueDate(input.dueDate),
       externalReference: input.externalReference,
       description: input.description,
       remoteIp: input.remoteIp,
