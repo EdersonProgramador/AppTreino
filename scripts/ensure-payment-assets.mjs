@@ -11,9 +11,9 @@ const sourceDir = path.join(paymentsDir, "source");
 const versionFile = path.join(root, "apps/web/src/components/checkout/payment-assets.version.ts");
 
 const ASSETS = [
-  { file: "pix-logo.png", liftDarkText: false },
-  { file: "card-brands.png", liftDarkText: true },
-  { file: "trust-badges.png", liftDarkText: false }
+  { file: "pix-logo.png", sourceNames: ["pix-logo.png", "pix.png"], liftDarkText: false },
+  { file: "card-brands.png", sourceNames: ["card-brands.png", "bandeiras-cartao.png", "bandeiras.png"], liftDarkText: true },
+  { file: "trust-badges.png", sourceNames: ["trust-badges.png"], liftDarkText: false }
 ];
 
 const MIN_TRANSPARENT_RATIO = 0.05;
@@ -124,6 +124,16 @@ async function copyIfExists(sourcePath, targetPath) {
   return true;
 }
 
+async function copyFromSource(sourceNames, targetPath) {
+  for (const name of sourceNames) {
+    const sourcePath = path.join(sourceDir, name);
+    if (await copyIfExists(sourcePath, targetPath)) {
+      return name;
+    }
+  }
+  return null;
+}
+
 async function writeVersionStamp() {
   const hashes = [];
   for (const asset of ASSETS) {
@@ -146,10 +156,10 @@ await fs.mkdir(sourceDir, { recursive: true });
 
 for (const asset of ASSETS) {
   const targetPath = path.join(paymentsDir, asset.file);
-  const sourcePath = path.join(sourceDir, asset.file);
+  const syncedFrom = await copyFromSource(asset.sourceNames, targetPath);
 
-  if (await copyIfExists(sourcePath, targetPath)) {
-    console.log(`[payments] synced source/${asset.file} -> ${asset.file}`);
+  if (syncedFrom) {
+    console.log(`[payments] synced source/${syncedFrom} -> ${asset.file}`);
   }
 
   let stats;
