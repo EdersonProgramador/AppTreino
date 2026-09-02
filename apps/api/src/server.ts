@@ -10,6 +10,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ZodError } from "zod";
 import { env } from "./env.js";
+import { ensureSchemaCompatibility } from "./ensure-schema.js";
 import { prisma } from "./prisma.js";
 import { mediaCacheControl } from "./media-optimize.js";
 import { registerAdminRoutes } from "./modules/admin.routes.js";
@@ -57,6 +58,15 @@ function isDevLanOrigin(origin: string) {
 }
 
 mkdirSync(uploadsDir, { recursive: true });
+
+if (env.DATABASE_URL) {
+  try {
+    await ensureSchemaCompatibility();
+  } catch (error) {
+    app.log.error({ err: error }, "schema compatibility check failed");
+    process.exit(1);
+  }
+}
 
 app.setErrorHandler((error, _request, reply) => {
   if (error instanceof ZodError) {
