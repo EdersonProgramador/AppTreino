@@ -27880,6 +27880,21 @@ html.light .activate-page.home-command .activate-billing-field select {
   border-color: rgba(50, 188, 173, 0.22);
 }
 
+.activate-page .native-checkout__panel--card {
+  border-color: rgba(212, 175, 55, 0.22);
+}
+
+.activate-page .native-checkout__hero-logo--card {
+  width: min(100%, 320px);
+  max-height: 52px;
+  object-fit: contain;
+}
+
+.activate-page .native-checkout__empty-cta {
+  width: min(100%, 360px);
+  margin-top: 0.35rem;
+}
+
 .activate-page .native-checkout__empty {
   display: grid;
   justify-items: center;

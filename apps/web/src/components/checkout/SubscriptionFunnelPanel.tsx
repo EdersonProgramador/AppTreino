@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Loader2, Sparkles } from "lucide-react";
+import { ArrowRight, Check, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { formatPriceInBRL } from "@app-treino/shared";
 import { brand } from "../../lib/brand";
@@ -288,37 +288,15 @@ export function SubscriptionFunnelPanel({
             billingType={nativeBillingType}
             onBillingTypeChange={(value) => onBillingTypeChange(value)}
             loading={Boolean(checkoutLoading)}
+            prepareDisabled={!canCheckoutSelectedPlan}
             defaultEmail={payerEmail}
             defaultPhone={payerPhone}
             defaultName={payerName}
+            onPrepareCheckout={onPrepareCheckout}
             onSessionResponse={(response) => onCheckoutSessionResponse?.(response)}
             onPaymentConfirmed={() => onPaymentConfirmed?.()}
             onError={(message) => onCheckoutError?.(message)}
           />
-
-          {nativeBillingType === "PIX" && !nativeCheckout?.pix ? (
-            <button
-              type="button"
-              className="ui-btn-primary activate-funnel-cta native-checkout__cta native-checkout__cta--pix"
-              onClick={onPrepareCheckout}
-              disabled={Boolean(checkoutLoading) || !canCheckoutSelectedPlan}
-            >
-              {checkoutLoading ? <Loader2 className="spin" size={18} /> : null}
-              Gerar QR Code Pix
-            </button>
-          ) : null}
-
-          {nativeBillingType === "CREDIT_CARD" && !pendingPayment ? (
-            <button
-              type="button"
-              className="ui-btn-primary activate-funnel-cta native-checkout__cta native-checkout__cta--card"
-              onClick={onPrepareCheckout}
-              disabled={Boolean(checkoutLoading) || !canCheckoutSelectedPlan}
-            >
-              {checkoutLoading ? <Loader2 className="spin" size={18} /> : null}
-              Continuar para cartão
-            </button>
-          ) : null}
 
           {showSandbox && onConfirmSandbox ? (
             <button type="button" className="ui-btn-secondary activate-funnel-secondary" onClick={onConfirmSandbox} disabled={Boolean(checkoutLoading)}>

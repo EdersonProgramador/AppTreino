@@ -1,4 +1,4 @@
-import { Check, Copy, Loader2, ShieldCheck } from "lucide-react";
+import { Check, Copy, CreditCard, Loader2, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { formatPriceInBRL } from "@app-treino/shared";
 import { apiGet, apiPost } from "../../api";
@@ -24,6 +24,8 @@ type NativeCheckoutPaymentProps = {
   onSessionResponse: (response: CheckoutSessionResponse) => void;
   onPaymentConfirmed: () => void;
   onError: (message: string) => void;
+  onPrepareCheckout?: () => void;
+  prepareDisabled?: boolean;
 };
 
 type CardFormState = {
@@ -86,7 +88,9 @@ export function NativeCheckoutPayment({
   defaultName,
   onSessionResponse,
   onPaymentConfirmed,
-  onError
+  onError,
+  onPrepareCheckout,
+  prepareDisabled = false
 }: NativeCheckoutPaymentProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const [cardSubmitting, setCardSubmitting] = useState(false);
@@ -188,6 +192,9 @@ export function NativeCheckoutPayment({
     }
   }
 
+  const cardReady = Boolean(payment?.id);
+  const prepareCheckoutDisabled = loading || prepareDisabled || !onPrepareCheckout;
+
   return (
     <div className="native-checkout">
       <div className="native-checkout__summary">
@@ -233,7 +240,16 @@ export function NativeCheckoutPayment({
             <div className="native-checkout__empty">
               <PixBrandImage className="native-checkout__hero-logo" />
               <strong>Pague com Pix</strong>
-              <p>Gere o QR Code abaixo e conclua no app do seu banco.</p>
+              <p>Gere o QR Code e conclua no app do seu banco.</p>
+              <button
+                type="button"
+                className="ui-btn-primary activate-funnel-cta native-checkout__empty-cta native-checkout__cta native-checkout__cta--pix"
+                onClick={onPrepareCheckout}
+                disabled={prepareCheckoutDisabled}
+              >
+                {loading ? <Loader2 className="spin" size={18} /> : null}
+                Gerar QR Code Pix
+              </button>
             </div>
           ) : (
             <>
@@ -270,6 +286,23 @@ export function NativeCheckoutPayment({
               </div>
             </>
           )}
+        </div>
+      ) : !cardReady ? (
+        <div className="native-checkout__panel native-checkout__panel--card">
+          <div className="native-checkout__empty">
+            <CardBrandsImage className="native-checkout__hero-logo native-checkout__hero-logo--card" />
+            <strong>Pague com cartão</strong>
+            <p>Na próxima etapa, preencha os dados do cartão com segurança.</p>
+            <button
+              type="button"
+              className="ui-btn-primary activate-funnel-cta native-checkout__empty-cta native-checkout__cta native-checkout__cta--card"
+              onClick={onPrepareCheckout}
+              disabled={prepareCheckoutDisabled}
+            >
+              {loading ? <Loader2 className="spin" size={18} /> : <CreditCard size={18} />}
+              Continuar com cartão
+            </button>
+          </div>
         </div>
       ) : (
         <form className="native-checkout__panel native-checkout__card-form" onSubmit={(event) => void handleSubmitCard(event)}>
@@ -411,7 +444,7 @@ export function NativeCheckoutPayment({
             </div>
           </div>
 
-          <button type="submit" className="ui-btn-primary activate-funnel-cta native-checkout__submit" disabled={loading || cardSubmitting || !payment?.id}>
+          <button type="submit" className="ui-btn-primary activate-funnel-cta native-checkout__submit" disabled={loading || cardSubmitting}>
             {cardSubmitting || loading ? <Loader2 className="spin" size={18} /> : <ShieldCheck size={18} />}
             Pagar {formatPriceInBRL(amountInCents)} com cartão
           </button>
