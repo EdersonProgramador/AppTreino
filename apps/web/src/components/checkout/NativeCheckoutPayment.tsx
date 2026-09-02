@@ -1,10 +1,10 @@
-import { Check, Copy, CreditCard, Loader2, ShieldCheck } from "lucide-react";
+import { Check, Copy, CreditCard, Loader2, QrCode, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { formatPriceInBRL } from "@app-treino/shared";
 import { apiGet, apiPost } from "../../api";
 import type { CheckoutSessionResponse, NativeCheckoutPayload, PaymentRow } from "../../types/shared";
 import { brand } from "../../lib/brand";
-import { CardBrandsImage, CardMethodPreview, PixBrandImage, TrustBadgesImage } from "./PaymentMethodArt";
+import { CardBrandsImage, TrustBadgesImage } from "./PaymentMethodArt";
 
 export type NativeBillingType = "PIX" | "CREDIT_CARD";
 
@@ -14,7 +14,7 @@ type NativeCheckoutPaymentProps = {
   amountInCents: number;
   payment: PaymentRow | null;
   nativeCheckout: NativeCheckoutPayload | null;
-  billingType: NativeBillingType;
+  billingType: NativeBillingType | null;
   onBillingTypeChange: (value: NativeBillingType) => void;
   loading?: boolean;
   error?: string | null;
@@ -211,7 +211,9 @@ export function NativeCheckoutPayment({
           className={`native-checkout__method native-checkout__method--pix${billingType === "PIX" ? " is-active" : ""}`}
           onClick={() => onBillingTypeChange("PIX")}
         >
-          <PixBrandImage className="native-checkout__method-logo native-checkout__method-logo--pix" />
+          <span className="native-checkout__method-icon native-checkout__method-icon--pix" aria-hidden="true">
+            <QrCode size={26} strokeWidth={1.75} />
+          </span>
           <span className="native-checkout__method-copy">
             <strong>Pix</strong>
             <small>Aprovação imediata</small>
@@ -224,7 +226,9 @@ export function NativeCheckoutPayment({
           className={`native-checkout__method native-checkout__method--card${billingType === "CREDIT_CARD" ? " is-active" : ""}`}
           onClick={() => onBillingTypeChange("CREDIT_CARD")}
         >
-          <CardMethodPreview className="native-checkout__method-logo native-checkout__method-logo--card" />
+          <span className="native-checkout__method-icon native-checkout__method-icon--card" aria-hidden="true">
+            <CreditCard size={26} strokeWidth={1.75} />
+          </span>
           <span className="native-checkout__method-copy">
             <strong>Cartão</strong>
             <small>Crédito à vista</small>
@@ -234,11 +238,14 @@ export function NativeCheckoutPayment({
 
       {error ? <div className="activate-funnel-error">{error}</div> : null}
 
-      {billingType === "PIX" ? (
+      {!billingType ? (
+        <div className="native-checkout__panel native-checkout__panel--idle">
+          <p className="native-checkout__idle-copy">Escolha Pix ou cartão para continuar o pagamento.</p>
+        </div>
+      ) : billingType === "PIX" ? (
         <div className="native-checkout__panel native-checkout__panel--pix">
           {!pixPayload ? (
             <div className="native-checkout__empty">
-              <PixBrandImage className="native-checkout__hero-logo" />
               <strong>Pague com Pix</strong>
               <p>Gere o QR Code e conclua no app do seu banco.</p>
               <button
@@ -254,7 +261,6 @@ export function NativeCheckoutPayment({
           ) : (
             <>
               <div className="native-checkout__qr-header">
-                <PixBrandImage className="native-checkout__qr-logo" />
                 <div>
                   <strong>Escaneie o QR Code</strong>
                   <p>Abra o app do banco e aponte a câmera.</p>
@@ -290,7 +296,6 @@ export function NativeCheckoutPayment({
       ) : !cardReady ? (
         <div className="native-checkout__panel native-checkout__panel--card">
           <div className="native-checkout__empty">
-            <CardBrandsImage className="native-checkout__hero-logo native-checkout__hero-logo--card" />
             <strong>Pague com cartão</strong>
             <p>Na próxima etapa, preencha os dados do cartão com segurança.</p>
             <button

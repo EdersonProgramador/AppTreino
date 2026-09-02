@@ -265,7 +265,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED";
   }>({
     planCode: (initialCheckoutIntent?.planCode as PlanCode | undefined) ?? "monthly",
-    billingType: "PIX"
+    billingType: "UNDEFINED"
   });
   const catalogCouponQuery = useMemo(() => {
     if (!appliedCoupon) return null;
@@ -1163,6 +1163,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
     const planCode = checkoutDraft.planCode;
     const billingType = checkoutDraft.billingType;
+
+    if (billingType !== "PIX" && billingType !== "CREDIT_CARD") {
+      setError("Escolha Pix ou cartão para continuar.");
+      return;
+    }
 
     setError(null);
     setCheckoutLoading(planCode);
@@ -2521,6 +2526,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               billingType={checkoutDraft.billingType}
               onBillingTypeChange={(value) => {
                 setCheckoutDraft((current) => ({ ...current, billingType: value }));
+                setCheckoutPayment(null);
                 setNativeCheckout(null);
               }}
               checkoutLoading={Boolean(checkoutLoading)}

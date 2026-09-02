@@ -58,8 +58,10 @@ const STEPS = [
   { id: 3, label: "Pagamento" }
 ] as const;
 
-function toNativeBillingType(value: BillingType): NativeBillingType {
-  return value === "CREDIT_CARD" ? "CREDIT_CARD" : "PIX";
+function toNativeBillingType(value: BillingType): NativeBillingType | null {
+  if (value === "CREDIT_CARD") return "CREDIT_CARD";
+  if (value === "PIX") return "PIX";
+  return null;
 }
 
 function PlanCard({
