@@ -26953,6 +26953,82 @@ html.light .student-app-shell .student-hero-card {
   backdrop-filter: blur(22px) saturate(1.15);
 }
 
+.login-command-panel__head {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.login-command-panel__title {
+  margin: 0.35rem 0 0;
+  font-family: "Oxanium", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(1.35rem, 3vw, 1.75rem);
+  color: #ecf2fa;
+  line-height: 1.15;
+}
+
+.login-command-panel__copy {
+  margin: 0;
+  color: #b8c4d4;
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.login-form--command {
+  display: grid;
+  gap: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.login-form--command .login-field-caption {
+  color: #ecf2fa;
+  font-size: 0.8125rem;
+  font-weight: 800;
+}
+
+.login-form--command .login-divider {
+  color: #8a98ae;
+}
+
+.login-form--command .login-divider::before,
+.login-form--command .login-divider::after {
+  background: rgba(180, 210, 255, 0.14);
+}
+
+.login-form--command .login-forgot {
+  color: #b8c4d4;
+}
+
+.login-form--command .login-forgot:hover {
+  color: #d4af37;
+}
+
+.login-command-panel__activate {
+  margin: 0.35rem 0 0;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: #8a98ae;
+  line-height: 1.5;
+}
+
+.login-command-panel__activate-link {
+  color: #e8c547;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.login-command-panel__activate-link:hover {
+  color: #f5d76e;
+  text-decoration: underline;
+}
+
+.activate-page .login-form--command .ui-error {
+  color: #ffb4a8;
+}
+
+.activate-page .login-form--command .ui-success {
+  color: #9ee6b8;
+}
+
 @media (min-width: 640px) {
   .activate-funnel-panel {
     padding: 1.5rem;

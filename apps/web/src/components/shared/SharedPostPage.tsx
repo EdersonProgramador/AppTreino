@@ -92,7 +92,7 @@ export function SharedPostPage() {
   }
 
   const media = post?.mediaItems[0];
-  const registerTo = `${paths.login}?mode=register&post=${encodeURIComponent(postId)}`;
+  const registerTo = `${paths.activate}?post=${encodeURIComponent(postId)}`;
   const loginTo = `${paths.login}?post=${encodeURIComponent(postId)}`;
 
   return (
@@ -110,7 +110,7 @@ export function SharedPostPage() {
           <div className="shared-post-card shared-post-empty">
             <strong>Publicação indisponível</strong>
             <p>{error ?? "Não foi possível abrir este link."}</p>
-            <Link className="shared-post-cta" to={`${paths.login}?mode=register`}>
+            <Link className="shared-post-cta" to={paths.activate}>
               Criar conta
             </Link>
           </div>

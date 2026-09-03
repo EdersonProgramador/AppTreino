@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, LogIn } from "lucide-react";
 import { ActivateView } from "../components/checkout/ActivateView";
 import { LoginView } from "../components/auth/LoginView";
+import { SubscriptionCheckoutShell } from "../components/checkout/SubscriptionCheckoutShell";
 import { AppDownloadSoonView } from "../components/home/AppDownloadSoonView";
 import { HomeView } from "../components/home/HomeView";
 import { SharedPostPage } from "../components/shared/SharedPostPage";
@@ -93,12 +94,9 @@ export function LoginPage() {
     loginState,
     loginError,
     loginSuccess,
-    selectedPlanCode,
-    setSelectedPlanCode,
     resetToken,
     setResetToken,
     submitAuth,
-    submitRegisterOnboarding,
     submitForgotPassword,
     submitResetPassword
   } = useAuth();
@@ -122,18 +120,20 @@ export function LoginPage() {
 
   useEffect(() => {
     const plan = searchParams.get("plan");
-    if (plan && plan.trim()) {
+    if (plan?.trim()) {
       navigate(`${paths.activate}?plan=${encodeURIComponent(plan.trim())}`, { replace: true });
       return;
     }
-    if (plan) {
-      setSelectedPlanCode(plan.trim());
+
+    if (searchParams.get("mode") === "register") {
+      const post = searchParams.get("post");
+      const params = new URLSearchParams();
+      if (post?.trim()) params.set("post", post.trim());
+      const query = params.toString();
+      navigate(query ? `${paths.activate}?${query}` : paths.activate, { replace: true });
     }
-  }, [navigate, searchParams, setSelectedPlanCode]);
+  }, [navigate, searchParams]);
 
-  const forceRegister = searchParams.get("mode") === "register";
-
-  // signingIn: mantém o formulário (spinner no botão). Só bloqueia em restore/redirect.
   if (phase === "restoring" || phase === "redirecting") {
     return <TransitionScreen message={transitionMessage} />;
   }
@@ -143,17 +143,19 @@ export function LoginPage() {
   }
 
   return (
-    <div className="login-shell">
-      <GuestChrome variant="login" />
+    <SubscriptionCheckoutShell
+      eyebrow={brand.accessEyebrow}
+      title="Entrar no ATLLY Command"
+      subtitle="Acesse treinos, corrida, performance e sua rede de atletas em um único sistema."
+      backHref={paths.home}
+      backLabel="Voltar ao site"
+    >
       <LoginView
         loading={loginState}
         error={loginError}
         success={loginSuccess}
-        selectedPlanCode={selectedPlanCode}
-        preferRegister={forceRegister}
         resetToken={resetToken}
         onSubmit={submitAuth}
-        onRegisterOnboarding={submitRegisterOnboarding}
         onForgotPassword={submitForgotPassword}
         onResetPassword={submitResetPassword}
         onClearResetToken={() => {
@@ -161,7 +163,7 @@ export function LoginPage() {
           navigate(paths.login, { replace: true });
         }}
       />
-    </div>
+    </SubscriptionCheckoutShell>
   );
 }
 

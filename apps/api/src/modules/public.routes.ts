@@ -244,7 +244,7 @@ export async function registerPublicRoutes(app: FastifyInstance) {
     const post = await loadPublicPost(id);
     const web = getWebAppOrigin().replace(/\/+$/, "");
     const sharePage = `${web}/p/${encodeURIComponent(id)}`;
-    const registerUrl = `${web}/login?mode=register&post=${encodeURIComponent(id)}`;
+    const registerUrl = `${web}/ativar?post=${encodeURIComponent(id)}`;
     const loginUrl = `${web}/login?post=${encodeURIComponent(id)}`;
 
     if (!post) {
