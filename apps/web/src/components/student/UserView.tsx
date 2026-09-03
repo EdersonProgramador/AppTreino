@@ -437,7 +437,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       let membership = membershipResponse.membership;
       let payments = paymentsResponse.payments;
 
-      const pendingPayment = pickPendingCheckoutPayment(payments);
+      const hasAccessNow = isAdminPreview || hasStudentWorkoutAccess(profile, membership);
+      const pendingPayment = hasAccessNow ? null : pickPendingCheckoutPayment(payments);
 
       if (pendingPayment && !options?.soft) {
         try {
@@ -477,7 +478,12 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       setPayments(payments);
       setPublishedWorkouts(workoutProgramsResponse.workouts);
       setTodayWorkout(restoredWorkout ?? firstPublishedWorkout);
-      setCheckoutPayment(pickPendingCheckoutPayment(payments));
+      setCheckoutPayment(hasAccess ? null : pickPendingCheckoutPayment(payments));
+
+      if (hasAccess) {
+        setError(null);
+        pixResumeAttemptRef.current = null;
+      }
 
       setAccessReady(true);
 
@@ -1189,11 +1195,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     }
   }
 
-  async function submitSubscriptionCheckout(input?: { cpfCnpj?: string }) {
+  async function submitSubscriptionCheckout(input?: {
+    cpfCnpj?: string;
+    billingType?: "PIX" | "CREDIT_CARD";
+  }) {
     if (!token) return;
 
     const planCode = checkoutDraft.planCode;
-    const billingType = checkoutDraft.billingType;
+    const billingType = input?.billingType ?? checkoutDraft.billingType;
 
     if (billingType !== "PIX" && billingType !== "CREDIT_CARD") {
       setError("Escolha Pix ou cartão de crédito para continuar.");
@@ -1245,6 +1254,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
   useEffect(() => {
     if (!token || nativeCheckout?.pix) return;
+    if (hasStudentWorkoutAccess(profile, membership)) return;
+
     const pending = checkoutPayment ?? pickPendingCheckoutPayment(payments);
     if (!pending || pending.status !== "PENDING") return;
     if (pixResumeAttemptRef.current === pending.id) return;
@@ -1256,8 +1267,19 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     if (!profile?.document) return;
 
     pixResumeAttemptRef.current = pending.id;
-    void submitSubscriptionCheckout({ cpfCnpj: profile.document.replace(/\D/g, "") });
-  }, [token, nativeCheckout, checkoutPayment, payments, profile?.document]);
+    void submitSubscriptionCheckout({
+      cpfCnpj: profile.document.replace(/\D/g, ""),
+      billingType: "PIX"
+    });
+  }, [
+    token,
+    nativeCheckout,
+    checkoutPayment,
+    payments,
+    profile?.document,
+    profile?.enrollmentStatus,
+    membership
+  ]);
 
   async function handleNativePaymentConfirmed() {
     if (!token) return;
