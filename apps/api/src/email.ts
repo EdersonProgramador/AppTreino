@@ -13,7 +13,7 @@ function getWebAppOrigin() {
 
 export function buildPasswordResetUrl(token: string) {
   const origin = getWebAppOrigin();
-  return `${origin}/?reset=${encodeURIComponent(token)}`;
+  return `${origin}/login?reset=${encodeURIComponent(token)}`;
 }
 
 export function isDeliverableEmail(email?: string | null) {
@@ -24,28 +24,49 @@ export function isDeliverableEmail(email?: string | null) {
   return !email.endsWith("@app-treino.local");
 }
 
+export function normalizeEmailFrom(value?: string | null) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+
+  const wrappedOnly = trimmed.match(/^<([^>]+)>$/);
+  if (wrappedOnly) {
+    return `ATLLY <${wrappedOnly[1]}>`;
+  }
+
+  if (!trimmed.includes("<") && trimmed.includes("@")) {
+    return `ATLLY <${trimmed}>`;
+  }
+
+  return trimmed;
+}
+
 export async function sendPasswordResetEmail(to: string, resetUrl: string, userName: string) {
-  const subject = "Redefinição de senha - App Treino";
+  const subject = "Redefinição de senha — ATLLY Command";
   const text = [
     `Olá, ${userName}.`,
     "",
-    "Recebemos uma solicitação para redefinir sua senha no App Treino.",
+    "Recebemos uma solicitação para redefinir sua senha no ATLLY Command.",
     "Se foi você, acesse o link abaixo para criar uma nova senha:",
     resetUrl,
     "",
     "O link expira em 1 hora. Se você não solicitou esta alteração, ignore este e-mail.",
     "",
-    "Equipe App Treino"
+    "Equipe ATLLY"
   ].join("\n");
   const html = `
     <p>Olá, <strong>${userName}</strong>.</p>
-    <p>Recebemos uma solicitação para redefinir sua senha no App Treino.</p>
+    <p>Recebemos uma solicitação para redefinir sua senha no <strong>ATLLY Command</strong>.</p>
     <p><a href="${resetUrl}">Clique aqui para criar uma nova senha</a></p>
     <p>O link expira em 1 hora. Se você não solicitou esta alteração, ignore este e-mail.</p>
-    <p>Equipe App Treino</p>
+    <p>Equipe ATLLY</p>
   `;
 
   if (env.RESEND_API_KEY && env.EMAIL_FROM) {
+    const from = normalizeEmailFrom(env.EMAIL_FROM);
+    if (!from) {
+      throw new Error("EMAIL_FROM inválido.");
+    }
+
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -53,7 +74,7 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string, userN
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        from: env.EMAIL_FROM,
+        from,
         to: [to],
         subject,
         html,

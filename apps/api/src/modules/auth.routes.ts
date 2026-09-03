@@ -109,14 +109,27 @@ const googleSchema = z.object({
 
 const forgotPasswordSchema = z
   .object({
-    email: z.string().email().optional().or(z.literal("")),
-    phone: z.string().min(8).optional().or(z.literal(""))
+    email: z.string().optional().or(z.literal("")),
+    phone: z.string().optional().or(z.literal(""))
   })
+  .transform((data) => ({
+    email: normalizeEmail(data.email),
+    phone: normalizePhone(data.phone)
+  }))
   .superRefine((data, ctx) => {
     if (!data.email && !data.phone) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Informe um e-mail ou telefone para recuperação de acesso."
+      });
+      return;
+    }
+
+    if (data.email && !z.string().email().safeParse(data.email).success) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["email"],
+        message: "Informe um e-mail válido."
       });
     }
   });
@@ -250,15 +263,15 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       });
     }
 
-    if (!user.passwordHash || !(await verifyPassword(credentials.password ?? "", user.passwordHash))) {
-      return reply.code(401).send({
-        message: loginInvalidPasswordMessage(identifierKind)
+    if (user.provider === "GOOGLE" && !user.passwordHash) {
+      return reply.code(400).send({
+        message: "Esta conta usa login com Google. Entre pelo botão do Google."
       });
     }
 
-    if (user.provider === "GOOGLE") {
-      return reply.code(400).send({
-        message: "Esta conta usa login com Google. Entre pelo botão do Google."
+    if (!user.passwordHash || !(await verifyPassword(credentials.password ?? "", user.passwordHash))) {
+      return reply.code(401).send({
+        message: loginInvalidPasswordMessage(identifierKind)
       });
     }
 
@@ -457,8 +470,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     async (request, reply) => {
       requireDatabase();
       const body = forgotPasswordSchema.parse(request.body);
-      const email = normalizeEmail(body.email);
-      const phone = normalizePhone(body.phone);
+      const email = body.email;
+      const phone = body.phone;
 
       const user = email
         ? await prisma.user.findUnique({
@@ -473,7 +486,6 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         user &&
         user.status === "ACTIVE" &&
         !user.deletedAt &&
-        user.passwordHash &&
         isDeliverableEmail(user.email)
       ) {
         const { raw, hash } = createPasswordResetToken();
@@ -496,9 +508,16 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
         try {
           await sendPasswordResetEmail(user.email!, buildPasswordResetUrl(raw), user.name);
+          console.info("[password-reset] email queued", { userId: user.id, to: user.email });
         } catch (error) {
-          console.error("Failed to send password reset email.", error);
+          console.error("[password-reset] failed to send email", { userId: user.id, error });
         }
+      } else if (user) {
+        console.warn("[password-reset] skipped", {
+          userId: user.id,
+          status: user.status,
+          hasDeliverableEmail: isDeliverableEmail(user.email)
+        });
       }
 
       return reply.send({

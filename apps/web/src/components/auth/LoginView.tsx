@@ -1,4 +1,4 @@
-import { ArrowLeft, Loader2, LogIn, UserRound } from "lucide-react";
+import { ArrowLeft, Loader2, LogIn, Mail, Save, UserRound } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import type { AuthMode } from "../../types/auth";
@@ -15,7 +15,9 @@ export const LoginView = ({
   onSubmit,
   onForgotPassword,
   onResetPassword,
-  onClearResetToken
+  onClearResetToken,
+  onAccessModeChange,
+  onClearMessages
 }: {
   loading: "idle" | "submitting";
   error: string | null;
@@ -25,8 +27,11 @@ export const LoginView = ({
   onForgotPassword: (formData: FormData) => Promise<void>;
   onResetPassword: (formData: FormData) => Promise<void>;
   onClearResetToken: () => void;
+  onAccessModeChange?: (mode: AuthMode) => void;
+  onClearMessages?: () => void;
 }) => {
   const [mode, setMode] = useState<AuthMode>(resetToken ? "reset" : "login");
+  const [recoverySubmitting, setRecoverySubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
   const googleButtonRef = useRef<HTMLDivElement | null>(null);
 
@@ -35,7 +40,13 @@ export const LoginView = ({
   }, [resetToken]);
 
   useEffect(() => {
-    if (success && mode === "reset") setMode("login");
+    onAccessModeChange?.(mode);
+  }, [mode, onAccessModeChange]);
+
+  useEffect(() => {
+    if (success && mode === "reset") {
+      setMode("login");
+    }
   }, [success, mode]);
 
   useEffect(() => {
@@ -101,17 +112,32 @@ export const LoginView = ({
     };
   }, [mode, onSubmit]);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const switchMode = (next: AuthMode) => {
+    onClearMessages?.();
+    setMode(next);
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     uiSounds.submit();
 
     if (mode === "forgot") {
-      void onForgotPassword(new FormData(event.currentTarget));
+      setRecoverySubmitting(true);
+      try {
+        await onForgotPassword(new FormData(event.currentTarget));
+      } finally {
+        setRecoverySubmitting(false);
+      }
       return;
     }
 
     if (mode === "reset") {
-      void onResetPassword(new FormData(event.currentTarget));
+      setRecoverySubmitting(true);
+      try {
+        await onResetPassword(new FormData(event.currentTarget));
+      } finally {
+        setRecoverySubmitting(false);
+      }
       return;
     }
 
@@ -123,7 +149,7 @@ export const LoginView = ({
     void onSubmit("login", new FormData(formRef.current), "GOOGLE");
   }
 
-  const isSubmitting = loading !== "idle";
+  const isSubmitting = loading !== "idle" || recoverySubmitting;
   const title =
     mode === "reset" ? "Redefinir senha" : mode === "forgot" ? "Recuperar acesso" : brand.loginTitle;
   const description =
@@ -132,6 +158,14 @@ export const LoginView = ({
       : mode === "forgot"
         ? "Informe o e-mail ou telefone cadastrado para receber o link."
         : brand.loginCopy;
+  const submitIcon =
+    mode === "reset" ? (
+      <Save size={18} />
+    ) : mode === "forgot" ? (
+      <Mail size={18} />
+    ) : (
+      <LogIn size={18} />
+    );
 
   return (
     <section className="activate-funnel-panel login-command-panel">
@@ -209,7 +243,7 @@ export const LoginView = ({
           type="submit"
           disabled={isSubmitting}
         >
-          {loading === "submitting" ? <Loader2 className="animate-spin" size={18} /> : <LogIn size={18} />}
+          {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : submitIcon}
           <span>
             {mode === "reset" ? "Salvar nova senha" : mode === "forgot" ? "Enviar link de recuperação" : "Entrar"}
           </span>
@@ -233,7 +267,7 @@ export const LoginView = ({
                 Entrar com Google
               </button>
             )}
-            <button className="ui-btn-ghost login-forgot" type="button" onClick={() => setMode("forgot")}>
+            <button className="ui-btn-ghost login-forgot" type="button" onClick={() => switchMode("forgot")}>
               Esqueci minha senha
             </button>
             <p className="login-command-panel__activate">
@@ -250,8 +284,11 @@ export const LoginView = ({
             className="ui-btn-ghost login-forgot"
             type="button"
             onClick={() => {
-              onClearResetToken();
-              setMode("login");
+              if (mode === "reset") {
+                onClearResetToken();
+              } else {
+                switchMode("login");
+              }
             }}
           >
             <ArrowLeft size={16} />

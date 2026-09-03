@@ -27,13 +27,27 @@ import {
   persistStoredUser,
   readStoredUser
 } from "./session";
-import { paths } from "./paths";
+import { paths, studentCheckoutPath } from "./paths";
 import { consumeCheckoutIntent, readCheckoutIntent } from "../lib/checkout-intent";
-import { studentCheckoutPath } from "./paths";
 import { preloadAdminPanel, preloadStudentPanel } from "./RouteGuards";
 import { useMusicPlayerStore } from "../stores/musicPlayerStore";
 import { clearStudentPanel } from "../lib/student-panel-persist";
 import { clearWorkoutRunner } from "../lib/workout-runner-persist";
+
+function buildForgotPasswordPayload(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const phoneRaw = String(formData.get("phone") ?? "").trim();
+  const identifier = String(formData.get("identifier") ?? "").trim();
+  const resolvedEmail = email || (identifier.includes("@") ? identifier.toLowerCase() : undefined);
+  const resolvedPhoneRaw = phoneRaw || (!identifier.includes("@") ? identifier : undefined);
+  const resolvedPhone = resolvedPhoneRaw ? resolvedPhoneRaw.replace(/\D/g, "") : undefined;
+
+  return {
+    email: resolvedEmail || undefined,
+    phone: resolvedPhone && resolvedPhone.length >= 8 ? resolvedPhone : resolvedPhoneRaw || undefined
+  };
+}
+
 import { flushShellStateToNative } from "../lib/shell-persist";
 import { isNativeAppShell, nativeLogout } from "../lib/native-bridge";
 
@@ -457,28 +471,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const submitForgotPassword = useCallback(async (formData: FormData) => {
-    const email = String(formData.get("email") ?? "").trim().toLowerCase();
-    const phone = String(formData.get("phone") ?? "").trim();
-    const identifier = String(formData.get("identifier") ?? "").trim();
     const store = useAuthStore.getState();
+    const payload = buildForgotPasswordPayload(formData);
 
     store.clearLoginMessages();
-    store.beginSignIn();
 
     try {
-      const response = await apiPost<{ message: string }>("/auth/forgot-password", {
-        email: email || (identifier.includes("@") ? identifier : undefined),
-        phone: phone || (!identifier.includes("@") ? identifier : undefined)
-      });
-      useAuthStore.setState({
-        phase: "anonymous",
-        loginSuccess:
-          response.message ??
+      const response = await apiPost<{ message: string }>("/auth/forgot-password", payload);
+      store.setLoginSuccess(
+        response.message ??
           "Se o e-mail ou telefone estiver cadastrado, você receberá instruções para redefinir sua senha."
-      });
+      );
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;
-      store.failSignIn(message ?? "Não foi possível processar a recuperação de senha neste momento.");
+      store.setLoginError(message ?? "Não foi possível processar a recuperação de senha neste momento.");
     }
   }, []);
 
@@ -499,22 +505,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    store.beginSignIn();
-
     try {
       const response = await apiPost<{ message: string }>("/auth/reset-password", {
         token: store.resetToken,
         password
       });
       useAuthStore.setState({
-        phase: "anonymous",
         resetToken: null,
+        loginError: null,
         loginSuccess:
           response.message ?? "Senha redefinida com sucesso. Você já pode entrar com a nova senha."
       });
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;
-      store.failSignIn(message ?? "Não foi possível redefinir a senha neste momento.");
+      store.setLoginError(message ?? "Não foi possível redefinir a senha neste momento.");
     }
   }, []);
 

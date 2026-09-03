@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, LogIn } from "lucide-react";
 import { ActivateView } from "../components/checkout/ActivateView";
@@ -14,6 +14,27 @@ import { useAuth } from "./AuthContext";
 import { AdminPanel, CoachPanel, StudentPanel, TransitionScreen } from "./RouteGuards";
 import { activatePath, homePathForRole, loginPath, paths } from "./paths";
 import { setPostLoginDestination } from "./session";
+import type { AuthMode } from "../types/auth";
+
+function loginShellCopy(mode: AuthMode) {
+  switch (mode) {
+    case "forgot":
+      return {
+        title: "Recuperar acesso",
+        subtitle: "Enviaremos um link seguro para redefinir sua senha no ATLLY Command."
+      };
+    case "reset":
+      return {
+        title: "Redefinir senha",
+        subtitle: "Crie uma nova senha para voltar aos treinos, corrida e performance."
+      };
+    default:
+      return {
+        title: "Entrar no ATLLY Command",
+        subtitle: "Acesse treinos, corrida, performance e sua rede de atletas em um único sistema."
+      };
+  }
+}
 
 export function HomePage() {
   const { user, token, isTransitioning, transitionMessage } = useAuth();
@@ -98,10 +119,13 @@ export function LoginPage() {
     setResetToken,
     submitAuth,
     submitForgotPassword,
-    submitResetPassword
+    submitResetPassword,
+    clearLoginMessages
   } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const [accessMode, setAccessMode] = useState<AuthMode>(resetToken ? "reset" : "login");
+  const shellCopy = useMemo(() => loginShellCopy(accessMode), [accessMode]);
 
   useEffect(() => {
     const reset = searchParams.get("reset");
@@ -117,6 +141,10 @@ export function LoginPage() {
       setSearchParams(next, { replace: true });
     }
   }, [searchParams, setResetToken, setSearchParams]);
+
+  useEffect(() => {
+    if (resetToken) setAccessMode("reset");
+  }, [resetToken]);
 
   useEffect(() => {
     const plan = searchParams.get("plan");
@@ -145,8 +173,8 @@ export function LoginPage() {
   return (
     <SubscriptionCheckoutShell
       eyebrow={brand.accessEyebrow}
-      title="Entrar no ATLLY Command"
-      subtitle="Acesse treinos, corrida, performance e sua rede de atletas em um único sistema."
+      title={shellCopy.title}
+      subtitle={shellCopy.subtitle}
       backHref={paths.home}
       backLabel="Voltar ao site"
     >
@@ -158,8 +186,12 @@ export function LoginPage() {
         onSubmit={submitAuth}
         onForgotPassword={submitForgotPassword}
         onResetPassword={submitResetPassword}
+        onAccessModeChange={setAccessMode}
+        onClearMessages={clearLoginMessages}
         onClearResetToken={() => {
+          clearLoginMessages();
           setResetToken(null);
+          setAccessMode("login");
           navigate(paths.login, { replace: true });
         }}
       />
