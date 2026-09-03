@@ -5,7 +5,7 @@ import { ApiError, apiGet, apiPost } from "../../api";
 import { paths, unpaidStudentActivatePath } from "../../auth/paths";
 import { useAuth } from "../../auth/AuthContext";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
-import { clearCheckoutIntent, readCheckoutIntent, resolveCheckoutPlanSelection, setCheckoutIntent } from "../../lib/checkout-intent";
+import { clearCheckoutIntent, patchCheckoutIntent, readCheckoutIntent, resolveCheckoutCouponSelection, resolveCheckoutPlanSelection } from "../../lib/checkout-intent";
 import { resolvePendingPaymentForSelectedPlan } from "../../lib/checkout-pending";
 import { planHasPromoDiscount, plansForCouponDisplay } from "../../lib/plan-catalog";
 import { isSandboxCheckoutEnabled } from "../../lib/sandbox-checkout";
@@ -42,7 +42,13 @@ export function ActivatePendingCheckout() {
     })
   );
   const [couponDraft, setCouponDraft] = useState("");
-  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(couponFromUrl?.toUpperCase() ?? null);
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(() => {
+    const resolved = resolveCheckoutCouponSelection({
+      checkoutIntent,
+      couponFromUrl
+    });
+    return resolved || null;
+  });
   const [couponFeedback, setCouponFeedback] = useState<string | null>(null);
   const [couponApplying, setCouponApplying] = useState(Boolean(couponFromUrl?.trim()));
   const [couponValidForSelection, setCouponValidForSelection] = useState<boolean | null>(
@@ -70,17 +76,29 @@ export function ActivatePendingCheckout() {
         });
         if (resolvedPlan) {
           setSelectedPlan(resolvedPlan);
-          setCheckoutIntent({
-            planCode: resolvedPlan,
-            couponCode: readCheckoutIntent()?.couponCode ?? couponFromUrl ?? undefined,
-            source: "activate"
-          });
         }
 
         const paymentsResponse = await apiGet<{ payments: PaymentRow[] }>("/user/payments", token);
         setPayments(paymentsResponse.payments);
         const pending = pickPendingCheckoutPayment(paymentsResponse.payments);
         setCheckoutPayment(pending);
+
+        const resolvedCoupon = resolveCheckoutCouponSelection({
+          checkoutIntent: readCheckoutIntent(),
+          couponFromUrl,
+          paymentCouponCode: pending?.couponCode
+        });
+        if (resolvedCoupon) {
+          setAppliedCoupon(resolvedCoupon);
+          setCouponApplying(true);
+          setCouponValidForSelection(null);
+        }
+
+        patchCheckoutIntent({
+          planCode: resolvedPlan || undefined,
+          couponCode: resolvedCoupon || undefined,
+          source: "activate"
+        });
 
         if (pending) {
           setBillingType("PIX");
@@ -131,6 +149,15 @@ export function ActivatePendingCheckout() {
   );
   const selectedPlanHasDiscount = planHasPromoDiscount(selectedPlanRow);
   const checkoutCoupon = selectedPlanHasDiscount ? appliedCoupon : null;
+
+  useEffect(() => {
+    if (!selectedPlan) return;
+    patchCheckoutIntent({
+      planCode: selectedPlan,
+      couponCode: appliedCoupon ?? undefined,
+      source: "activate"
+    });
+  }, [appliedCoupon, selectedPlan]);
 
   useEffect(() => {
     if (!appliedCoupon) {
@@ -296,14 +323,14 @@ export function ActivatePendingCheckout() {
         onSelectPlan={(code) => {
           uiSounds.radioSelect();
           setSelectedPlan(code);
-          setCheckoutIntent({
+          patchCheckoutIntent({
             planCode: code,
-            couponCode: checkoutCoupon ?? undefined,
+            couponCode: appliedCoupon ?? undefined,
             source: "activate"
           });
           setCheckoutPayment(null);
           setNativeCheckout(null);
-          navigate(unpaidStudentActivatePath(membership, code, checkoutCoupon ?? undefined), { replace: true });
+          navigate(unpaidStudentActivatePath(membership, code, appliedCoupon ?? undefined), { replace: true });
         }}
         billingType={billingType}
         onBillingTypeChange={(value) => {
@@ -335,6 +362,7 @@ export function ActivatePendingCheckout() {
             setAppliedCoupon(null);
             setCouponValidForSelection(false);
             setCouponFeedback(null);
+            patchCheckoutIntent({ couponCode: undefined, source: "activate" });
             return;
           }
           setCouponApplying(true);
@@ -349,6 +377,7 @@ export function ActivatePendingCheckout() {
           setCouponApplying(false);
           setCouponDraft("");
           setCouponFeedback(null);
+          patchCheckoutIntent({ couponCode: undefined, source: "activate" });
         }}
         couponFeedback={couponFeedback}
         couponApplying={couponApplying || catalogPlansLoading}

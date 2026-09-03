@@ -60,3 +60,30 @@ export function resolveCheckoutPlanSelection(input: {
 
   return input.membershipPlanCode?.trim() ?? "";
 }
+
+/** Cupom aplicado no funil: intent → URL → pagamento pendente. */
+export function resolveCheckoutCouponSelection(input: {
+  checkoutIntent?: CheckoutIntent | null;
+  couponFromUrl?: string | null;
+  paymentCouponCode?: string | null;
+}): string {
+  const fromIntent = input.checkoutIntent?.couponCode?.trim().toUpperCase();
+  if (fromIntent) return fromIntent;
+
+  const fromUrl = input.couponFromUrl?.trim().toUpperCase();
+  if (fromUrl) return fromUrl;
+
+  const fromPayment = input.paymentCouponCode?.trim().toUpperCase();
+  if (fromPayment) return fromPayment;
+
+  return "";
+}
+
+export function patchCheckoutIntent(patch: CheckoutIntent) {
+  const current = readCheckoutIntent();
+  setCheckoutIntent({
+    planCode: "planCode" in patch ? patch.planCode : current?.planCode,
+    couponCode: "couponCode" in patch ? patch.couponCode : current?.couponCode,
+    source: patch.source ?? current?.source ?? "activate"
+  });
+}

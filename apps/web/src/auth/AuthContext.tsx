@@ -28,7 +28,7 @@ import {
   readStoredUser
 } from "./session";
 import { paths, unpaidStudentActivatePath } from "./paths";
-import { clearCheckoutIntent, readCheckoutIntent, resolveCheckoutPlanSelection } from "../lib/checkout-intent";
+import { clearCheckoutIntent, readCheckoutIntent, resolveCheckoutCouponSelection, resolveCheckoutPlanSelection } from "../lib/checkout-intent";
 import { fetchStudentPortalAccess } from "../lib/student-portal-access";
 import { preloadAdminPanel, preloadStudentPanel } from "./RouteGuards";
 import { useMusicPlayerStore } from "../stores/musicPlayerStore";
@@ -342,7 +342,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         checkoutIntent?.planCode?.trim() ||
         store.selectedPlanCode?.trim() ||
         null;
-      const couponForCheckout = checkoutIntent?.couponCode ?? null;
+      const couponForCheckout =
+        resolveCheckoutCouponSelection({ checkoutIntent }) || null;
       const isCheckoutRegister = mode === "register" && Boolean(planCode);
       const endpoint =
         provider === "GOOGLE"
@@ -433,6 +434,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           selectedPlanCode: store.selectedPlanCode,
           membershipPlanCode: null
         }) || planCode;
+        const couponForRedirect =
+          resolveCheckoutCouponSelection({ checkoutIntent: checkoutIntentAfter }) || undefined;
         let destination = store.establishSession(response);
 
         if (response.user.role === "USER" && !response.user.previewMode) {
@@ -445,14 +448,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               destination = unpaidStudentActivatePath(
                 access.membership,
                 planForCheckout ?? checkoutIntent?.planCode ?? undefined,
-                checkoutIntentAfter?.couponCode ?? undefined
+                couponForRedirect
               );
             }
           } catch {
             destination = unpaidStudentActivatePath(
               null,
               planForCheckout ?? checkoutIntent?.planCode ?? undefined,
-              checkoutIntentAfter?.couponCode ?? undefined
+              couponForRedirect
             );
           }
         }
