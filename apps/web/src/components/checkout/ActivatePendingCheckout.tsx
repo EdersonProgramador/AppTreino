@@ -7,7 +7,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
 import { clearCheckoutIntent, patchCheckoutIntent, readCheckoutIntent, resolveCheckoutCouponSelection, resolveCheckoutPlanSelection } from "../../lib/checkout-intent";
 import { resolvePendingPaymentForSelectedPlan } from "../../lib/checkout-pending";
-import { planHasPromoDiscount, plansForCouponDisplay } from "../../lib/plan-catalog";
+import { planHasPromoDiscount, plansForCouponDisplay, resolvePlanCodeInCatalog } from "../../lib/plan-catalog";
 import { isSandboxCheckoutEnabled } from "../../lib/sandbox-checkout";
 import { pickPendingCheckoutPayment, syncCheckoutPaymentStatus } from "../../lib/checkout-payment-sync";
 import { fetchStudentPortalAccess, hasStudentPortalAccess } from "../../lib/student-portal-access";
@@ -34,18 +34,22 @@ export function ActivatePendingCheckout() {
   const [checkoutLoading, setCheckoutLoading] = useState<PlanCode | "sandbox" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [billingType, setBillingType] = useState<BillingType>("UNDEFINED");
+  const preferUrlParams = Boolean(planFromUrl?.trim() || couponFromUrl?.trim());
+
   const [selectedPlan, setSelectedPlan] = useState(() =>
     resolveCheckoutPlanSelection({
       checkoutIntent,
       planFromUrl,
-      selectedPlanCode
+      selectedPlanCode,
+      preferUrl: preferUrlParams
     })
   );
   const [couponDraft, setCouponDraft] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(() => {
     const resolved = resolveCheckoutCouponSelection({
       checkoutIntent,
-      couponFromUrl
+      couponFromUrl,
+      preferUrl: preferUrlParams
     });
     return resolved || null;
   });
@@ -72,7 +76,8 @@ export function ActivatePendingCheckout() {
           checkoutIntent: readCheckoutIntent(),
           planFromUrl,
           selectedPlanCode,
-          membershipPlanCode: access.membership?.plan?.code
+          membershipPlanCode: access.membership?.plan?.code,
+          preferUrl: preferUrlParams
         });
         if (resolvedPlan) {
           setSelectedPlan(resolvedPlan);
@@ -86,7 +91,8 @@ export function ActivatePendingCheckout() {
         const resolvedCoupon = resolveCheckoutCouponSelection({
           checkoutIntent: readCheckoutIntent(),
           couponFromUrl,
-          paymentCouponCode: pending?.couponCode
+          paymentCouponCode: pending?.couponCode,
+          preferUrl: preferUrlParams
         });
         if (resolvedCoupon) {
           setAppliedCoupon(resolvedCoupon);
@@ -121,7 +127,7 @@ export function ActivatePendingCheckout() {
         setLoadingAccess(false);
       }
     })();
-  }, [couponFromUrl, navigate, planFromUrl, selectedPlanCode, token]);
+  }, [couponFromUrl, navigate, planFromUrl, preferUrlParams, selectedPlanCode, token]);
 
   const catalogCouponQuery = useMemo(() => {
     if (!appliedCoupon) return null;
@@ -133,10 +139,21 @@ export function ActivatePendingCheckout() {
     useCatalogPlans(selectedPlan || planFromUrl || membership?.plan?.code, catalogCouponQuery);
 
   useEffect(() => {
+    if (catalogPlansLoading || catalogPlans.length === 0) return;
+
+    const planRef = selectedPlan || planFromUrl;
+    const resolved = resolvePlanCodeInCatalog(planRef, catalogPlans);
+    if (resolved && resolved !== selectedPlan) {
+      setSelectedPlan(resolved);
+      return;
+    }
+
+    if (planFromUrl?.trim()) return;
+
     if (initialPlanCode && !catalogPlans.some((plan) => plan.code === selectedPlan)) {
       setSelectedPlan(initialPlanCode);
     }
-  }, [catalogPlans, initialPlanCode, selectedPlan]);
+  }, [catalogPlans, catalogPlansLoading, initialPlanCode, planFromUrl, selectedPlan]);
 
   const plans = useMemo(
     () => plansForCouponDisplay(catalogPlans, appliedCoupon, selectedPlan),
@@ -354,6 +371,7 @@ export function ActivatePendingCheckout() {
         onConfirmSandbox={() => void handleConfirmSandboxPayment()}
         showSandbox={Boolean(isSandboxCheckoutEnabled() && pendingPayment && pendingPayment.status === "PENDING")}
         couponCode={checkoutCoupon}
+        stagedCouponCode={appliedCoupon}
         couponDraft={couponDraft}
         onCouponDraftChange={setCouponDraft}
         onApplyCoupon={() => {

@@ -48,11 +48,15 @@ export function resolveCheckoutPlanSelection(input: {
   planFromUrl?: string | null;
   selectedPlanCode?: string | null;
   membershipPlanCode?: string | null;
+  /** Em refresh com query string, a URL manda sobre intent stale. */
+  preferUrl?: boolean;
 }): string {
-  const fromIntent = input.checkoutIntent?.planCode?.trim();
-  if (fromIntent) return fromIntent;
-
   const fromUrl = input.planFromUrl?.trim();
+  const fromIntent = input.checkoutIntent?.planCode?.trim();
+
+  if (input.preferUrl && fromUrl) return fromUrl;
+
+  if (fromIntent) return fromIntent;
   if (fromUrl) return fromUrl;
 
   const fromStore = input.selectedPlanCode?.trim();
@@ -66,11 +70,15 @@ export function resolveCheckoutCouponSelection(input: {
   checkoutIntent?: CheckoutIntent | null;
   couponFromUrl?: string | null;
   paymentCouponCode?: string | null;
+  /** Em refresh com query string, a URL manda sobre intent stale. */
+  preferUrl?: boolean;
 }): string {
-  const fromIntent = input.checkoutIntent?.couponCode?.trim().toUpperCase();
-  if (fromIntent) return fromIntent;
-
   const fromUrl = input.couponFromUrl?.trim().toUpperCase();
+  const fromIntent = input.checkoutIntent?.couponCode?.trim().toUpperCase();
+
+  if (input.preferUrl && fromUrl) return fromUrl;
+
+  if (fromIntent) return fromIntent;
   if (fromUrl) return fromUrl;
 
   const fromPayment = input.paymentCouponCode?.trim().toUpperCase();

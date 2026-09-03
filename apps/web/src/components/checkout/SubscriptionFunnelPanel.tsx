@@ -44,6 +44,8 @@ type SubscriptionFunnelPanelProps = {
   showPaymentStep?: boolean;
   accountSlot?: ReactNode;
   couponCode?: string | null;
+  /** Cupom da URL/intent ainda em validação ou aguardando plano compatível. */
+  stagedCouponCode?: string | null;
   couponDraft?: string;
   onCouponDraftChange?: (value: string) => void;
   onApplyCoupon?: () => void;
@@ -142,6 +144,7 @@ export function SubscriptionFunnelPanel({
   showPaymentStep = false,
   accountSlot,
   couponCode,
+  stagedCouponCode = null,
   couponDraft = "",
   onCouponDraftChange,
   onApplyCoupon,
@@ -155,6 +158,9 @@ export function SubscriptionFunnelPanel({
   const canCheckoutSelectedPlan = selectedPlan ? isCheckoutEligiblePlan(selectedPlan) : false;
   const resolvedSelectedPlanHasDiscount = selectedPlanHasDiscount || planHasPromoDiscount(selectedPlan);
   const nativeBillingType = toNativeBillingType(billingType);
+  const visibleCouponCode = couponCode ?? stagedCouponCode;
+  const showAppliedCouponRow =
+    Boolean(couponCode && resolvedSelectedPlanHasDiscount) || Boolean(stagedCouponCode && couponApplying);
 
   return (
     <div className="activate-funnel-panel">
@@ -200,10 +206,10 @@ export function SubscriptionFunnelPanel({
 
           {(step === 1 || showPaymentStep) && onApplyCoupon && onCouponDraftChange ? (
             <div className="activate-coupon-box">
-              {couponCode && resolvedSelectedPlanHasDiscount ? (
+              {showAppliedCouponRow && visibleCouponCode ? (
                 <div className="activate-coupon-applied-row">
                   <span className="activate-coupon-applied">
-                    Cupom <strong>{couponCode}</strong> aplicado
+                    Cupom <strong>{visibleCouponCode}</strong> {couponApplying ? "validando…" : "aplicado"}
                   </span>
                   {onRemoveCoupon ? (
                     <button type="button" className="activate-coupon-apply" onClick={onRemoveCoupon}>
@@ -216,7 +222,7 @@ export function SubscriptionFunnelPanel({
                   <span className="activate-coupon-field__hint">Tem um cupom?</span>
                   <div className="activate-coupon-field__row">
                     <input
-                      value={couponDraft}
+                      value={couponDraft || stagedCouponCode || ""}
                       onChange={(event) => onCouponDraftChange(event.target.value.toUpperCase())}
                       placeholder="Código"
                       autoComplete="off"

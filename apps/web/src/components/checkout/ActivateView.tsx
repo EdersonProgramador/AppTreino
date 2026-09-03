@@ -6,7 +6,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { paths, activatePath } from "../../auth/paths";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
 import { patchCheckoutIntent, readCheckoutIntent, resolveCheckoutCouponSelection } from "../../lib/checkout-intent";
-import { getEffectivePriceCents, planHasPromoDiscount, plansForCouponDisplay } from "../../lib/plan-catalog";
+import { getEffectivePriceCents, planHasPromoDiscount, plansForCouponDisplay, resolvePlanCodeInCatalog } from "../../lib/plan-catalog";
 import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
 import { SubscriptionCheckoutShell } from "./SubscriptionCheckoutShell";
 import { SubscriptionFunnelPanel, type BillingType } from "./SubscriptionFunnelPanel";
@@ -25,11 +25,14 @@ export function ActivateView() {
 
   const [portalState, setPortalState] = useState<"loading" | "guest" | "paid" | "unpaid">("loading");
 
+  const preferUrlParams = Boolean(planFromUrl?.trim() || couponFromUrl?.trim());
+
   const [couponDraft, setCouponDraft] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(() => {
     const resolved = resolveCheckoutCouponSelection({
       checkoutIntent: readCheckoutIntent(),
-      couponFromUrl
+      couponFromUrl,
+      preferUrl: preferUrlParams
     });
     return resolved || null;
   });
@@ -68,14 +71,15 @@ export function ActivateView() {
   useEffect(() => {
     const resolved = resolveCheckoutCouponSelection({
       checkoutIntent: readCheckoutIntent(),
-      couponFromUrl
+      couponFromUrl,
+      preferUrl: preferUrlParams
     });
     if (resolved) {
       setAppliedCoupon(resolved);
       setCouponApplying(true);
       setCouponValidForSelection(null);
     }
-  }, [couponFromUrl]);
+  }, [couponFromUrl, preferUrlParams]);
 
   const catalogCouponQuery = useMemo(() => {
     if (!appliedCoupon) return null;
@@ -106,10 +110,21 @@ export function ActivateView() {
   }, [planFromUrl, syncSelectedPlan]);
 
   useEffect(() => {
+    if (loading || plans.length === 0) return;
+
+    const planRef = selectedPlan || planFromUrl;
+    const resolved = resolvePlanCodeInCatalog(planRef, plans);
+    if (resolved && resolved !== selectedPlan) {
+      syncSelectedPlan(resolved);
+      return;
+    }
+
+    if (planFromUrl?.trim()) return;
+
     if (initialPlanCode && !plans.some((plan) => plan.code === selectedPlan)) {
       syncSelectedPlan(initialPlanCode);
     }
-  }, [initialPlanCode, plans, selectedPlan, syncSelectedPlan]);
+  }, [initialPlanCode, loading, planFromUrl, plans, selectedPlan, syncSelectedPlan]);
 
   const selectedPlanRow = useMemo(
     () => plans.find((plan) => plan.code === selectedPlan) ?? plans[0] ?? null,
@@ -257,6 +272,7 @@ export function ActivateView() {
         onContinuePlan={handleContinuePlan}
         error={loginError}
         couponCode={checkoutCoupon}
+        stagedCouponCode={appliedCoupon}
         couponDraft={couponDraft}
         onCouponDraftChange={setCouponDraft}
         onApplyCoupon={handleApplyCoupon}

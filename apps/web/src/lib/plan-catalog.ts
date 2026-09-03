@@ -133,6 +133,27 @@ export function getAnnualSavingsCents(plan: CatalogPlan, monthlyBaseline: Catalo
   return Math.max(0, monthlyBaseline.priceInCents * 12 - plan.priceInCents);
 }
 
+/** Mapeia ?plan=97 ou código parcial para o code real do catálogo. */
+export function resolvePlanCodeInCatalog(planRef: string | null | undefined, plans: CatalogPlan[]): string {
+  const ref = planRef?.trim();
+  if (!ref) return "";
+  if (plans.some((plan) => plan.code === ref)) return ref;
+
+  const numeric = Number(ref.replace(",", "."));
+  if (Number.isFinite(numeric) && numeric > 0) {
+    const asCents = numeric >= 100 ? Math.round(numeric) : Math.round(numeric * 100);
+    const match = plans.find(
+      (plan) =>
+        plan.priceInCents === asCents ||
+        getEffectivePriceCents(plan) === asCents ||
+        Math.round(plan.priceInCents / 100) === Math.round(asCents / 100)
+    );
+    if (match) return match.code;
+  }
+
+  return ref;
+}
+
 export function getDefaultPlanCode(plans: CatalogPlan[], preferredCode?: string | null): string {
   const visible = getFunnelPlans(plans);
   const eligible = visible.filter(isCheckoutEligiblePlan);
