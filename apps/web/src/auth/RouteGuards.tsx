@@ -1,13 +1,14 @@
 import { Loader2 } from "lucide-react";
-import { Suspense, type ReactNode } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { can, canAccessPanel, type UserRole } from "@app-treino/shared";
 import { assetUrl } from "../lib/urls";
 import { brand } from "../lib/brand";
+import { fetchStudentPortalAccess } from "../lib/student-portal-access";
 import { importWithChunkRetry, lazyWithChunkRetry } from "../lib/lazy-retry";
 import { useAuth } from "./AuthContext";
 import { canAccessRoleRoute, homePathForRole, isGuestPath, isRoleHomePath, mustRedirectForRole } from "./session";
-import { paths } from "./paths";
+import { paths, unpaidStudentActivatePath } from "./paths";
 
 export function TransitionScreen({ message }: { message?: string }) {
   return (
@@ -167,6 +168,48 @@ export function AdminPanel() {
   );
 }
 
+export function StudentPortalGate({ children }: { children: ReactNode }) {
+  const { user, token } = useAuth();
+  const [state, setState] = useState<"loading" | "allowed" | "blocked">("loading");
+  const [redirectTo, setRedirectTo] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user || !token || user.role !== "USER") {
+      setState("allowed");
+      return;
+    }
+    if (user.previewMode) {
+      setState("allowed");
+      return;
+    }
+
+    let cancelled = false;
+    void fetchStudentPortalAccess(token).then((access) => {
+      if (cancelled) return;
+      if (access.hasAccess) {
+        setState("allowed");
+        return;
+      }
+      setRedirectTo(unpaidStudentActivatePath(access.membership));
+      setState("blocked");
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, user]);
+
+  if (state === "loading") {
+    return <TransitionScreen message="Verificando sua assinatura..." />;
+  }
+
+  if (state === "blocked" && redirectTo) {
+    return <Navigate to={redirectTo} replace />;
+  }
+
+  return <>{children}</>;
+}
+
 export function StudentPanel() {
   const { token, user, logout } = useAuth();
 
@@ -179,9 +222,11 @@ export function StudentPanel() {
   }
 
   return (
-    <Suspense fallback={<TransitionScreen message="Abrindo seu painel..." />}>
-      <UserViewLazy token={token} onLogout={logout} />
-    </Suspense>
+    <StudentPortalGate>
+      <Suspense fallback={<TransitionScreen message="Abrindo seu painel..." />}>
+        <UserViewLazy token={token} onLogout={logout} />
+      </Suspense>
+    </StudentPortalGate>
   );
 }
 

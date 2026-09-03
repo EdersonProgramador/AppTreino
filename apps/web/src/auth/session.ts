@@ -98,6 +98,7 @@ export function isRoleHomePath(pathname: string, role: UserRole) {
 /** True when the current URL is forbidden for this role (must redirect). */
 export function mustRedirectForRole(pathname: string, role: UserRole) {
   const normalized = normalizeRole(role);
+  if (pathname === paths.activate) return false;
   if (isGuestPath(pathname)) return true;
   if (isCoachPath(pathname)) return false;
   if (normalized === "USER" && isAdminPath(pathname)) return true;

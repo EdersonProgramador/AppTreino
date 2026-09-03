@@ -27,8 +27,9 @@ import {
   persistStoredUser,
   readStoredUser
 } from "./session";
-import { paths, studentCheckoutPath } from "./paths";
+import { paths, unpaidStudentActivatePath } from "./paths";
 import { consumeCheckoutIntent, readCheckoutIntent } from "../lib/checkout-intent";
+import { fetchStudentPortalAccess } from "../lib/student-portal-access";
 import { preloadAdminPanel, preloadStudentPanel } from "./RouteGuards";
 import { useMusicPlayerStore } from "../stores/musicPlayerStore";
 import { clearStudentPanel } from "../lib/student-panel-persist";
@@ -426,9 +427,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const checkoutIntentAfter = readCheckoutIntent();
         const planForCheckout = checkoutIntentAfter?.planCode ?? store.selectedPlanCode ?? planCode;
         let destination = store.establishSession(response);
-        if (response.user.role === "USER" && checkoutIntent) {
-          destination = studentCheckoutPath(planForCheckout ?? undefined);
+
+        if (response.user.role === "USER" && !response.user.previewMode) {
+          if (checkoutIntent) {
+            destination = unpaidStudentActivatePath(
+              null,
+              planForCheckout ?? undefined,
+              checkoutIntentAfter?.couponCode ?? undefined
+            );
+          } else {
+            try {
+              const access = await fetchStudentPortalAccess(response.token);
+              if (!access.hasAccess) {
+                destination = unpaidStudentActivatePath(
+                  access.membership,
+                  planForCheckout ?? undefined,
+                  checkoutIntentAfter?.couponCode ?? undefined
+                );
+              }
+            } catch {
+              destination = unpaidStudentActivatePath(null, planForCheckout ?? undefined);
+            }
+          }
         }
+
         if (response.user.role === "ADMIN") {
           preloadAdminPanel();
         } else {
@@ -514,7 +536,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         resetToken: null,
         loginError: null,
         loginSuccess:
-          response.message ?? "Senha redefinida com sucesso. Você já pode entrar com a nova senha."
+          response.message ?? "Senha redefinida. Entre e conclua o pagamento para liberar o portal do aluno."
       });
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;

@@ -3,13 +3,15 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { formatPriceInBRL } from "@app-treino/shared";
 import { useAuth } from "../../auth/AuthContext";
-import { paths, studentCheckoutPath } from "../../auth/paths";
+import { paths } from "../../auth/paths";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
 import { setCheckoutIntent } from "../../lib/checkout-intent";
 import { getEffectivePriceCents, planHasPromoDiscount, plansForCouponDisplay } from "../../lib/plan-catalog";
 import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
 import { SubscriptionCheckoutShell } from "./SubscriptionCheckoutShell";
 import { SubscriptionFunnelPanel, type BillingType } from "./SubscriptionFunnelPanel";
+import { ActivatePendingCheckout } from "./ActivatePendingCheckout";
+import { fetchStudentPortalAccess } from "../../lib/student-portal-access";
 
 export function ActivateView() {
   const { user, token, phase, loginState, loginError, selectedPlanCode, setSelectedPlanCode, submitAuth, submitRegisterOnboarding } =
@@ -20,6 +22,9 @@ export function ActivateView() {
   const couponFromUrl = searchParams.get("coupon");
   const stepParam = searchParams.get("step");
   const initialStep = stepParam === "account" ? 2 : 1;
+  const isPaymentStep = stepParam === "payment";
+
+  const [portalState, setPortalState] = useState<"loading" | "guest" | "paid" | "unpaid">("loading");
 
   const [couponDraft, setCouponDraft] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(couponFromUrl?.toUpperCase() ?? null);
@@ -118,12 +123,49 @@ export function ActivateView() {
     setCouponFeedback(null);
   };
 
-  if (user && token && user.role === "USER") {
-    return <Navigate to={studentCheckoutPath(selectedPlan, checkoutCoupon ?? undefined)} replace />;
+  useEffect(() => {
+    if (!user || !token) {
+      setPortalState("guest");
+      return;
+    }
+    if (user.role !== "USER") {
+      setPortalState("paid");
+      return;
+    }
+    if (user.previewMode) {
+      setPortalState("paid");
+      return;
+    }
+
+    let cancelled = false;
+    void fetchStudentPortalAccess(token).then((access) => {
+      if (cancelled) return;
+      setPortalState(access.hasAccess ? "paid" : "unpaid");
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, user]);
+
+  if (user && token && user.role === "USER" && (portalState === "unpaid" || isPaymentStep)) {
+    return <ActivatePendingCheckout />;
   }
 
-  if (user && token) {
+  if (user && token && user.role === "USER" && portalState === "paid") {
+    return <Navigate to={paths.student} replace />;
+  }
+
+  if (user && token && user.role !== "USER") {
     return <Navigate to={paths.admin} replace />;
+  }
+
+  if (portalState === "loading" && user && token) {
+    return (
+      <main className="activate-page home-command grid min-h-screen place-items-center">
+        <Loader2 className="spin text-brand-gold" size={32} />
+      </main>
+    );
   }
 
   if (phase === "restoring" || phase === "redirecting") {
