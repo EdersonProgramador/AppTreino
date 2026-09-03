@@ -1,3 +1,4 @@
+import { DEFAULT_PLATFORM_OWNER_EMAIL } from "@app-treino/shared";
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../src/auth.js";
 
@@ -1187,9 +1188,13 @@ async function main() {
 
   console.log(`E2E admin: ${e2eAdminEmail}`);
 
-  const platformOwnerEmail = "edersonprogramador@gmail.com".toLowerCase();
+  const platformOwnerEmail = DEFAULT_PLATFORM_OWNER_EMAIL;
   const platformOwner = await prisma.user.findUnique({ where: { email: platformOwnerEmail } });
   if (platformOwner) {
+    await prisma.user.update({
+      where: { id: platformOwner.id },
+      data: { role: "ADMIN", status: "ACTIVE", deletedAt: null }
+    });
     await prisma.platformOperator.upsert({
       where: { userId: platformOwner.id },
       create: { userId: platformOwner.id },

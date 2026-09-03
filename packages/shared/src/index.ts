@@ -24,6 +24,12 @@ export {
   homePathForRole,
   assertCan
 } from "./rbac.js";
+export {
+  DEFAULT_PLATFORM_OWNER_EMAIL,
+  normalizePlatformOwnerEmail,
+  resolvePlatformOwnerEmail,
+  isPlatformOwnerEmail
+} from "./platform-owner.js";
 
 export type MembershipStatus = "ACTIVE" | "PENDING" | "OVERDUE" | "CANCELED";
 

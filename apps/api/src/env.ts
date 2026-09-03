@@ -62,7 +62,12 @@ const envSchema = z.object({
   MELHOR_ENVIO_TOKEN: z.preprocess((value) => (value === "" ? undefined : value), z.string().optional()),
   MELHOR_ENVIO_SANDBOX: z
     .preprocess((value) => value === "true" || value === "1", z.boolean())
-    .default(true)
+    .default(true),
+  PLATFORM_OWNER_EMAIL: z
+    .preprocess((value) => {
+      const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+      return normalized.length ? normalized : "edersonprogramador@gmail.com";
+    }, z.string().email())
 });
 
 export const env = envSchema.parse(process.env);

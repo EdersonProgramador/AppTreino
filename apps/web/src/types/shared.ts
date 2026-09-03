@@ -8,6 +8,7 @@ export interface AdminUser {
   role: UserRole;
   status: "ACTIVE" | "INACTIVE";
   enrollmentStatus: "PENDING" | "ACTIVE" | "CANCELED";
+  isPlatformOwner?: boolean;
   createdAt?: string | null;
   profile?: {
     gender?: "MALE" | "FEMALE" | null;

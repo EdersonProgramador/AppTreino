@@ -198,6 +198,7 @@ type AdminSelfProfile = {
   provider: string;
   avatarUrl: string | null;
   createdAt?: string;
+  isPlatformOwner?: boolean;
 };
 
 type AdminSection =
@@ -3140,9 +3141,11 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 {adminProfile?.name ?? authUser?.name ?? "Admin"}
               </strong>
               <span className="truncate text-[11px] font-extrabold uppercase tracking-wide text-sand-muted">
-                {adminProfile?.role === "ADMIN" || authUser?.role === "ADMIN"
-                  ? "Administrador"
-                  : "Operador"}
+                {adminProfile?.isPlatformOwner
+                  ? "Proprietário ATLLY"
+                  : adminProfile?.role === "ADMIN" || authUser?.role === "ADMIN"
+                    ? "Administrador"
+                    : "Operador"}
               </span>
             </div>
           </button>
@@ -3433,14 +3436,18 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                     <td>
                       <span>
                         <strong>{item.name}</strong>
+                        {item.isPlatformOwner ? (
+                          <small className="admin-platform-owner-badge">Proprietário ATLLY</small>
+                        ) : null}
                         <small>{item.email}</small>
                       </span>
                     </td>
-                    <td>{item.role === "USER" ? "Aluno" : "Admin"}</td>
+                    <td>{item.isPlatformOwner ? "Proprietário" : item.role === "USER" ? "Aluno" : "Admin"}</td>
                     <td>
                       <select
                         aria-label="Status do usuário"
                         value={item.status}
+                        disabled={item.isPlatformOwner}
                         onChange={(event) => handleUpdateUserStatus(item.id, event.target.value as AdminUser["status"])}
                       >
                         <option value="ACTIVE">Ativo</option>
@@ -3457,14 +3464,16 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                             Editar
                           </button>
                         )}
-                        <button
-                          type="button"
-                          className={deleteActionButtonClass}
-                          aria-label="Excluir usuário"
-                          onClick={() => setPendingCmsDelete({ kind: "users", id: item.id, name: item.name })}
-                        >
-                          <Trash2 size={17} />
-                        </button>
+                        {!item.isPlatformOwner ? (
+                          <button
+                            type="button"
+                            className={deleteActionButtonClass}
+                            aria-label="Excluir usuário"
+                            onClick={() => setPendingCmsDelete({ kind: "users", id: item.id, name: item.name })}
+                          >
+                            <Trash2 size={17} />
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -7685,9 +7694,11 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                       ? "Feminino"
                       : "Sexo não informado"}
                   {" · "}
-                  {adminProfile?.role === "ADMIN" || authUser?.role === "ADMIN"
-                    ? "Administrador"
-                    : "Operador"}
+                  {adminProfile?.isPlatformOwner
+                    ? "Proprietário ATLLY"
+                    : adminProfile?.role === "ADMIN" || authUser?.role === "ADMIN"
+                      ? "Administrador"
+                      : "Operador"}
                 </em>
               </div>
             </div>

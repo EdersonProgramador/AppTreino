@@ -25,6 +25,7 @@ import { registerSocialInfraRoutes } from "./modules/social-infra.routes.js";
 import { registerSocialSockets } from "./modules/social-socket.js";
 import { registerCommerceRoutes } from "./modules/commerce.routes.js";
 import { startMembershipMaintenanceJobs } from "./modules/membership-jobs.js";
+import { ensurePlatformOwnerAccount } from "./platform-owner.js";
 import { registerMusicRoutes } from "./modules/music.routes.js";
 import { registerUserRoutes } from "./modules/user.routes.js";
 import { registerOrgRoutes } from "./modules/org.routes.js";
@@ -262,6 +263,7 @@ process.on("uncaughtException", (error) => {
 });
 
 try {
+  await ensurePlatformOwnerAccount(app.log);
   await app.listen({
     port: env.API_PORT,
     host: "0.0.0.0"

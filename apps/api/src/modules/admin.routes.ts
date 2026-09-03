@@ -12,6 +12,10 @@ import { isVideoUploadExtension, saveValidatedUpload, uploadsDir } from "../uplo
 import type { UploadGroup } from "../upload-security.js";
 import { persistUploadedFile } from "../upload-persist.js";
 import { ensureUploadedVideoIsMp4 } from "../video-transcode.js";
+import {
+  assertPlatformOwnerMutableByAdmin,
+  assertPlatformOwnerNotDeletable
+} from "../platform-owner.js";
 import { serializePlanRecord, hydratePlanCouponRelations } from "../plan-serializer.js";
 import { clearPlanPromoCoupon, syncPlanPromoCoupon } from "./plan-promo.service.js";
 import { autoCloseStaleTickets, FINALIZE_PROMPT, ticketInclude } from "./ticket.utils.js";
@@ -1108,25 +1112,28 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     avatarUrl: z.string().optional().or(z.literal(""))
   });
 
-  function toAdminMeProfile(user: {
-    id: string;
-    name: string;
-    email: string | null;
-    phone: string | null;
-    role: string;
-    status: string;
-    provider: string | null;
-    createdAt: Date;
-    profile: {
+  function toAdminMeProfile(
+    user: {
+      id: string;
+      name: string;
+      email: string | null;
       phone: string | null;
-      document: string | null;
-      birthDate: Date | null;
-      gender: "MALE" | "FEMALE" | null;
-      city: string | null;
-      state: string | null;
-      avatarUrl: string | null;
-    } | null;
-  }) {
+      role: string;
+      status: string;
+      provider: string | null;
+      createdAt: Date;
+      profile: {
+        phone: string | null;
+        document: string | null;
+        birthDate: Date | null;
+        gender: "MALE" | "FEMALE" | null;
+        city: string | null;
+        state: string | null;
+        avatarUrl: string | null;
+      } | null;
+    },
+    isPlatformOwner = false
+  ) {
     return {
       id: user.id,
       name: user.name,
@@ -1141,7 +1148,18 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       status: user.status,
       provider: user.provider ?? "EMAIL",
       avatarUrl: user.profile?.avatarUrl ?? null,
-      createdAt: user.createdAt
+      createdAt: user.createdAt,
+      isPlatformOwner
+    };
+  }
+
+  function withPlatformOwnerFlag<
+    T extends { id: string; platformOperator?: { userId: string } | null }
+  >(user: T) {
+    const { platformOperator, ...rest } = user;
+    return {
+      ...rest,
+      isPlatformOwner: Boolean(platformOperator)
     };
   }
 
@@ -1150,14 +1168,14 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     const authUser = await requireRole(app, request, "ADMIN");
     const user = await prisma.user.findUnique({
       where: { id: authUser.id },
-      include: { profile: true }
+      include: { profile: true, platformOperator: { select: { userId: true } } }
     });
 
     if (!user || user.deletedAt || user.status !== "ACTIVE") {
       throw httpError(404, "Administrador não encontrado.");
     }
 
-    return { profile: toAdminMeProfile(user) };
+    return { profile: toAdminMeProfile(user, Boolean(user.platformOperator)) };
   });
 
   app.put("/admin/me", async (request) => {
@@ -1204,10 +1222,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           }
         }
       },
-      include: { profile: true }
+      include: { profile: true, platformOperator: { select: { userId: true } } }
     });
 
-    return { profile: toAdminMeProfile(user) };
+    return { profile: toAdminMeProfile(user, Boolean(user.platformOperator)) };
   });
 
   app.post(
@@ -1377,6 +1395,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         where,
         include: {
           profile: true,
+          platformOperator: { select: { userId: true } },
           memberships: {
             where: { deletedAt: null },
             include: {
@@ -1396,7 +1415,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       prisma.user.count({ where })
     ]);
 
-    return { users, meta: buildPaginationMeta(total, page, perPage) };
+    return { users: users.map(withPlatformOwnerFlag), meta: buildPaginationMeta(total, page, perPage) };
   });
 
   app.get("/admin/students/:id/overview", async (request) => {
@@ -1590,6 +1609,12 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     const body = updateUserSchema.parse(request.body);
     const { password, phone, document, gender, objective, level, city, state, avatarUrl, locationId, ...userData } = body;
 
+    await assertPlatformOwnerMutableByAdmin(id, {
+      role: userData.role,
+      status: userData.status,
+      email: userData.email
+    });
+
     const user = await prisma.user.update({
       where: { id },
       data: {
@@ -1635,6 +1660,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/users/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
+    await assertPlatformOwnerNotDeletable(id);
     await prisma.user.update({
       where: { id },
       data: { deletedAt: new Date(), status: "INACTIVE" }
@@ -3699,6 +3725,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
     switch (kind) {
       case "users": {
+        await assertPlatformOwnerNotDeletable(id);
         const memberships = await prisma.membership.findMany({ where: { userId: id }, select: { id: true } });
         const membershipIds = memberships.map((membership) => membership.id);
         await prisma.$transaction([
