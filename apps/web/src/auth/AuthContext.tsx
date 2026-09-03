@@ -28,7 +28,7 @@ import {
   readStoredUser
 } from "./session";
 import { paths, unpaidStudentActivatePath } from "./paths";
-import { clearCheckoutIntent, readCheckoutIntent } from "../lib/checkout-intent";
+import { clearCheckoutIntent, readCheckoutIntent, resolveCheckoutPlanSelection } from "../lib/checkout-intent";
 import { fetchStudentPortalAccess } from "../lib/student-portal-access";
 import { preloadAdminPanel, preloadStudentPanel } from "./RouteGuards";
 import { useMusicPlayerStore } from "../stores/musicPlayerStore";
@@ -337,8 +337,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const acceptPrivacy = acceptPrivacyRaw === "true" || acceptPrivacyRaw === "on";
       const idToken = String(formData.get("idToken") ?? "").trim();
       const credential = String(formData.get("credential") ?? "").trim();
-      const planCode = store.selectedPlanCode ?? (mode === "register" ? "monthly" : null);
       const checkoutIntent = readCheckoutIntent();
+      const planCode =
+        checkoutIntent?.planCode?.trim() ||
+        store.selectedPlanCode?.trim() ||
+        null;
       const couponForCheckout = checkoutIntent?.couponCode ?? null;
       const isCheckoutRegister = mode === "register" && Boolean(planCode);
       const endpoint =
@@ -425,7 +428,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }>(endpoint, payload);
 
         const checkoutIntentAfter = readCheckoutIntent();
-        const planForCheckout = checkoutIntentAfter?.planCode ?? store.selectedPlanCode ?? planCode;
+        const planForCheckout = resolveCheckoutPlanSelection({
+          checkoutIntent: checkoutIntentAfter,
+          selectedPlanCode: store.selectedPlanCode,
+          membershipPlanCode: null
+        }) || planCode;
         let destination = store.establishSession(response);
 
         if (response.user.role === "USER" && !response.user.previewMode) {

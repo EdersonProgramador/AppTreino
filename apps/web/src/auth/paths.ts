@@ -45,7 +45,9 @@ export function unpaidStudentActivatePath(
   couponCode?: string | null
 ) {
   const params = new URLSearchParams({ step: "payment" });
-  const plan = membership?.plan?.code ?? planCode?.trim();
+  const chosenPlan = planCode?.trim();
+  const membershipPlan = membership?.plan?.code?.trim();
+  const plan = chosenPlan || membershipPlan;
   if (plan) params.set("plan", plan);
   if (couponCode?.trim()) params.set("coupon", couponCode.trim());
   return `${paths.activate}?${params.toString()}`;

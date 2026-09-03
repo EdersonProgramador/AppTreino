@@ -1,5 +1,5 @@
 import { Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { formatPriceInBRL } from "@app-treino/shared";
 import { useAuth } from "../../auth/AuthContext";
@@ -38,6 +38,20 @@ export function ActivateView() {
   const [accountMode, setAccountMode] = useState<"register" | "login">("register");
   const [billingType, setBillingType] = useState<BillingType>("UNDEFINED");
 
+  const syncSelectedPlan = useCallback(
+    (code: string, couponCode?: string | null) => {
+      if (!code) return;
+      setSelectedPlan(code);
+      setSelectedPlanCode(code);
+      setCheckoutIntent({
+        planCode: code,
+        couponCode: couponCode ?? undefined,
+        source: "activate"
+      });
+    },
+    [setSelectedPlanCode]
+  );
+
   const catalogCouponQuery = useMemo(() => {
     if (!appliedCoupon) return null;
     if (couponApplying || couponValidForSelection === null) return appliedCoupon;
@@ -62,16 +76,15 @@ export function ActivateView() {
 
   useEffect(() => {
     if (planFromUrl) {
-      setSelectedPlanCode(planFromUrl);
-      setSelectedPlan(planFromUrl);
+      syncSelectedPlan(planFromUrl);
     }
-  }, [planFromUrl, setSelectedPlanCode]);
+  }, [planFromUrl, syncSelectedPlan]);
 
   useEffect(() => {
     if (initialPlanCode && !plans.some((plan) => plan.code === selectedPlan)) {
-      setSelectedPlan(initialPlanCode);
+      syncSelectedPlan(initialPlanCode);
     }
-  }, [initialPlanCode, plans, selectedPlan]);
+  }, [initialPlanCode, plans, selectedPlan, syncSelectedPlan]);
 
   const selectedPlanRow = useMemo(
     () => plans.find((plan) => plan.code === selectedPlan) ?? plans[0] ?? null,
@@ -81,6 +94,7 @@ export function ActivateView() {
   const checkoutCoupon = selectedPlanHasDiscount ? appliedCoupon : null;
 
   useEffect(() => {
+    if (!selectedPlan) return;
     setCheckoutIntent({ planCode: selectedPlan, couponCode: checkoutCoupon ?? undefined, source: "activate" });
   }, [checkoutCoupon, selectedPlan]);
 
@@ -176,21 +190,19 @@ export function ActivateView() {
   }
 
   const handleContinuePlan = () => {
-    setCheckoutIntent({ planCode: selectedPlan, couponCode: checkoutCoupon ?? undefined, source: "activate" });
-    setSelectedPlanCode(selectedPlan);
+    syncSelectedPlan(selectedPlan, checkoutCoupon);
     setStep(2);
     navigate(`${paths.activate}?plan=${encodeURIComponent(selectedPlan)}&step=account`, { replace: true });
   };
 
   const handleRegister = async (payload: WorkoutOnboardingSubmitPayload) => {
-    setSelectedPlanCode(selectedPlan);
+    syncSelectedPlan(selectedPlan, checkoutCoupon);
     await submitRegisterOnboarding(payload);
   };
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSelectedPlanCode(selectedPlan);
-    setCheckoutIntent({ planCode: selectedPlan, couponCode: checkoutCoupon ?? undefined, source: "activate" });
+    syncSelectedPlan(selectedPlan, checkoutCoupon);
     await submitAuth("login", new FormData(event.currentTarget), "EMAIL");
   };
 
@@ -207,8 +219,7 @@ export function ActivateView() {
         monthlyBaseline={monthlyBaseline}
         selectedPlanCode={selectedPlan}
         onSelectPlan={(code) => {
-          setSelectedPlan(code);
-          setSelectedPlanCode(code);
+          syncSelectedPlan(code, checkoutCoupon);
         }}
         billingType={billingType}
         onBillingTypeChange={setBillingType}

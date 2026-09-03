@@ -41,3 +41,22 @@ export function clearCheckoutIntent() {
     // storage blocked
   }
 }
+
+/** Plano escolhido no funil: intent → URL → store → matrícula pendente. */
+export function resolveCheckoutPlanSelection(input: {
+  checkoutIntent?: CheckoutIntent | null;
+  planFromUrl?: string | null;
+  selectedPlanCode?: string | null;
+  membershipPlanCode?: string | null;
+}): string {
+  const fromIntent = input.checkoutIntent?.planCode?.trim();
+  if (fromIntent) return fromIntent;
+
+  const fromUrl = input.planFromUrl?.trim();
+  if (fromUrl) return fromUrl;
+
+  const fromStore = input.selectedPlanCode?.trim();
+  if (fromStore) return fromStore;
+
+  return input.membershipPlanCode?.trim() ?? "";
+}

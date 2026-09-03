@@ -5,7 +5,7 @@ import { ApiError, apiGet, apiPost } from "../../api";
 import { paths, unpaidStudentActivatePath } from "../../auth/paths";
 import { useAuth } from "../../auth/AuthContext";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
-import { clearCheckoutIntent } from "../../lib/checkout-intent";
+import { clearCheckoutIntent, readCheckoutIntent, resolveCheckoutPlanSelection, setCheckoutIntent } from "../../lib/checkout-intent";
 import { resolvePendingPaymentForSelectedPlan } from "../../lib/checkout-pending";
 import { planHasPromoDiscount, plansForCouponDisplay } from "../../lib/plan-catalog";
 import { isSandboxCheckoutEnabled } from "../../lib/sandbox-checkout";
@@ -18,11 +18,12 @@ import { SubscriptionCheckoutShell } from "./SubscriptionCheckoutShell";
 import { SubscriptionFunnelPanel, type BillingType } from "./SubscriptionFunnelPanel";
 
 export function ActivatePendingCheckout() {
-  const { token, user, logout } = useAuth();
+  const { token, user, logout, selectedPlanCode } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const planFromUrl = searchParams.get("plan");
   const couponFromUrl = searchParams.get("coupon");
+  const checkoutIntent = readCheckoutIntent();
 
   const [loadingAccess, setLoadingAccess] = useState(true);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
@@ -33,7 +34,13 @@ export function ActivatePendingCheckout() {
   const [checkoutLoading, setCheckoutLoading] = useState<PlanCode | "sandbox" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [billingType, setBillingType] = useState<BillingType>("UNDEFINED");
-  const [selectedPlan, setSelectedPlan] = useState(planFromUrl ?? "");
+  const [selectedPlan, setSelectedPlan] = useState(() =>
+    resolveCheckoutPlanSelection({
+      checkoutIntent,
+      planFromUrl,
+      selectedPlanCode
+    })
+  );
   const [couponDraft, setCouponDraft] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(couponFromUrl?.toUpperCase() ?? null);
   const [couponFeedback, setCouponFeedback] = useState<string | null>(null);
@@ -55,9 +62,19 @@ export function ActivatePendingCheckout() {
         }
         setProfile(access.profile);
         setMembership(access.membership);
-        const planCode = access.membership?.plan?.code ?? planFromUrl;
-        if (planCode) {
-          setSelectedPlan(planCode);
+        const resolvedPlan = resolveCheckoutPlanSelection({
+          checkoutIntent: readCheckoutIntent(),
+          planFromUrl,
+          selectedPlanCode,
+          membershipPlanCode: access.membership?.plan?.code
+        });
+        if (resolvedPlan) {
+          setSelectedPlan(resolvedPlan);
+          setCheckoutIntent({
+            planCode: resolvedPlan,
+            couponCode: readCheckoutIntent()?.couponCode ?? couponFromUrl ?? undefined,
+            source: "activate"
+          });
         }
 
         const paymentsResponse = await apiGet<{ payments: PaymentRow[] }>("/user/payments", token);
@@ -86,7 +103,7 @@ export function ActivatePendingCheckout() {
         setLoadingAccess(false);
       }
     })();
-  }, [navigate, token]);
+  }, [couponFromUrl, navigate, planFromUrl, selectedPlanCode, token]);
 
   const catalogCouponQuery = useMemo(() => {
     if (!appliedCoupon) return null;
@@ -279,6 +296,11 @@ export function ActivatePendingCheckout() {
         onSelectPlan={(code) => {
           uiSounds.radioSelect();
           setSelectedPlan(code);
+          setCheckoutIntent({
+            planCode: code,
+            couponCode: checkoutCoupon ?? undefined,
+            source: "activate"
+          });
           setCheckoutPayment(null);
           setNativeCheckout(null);
           navigate(unpaidStudentActivatePath(membership, code, checkoutCoupon ?? undefined), { replace: true });
