@@ -21,6 +21,7 @@ import {
   resolveCheckoutCardInstallment,
   resolveSubscriptionCheckoutPricing
 } from "./checkout.utils.js";
+import { syncSubscriptionPaymentFromAsaas } from "./asaas-payment-sync.js";
 
 const planCodeSchema = z.string().trim().min(1).max(80);
 
@@ -425,7 +426,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     const authUser = await requireAuth(app, request);
     const params = z.object({ paymentId: z.string().min(1) }).parse(request.params);
 
-    const payment = await prisma.payment.findFirst({
+    let payment = await prisma.payment.findFirst({
       where: {
         id: params.paymentId,
         membership: {
@@ -445,10 +446,22 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       return reply.code(404).send({ message: "Pagamento não encontrado." });
     }
 
+    if (["PENDING", "OVERDUE"].includes(payment.status)) {
+      try {
+        const synced = await syncSubscriptionPaymentFromAsaas(payment);
+        if (synced) {
+          payment = synced.payment;
+        }
+      } catch (error) {
+        request.log.warn({ err: error, paymentId: payment.id }, "Asaas payment status sync failed");
+      }
+    }
+
     return reply.send({
       payment,
       membership: payment.membership,
-      alreadyActive: payment.membership.status === "ACTIVE"
+      alreadyActive: payment.membership.status === "ACTIVE",
+      syncedFromAsaas: payment.status === "CONFIRMED"
     });
   });
 

@@ -290,6 +290,9 @@ export async function updateAsaasCustomer(
 export type AsaasPaymentRecord = {
   id: string;
   status?: string;
+  value?: number | string;
+  paymentDate?: string | null;
+  confirmedDate?: string | null;
   invoiceUrl?: string | null;
   bankSlipUrl?: string | null;
 };

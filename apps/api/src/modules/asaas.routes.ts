@@ -4,6 +4,7 @@ import { z } from "zod";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { parseOrderExternalReference, parsePurchaseExternalReference } from "./asaas.client.js";
+import { applySubscriptionPaymentConfirmation } from "./asaas-payment-sync.js";
 import {
   applyOrderStatusSideEffects,
   applyPurchaseStatusSideEffects,
@@ -161,9 +162,14 @@ export async function registerAsaasRoutes(app: FastifyInstance) {
     const parsed = asaasWebhookSchema.safeParse(request.body);
 
     if (!parsed.success) {
-      return reply.code(400).send({
-        error: "Invalid webhook payload",
-        issues: parsed.error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message }))
+      request.log.warn(
+        { issues: parsed.error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message })) },
+        "Asaas webhook payload ignored"
+      );
+      return reply.code(200).send({
+        received: true,
+        ignored: true,
+        reason: "invalid_payload"
       });
     }
 
@@ -203,7 +209,11 @@ export async function registerAsaasRoutes(app: FastifyInstance) {
         return reply.code(200).send({ received: true, ignored: true });
       }
       if (shouldActivateMembership(status) && amountInCents != null && amountInCents !== order.amountInCents) {
-        return reply.code(400).send({ error: "Payment value mismatch" });
+        request.log.warn(
+          { orderId: order.id, expected: order.amountInCents, received: amountInCents },
+          "Asaas webhook order value mismatch ignored"
+        );
+        return reply.code(200).send({ received: true, ignored: true, reason: "value_mismatch" });
       }
       const nextOrderStatus = mapAsaasStatusToOrderStatus(status);
       const timestamps = resolveOrderTimestamps(nextOrderStatus ?? undefined, {
@@ -238,9 +248,11 @@ export async function registerAsaasRoutes(app: FastifyInstance) {
 
       if (purchase) {
         if (shouldActivateMembership(status) && amountInCents != null && amountInCents !== purchase.amountInCents) {
-          return reply.code(400).send({
-            error: "Payment value mismatch"
-          });
+          request.log.warn(
+            { purchaseId: purchase.id, expected: purchase.amountInCents, received: amountInCents },
+            "Asaas webhook purchase value mismatch ignored"
+          );
+          return reply.code(200).send({ received: true, ignored: true, reason: "value_mismatch" });
         }
 
         const nextPurchaseStatus = mapAsaasStatusToPurchaseStatus(status);
@@ -295,7 +307,14 @@ export async function registerAsaasRoutes(app: FastifyInstance) {
         ? { id: paymentId }
         : asaasPayment?.id
           ? { asaasPaymentId: asaasPayment.id }
-          : { asaasPaymentId: checkout?.id }
+          : { asaasPaymentId: checkout?.id },
+      include: {
+        membership: {
+          include: {
+            plan: true
+          }
+        }
+      }
     });
 
     if (!payment) {
@@ -313,72 +332,40 @@ export async function registerAsaasRoutes(app: FastifyInstance) {
     }
 
     if (shouldActivateMembership(status) && amountInCents != null && amountInCents !== payment.amountInCents) {
-      return reply.code(400).send({
-        error: "Payment value mismatch"
+      request.log.warn(
+        { paymentId: payment.id, expected: payment.amountInCents, received: amountInCents },
+        "Asaas webhook payment value mismatch ignored"
+      );
+      return reply.code(200).send({
+        received: true,
+        ignored: true,
+        reason: "value_mismatch"
       });
     }
 
-    const updatedPayment = await prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        ...(asaasPayment?.id ? { asaasPaymentId: asaasPayment.id } : {}),
-        status,
-        paymentUrl: asaasPayment?.invoiceUrl ?? asaasPayment?.bankSlipUrl ?? checkout?.link,
+    try {
+      const result = await applySubscriptionPaymentConfirmation(payment, {
+        status: asaasPayment?.status ?? checkout?.status ?? payment.status,
+        asaasPaymentId: asaasPayment?.id ?? checkout?.id ?? payment.asaasPaymentId,
+        paymentUrl: asaasPayment?.invoiceUrl ?? asaasPayment?.bankSlipUrl ?? checkout?.link ?? payment.paymentUrl,
         paidAt: shouldActivateMembership(status)
           ? new Date(asaasPayment?.paymentDate ?? asaasPayment?.confirmedDate ?? Date.now())
-          : undefined
-      }
-    });
-
-    const shouldExtendMembership = shouldActivateMembership(status) && payment.status !== "CONFIRMED";
-
-    if (shouldExtendMembership && payment.couponId) {
-      await prisma.coupon.update({
-        where: { id: payment.couponId },
-        data: { usedCount: { increment: 1 } }
-      });
-    }
-
-    if (shouldExtendMembership) {
-      const membership = await prisma.membership.findUnique({
-        where: { id: payment.membershipId },
-        include: {
-          plan: true
-        }
+          : undefined,
+        amountInCents
       });
 
-      if (membership) {
-        const now = new Date();
-        const cycle = membership.plan.billingCycle;
-        let endsAt = membership.endsAt;
-
-        if (membership.status === "ACTIVE") {
-          const base = membership.endsAt && membership.endsAt > now ? membership.endsAt : now;
-          endsAt = addCycleDate(base, cycle);
-        } else if (!endsAt || endsAt <= now) {
-          endsAt = addCycleDate(now, cycle);
-        }
-
-        await prisma.membership.update({
-          where: {
-            id: membership.id
-          },
-          data: {
-            status: "ACTIVE",
-            endsAt,
-            user: {
-              update: {
-                enrollmentStatus: "ACTIVE"
-              }
-            }
-          }
-        });
-      }
+      return reply.code(200).send({
+        received: true,
+        paymentId: result.payment.id,
+        activated: result.activated
+      });
+    } catch (error) {
+      request.log.error({ err: error, paymentId: payment.id }, "Asaas webhook subscription sync failed");
+      return reply.code(200).send({
+        received: true,
+        ignored: true,
+        reason: "sync_failed"
+      });
     }
-
-    return reply.code(200).send({
-      received: true,
-      paymentId: updatedPayment.id
-    });
   });
 }

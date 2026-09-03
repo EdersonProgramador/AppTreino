@@ -99,6 +99,8 @@ export function NativeCheckoutPayment({
 }: NativeCheckoutPaymentProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const [cardSubmitting, setCardSubmitting] = useState(false);
+  const [pixVerifying, setPixVerifying] = useState(false);
+  const [pixConfirmed, setPixConfirmed] = useState(false);
   const isAnnualPlan = billingCycle === "YEARLY";
   const installmentOptions = useMemo(
     () => (isAnnualPlan ? listAnnualInstallmentCounts(amountInCents) : [1]),
@@ -124,7 +126,38 @@ export function NativeCheckoutPayment({
   });
 
   const pixPayload = nativeCheckout?.billingType === "PIX" ? nativeCheckout.pix : null;
-  const waitingPix = Boolean(payment?.id && pixPayload && payment.status === "PENDING");
+  const waitingPix = Boolean(payment?.id && pixPayload && payment.status === "PENDING" && !pixConfirmed);
+
+  async function pollPixPaymentStatus(options?: { manual?: boolean }) {
+    if (!payment?.id) return false;
+
+    if (options?.manual) {
+      setPixVerifying(true);
+    }
+
+    try {
+      const response = await apiGet<{
+        payment: PaymentRow;
+        alreadyActive: boolean;
+      }>(`/checkout/payments/${payment.id}/status`, token);
+
+      if (response.alreadyActive || response.payment?.status === "CONFIRMED") {
+        setPixConfirmed(true);
+        onPaymentConfirmed();
+        return true;
+      }
+    } catch {
+      if (options?.manual) {
+        onError("Não foi possível verificar o Pix agora. Tente novamente em alguns segundos.");
+      }
+    } finally {
+      if (options?.manual) {
+        setPixVerifying(false);
+      }
+    }
+
+    return false;
+  }
 
   useEffect(() => {
     if (!isAnnualPlan) {
@@ -140,26 +173,18 @@ export function NativeCheckoutPayment({
     if (!payment?.id || !waitingPix) return;
 
     let cancelled = false;
-    const interval = window.setInterval(async () => {
-      try {
-        const response = await apiGet<{
-          payment: PaymentRow;
-          alreadyActive: boolean;
-        }>(`/checkout/payments/${payment.id}/status`, token);
-        if (cancelled) return;
-        if (response.alreadyActive || response.payment?.status === "CONFIRMED") {
-          onPaymentConfirmed();
-        }
-      } catch {
-        // polling silencioso
-      }
-    }, 3000);
+    void pollPixPaymentStatus();
+
+    const interval = window.setInterval(() => {
+      if (cancelled) return;
+      void pollPixPaymentStatus();
+    }, 2500);
 
     return () => {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [payment?.id, payment?.status, waitingPix, token, onPaymentConfirmed]);
+  }, [payment?.id, waitingPix, token, onPaymentConfirmed]);
 
   const summaryLine = useMemo(
     () => `${planName} · ${formatPriceInBRL(amountInCents)}`,
@@ -357,9 +382,25 @@ export function NativeCheckoutPayment({
                 <p className="native-checkout__hint">Expira em {new Date(pixPayload.expiresAt).toLocaleString("pt-BR")}</p>
               ) : null}
               <div className="native-checkout__waiting">
-                <Loader2 className="spin" size={18} />
-                <span>Aguardando confirmação do Pix…</span>
+                {pixConfirmed ? <Check size={18} /> : pixVerifying ? <Loader2 className="spin" size={18} /> : <Loader2 className="spin" size={18} />}
+                <span>
+                  {pixConfirmed
+                    ? "Pagamento confirmado. Liberando seu acesso…"
+                    : pixVerifying
+                      ? "Consultando confirmação no Asaas…"
+                      : "Aguardando confirmação do Pix…"}
+                </span>
               </div>
+              {!pixConfirmed ? (
+                <button
+                  type="button"
+                  className="native-checkout__verify-btn"
+                  onClick={() => void pollPixPaymentStatus({ manual: true })}
+                  disabled={pixVerifying}
+                >
+                  {pixVerifying ? "Verificando…" : "Já paguei — verificar agora"}
+                </button>
+              ) : null}
             </>
           )}
         </div>
