@@ -49,6 +49,7 @@ export function ActivatePendingCheckout() {
       try {
         const access = await fetchStudentPortalAccess(token);
         if (access.hasAccess) {
+          clearCheckoutIntent();
           navigate(paths.student, { replace: true });
           return;
         }
@@ -69,6 +70,7 @@ export function ActivatePendingCheckout() {
           try {
             const synced = await syncCheckoutPaymentStatus(token, pending.id);
             if (synced.alreadyActive || synced.payment.status === "CONFIRMED") {
+              clearCheckoutIntent();
               navigate(paths.student, { replace: true });
               return;
             }

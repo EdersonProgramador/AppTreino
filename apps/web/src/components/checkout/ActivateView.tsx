@@ -22,7 +22,6 @@ export function ActivateView() {
   const couponFromUrl = searchParams.get("coupon");
   const stepParam = searchParams.get("step");
   const initialStep = stepParam === "account" ? 2 : 1;
-  const isPaymentStep = stepParam === "payment";
 
   const [portalState, setPortalState] = useState<"loading" | "guest" | "paid" | "unpaid">("loading");
 
@@ -148,7 +147,7 @@ export function ActivateView() {
     };
   }, [token, user]);
 
-  if (user && token && user.role === "USER" && (portalState === "unpaid" || isPaymentStep)) {
+  if (user && token && user.role === "USER" && portalState === "unpaid") {
     return <ActivatePendingCheckout />;
   }
 

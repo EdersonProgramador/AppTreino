@@ -28,7 +28,7 @@ import {
   readStoredUser
 } from "./session";
 import { paths, unpaidStudentActivatePath } from "./paths";
-import { consumeCheckoutIntent, readCheckoutIntent } from "../lib/checkout-intent";
+import { clearCheckoutIntent, readCheckoutIntent } from "../lib/checkout-intent";
 import { fetchStudentPortalAccess } from "../lib/student-portal-access";
 import { preloadAdminPanel, preloadStudentPanel } from "./RouteGuards";
 import { useMusicPlayerStore } from "../stores/musicPlayerStore";
@@ -429,25 +429,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let destination = store.establishSession(response);
 
         if (response.user.role === "USER" && !response.user.previewMode) {
-          if (checkoutIntent) {
+          try {
+            const access = await fetchStudentPortalAccess(response.token);
+            if (access.hasAccess) {
+              clearCheckoutIntent();
+              destination = paths.student;
+            } else {
+              destination = unpaidStudentActivatePath(
+                access.membership,
+                planForCheckout ?? checkoutIntent?.planCode ?? undefined,
+                checkoutIntentAfter?.couponCode ?? undefined
+              );
+            }
+          } catch {
             destination = unpaidStudentActivatePath(
               null,
-              planForCheckout ?? undefined,
+              planForCheckout ?? checkoutIntent?.planCode ?? undefined,
               checkoutIntentAfter?.couponCode ?? undefined
             );
-          } else {
-            try {
-              const access = await fetchStudentPortalAccess(response.token);
-              if (!access.hasAccess) {
-                destination = unpaidStudentActivatePath(
-                  access.membership,
-                  planForCheckout ?? undefined,
-                  checkoutIntentAfter?.couponCode ?? undefined
-                );
-              }
-            } catch {
-              destination = unpaidStudentActivatePath(null, planForCheckout ?? undefined);
-            }
           }
         }
 
