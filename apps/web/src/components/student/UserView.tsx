@@ -123,6 +123,7 @@ import { formatPlanPriceLines, getEffectivePriceCents, planHasPromoDiscount, pla
 import { paths } from "../../auth/paths";
 import { clearCheckoutIntent, readCheckoutIntent } from "../../lib/checkout-intent";
 import { resolvePendingPaymentForSelectedPlan, paymentMatchesPlanPricing } from "../../lib/checkout-pending";
+import { pickPendingCheckoutPayment, syncCheckoutPaymentStatus } from "../../lib/checkout-payment-sync";
 import { hasStudentWorkoutAccess, hasValidActiveMembership } from "../../lib/student-access";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
 import { LockedOverlay } from "./LockedOverlay";
@@ -308,6 +309,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [storeTab, setStoreTab] = useState<StoreTab>("catalog");
   const [storePaymentNotice, setStorePaymentNotice] = useState<string | null>(null);
   const purchaseConfirmTimer = useRef<number | null>(null);
+  const pixResumeAttemptRef = useRef<string | null>(null);
   const [studentWorkoutFavorites, setStudentWorkoutFavorites] = useState<StudentFavoriteRow[]>([]);
   const [ratingDraft, setRatingDraft] = useState<Record<string, { score: number; comment: string }>>({});
   const [submittingRatingId, setSubmittingRatingId] = useState<string | null>(null);
@@ -431,8 +433,36 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         apiGet<{ payments: PaymentRow[] }>("/user/payments", token)
       ]);
 
-      const hasAccess =
-        isAdminPreview || hasStudentWorkoutAccess(profileResponse.profile, membershipResponse.membership);
+      let profile = profileResponse.profile;
+      let membership = membershipResponse.membership;
+      let payments = paymentsResponse.payments;
+
+      const pendingPayment = pickPendingCheckoutPayment(payments);
+
+      if (pendingPayment && !options?.soft) {
+        try {
+          const synced = await syncCheckoutPaymentStatus(token, pendingPayment.id);
+          if (synced.alreadyActive || synced.payment.status === "CONFIRMED") {
+            const refreshed = await Promise.all([
+              apiGet<{ profile: StudentProfile }>("/user/profile", token),
+              apiGet<{ membership: StudentMembershipRow | null }>("/user/membership", token),
+              apiGet<{ payments: PaymentRow[] }>("/user/payments", token)
+            ]);
+            profile = refreshed[0].profile;
+            membership = refreshed[1].membership;
+            payments = refreshed[2].payments;
+          } else {
+            payments = payments.map((item) => (item.id === synced.payment.id ? synced.payment : item));
+            if (synced.membership) {
+              membership = synced.membership;
+            }
+          }
+        } catch {
+          // Mantém fluxo local; polling continua tentando.
+        }
+      }
+
+      const hasAccess = isAdminPreview || hasStudentWorkoutAccess(profile, membership);
       const workoutProgramsResponse = hasAccess
         ? await apiGet<StudentWorkoutProgramsResponse>("/student/workout/programs", token)
         : { workouts: [] as StudentWorkoutProgramsResponse["workouts"] };
@@ -442,12 +472,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         ? workoutProgramsResponse.workouts.find((item) => item.programId === restoredProgramId) ?? null
         : null;
 
-      setProfile(profileResponse.profile);
-      setMembership(membershipResponse.membership);
-      setPayments(paymentsResponse.payments);
+      setProfile(profile);
+      setMembership(membership);
+      setPayments(payments);
       setPublishedWorkouts(workoutProgramsResponse.workouts);
       setTodayWorkout(restoredWorkout ?? firstPublishedWorkout);
-      setCheckoutPayment(paymentsResponse.payments.find((item) => item.status === "PENDING") ?? null);
+      setCheckoutPayment(pickPendingCheckoutPayment(payments));
+
       setAccessReady(true);
 
       if (!hasAccess) {
@@ -1003,27 +1034,27 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     if (!token) return;
     if (membership?.status === "ACTIVE" || profile?.enrollmentStatus === "ACTIVE") return;
 
-    const pending = checkoutPayment ?? payments.find((item) => item.status === "PENDING");
+    const pending = checkoutPayment ?? pickPendingCheckoutPayment(payments);
     if (!pending) return;
 
     const interval = window.setInterval(async () => {
       try {
-        const [membershipResponse, profileResponse] = await Promise.all([
-          apiGet<{ membership: StudentMembershipRow | null }>("/user/membership", token),
-          apiGet<{ profile: StudentProfile }>("/user/profile", token)
-        ]);
-        if (
-          membershipResponse.membership?.status === "ACTIVE" ||
-          profileResponse.profile.enrollmentStatus === "ACTIVE"
-        ) {
-          setMembership(membershipResponse.membership);
-          setProfile(profileResponse.profile);
-          await loadUserData();
+        const synced = await syncCheckoutPaymentStatus(token, pending.id);
+        if (synced.alreadyActive || synced.payment?.status === "CONFIRMED") {
+          setMembership(synced.membership);
+          setCheckoutPayment(synced.payment.status === "CONFIRMED" ? null : synced.payment);
+          await loadUserData({ soft: true });
+          uiSounds.paymentApproved();
+          clearCheckoutIntent();
+          return;
+        }
+        if (synced.payment) {
+          setCheckoutPayment(synced.payment);
         }
       } catch {
         // Ignora falhas transitórias enquanto aguarda a confirmação do pagamento.
       }
-    }, 4000);
+    }, 3000);
 
     return () => window.clearInterval(interval);
   }, [token, membership?.status, profile?.enrollmentStatus, checkoutPayment, payments]);
@@ -1212,10 +1243,35 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     }
   }
 
+  useEffect(() => {
+    if (!token || nativeCheckout?.pix) return;
+    const pending = checkoutPayment ?? pickPendingCheckoutPayment(payments);
+    if (!pending || pending.status !== "PENDING") return;
+    if (pixResumeAttemptRef.current === pending.id) return;
+
+    setCheckoutDraft((current) =>
+      current.billingType === "UNDEFINED" ? { ...current, billingType: "PIX" } : current
+    );
+
+    if (!profile?.document) return;
+
+    pixResumeAttemptRef.current = pending.id;
+    void submitSubscriptionCheckout({ cpfCnpj: profile.document.replace(/\D/g, "") });
+  }, [token, nativeCheckout, checkoutPayment, payments, profile?.document]);
+
   async function handleNativePaymentConfirmed() {
+    if (!token) return;
     uiSounds.paymentApproved();
     clearCheckoutIntent();
     setNativeCheckout(null);
+    const pending = checkoutPayment ?? pickPendingCheckoutPayment(payments);
+    if (pending) {
+      try {
+        await syncCheckoutPaymentStatus(token, pending.id);
+      } catch {
+        // loadUserData ainda tenta sincronizar via /user/membership.
+      }
+    }
     await loadUserData();
   }
 

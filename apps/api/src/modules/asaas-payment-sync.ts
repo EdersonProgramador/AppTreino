@@ -1,7 +1,7 @@
 import type { Membership, Payment, Plan } from "@prisma/client";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
-import { getAsaasPayment } from "./asaas.client.js";
+import { getAsaasPayment, findAsaasPaymentByExternalReference } from "./asaas.client.js";
 import { addCycleDate, asaasStatusToPaymentStatus, shouldActivateMembership } from "./asaas.routes.js";
 
 type PaymentWithMembership = Payment & {
@@ -115,7 +115,7 @@ export async function applySubscriptionPaymentConfirmation(
 export async function syncSubscriptionPaymentFromAsaas(
   payment: PaymentWithMembership
 ): Promise<SubscriptionPaymentSyncResult | null> {
-  if (!env.ASAAS_API_KEY || !payment.asaasPaymentId) {
+  if (!env.ASAAS_API_KEY) {
     return null;
   }
 
@@ -128,10 +128,15 @@ export async function syncSubscriptionPaymentFromAsaas(
     };
   }
 
-  const remote = await getAsaasPayment(payment.asaasPaymentId);
+  const remote = payment.asaasPaymentId
+    ? await getAsaasPayment(payment.asaasPaymentId)
+    : await findAsaasPaymentByExternalReference(payment.id);
+
+  if (!remote?.id) {
+    return null;
+  }
+
   const remoteStatus = asaasStatusToPaymentStatus(remote.status);
-  const amountInCents =
-    remote.value != null && remote.value !== "" ? Math.round(Number(remote.value) * 100) : null;
 
   if (remoteStatus === payment.status) {
     return {
@@ -152,11 +157,40 @@ export async function syncSubscriptionPaymentFromAsaas(
           confirmedDate: remote.confirmedDate
         })
       : undefined,
-    amountInCents
+    // Confia no status consultado diretamente no Asaas (evita falso negativo no polling).
+    amountInCents: null
   });
 
   return {
     ...result,
     syncedFromAsaas: true
   };
+}
+
+export async function syncPendingSubscriptionPaymentsForUser(userId: string) {
+  const pendingPayments = await prisma.payment.findMany({
+    where: {
+      status: { in: ["PENDING", "OVERDUE"] },
+      membership: { userId, deletedAt: null }
+    },
+    include: {
+      membership: {
+        include: {
+          plan: true
+        }
+      }
+    },
+    orderBy: {
+      dueDate: "desc"
+    },
+    take: 5
+  });
+
+  for (const payment of pendingPayments) {
+    try {
+      await syncSubscriptionPaymentFromAsaas(payment);
+    } catch {
+      // Mantém outros pagamentos pendentes em fila sem quebrar a requisição.
+    }
+  }
 }

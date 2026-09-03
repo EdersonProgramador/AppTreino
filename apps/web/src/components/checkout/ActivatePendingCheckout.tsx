@@ -9,6 +9,7 @@ import { clearCheckoutIntent } from "../../lib/checkout-intent";
 import { resolvePendingPaymentForSelectedPlan } from "../../lib/checkout-pending";
 import { planHasPromoDiscount, plansForCouponDisplay } from "../../lib/plan-catalog";
 import { isSandboxCheckoutEnabled } from "../../lib/sandbox-checkout";
+import { pickPendingCheckoutPayment, syncCheckoutPaymentStatus } from "../../lib/checkout-payment-sync";
 import { fetchStudentPortalAccess, hasStudentPortalAccess } from "../../lib/student-portal-access";
 import { uiSounds } from "../../lib/ui-sounds";
 import type { CheckoutSessionResponse, NativeCheckoutPayload, PaymentRow, PlanCode } from "../../types/shared";
@@ -60,7 +61,23 @@ export function ActivatePendingCheckout() {
 
         const paymentsResponse = await apiGet<{ payments: PaymentRow[] }>("/user/payments", token);
         setPayments(paymentsResponse.payments);
-        setCheckoutPayment(paymentsResponse.payments.find((item) => item.status === "PENDING") ?? null);
+        const pending = pickPendingCheckoutPayment(paymentsResponse.payments);
+        setCheckoutPayment(pending);
+
+        if (pending) {
+          setBillingType("PIX");
+          try {
+            const synced = await syncCheckoutPaymentStatus(token, pending.id);
+            if (synced.alreadyActive || synced.payment.status === "CONFIRMED") {
+              navigate(paths.student, { replace: true });
+              return;
+            }
+            setCheckoutPayment(synced.payment);
+            setMembership(synced.membership);
+          } catch {
+            // polling do NativeCheckoutPayment continua tentando.
+          }
+        }
       } catch {
         setError("Não foi possível carregar seu checkout pendente.");
       } finally {
@@ -179,6 +196,18 @@ export function ActivatePendingCheckout() {
     if (!token) return;
     uiSounds.paymentApproved();
     clearCheckoutIntent();
+    const pending = checkoutPayment ?? pickPendingCheckoutPayment(payments);
+    if (pending) {
+      try {
+        const synced = await syncCheckoutPaymentStatus(token, pending.id);
+        if (synced.alreadyActive || synced.payment.status === "CONFIRMED") {
+          navigate(paths.student, { replace: true });
+          return;
+        }
+      } catch {
+        // segue para refresh abaixo
+      }
+    }
     const access = await fetchStudentPortalAccess(token);
     if (access.hasAccess) {
       navigate(paths.student, { replace: true });
@@ -186,7 +215,7 @@ export function ActivatePendingCheckout() {
     }
     setProfile(access.profile);
     setMembership(access.membership);
-    setError("Pagamento recebido. Aguardando confirmação final — atualize em instantes.");
+    setError("Pagamento recebido. Aguardando confirmação final — clique em verificar ou atualize a página.");
   }
 
   async function handleConfirmSandboxPayment() {

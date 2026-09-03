@@ -322,6 +322,20 @@ export async function getAsaasPayment(asaasPaymentId: string) {
   return asaasJsonRequest<AsaasPaymentRecord>(`/payments/${asaasPaymentId}`);
 }
 
+export async function findAsaasPaymentByExternalReference(externalReference: string) {
+  if (!env.ASAAS_API_KEY) return null;
+  const data = await asaasJsonRequest<{ data?: AsaasPaymentRecord[] }>(
+    `/payments?externalReference=${encodeURIComponent(externalReference)}&limit=10`
+  );
+  const payments = data.data ?? [];
+  if (payments.length === 0) return null;
+
+  const confirmed = payments.find((item) =>
+    ["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"].includes(item.status ?? "")
+  );
+  return confirmed ?? payments[0] ?? null;
+}
+
 export type AsaasPixQrCode = {
   encodedImage: string;
   payload: string;

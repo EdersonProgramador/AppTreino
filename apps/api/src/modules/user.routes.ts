@@ -12,6 +12,7 @@ import { persistUploadedFile } from "../upload-persist.js";
 import { autoCloseStaleTickets, ticketInclude } from "./ticket.utils.js";
 import { calculateBodyFatEstimate, physicalAssessmentFormSchema } from "./physical-assessment.utils.js";
 import { validActiveMembershipWhere } from "./membership.utils.js";
+import { syncPendingSubscriptionPaymentsForUser } from "./asaas-payment-sync.js";
 import { assertModuleEnabled } from "./commerce.utils.js";
 import { loadCoachContext } from "./coach/context.js";
 import { buildWorkoutPlan } from "./coach/engine.js";
@@ -505,6 +506,7 @@ export async function registerUserRoutes(app: FastifyInstance) {
   app.get("/user/membership", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);
+    await syncPendingSubscriptionPaymentsForUser(user.id);
     const membership = await getCurrentUserMembership(user.id);
 
     return {
@@ -521,6 +523,7 @@ export async function registerUserRoutes(app: FastifyInstance) {
   app.get("/user/payments", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);
+    await syncPendingSubscriptionPaymentsForUser(user.id);
     const payments = await prisma.payment.findMany({
       where: {
         membership: {
