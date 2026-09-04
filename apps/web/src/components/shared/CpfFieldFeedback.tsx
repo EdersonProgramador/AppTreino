@@ -38,20 +38,20 @@ export function CpfFieldFeedback({
   const tone = resolveCpfFieldTone(validation.state);
 
   if (!showStatus && !errorMessage) {
-    return <span className="cpf-field-feedback cpf-field-feedback--idle">{idleHint}</span>;
+    return <p className="cpf-field-feedback cpf-field-feedback--idle">{idleHint}</p>;
   }
 
   if (tone === "idle") {
-    return <span className="cpf-field-feedback cpf-field-feedback--idle">{resolvedMessage}</span>;
+    return <p className="cpf-field-feedback cpf-field-feedback--idle">{resolvedMessage}</p>;
   }
 
   return (
-    <span
+    <p
       className={`cpf-field-feedback cpf-field-feedback--${tone}`}
       role={tone === "valid" ? "status" : "alert"}
       aria-live="polite"
     >
       {resolvedMessage}
-    </span>
+    </p>
   );
 }

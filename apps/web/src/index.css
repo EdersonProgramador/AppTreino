@@ -28297,8 +28297,8 @@ html.light .student-app-shell .student-hero-card {
   margin-top: 0.5rem;
 }
 
-.activate-page .ui-label > span,
-.activate-page .ui-label span {
+.activate-page .ui-label > span:not(.cpf-field-feedback),
+.activate-page .ui-label span:not(.cpf-field-feedback) {
   color: #c7d3e3;
 }
 
@@ -28332,6 +28332,7 @@ html.light .student-app-shell .student-hero-card {
 
 .cpf-field-feedback {
   display: block;
+  margin: 0;
   margin-top: 0.35rem;
   font-size: 0.75rem;
   line-height: 1.35;
@@ -28342,19 +28343,37 @@ html.light .student-app-shell .student-hero-card {
   font-weight: 600;
 }
 
-.cpf-field-feedback--valid {
-  color: #4ade80;
+.cpf-field-feedback--valid,
+.activate-page .cpf-field-feedback--valid,
+.activate-page .native-checkout__field .cpf-field-feedback--valid {
+  color: #4ade80 !important;
   font-weight: 700;
 }
 
-.cpf-field-feedback--incomplete {
-  color: #facc15;
+.cpf-field-feedback--incomplete,
+.activate-page .cpf-field-feedback--incomplete,
+.activate-page .native-checkout__field .cpf-field-feedback--incomplete {
+  color: #facc15 !important;
   font-weight: 700;
 }
 
-.cpf-field-feedback--invalid {
-  color: #ff8f7a;
+.cpf-field-feedback--invalid,
+.activate-page .cpf-field-feedback--invalid,
+.activate-page .native-checkout__field .cpf-field-feedback--invalid {
+  color: #ff8f7a !important;
   font-weight: 700;
+}
+
+html.light .activate-page.home-command .cpf-field-feedback--valid {
+  color: #4ade80 !important;
+}
+
+html.light .activate-page.home-command .cpf-field-feedback--incomplete {
+  color: #facc15 !important;
+}
+
+html.light .activate-page.home-command .cpf-field-feedback--invalid {
+  color: #ff8f7a !important;
 }
 
 /* Keep /ativar readable when the global app theme is light */
@@ -28370,8 +28389,8 @@ html.light .activate-page.home-command .activate-plan-card__head strong,
 html.light .activate-page.home-command .activate-funnel-guarantee strong,
 html.light .activate-page.home-command .activate-billing-field span,
 html.light .activate-page.home-command .activate-pending-payment strong,
-html.light .activate-page.home-command .ui-label > span,
-html.light .activate-page.home-command .ui-label span {
+html.light .activate-page.home-command .ui-label > span:not(.cpf-field-feedback),
+html.light .activate-page.home-command .ui-label span:not(.cpf-field-feedback) {
   color: #ecf2fa !important;
 }
 
