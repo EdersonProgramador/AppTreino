@@ -161,9 +161,12 @@ export function SubscriptionFunnelPanel({
   const couponBlocksCheckout = Boolean(stagedCouponCode) && couponValidForSelection === null;
   const resolvedSelectedPlanHasDiscount = selectedPlanHasDiscount || planHasPromoDiscount(selectedPlan);
   const nativeBillingType = toNativeBillingType(billingType);
-  const visibleCouponCode = couponCode ?? (couponValidForSelection === null ? stagedCouponCode : null);
-  const showAppliedCouponRow = Boolean(couponCode && couponValidForSelection === true);
-  const showRejectedCouponRow = Boolean(stagedCouponCode && couponValidForSelection === false);
+  const visibleCouponCode = couponCode ?? stagedCouponCode;
+  const showAppliedCouponRow = Boolean(
+    stagedCouponCode && (couponValidForSelection === true || couponValidForSelection === null)
+  );
+  const couponStatusClass =
+    couponValidForSelection === null ? " is-validating" : couponValidForSelection === true ? " is-applied" : "";
 
   return (
     <div className="activate-funnel-panel">
@@ -211,31 +214,15 @@ export function SubscriptionFunnelPanel({
             <div className="activate-coupon-box">
               {showAppliedCouponRow && visibleCouponCode ? (
                 <div className="activate-coupon-applied-row">
-                  <span className="activate-coupon-applied is-applied">
-                    Cupom <strong>{visibleCouponCode}</strong> aplicado
+                  <span className={`activate-coupon-applied${couponStatusClass}`}>
+                    Cupom <strong>{visibleCouponCode}</strong>{" "}
+                    {couponValidForSelection === null ? "validando…" : "aplicado"}
                   </span>
-                  {onRemoveCoupon ? (
+                  {onRemoveCoupon && couponValidForSelection !== null ? (
                     <button type="button" className="activate-coupon-apply" onClick={onRemoveCoupon}>
                       Remover
                     </button>
                   ) : null}
-                </div>
-              ) : showRejectedCouponRow && stagedCouponCode ? (
-                <div className="activate-coupon-applied-row">
-                  <span className="activate-coupon-applied is-rejected">
-                    Cupom <strong>{stagedCouponCode}</strong> indisponível neste plano
-                  </span>
-                  {onRemoveCoupon ? (
-                    <button type="button" className="activate-coupon-apply" onClick={onRemoveCoupon}>
-                      Remover
-                    </button>
-                  ) : null}
-                </div>
-              ) : couponValidForSelection === null && stagedCouponCode ? (
-                <div className="activate-coupon-applied-row">
-                  <span className="activate-coupon-applied is-validating">
-                    Cupom <strong>{stagedCouponCode}</strong> validando…
-                  </span>
                 </div>
               ) : (
                 <div className="activate-coupon-field">
@@ -260,7 +247,7 @@ export function SubscriptionFunnelPanel({
                   </div>
                 </div>
               )}
-              {couponFeedback && !showRejectedCouponRow ? (
+              {couponFeedback ? (
                 <p className={`activate-coupon-feedback${couponFeedback.includes("inválido") || couponFeedback.includes("não vale") ? " is-error" : ""}`}>
                   {couponFeedback}
                 </p>

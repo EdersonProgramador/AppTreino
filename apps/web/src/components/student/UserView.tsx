@@ -285,9 +285,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const catalogPlans = useMemo(
     () =>
       plansForCouponDisplay(catalogPlansRaw, appliedCoupon, checkoutDraft.planCode, {
-        couponValidating: Boolean(appliedCoupon) && !couponCatalogReady
+        couponValidForSelection
       }),
-    [appliedCoupon, catalogPlansRaw, checkoutDraft.planCode, couponCatalogReady]
+    [appliedCoupon, catalogPlansRaw, checkoutDraft.planCode, couponValidForSelection]
   );
   const [assessmentForm, setAssessmentForm] = useState<PhysicalAssessmentForm | null>(null);
   const [editingAssessmentId, setEditingAssessmentId] = useState<string | null>(null);
@@ -635,10 +635,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     setCouponValidForSelection(next.couponValidForSelection);
     setCouponApplying(next.couponApplying);
     setCouponFeedback(next.couponFeedback);
-    if (next.clearedInvalidCoupon && searchParams.get("coupon")?.trim()) {
-      const cleaned = new URLSearchParams(searchParams);
-      cleaned.delete("coupon");
-      setSearchParams(cleaned, { replace: true });
+    if (next.clearedInvalidCoupon) {
+      const rejected = appliedCoupon?.trim().toUpperCase();
+      if (rejected) setCouponDraft(rejected);
+      if (searchParams.get("coupon")?.trim()) {
+        const cleaned = new URLSearchParams(searchParams);
+        cleaned.delete("coupon");
+        setSearchParams(cleaned, { replace: true });
+      }
     }
   }, [appliedCoupon, catalogAllPlans, checkoutDraft.planCode, couponCatalogReady, loadedCouponCode, searchParams, setSearchParams]);
 

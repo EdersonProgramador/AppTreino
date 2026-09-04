@@ -144,9 +144,10 @@ export function ActivatePendingCheckout() {
   useEffect(() => {
     if (catalogPlansLoading || catalogPlans.length === 0) return;
 
+    const selectedExists = catalogPlans.some((plan) => plan.code === selectedPlan);
     const planRef = selectedPlan || planFromUrl;
     const resolved = resolvePlanCodeInCatalog(planRef, catalogPlans);
-    if (resolved && resolved !== selectedPlan) {
+    if (resolved && resolved !== selectedPlan && !selectedExists) {
       setSelectedPlan(resolved);
       return;
     }
@@ -161,15 +162,15 @@ export function ActivatePendingCheckout() {
   const plans = useMemo(
     () =>
       plansForCouponDisplay(catalogPlans, appliedCoupon, selectedPlan, {
-        couponValidating: Boolean(appliedCoupon) && !couponCatalogReady
+        couponValidForSelection
       }),
-    [appliedCoupon, catalogPlans, couponCatalogReady, selectedPlan]
+    [appliedCoupon, catalogPlans, couponValidForSelection, selectedPlan]
   );
 
-  const selectedPlanRow = useMemo(
-    () => catalogPlans.find((plan) => plan.code === selectedPlan) ?? allPlans.find((plan) => plan.code === selectedPlan) ?? null,
-    [allPlans, catalogPlans, selectedPlan]
-  );
+  const selectedPlanRow = useMemo(() => {
+    const code = resolvePlanCodeInCatalog(selectedPlan, allPlans) || selectedPlan;
+    return allPlans.find((plan) => plan.code === code) ?? null;
+  }, [allPlans, selectedPlan]);
   const selectedPlanHasDiscount = planHasPromoDiscount(selectedPlanRow);
   const checkoutCoupon = couponValidForSelection && appliedCoupon ? appliedCoupon : null;
 
@@ -192,6 +193,8 @@ export function ActivatePendingCheckout() {
     setCouponApplying(next.couponApplying);
     setCouponFeedback(next.couponFeedback);
     if (next.clearedInvalidCoupon) {
+      const rejected = appliedCoupon?.trim().toUpperCase();
+      if (rejected) setCouponDraft(rejected);
       patchCheckoutIntent({ couponCode: undefined, source: "activate" });
       if (couponFromUrl?.trim()) {
         navigate(unpaidStudentActivatePath(membership, selectedPlan), { replace: true });

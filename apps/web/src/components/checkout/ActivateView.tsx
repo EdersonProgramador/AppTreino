@@ -102,9 +102,9 @@ export function ActivateView() {
   const plans = useMemo(
     () =>
       plansForCouponDisplay(catalogPlans, appliedCoupon, selectedPlan, {
-        couponValidating: Boolean(appliedCoupon) && !couponCatalogReady
+        couponValidForSelection
       }),
-    [appliedCoupon, catalogPlans, couponCatalogReady, selectedPlan]
+    [appliedCoupon, catalogPlans, couponValidForSelection, selectedPlan]
   );
 
   useEffect(() => {
@@ -116,9 +116,10 @@ export function ActivateView() {
   useEffect(() => {
     if (loading || plans.length === 0) return;
 
+    const selectedExists = plans.some((plan) => plan.code === selectedPlan);
     const planRef = selectedPlan || planFromUrl;
     const resolved = resolvePlanCodeInCatalog(planRef, plans);
-    if (resolved && resolved !== selectedPlan) {
+    if (resolved && resolved !== selectedPlan && !selectedExists) {
       syncSelectedPlan(resolved);
       return;
     }
@@ -130,10 +131,10 @@ export function ActivateView() {
     }
   }, [initialPlanCode, loading, planFromUrl, plans, selectedPlan, syncSelectedPlan]);
 
-  const selectedPlanRow = useMemo(
-    () => catalogPlans.find((plan) => plan.code === selectedPlan) ?? allPlans.find((plan) => plan.code === selectedPlan) ?? null,
-    [allPlans, catalogPlans, selectedPlan]
-  );
+  const selectedPlanRow = useMemo(() => {
+    const code = resolvePlanCodeInCatalog(selectedPlan, allPlans) || selectedPlan;
+    return allPlans.find((plan) => plan.code === code) ?? null;
+  }, [allPlans, selectedPlan]);
   const selectedPlanHasDiscount = planHasPromoDiscount(selectedPlanRow);
   const checkoutCoupon = couponValidForSelection && appliedCoupon ? appliedCoupon : null;
 
@@ -156,6 +157,8 @@ export function ActivateView() {
     setCouponApplying(next.couponApplying);
     setCouponFeedback(next.couponFeedback);
     if (next.clearedInvalidCoupon) {
+      const rejected = appliedCoupon?.trim().toUpperCase();
+      if (rejected) setCouponDraft(rejected);
       patchCheckoutIntent({ couponCode: undefined, source: "activate" });
       if (couponFromUrl?.trim()) {
         navigate(activatePath(selectedPlan), { replace: true });

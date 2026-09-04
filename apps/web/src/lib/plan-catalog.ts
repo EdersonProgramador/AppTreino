@@ -148,16 +148,6 @@ export function resolveCouponValidationState(
   }
 
   if (!result.valid) {
-    if (result.appliesElsewhere) {
-      return {
-        appliedCoupon: normalizedCoupon,
-        couponValidForSelection: false,
-        couponApplying: false,
-        couponFeedback: result.feedback,
-        clearedInvalidCoupon: false
-      };
-    }
-
     return {
       appliedCoupon: null,
       couponValidForSelection: false,
@@ -186,16 +176,23 @@ export function clearPlanPromoDisplay(plan: CatalogPlan): CatalogPlan {
   };
 }
 
-/** Cards do funil: mantém preços por plano vindos do catálogo (com cupom na query). */
+/** Cards do funil: promo só no plano selecionado e só com cupom validado para ele. */
 export function plansForCouponDisplay(
   plans: CatalogPlan[],
   appliedCoupon: string | null | undefined,
-  _selectedPlanCode: string | null | undefined,
-  options?: { couponValidating?: boolean }
+  selectedPlanCode: string | null | undefined,
+  options?: { couponValidForSelection?: boolean | null }
 ): CatalogPlan[] {
   if (!appliedCoupon?.trim()) return plans;
-  if (options?.couponValidating) return plans;
-  return plans;
+
+  const resolvedSelectedCode =
+    resolvePlanCodeInCatalog(selectedPlanCode, plans) || selectedPlanCode?.trim() || "";
+
+  if (options?.couponValidForSelection !== true) {
+    return plans.map(clearPlanPromoDisplay);
+  }
+
+  return plans.map((plan) => (plan.code === resolvedSelectedCode ? plan : clearPlanPromoDisplay(plan)));
 }
 
 export function getOriginalPriceCents(plan: CatalogPlan): number {

@@ -18,15 +18,14 @@ describe("resolveCouponValidationState", () => {
     discountInCents: 0
   });
 
-  it("mantém cupom quando vale para outro plano", () => {
+  it("remove cupom quando vale para outro plano", () => {
     const result = resolveCouponValidationState("CINCO", "yearly", [monthlyWithCoupon, yearlyFullPrice], {
       couponCatalogReady: true,
       loadedCouponCode: "CINCO"
     });
 
-    assert.equal(result.appliedCoupon, "CINCO");
-    assert.equal(result.couponValidForSelection, false);
-    assert.equal(result.clearedInvalidCoupon, false);
+    assert.equal(result.appliedCoupon, null);
+    assert.equal(result.clearedInvalidCoupon, true);
     assert.match(result.couponFeedback ?? "", /não vale para o plano selecionado/i);
   });
 
