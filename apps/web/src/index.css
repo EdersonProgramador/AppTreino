@@ -12381,6 +12381,7 @@ html.dark .student-rating-done {
 .runner-gender-icon {
   display: inline-block;
   flex-shrink: 0;
+  aspect-ratio: 1 / 1;
   background-color: currentColor;
   -webkit-mask-size: contain;
   mask-size: contain;
