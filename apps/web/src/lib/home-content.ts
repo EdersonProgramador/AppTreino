@@ -230,6 +230,19 @@ export const testimonials = [
   }
 ] as const;
 
+/** Matriz comparativa alinhada à ordem Start → Pro → Atlly Coach (sortOrder no admin). */
+export const planComparisonMatrix = [
+  { feature: "Treinos digitais e programas", included: [true, true, true] },
+  { feature: "Registro de cargas e séries", included: [true, true, true] },
+  { feature: "Avaliação física e BioCore", included: [true, true, true] },
+  { feature: "Comunidade e desafios", included: [true, true, true] },
+  { feature: "Corrida, caminhada e ciclismo GPS", included: [false, true, true] },
+  { feature: "Histórico completo de atividades", included: [false, true, true] },
+  { feature: "Acompanhamento de progresso", included: [false, true, true] },
+  { feature: "Suporte prioritário", included: [false, true, true] },
+  { feature: "ATLLY AI Coach", included: [false, false, true] }
+] as const;
+
 export const monthlyPlanPerks = [
   "Acesso à ATLLY",
   "Treinos digitais",

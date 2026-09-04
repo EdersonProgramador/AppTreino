@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Check, ChevronRight, Menu, ShieldCheck, X } from "lucide-react";
-import { formatPriceInBRL } from "@app-treino/shared";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
 import { brand } from "../../lib/brand";
 import { isLegalIdentityPublic, legalMeta, legalPublicOperatorName } from "../../lib/legal-content";
@@ -30,7 +29,7 @@ import {
   workoutPerks,
   workoutRows
 } from "../../lib/home-content";
-import { formatPlanPriceLines, getMonthlyBaseline } from "../../lib/plan-catalog";
+import { HomePricingSection } from "./HomePricingSection";
 
 const PRIMARY_CTA = "Ativar agora";
 
@@ -520,71 +519,12 @@ export function HomeView({
       </section>
 
       {/* Planos */}
-      <section id="planos" className="home-band border-y border-white/10 px-4 py-16 sm:px-8">
-        <div className="mx-auto max-w-6xl">
-          <SectionEyebrow>Planos</SectionEyebrow>
-          <h2 className="ui-display mt-4 text-[clamp(1.75rem,4vw,2.25rem)] font-bold uppercase">Escolha como você quer começar sua evolução</h2>
-          <p className="mt-3 text-sand-muted">Sem complicação. Acesso imediato pelo celular.</p>
-          <div className="mt-10 grid gap-5 lg:grid-cols-2 home-plan-grid">
-            {plansLoading ? (
-              <article className="home-plan-card rounded-3xl border border-white/10 p-6 sm:p-8">
-                <p className="text-sm text-sand-muted">Carregando planos…</p>
-              </article>
-            ) : funnelPlans.length > 0 ? (
-              funnelPlans.map((plan) => {
-                const priceLines = formatPlanPriceLines(plan, monthlyBaseline);
-                const benefits = plan.cardBenefits.length > 0 ? plan.cardBenefits : ["Acesso completo ao ecossistema ATLLY"];
-                const featured = plan.isFeatured || Boolean(plan.badgeLabel);
-
-                return (
-                  <article
-                    key={plan.code}
-                    className={`rounded-3xl border p-6 sm:p-8 ${
-                      featured ? "home-plan-featured relative border-brand-gold/50 shadow-glow" : "home-plan-card border-white/10"
-                    }`}
-                  >
-                    {plan.badgeLabel ? (
-                      <span className="absolute right-4 top-4 rounded-full bg-brand-gold px-3 py-1 text-[10px] font-extrabold uppercase text-black">
-                        {plan.badgeLabel}
-                      </span>
-                    ) : null}
-                    <h3 className="font-display text-2xl font-bold uppercase">{plan.name}</h3>
-                    {plan.description ? <p className="mt-1 text-sm text-sand-muted">{plan.description}</p> : null}
-                    <div className="mt-4">
-                      {priceLines.anchor ? <p className="text-sm line-through text-sand-faint">{priceLines.anchor}</p> : null}
-                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                        <strong className="font-display text-4xl text-brand-gold">{priceLines.primary}</strong>
-                        <p className="text-sm text-sand-muted">{priceLines.secondary}</p>
-                      </div>
-                      {priceLines.discountLabel ? (
-                        <span className="mt-2 inline-flex rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold uppercase text-emerald-300">
-                          {priceLines.discountLabel}
-                        </span>
-                      ) : null}
-                    </div>
-                    <ul className="mt-6 grid gap-2">
-                      {benefits.map((perk) => (
-                        <li key={perk} className={`flex gap-2 text-sm ${featured ? "text-sand" : "text-sand-muted"}`}>
-                          <Check size={16} className="shrink-0 text-brand-gold" />
-                          {perk}
-                        </li>
-                      ))}
-                    </ul>
-                    <button type="button" className="ui-btn-primary mt-6 w-full sm:w-auto" onClick={() => onStart(plan.code)}>
-                      Ativar {plan.name.toLowerCase()}
-                      <ArrowRight size={18} />
-                    </button>
-                  </article>
-                );
-              })
-            ) : (
-              <article className="home-plan-card rounded-3xl border border-white/10 p-6 sm:p-8">
-                <p className="text-sm text-sand-muted">Planos indisponíveis no momento.</p>
-              </article>
-            )}
-          </div>
-        </div>
-      </section>
+      <HomePricingSection
+        plans={funnelPlans}
+        loading={plansLoading}
+        monthlyBaseline={monthlyBaseline}
+        onStart={onStart}
+      />
 
       {/* Garantia */}
       <section className="px-4 py-16 sm:px-8">
