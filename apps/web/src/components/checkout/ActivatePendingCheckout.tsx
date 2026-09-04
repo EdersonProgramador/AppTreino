@@ -7,7 +7,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
 import { clearCheckoutIntent, patchCheckoutIntent, readCheckoutIntent, resolveCheckoutCouponSelection, resolveCheckoutPlanSelection } from "../../lib/checkout-intent";
 import { resolvePendingPaymentForSelectedPlan, paymentMatchesPlanPricing } from "../../lib/checkout-pending";
-import { planHasPromoDiscount, buildCatalogCouponQuery, plansForCouponDisplay, resolveCouponValidationState, resolvePlanCodeInCatalog } from "../../lib/plan-catalog";
+import { planHasPromoDiscount, buildCatalogCouponQuery, planAllowsCreditCardCheckout, plansForCouponDisplay, resolveCouponValidationState, resolvePlanCodeInCatalog } from "../../lib/plan-catalog";
 import { isSandboxCheckoutEnabled } from "../../lib/sandbox-checkout";
 import { pickPendingCheckoutPayment, syncCheckoutPaymentStatus } from "../../lib/checkout-payment-sync";
 import { fetchStudentPortalAccess, hasStudentPortalAccess } from "../../lib/student-portal-access";
@@ -231,8 +231,17 @@ export function ActivatePendingCheckout() {
   async function submitSubscriptionCheckout(input?: { cpfCnpj?: string }) {
     if (!token) return;
     const planCode = selectedPlan as PlanCode;
+    const selectedPlanRow = plans.find((plan) => plan.code === planCode) ?? null;
     if (billingType !== "PIX" && billingType !== "CREDIT_CARD") {
-      setError("Escolha Pix ou cartão de crédito para continuar.");
+      setError(
+        planAllowsCreditCardCheckout(selectedPlanRow)
+          ? "Escolha Pix ou cartão de crédito para continuar."
+          : "Escolha Pix para continuar."
+      );
+      return;
+    }
+    if (billingType === "CREDIT_CARD" && !planAllowsCreditCardCheckout(selectedPlanRow)) {
+      setError("Cartão de crédito disponível apenas no plano anual.");
       return;
     }
 
@@ -360,7 +369,11 @@ export function ActivatePendingCheckout() {
         selectedPlanCode={selectedPlan}
         onSelectPlan={(code) => {
           uiSounds.radioSelect();
+          const nextPlan = plans.find((plan) => plan.code === code) ?? null;
           setSelectedPlan(code);
+          if (!planAllowsCreditCardCheckout(nextPlan) && billingType === "CREDIT_CARD") {
+            setBillingType("PIX");
+          }
           patchCheckoutIntent({
             planCode: code,
             couponCode: appliedCoupon ?? undefined,

@@ -7,7 +7,8 @@ import { brand } from "../../lib/brand";
 import {
   defaultAnnualInstallmentCount,
   formatCardInstallmentLabel,
-  listAnnualInstallmentCounts
+  listAnnualInstallmentCounts,
+  planAllowsCreditCardCheckout
 } from "../../lib/plan-catalog";
 import { CardBrandsImage, TrustBadgesImage } from "./PaymentMethodArt";
 
@@ -101,7 +102,7 @@ export function NativeCheckoutPayment({
   const [cardSubmitting, setCardSubmitting] = useState(false);
   const [pixVerifying, setPixVerifying] = useState(false);
   const [pixConfirmed, setPixConfirmed] = useState(false);
-  const isAnnualPlan = billingCycle === "YEARLY";
+  const isAnnualPlan = planAllowsCreditCardCheckout({ billingCycle });
   const installmentOptions = useMemo(
     () => (isAnnualPlan ? listAnnualInstallmentCounts(amountInCents) : [1]),
     [amountInCents, isAnnualPlan]
@@ -168,6 +169,13 @@ export function NativeCheckoutPayment({
       installmentOptions.includes(current) ? current : defaultAnnualInstallmentCount(amountInCents)
     );
   }, [amountInCents, installmentOptions, isAnnualPlan]);
+
+  useEffect(() => {
+    if (isAnnualPlan) return;
+    if (billingType !== "PIX") {
+      onBillingTypeChange("PIX");
+    }
+  }, [billingType, isAnnualPlan, onBillingTypeChange]);
 
   useEffect(() => {
     if (!payment?.id || !waitingPix) return;
@@ -281,7 +289,11 @@ export function NativeCheckoutPayment({
         <p>Pagamento seguro sem sair do {brand.name}.</p>
       </div>
 
-      <div className="native-checkout__methods" role="tablist" aria-label="Forma de pagamento">
+      <div
+        className={`native-checkout__methods${isAnnualPlan ? "" : " native-checkout__methods--single"}`}
+        role="tablist"
+        aria-label="Forma de pagamento"
+      >
         <button
           type="button"
           role="tab"
@@ -297,28 +309,34 @@ export function NativeCheckoutPayment({
             <small>Aprovação imediata</small>
           </span>
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={billingType === "CREDIT_CARD"}
-          className={`native-checkout__method native-checkout__method--card${billingType === "CREDIT_CARD" ? " is-active" : ""}`}
-          onClick={() => onBillingTypeChange("CREDIT_CARD")}
-        >
-          <span className="native-checkout__method-icon native-checkout__method-icon--card" aria-hidden="true">
-            <CreditCard size={26} strokeWidth={1.75} />
-          </span>
-          <span className="native-checkout__method-copy">
-            <strong>Cartão de crédito</strong>
-            <small>Visa, Master, Elo</small>
-          </span>
-        </button>
+        {isAnnualPlan ? (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={billingType === "CREDIT_CARD"}
+            className={`native-checkout__method native-checkout__method--card${billingType === "CREDIT_CARD" ? " is-active" : ""}`}
+            onClick={() => onBillingTypeChange("CREDIT_CARD")}
+          >
+            <span className="native-checkout__method-icon native-checkout__method-icon--card" aria-hidden="true">
+              <CreditCard size={26} strokeWidth={1.75} />
+            </span>
+            <span className="native-checkout__method-copy">
+              <strong>Cartão de crédito</strong>
+              <small>Visa, Master, Elo</small>
+            </span>
+          </button>
+        ) : null}
       </div>
 
       {error ? <div className="activate-funnel-error">{error}</div> : null}
 
       {!billingType ? (
         <div className="native-checkout__panel native-checkout__panel--idle">
-          <p className="native-checkout__idle-copy">Escolha Pix ou cartão de crédito para continuar o pagamento.</p>
+          <p className="native-checkout__idle-copy">
+            {isAnnualPlan
+              ? "Escolha Pix ou cartão de crédito para continuar o pagamento."
+              : "Use Pix para continuar o pagamento."}
+          </p>
         </div>
       ) : billingType === "PIX" ? (
         <div className="native-checkout__panel native-checkout__panel--pix">

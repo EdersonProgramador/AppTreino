@@ -119,7 +119,7 @@ import { assessmentPerimeterKeys, assessmentPhotoFields } from "../../types/admi
 import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
 import { SubscriptionCheckoutShell } from "../checkout/SubscriptionCheckoutShell";
 import { SubscriptionFunnelPanel } from "../checkout/SubscriptionFunnelPanel";
-import { formatPlanPriceLines, buildCatalogCouponQuery, getEffectivePriceCents, planHasPromoDiscount, plansForCouponDisplay, resolveCouponValidationState } from "../../lib/plan-catalog";
+import { formatPlanPriceLines, buildCatalogCouponQuery, getEffectivePriceCents, planAllowsCreditCardCheckout, planHasPromoDiscount, plansForCouponDisplay, resolveCouponValidationState } from "../../lib/plan-catalog";
 import { paths } from "../../auth/paths";
 import { clearCheckoutIntent, readCheckoutIntent } from "../../lib/checkout-intent";
 import { resolvePendingPaymentForSelectedPlan, paymentMatchesPlanPricing } from "../../lib/checkout-pending";
@@ -1223,9 +1223,18 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
     const planCode = checkoutDraft.planCode;
     const billingType = input?.billingType ?? checkoutDraft.billingType;
+    const selectedPlanRow = catalogPlans.find((plan) => plan.code === planCode) ?? null;
 
     if (billingType !== "PIX" && billingType !== "CREDIT_CARD") {
-      setError("Escolha Pix ou cartão de crédito para continuar.");
+      setError(
+        planAllowsCreditCardCheckout(selectedPlanRow)
+          ? "Escolha Pix ou cartão de crédito para continuar."
+          : "Escolha Pix para continuar."
+      );
+      return;
+    }
+    if (billingType === "CREDIT_CARD" && !planAllowsCreditCardCheckout(selectedPlanRow)) {
+      setError("Cartão de crédito disponível apenas no plano anual.");
       return;
     }
 
@@ -2672,7 +2681,15 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               selectedPlanCode={checkoutDraft.planCode}
               onSelectPlan={(code) => {
                 uiSounds.radioSelect();
-                setCheckoutDraft((current) => ({ ...current, planCode: code }));
+                const nextPlan = catalogPlans.find((plan) => plan.code === code) ?? null;
+                setCheckoutDraft((current) => ({
+                  ...current,
+                  planCode: code,
+                  billingType:
+                    !planAllowsCreditCardCheckout(nextPlan) && current.billingType === "CREDIT_CARD"
+                      ? "PIX"
+                      : current.billingType
+                }));
                 setCheckoutPayment(null);
                 setNativeCheckout(null);
               }}

@@ -15,6 +15,7 @@ import {
   evaluateSandboxConfirmGate,
   incrementSubscriptionCouponUsage,
   getAsaasCheckoutAmountError,
+  getCreditCardCheckoutError,
   normalizeCheckoutCouponInput,
   pendingCheckoutPricingMatches,
   resolveCheckoutSessionPricing,
@@ -280,6 +281,10 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     }
     const sessionCpfCnpj = cpfResolution.cpfCnpj ?? null;
     const planSeed = await resolveCheckoutPlan(body.planCode);
+    const creditCardError = getCreditCardCheckoutError(planSeed.billingCycle, body.billingType);
+    if (creditCardError) {
+      return reply.code(400).send({ message: creditCardError });
+    }
     const requestedCouponCode = normalizeCheckoutCouponInput(body.couponCode);
 
     const activeMembership = await prisma.membership.findFirst({
@@ -501,6 +506,11 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       return reply.code(404).send({ message: "Pagamento não encontrado." });
     }
 
+    const creditCardError = getCreditCardCheckoutError(payment.membership.plan?.billingCycle, "CREDIT_CARD");
+    if (creditCardError) {
+      return reply.code(400).send({ message: creditCardError });
+    }
+
     if (payment.status === "CONFIRMED") {
       return reply.send(
         buildNativeCheckoutResponse({
@@ -669,6 +679,11 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     const phone = body.phone || null;
     const fallbackEmail = email ?? (phone ? `phone-${phone.replace(/[^a-z0-9]+/gi, "").toLowerCase()}@app-treino.local` : null);
     const planSeed = await resolveCheckoutPlan(body.planCode);
+
+    const creditCardError = getCreditCardCheckoutError(planSeed.billingCycle, body.billingType);
+    if (creditCardError) {
+      return reply.code(400).send({ message: creditCardError });
+    }
 
     const existingUser =
       (email ? await prisma.user.findUnique({ where: { email } }) : null) ??

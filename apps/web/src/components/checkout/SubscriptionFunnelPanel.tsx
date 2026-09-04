@@ -8,6 +8,7 @@ import {
   getCheckoutMinimumAmountMessage,
   getEffectivePriceCents,
   isCheckoutEligiblePlan,
+  planAllowsCreditCardCheckout,
   planHasPromoDiscount,
   type CatalogPlan
 } from "../../lib/plan-catalog";
@@ -165,6 +166,7 @@ export function SubscriptionFunnelPanel({
   const couponBlocksCheckout = Boolean(stagedCouponCode) && couponValidForSelection === null;
   const resolvedSelectedPlanHasDiscount = selectedPlanHasDiscount || planHasPromoDiscount(selectedPlan);
   const nativeBillingType = toNativeBillingType(billingType);
+  const selectedPlanAllowsCreditCard = planAllowsCreditCardCheckout(selectedPlan);
   const visibleCouponCode = couponCode ?? stagedCouponCode;
   const showRejectedCouponRow = Boolean(rejectedCouponCode);
   const showAppliedCouponRow =
@@ -186,6 +188,11 @@ export function SubscriptionFunnelPanel({
     const timer = window.setTimeout(() => onRejectedCouponDismissed?.(), 1400);
     return () => window.clearTimeout(timer);
   }, [onRejectedCouponDismissed, rejectedCouponCode]);
+
+  useEffect(() => {
+    if (!selectedPlan || selectedPlanAllowsCreditCard || billingType !== "CREDIT_CARD") return;
+    onBillingTypeChange("PIX");
+  }, [billingType, onBillingTypeChange, selectedPlan, selectedPlanAllowsCreditCard]);
 
   return (
     <div className="activate-funnel-panel">
@@ -312,7 +319,10 @@ export function SubscriptionFunnelPanel({
           <header className="activate-plan-stage__head">
             <span className="home-telemetry-label">Passo 3</span>
             <h2 className="activate-plan-stage__title">Finalize sua ativação</h2>
-            <p className="activate-plan-stage__copy">Pagamento 100% {brand.name} · Pix ou cartão de crédito na mesma tela.</p>
+            <p className="activate-plan-stage__copy">
+              Pagamento 100% {brand.name}
+              {selectedPlanAllowsCreditCard ? " · Pix ou cartão de crédito na mesma tela." : " · Pix na mesma tela."}
+            </p>
           </header>
 
           <NativeCheckoutPayment

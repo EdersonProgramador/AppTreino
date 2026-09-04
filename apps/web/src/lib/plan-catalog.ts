@@ -22,6 +22,10 @@ export type CatalogPlan = {
 export const ASAAS_MIN_CHECKOUT_CENTS = 500;
 export const MAX_ANNUAL_CARD_INSTALLMENTS = 12;
 
+export function planAllowsCreditCardCheckout(plan: Pick<CatalogPlan, "billingCycle"> | null | undefined) {
+  return plan?.billingCycle === "YEARLY";
+}
+
 export function listAnnualInstallmentCounts(amountInCents: number, max = MAX_ANNUAL_CARD_INSTALLMENTS) {
   const counts = [1];
   for (let installmentCount = 2; installmentCount <= max; installmentCount += 1) {

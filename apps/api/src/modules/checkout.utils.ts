@@ -57,6 +57,17 @@ export function resolveNativeCheckoutBillingType(
 export const ASAAS_MIN_CHECKOUT_CENTS = 500;
 export const MAX_ANNUAL_CARD_INSTALLMENTS = 12;
 
+export function getCreditCardCheckoutError(
+  billingCycle: string | null | undefined,
+  billingType: string
+): string | null {
+  if (billingType !== "CREDIT_CARD") return null;
+  if (billingCycle !== "YEARLY") {
+    return "Cartão de crédito disponível apenas no plano anual.";
+  }
+  return null;
+}
+
 export function resolveCheckoutCardInstallment(input: {
   billingCycle?: string | null;
   installmentCount?: number | null;
