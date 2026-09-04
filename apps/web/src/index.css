@@ -28318,6 +28318,12 @@ html.light .student-app-shell .student-hero-card {
   box-shadow: 0 0 0 1px rgba(255, 143, 122, 0.18);
 }
 
+.ui-input--incomplete,
+.native-checkout__input--incomplete {
+  border-color: rgba(250, 204, 21, 0.78) !important;
+  box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.2);
+}
+
 .ui-input--valid,
 .native-checkout__input--valid {
   border-color: rgba(74, 222, 128, 0.55) !important;
@@ -28338,6 +28344,11 @@ html.light .student-app-shell .student-hero-card {
 
 .cpf-field-feedback--valid {
   color: #4ade80;
+  font-weight: 700;
+}
+
+.cpf-field-feedback--incomplete {
+  color: #facc15;
   font-weight: 700;
 }
 

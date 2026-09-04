@@ -4,7 +4,7 @@ import { formatCpf, formatPriceInBRL, getCpfFieldValidation, isValidCpf } from "
 import { apiGet, apiPost } from "../../api";
 import type { CheckoutSessionResponse, NativeCheckoutPayload, PaymentRow } from "../../types/shared";
 import { brand } from "../../lib/brand";
-import { CpfFieldFeedback } from "../shared/CpfFieldFeedback";
+import { CpfFieldFeedback, buildCpfInputClassName } from "../shared/CpfFieldFeedback";
 import {
   defaultAnnualInstallmentCount,
   formatCardInstallmentLabel,
@@ -351,13 +351,13 @@ export function NativeCheckoutPayment({
                 <label className="native-checkout__field native-checkout__full">
                   <span className="native-checkout__label">CPF do titular</span>
                   <input
-                    className={`native-checkout__input${showPixCpfStatus && !pixCpfValidation.isValid ? " native-checkout__input--invalid" : ""}${showPixCpfStatus && pixCpfValidation.isValid ? " native-checkout__input--valid" : ""}`}
+                    className={buildCpfInputClassName("native-checkout__input", pixCpfValidation, showPixCpfStatus)}
                     value={pixCpf}
                     onChange={(event) => setPixCpf(formatCpf(event.target.value))}
                     placeholder="000.000.000-00"
                     inputMode="numeric"
                     autoComplete="off"
-                    aria-invalid={showPixCpfStatus && !pixCpfValidation.isValid}
+                    aria-invalid={showPixCpfStatus && pixCpfValidation.state === "invalid"}
                     required
                   />
                   <CpfFieldFeedback

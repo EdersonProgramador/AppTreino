@@ -4,7 +4,7 @@ import { Check, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { CpfFieldFeedback } from "../shared/CpfFieldFeedback";
+import { CpfFieldFeedback, buildCpfInputClassName } from "../shared/CpfFieldFeedback";
 import {
   EQUIPMENT_OPTIONS,
   ONBOARDING_STEP_FIELDS,
@@ -211,11 +211,11 @@ export function WorkoutOnboarding({
                 CPF
                 <input
                   {...register("document")}
-                  className={`ui-input${showCpfStatus && !cpfValidation.isValid ? " ui-input--invalid" : ""}${showCpfStatus && cpfValidation.isValid ? " ui-input--valid" : ""}`}
+                  className={buildCpfInputClassName("ui-input", cpfValidation, showCpfStatus)}
                   inputMode="numeric"
                   placeholder="000.000.000-00"
                   autoComplete="off"
-                  aria-invalid={showCpfStatus && !cpfValidation.isValid}
+                  aria-invalid={showCpfStatus && cpfValidation.state === "invalid"}
                   onChange={(event) => {
                     event.target.value = formatCpf(event.target.value);
                     void register("document").onChange(event);
