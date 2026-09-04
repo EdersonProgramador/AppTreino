@@ -7,7 +7,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
 import { clearCheckoutIntent, patchCheckoutIntent, readCheckoutIntent, resolveCheckoutCouponSelection, resolveCheckoutPlanSelection } from "../../lib/checkout-intent";
 import { resolvePendingPaymentForSelectedPlan, paymentMatchesPlanPricing } from "../../lib/checkout-pending";
-import { planHasPromoDiscount, plansForCouponDisplay, resolvePlanCodeInCatalog } from "../../lib/plan-catalog";
+import { planHasPromoDiscount, buildCatalogCouponQuery, evaluateCouponForSelectedPlan, plansForCouponDisplay, resolvePlanCodeInCatalog } from "../../lib/plan-catalog";
 import { isSandboxCheckoutEnabled } from "../../lib/sandbox-checkout";
 import { pickPendingCheckoutPayment, syncCheckoutPaymentStatus } from "../../lib/checkout-payment-sync";
 import { fetchStudentPortalAccess, hasStudentPortalAccess } from "../../lib/student-portal-access";
@@ -129,14 +129,20 @@ export function ActivatePendingCheckout() {
     })();
   }, [couponFromUrl, navigate, planFromUrl, preferUrlParams, selectedPlanCode, token]);
 
-  const catalogCouponQuery = useMemo(() => {
-    if (!appliedCoupon) return null;
-    if (couponApplying || couponValidForSelection === null) return appliedCoupon;
-    return couponValidForSelection ? appliedCoupon : null;
-  }, [appliedCoupon, couponApplying, couponValidForSelection]);
+  const catalogCouponQuery = useMemo(
+    () => buildCatalogCouponQuery(appliedCoupon, couponValidForSelection),
+    [appliedCoupon, couponValidForSelection]
+  );
 
-  const { plans: catalogPlans, allPlans, loading: catalogPlansLoading, monthlyBaseline, initialPlanCode } =
-    useCatalogPlans(selectedPlan || planFromUrl || membership?.plan?.code, catalogCouponQuery);
+  const {
+    plans: catalogPlans,
+    allPlans,
+    loading: catalogPlansLoading,
+    monthlyBaseline,
+    initialPlanCode,
+    couponCatalogReady,
+    loadedCouponCode
+  } = useCatalogPlans(selectedPlan || planFromUrl || membership?.plan?.code, catalogCouponQuery);
 
   useEffect(() => {
     if (catalogPlansLoading || catalogPlans.length === 0) return;
@@ -158,9 +164,9 @@ export function ActivatePendingCheckout() {
   const plans = useMemo(
     () =>
       plansForCouponDisplay(catalogPlans, appliedCoupon, selectedPlan, {
-        couponValidating: catalogPlansLoading && Boolean(appliedCoupon)
+        couponValidating: Boolean(appliedCoupon) && !couponCatalogReady
       }),
-    [appliedCoupon, catalogPlans, catalogPlansLoading, selectedPlan]
+    [appliedCoupon, catalogPlans, couponCatalogReady, selectedPlan]
   );
 
   const selectedPlanRow = useMemo(
@@ -183,15 +189,23 @@ export function ActivatePendingCheckout() {
     if (!appliedCoupon) {
       setCouponValidForSelection(false);
       setCouponApplying(false);
+      setCouponFeedback(null);
       return;
     }
-    if (catalogPlansLoading) return;
-    const pricedSelected = allPlans.find((plan) => plan.code === selectedPlan) ?? null;
-    const valid = Boolean(pricedSelected && planHasPromoDiscount(pricedSelected));
-    setCouponValidForSelection(valid);
+
+    const result = evaluateCouponForSelectedPlan(appliedCoupon, selectedPlan, allPlans, {
+      couponCatalogReady,
+      loadedCouponCode
+    });
+    if (result.pending) {
+      setCouponApplying(true);
+      return;
+    }
+
+    setCouponValidForSelection(result.valid);
     setCouponApplying(false);
-    setCouponFeedback(valid ? null : "Código inválido ou indisponível para este plano.");
-  }, [allPlans, appliedCoupon, catalogPlansLoading, selectedPlan]);
+    setCouponFeedback(result.feedback);
+  }, [allPlans, appliedCoupon, couponCatalogReady, loadedCouponCode, selectedPlan]);
 
   function resolveCheckoutCoupon(planCode: PlanCode) {
     if (!checkoutCoupon) return null;
@@ -412,7 +426,7 @@ export function ActivatePendingCheckout() {
           patchCheckoutIntent({ couponCode: undefined, source: "activate" });
         }}
         couponFeedback={couponFeedback}
-        couponApplying={couponApplying || catalogPlansLoading}
+        couponApplying={couponApplying || !couponCatalogReady}
         couponValidForSelection={couponValidForSelection}
         selectedPlanHasDiscount={selectedPlanHasDiscount}
       />

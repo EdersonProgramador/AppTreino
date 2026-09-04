@@ -119,7 +119,7 @@ import { assessmentPerimeterKeys, assessmentPhotoFields } from "../../types/admi
 import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
 import { SubscriptionCheckoutShell } from "../checkout/SubscriptionCheckoutShell";
 import { SubscriptionFunnelPanel } from "../checkout/SubscriptionFunnelPanel";
-import { formatPlanPriceLines, getEffectivePriceCents, planHasPromoDiscount, plansForCouponDisplay } from "../../lib/plan-catalog";
+import { formatPlanPriceLines, buildCatalogCouponQuery, evaluateCouponForSelectedPlan, getEffectivePriceCents, planHasPromoDiscount, plansForCouponDisplay } from "../../lib/plan-catalog";
 import { paths } from "../../auth/paths";
 import { clearCheckoutIntent, readCheckoutIntent } from "../../lib/checkout-intent";
 import { resolvePendingPaymentForSelectedPlan, paymentMatchesPlanPricing } from "../../lib/checkout-pending";
@@ -268,16 +268,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     planCode: (initialCheckoutIntent?.planCode as PlanCode | undefined) ?? "monthly",
     billingType: "UNDEFINED"
   });
-  const catalogCouponQuery = useMemo(() => {
-    if (!appliedCoupon) return null;
-    if (couponApplying || couponValidForSelection === null) return appliedCoupon;
-    return couponValidForSelection ? appliedCoupon : null;
-  }, [appliedCoupon, couponApplying, couponValidForSelection]);
+  const catalogCouponQuery = useMemo(
+    () => buildCatalogCouponQuery(appliedCoupon, couponValidForSelection),
+    [appliedCoupon, couponValidForSelection]
+  );
   const {
     plans: catalogPlansRaw,
     allPlans: catalogAllPlans,
     loading: catalogPlansLoading,
-    monthlyBaseline: catalogMonthlyBaseline
+    monthlyBaseline: catalogMonthlyBaseline,
+    couponCatalogReady,
+    loadedCouponCode
   } = useCatalogPlans(checkoutDraft.planCode, catalogCouponQuery);
   const catalogCoupon = useMemo(() => {
     if (!appliedCoupon) return null;
@@ -287,9 +288,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const catalogPlans = useMemo(
     () =>
       plansForCouponDisplay(catalogPlansRaw, appliedCoupon, checkoutDraft.planCode, {
-        couponValidating: catalogPlansLoading && Boolean(appliedCoupon)
+        couponValidating: Boolean(appliedCoupon) && !couponCatalogReady
       }),
-    [appliedCoupon, catalogPlansLoading, catalogPlansRaw, checkoutDraft.planCode]
+    [appliedCoupon, catalogPlansRaw, checkoutDraft.planCode, couponCatalogReady]
   );
   const [assessmentForm, setAssessmentForm] = useState<PhysicalAssessmentForm | null>(null);
   const [editingAssessmentId, setEditingAssessmentId] = useState<string | null>(null);
@@ -632,16 +633,23 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     if (!appliedCoupon) {
       setCouponValidForSelection(false);
       setCouponApplying(false);
+      setCouponFeedback(null);
       return;
     }
-    if (catalogPlansLoading) return;
 
-    const selected = catalogAllPlans.find((plan) => plan.code === checkoutDraft.planCode) ?? null;
-    const valid = Boolean(selected && planHasPromoDiscount(selected));
-    setCouponValidForSelection(valid);
+    const result = evaluateCouponForSelectedPlan(appliedCoupon, checkoutDraft.planCode, catalogAllPlans, {
+      couponCatalogReady,
+      loadedCouponCode
+    });
+    if (result.pending) {
+      setCouponApplying(true);
+      return;
+    }
+
+    setCouponValidForSelection(result.valid);
     setCouponApplying(false);
-    setCouponFeedback(valid ? null : "Código inválido ou indisponível para este plano.");
-  }, [appliedCoupon, catalogAllPlans, catalogPlansLoading, checkoutDraft.planCode]);
+    setCouponFeedback(result.feedback);
+  }, [appliedCoupon, catalogAllPlans, checkoutDraft.planCode, couponCatalogReady, loadedCouponCode]);
 
   const handleApplySubscriptionCoupon = () => {
     const next = couponDraft.trim().toUpperCase();
@@ -2636,7 +2644,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               onApplyCoupon={handleApplySubscriptionCoupon}
               onRemoveCoupon={handleRemoveSubscriptionCoupon}
               couponFeedback={couponFeedback}
-              couponApplying={couponApplying || catalogPlansLoading}
+              couponApplying={couponApplying || !couponCatalogReady}
               couponValidForSelection={couponValidForSelection}
               selectedPlanHasDiscount={planHasPromoDiscount(selectedCatalogPlan)}
             />

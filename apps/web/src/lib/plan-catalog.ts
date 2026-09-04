@@ -68,6 +68,41 @@ export function planHasPromoDiscount(plan: CatalogPlan | null | undefined): bool
   return (plan.discountInCents ?? 0) > 0 && getEffectivePriceCents(plan) < getOriginalPriceCents(plan);
 }
 
+export function buildCatalogCouponQuery(
+  appliedCoupon: string | null | undefined,
+  couponValidForSelection: boolean | null
+): string | null {
+  if (!appliedCoupon?.trim()) return null;
+  if (couponValidForSelection === false) return null;
+  return appliedCoupon.trim().toUpperCase();
+}
+
+export function evaluateCouponForSelectedPlan(
+  appliedCoupon: string | null | undefined,
+  selectedPlanCode: string | null | undefined,
+  allPlans: CatalogPlan[],
+  options: { couponCatalogReady: boolean; loadedCouponCode: string | null }
+): { pending: true } | { pending: false; valid: boolean; feedback: string | null } {
+  if (!options.couponCatalogReady) return { pending: true };
+
+  const expectedCoupon = appliedCoupon?.trim().toUpperCase() || null;
+  if (expectedCoupon && options.loadedCouponCode !== expectedCoupon) return { pending: true };
+
+  if (!expectedCoupon) {
+    return { pending: false, valid: false, feedback: null };
+  }
+
+  const planCode = resolvePlanCodeInCatalog(selectedPlanCode, allPlans) || selectedPlanCode || "";
+  const plan = allPlans.find((item) => item.code === planCode) ?? null;
+  const valid = Boolean(plan && planHasPromoDiscount(plan));
+
+  return {
+    pending: false,
+    valid,
+    feedback: valid ? null : "Código inválido ou indisponível para este plano."
+  };
+}
+
 export function clearPlanPromoDisplay(plan: CatalogPlan): CatalogPlan {
   const original = getOriginalPriceCents(plan);
   return {
