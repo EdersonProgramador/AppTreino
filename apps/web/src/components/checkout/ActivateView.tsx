@@ -101,7 +101,8 @@ export function ActivateView() {
 
   const plans = useMemo(
     () =>
-      plansForCouponDisplay(catalogPlans, appliedCoupon, selectedPlan, {
+      plansForCouponDisplay(catalogPlans, selectedPlan, {
+        appliedCoupon,
         couponValidForSelection
       }),
     [appliedCoupon, catalogPlans, couponValidForSelection, selectedPlan]

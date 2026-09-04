@@ -284,7 +284,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   }, [appliedCoupon, catalogPlansLoading, couponApplying, couponValidForSelection]);
   const catalogPlans = useMemo(
     () =>
-      plansForCouponDisplay(catalogPlansRaw, appliedCoupon, checkoutDraft.planCode, {
+      plansForCouponDisplay(catalogPlansRaw, checkoutDraft.planCode, {
+        appliedCoupon,
         couponValidForSelection
       }),
     [appliedCoupon, catalogPlansRaw, checkoutDraft.planCode, couponValidForSelection]

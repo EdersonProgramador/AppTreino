@@ -1,6 +1,64 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { normalizeCatalogPlan, resolveCouponValidationState } from "./plan-catalog.js";
+import {
+  getEffectivePriceCents,
+  normalizeCatalogPlan,
+  planHasPromoDiscount,
+  plansForCouponDisplay,
+  resolveCouponValidationState
+} from "./plan-catalog.js";
+
+describe("plansForCouponDisplay", () => {
+  const startPlan = normalizeCatalogPlan({
+    code: "start10",
+    name: "Start",
+    priceInCents: 4990,
+    effectivePriceInCents: 4990,
+    discountInCents: 0
+  });
+  const monthlyWithCoupon = normalizeCatalogPlan({
+    code: "97",
+    name: "Mensal",
+    priceInCents: 9700,
+    effectivePriceInCents: 500,
+    discountInCents: 9200
+  });
+
+  it("não mostra desconto no Mensal quando Start está selecionado e cupom validando", () => {
+    const displayed = plansForCouponDisplay([startPlan, monthlyWithCoupon], "start10", {
+      appliedCoupon: "CINCO",
+      couponValidForSelection: null
+    });
+
+    const mensal = displayed.find((plan) => plan.code === "97");
+    assert.equal(getEffectivePriceCents(mensal!), 9700);
+    assert.equal(planHasPromoDiscount(mensal), false);
+  });
+
+  it("não mostra desconto no Mensal quando Start está selecionado e cupom inválido", () => {
+    const displayed = plansForCouponDisplay([startPlan, monthlyWithCoupon], "start10", {
+      appliedCoupon: "CINCO",
+      couponValidForSelection: false
+    });
+
+    const mensal = displayed.find((plan) => plan.code === "97");
+    assert.equal(getEffectivePriceCents(mensal!), 9700);
+  });
+
+  it("mostra desconto só no Mensal quando Mensal está selecionado e cupom validado", () => {
+    const displayed = plansForCouponDisplay([startPlan, monthlyWithCoupon], "97", {
+      appliedCoupon: "CINCO",
+      couponValidForSelection: true
+    });
+
+    const start = displayed.find((plan) => plan.code === "start10");
+    const mensal = displayed.find((plan) => plan.code === "97");
+    assert.equal(getEffectivePriceCents(start!), 4990);
+    assert.equal(getEffectivePriceCents(mensal!), 500);
+    assert.equal(planHasPromoDiscount(mensal), true);
+    assert.equal(planHasPromoDiscount(start), false);
+  });
+});
 
 describe("resolveCouponValidationState", () => {
   const monthlyWithCoupon = normalizeCatalogPlan({
@@ -19,7 +77,14 @@ describe("resolveCouponValidationState", () => {
   });
 
   it("remove cupom quando vale para outro plano", () => {
-    const result = resolveCouponValidationState("CINCO", "yearly", [monthlyWithCoupon, yearlyFullPrice], {
+    const startPlan = normalizeCatalogPlan({
+      code: "start10",
+      name: "Start",
+      priceInCents: 4990,
+      effectivePriceInCents: 4990,
+      discountInCents: 0
+    });
+    const result = resolveCouponValidationState("CINCO", "start10", [monthlyWithCoupon, startPlan], {
       couponCatalogReady: true,
       loadedCouponCode: "CINCO"
     });
