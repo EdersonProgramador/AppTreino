@@ -7,7 +7,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
 import { clearCheckoutIntent, patchCheckoutIntent, readCheckoutIntent, resolveCheckoutCouponSelection, resolveCheckoutPlanSelection } from "../../lib/checkout-intent";
 import { resolvePendingPaymentForSelectedPlan, paymentMatchesPlanPricing } from "../../lib/checkout-pending";
-import { planHasPromoDiscount, buildCatalogCouponQuery, evaluateCouponForSelectedPlan, plansForCouponDisplay, resolvePlanCodeInCatalog } from "../../lib/plan-catalog";
+import { planHasPromoDiscount, buildCatalogCouponQuery, plansForCouponDisplay, resolveCouponValidationState, resolvePlanCodeInCatalog } from "../../lib/plan-catalog";
 import { isSandboxCheckoutEnabled } from "../../lib/sandbox-checkout";
 import { pickPendingCheckoutPayment, syncCheckoutPaymentStatus } from "../../lib/checkout-payment-sync";
 import { fetchStudentPortalAccess, hasStudentPortalAccess } from "../../lib/student-portal-access";
@@ -186,26 +186,21 @@ export function ActivatePendingCheckout() {
   }, [checkoutCoupon, selectedPlan]);
 
   useEffect(() => {
-    if (!appliedCoupon) {
-      setCouponValidForSelection(false);
-      setCouponApplying(false);
-      setCouponFeedback(null);
-      return;
-    }
-
-    const result = evaluateCouponForSelectedPlan(appliedCoupon, selectedPlan, allPlans, {
+    const next = resolveCouponValidationState(appliedCoupon, selectedPlan, allPlans, {
       couponCatalogReady,
       loadedCouponCode
     });
-    if (result.pending) {
-      setCouponApplying(true);
-      return;
+    setAppliedCoupon(next.appliedCoupon);
+    setCouponValidForSelection(next.couponValidForSelection);
+    setCouponApplying(next.couponApplying);
+    setCouponFeedback(next.couponFeedback);
+    if (next.clearedInvalidCoupon) {
+      patchCheckoutIntent({ couponCode: undefined, source: "activate" });
+      if (couponFromUrl?.trim()) {
+        navigate(unpaidStudentActivatePath(membership, selectedPlan), { replace: true });
+      }
     }
-
-    setCouponValidForSelection(result.valid);
-    setCouponApplying(false);
-    setCouponFeedback(result.feedback);
-  }, [allPlans, appliedCoupon, couponCatalogReady, loadedCouponCode, selectedPlan]);
+  }, [allPlans, appliedCoupon, couponCatalogReady, couponFromUrl, loadedCouponCode, membership, navigate, selectedPlan]);
 
   function resolveCheckoutCoupon(planCode: PlanCode) {
     if (!checkoutCoupon) return null;
@@ -426,7 +421,7 @@ export function ActivatePendingCheckout() {
           patchCheckoutIntent({ couponCode: undefined, source: "activate" });
         }}
         couponFeedback={couponFeedback}
-        couponApplying={couponApplying || !couponCatalogReady}
+        couponApplying={couponApplying}
         couponValidForSelection={couponValidForSelection}
         selectedPlanHasDiscount={selectedPlanHasDiscount}
       />

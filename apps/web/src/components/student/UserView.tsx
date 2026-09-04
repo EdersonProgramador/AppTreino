@@ -119,7 +119,7 @@ import { assessmentPerimeterKeys, assessmentPhotoFields } from "../../types/admi
 import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
 import { SubscriptionCheckoutShell } from "../checkout/SubscriptionCheckoutShell";
 import { SubscriptionFunnelPanel } from "../checkout/SubscriptionFunnelPanel";
-import { formatPlanPriceLines, buildCatalogCouponQuery, evaluateCouponForSelectedPlan, getEffectivePriceCents, planHasPromoDiscount, plansForCouponDisplay } from "../../lib/plan-catalog";
+import { formatPlanPriceLines, buildCatalogCouponQuery, getEffectivePriceCents, planHasPromoDiscount, plansForCouponDisplay, resolveCouponValidationState } from "../../lib/plan-catalog";
 import { paths } from "../../auth/paths";
 import { clearCheckoutIntent, readCheckoutIntent } from "../../lib/checkout-intent";
 import { resolvePendingPaymentForSelectedPlan, paymentMatchesPlanPricing } from "../../lib/checkout-pending";
@@ -630,26 +630,20 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   }, [catalogPlans, catalogPlansLoading, checkoutDraft.planCode]);
 
   useEffect(() => {
-    if (!appliedCoupon) {
-      setCouponValidForSelection(false);
-      setCouponApplying(false);
-      setCouponFeedback(null);
-      return;
-    }
-
-    const result = evaluateCouponForSelectedPlan(appliedCoupon, checkoutDraft.planCode, catalogAllPlans, {
+    const next = resolveCouponValidationState(appliedCoupon, checkoutDraft.planCode, catalogAllPlans, {
       couponCatalogReady,
       loadedCouponCode
     });
-    if (result.pending) {
-      setCouponApplying(true);
-      return;
+    setAppliedCoupon(next.appliedCoupon);
+    setCouponValidForSelection(next.couponValidForSelection);
+    setCouponApplying(next.couponApplying);
+    setCouponFeedback(next.couponFeedback);
+    if (next.clearedInvalidCoupon && searchParams.get("coupon")?.trim()) {
+      const cleaned = new URLSearchParams(searchParams);
+      cleaned.delete("coupon");
+      setSearchParams(cleaned, { replace: true });
     }
-
-    setCouponValidForSelection(result.valid);
-    setCouponApplying(false);
-    setCouponFeedback(result.feedback);
-  }, [appliedCoupon, catalogAllPlans, checkoutDraft.planCode, couponCatalogReady, loadedCouponCode]);
+  }, [appliedCoupon, catalogAllPlans, checkoutDraft.planCode, couponCatalogReady, loadedCouponCode, searchParams, setSearchParams]);
 
   const handleApplySubscriptionCoupon = () => {
     const next = couponDraft.trim().toUpperCase();
@@ -2644,7 +2638,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               onApplyCoupon={handleApplySubscriptionCoupon}
               onRemoveCoupon={handleRemoveSubscriptionCoupon}
               couponFeedback={couponFeedback}
-              couponApplying={couponApplying || !couponCatalogReady}
+              couponApplying={couponApplying}
               couponValidForSelection={couponValidForSelection}
               selectedPlanHasDiscount={planHasPromoDiscount(selectedCatalogPlan)}
             />

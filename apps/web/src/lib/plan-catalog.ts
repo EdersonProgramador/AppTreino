@@ -103,6 +103,61 @@ export function evaluateCouponForSelectedPlan(
   };
 }
 
+export type CouponValidationState = {
+  appliedCoupon: string | null;
+  couponValidForSelection: boolean | null;
+  couponApplying: boolean;
+  couponFeedback: string | null;
+  clearedInvalidCoupon: boolean;
+};
+
+/** Valida cupom após catálogo carregar; cupom inválido é removido (não fica em validando). */
+export function resolveCouponValidationState(
+  appliedCoupon: string | null | undefined,
+  selectedPlanCode: string | null | undefined,
+  allPlans: CatalogPlan[],
+  options: { couponCatalogReady: boolean; loadedCouponCode: string | null }
+): CouponValidationState {
+  if (!appliedCoupon?.trim()) {
+    return {
+      appliedCoupon: null,
+      couponValidForSelection: false,
+      couponApplying: false,
+      couponFeedback: null,
+      clearedInvalidCoupon: false
+    };
+  }
+
+  const result = evaluateCouponForSelectedPlan(appliedCoupon, selectedPlanCode, allPlans, options);
+  if (result.pending) {
+    return {
+      appliedCoupon: appliedCoupon.trim().toUpperCase(),
+      couponValidForSelection: null,
+      couponApplying: true,
+      couponFeedback: null,
+      clearedInvalidCoupon: false
+    };
+  }
+
+  if (!result.valid) {
+    return {
+      appliedCoupon: null,
+      couponValidForSelection: false,
+      couponApplying: false,
+      couponFeedback: result.feedback,
+      clearedInvalidCoupon: true
+    };
+  }
+
+  return {
+    appliedCoupon: appliedCoupon.trim().toUpperCase(),
+    couponValidForSelection: true,
+    couponApplying: false,
+    couponFeedback: null,
+    clearedInvalidCoupon: false
+  };
+}
+
 export function clearPlanPromoDisplay(plan: CatalogPlan): CatalogPlan {
   const original = getOriginalPriceCents(plan);
   return {

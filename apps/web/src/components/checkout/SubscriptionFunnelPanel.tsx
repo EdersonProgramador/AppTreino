@@ -158,12 +158,14 @@ export function SubscriptionFunnelPanel({
   const selectedPlan = plans.find((plan) => plan.code === selectedPlanCode) ?? plans[0] ?? null;
   const selectedPlanCheckoutError = selectedPlan ? getCheckoutMinimumAmountMessage(selectedPlan) : null;
   const canCheckoutSelectedPlan = selectedPlan ? isCheckoutEligiblePlan(selectedPlan) : false;
-  const couponBlocksCheckout = Boolean(stagedCouponCode) && (couponApplying || couponValidForSelection === null);
+  const couponBlocksCheckout = Boolean(stagedCouponCode) && couponValidForSelection === null;
   const resolvedSelectedPlanHasDiscount = selectedPlanHasDiscount || planHasPromoDiscount(selectedPlan);
   const nativeBillingType = toNativeBillingType(billingType);
-  const visibleCouponCode = couponCode ?? stagedCouponCode;
-  const showAppliedCouponRow =
-    Boolean(couponCode && resolvedSelectedPlanHasDiscount) || Boolean(stagedCouponCode && couponApplying);
+  const visibleCouponCode = couponCode ?? (couponValidForSelection === null ? stagedCouponCode : null);
+  const showAppliedCouponRow = Boolean(
+    (couponCode && resolvedSelectedPlanHasDiscount) ||
+      (stagedCouponCode && couponValidForSelection === null)
+  );
 
   return (
     <div className="activate-funnel-panel">
@@ -225,7 +227,7 @@ export function SubscriptionFunnelPanel({
                   <span className="activate-coupon-field__hint">Tem um cupom?</span>
                   <div className="activate-coupon-field__row">
                     <input
-                      value={couponDraft || stagedCouponCode || ""}
+                      value={couponDraft}
                       onChange={(event) => onCouponDraftChange(event.target.value.toUpperCase())}
                       placeholder="Código"
                       autoComplete="off"
