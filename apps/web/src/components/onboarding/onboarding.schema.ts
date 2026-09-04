@@ -24,84 +24,89 @@ export type TrainingGoal = (typeof TRAINING_GOALS)[number]["id"];
 export type TrainingLevel = (typeof TRAINING_LEVELS)[number]["id"];
 export type EquipmentTag = (typeof EQUIPMENT_OPTIONS)[number]["id"];
 
-function addDocumentValidationIssues(document: string | undefined, ctx: z.RefinementCtx) {
-  const state = resolveCpfValidationState(document);
+const cpfDocumentFieldSchema = z.string().trim().superRefine((value, ctx) => {
+  const state = resolveCpfValidationState(value);
   if (state === "valid") return;
   ctx.addIssue({
     code: z.ZodIssueCode.custom,
-    message: getCpfValidationMessage(state, normalizeCpfDigits(document ?? "").length),
-    path: ["document"]
+    message: getCpfValidationMessage(state, normalizeCpfDigits(value).length)
   });
+});
+
+function addEmailOrPhoneIssue(data: { email?: string; phone?: string }, ctx: z.RefinementCtx) {
+  if (!data.email && !data.phone) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Informe e-mail ou telefone",
+      path: ["email"]
+    });
+  }
 }
 
-export const onboardingSchema = z
-  .object({
-    name: z.string().trim().min(2, "Informe seu nome"),
-    email: z.string().trim().email("E-mail inválido").optional().or(z.literal("")),
-    phone: z.string().trim().min(8, "Telefone inválido").optional().or(z.literal("")),
-    document: z.string().trim().optional().or(z.literal("")),
-    password: z.string().min(6, "Mínimo de 6 caracteres").optional().or(z.literal("")),
-    gender: z.enum(["MALE", "FEMALE"], {
-      required_error: "Selecione o sexo",
-      invalid_type_error: "Selecione o sexo"
-    }),
-    birthYear: z
-      .string()
-      .min(4, "Informe o ano de nascimento")
-      .regex(/^\d{4}$/, "Ano inválido")
-      .refine((value) => {
-        const year = Number(value);
-        const current = new Date().getFullYear();
-        return year >= current - 100 && year <= current - 12;
-      }, "Informe um ano de nascimento válido"),
-    goal: z.enum(["hypertrophy", "fat_loss", "conditioning"], {
-      required_error: "Selecione um objetivo"
-    }),
-    daysPerWeek: z.enum(["3", "4", "5", "6"], {
-      required_error: "Selecione a frequência"
-    }),
-    level: z.enum(["beginner", "intermediate", "advanced"], {
-      required_error: "Selecione seu nível"
-    }),
-    equipment: z.array(z.enum(["gym", "dumbbells", "bodyweight", "bands"])).min(1, "Selecione ao menos um equipamento"),
-    billingType: z.enum(["UNDEFINED", "PIX", "CREDIT_CARD"]).optional().default("UNDEFINED"),
-    acceptTerms: z.boolean().optional(),
-    acceptPrivacy: z.boolean().optional()
+const onboardingObjectSchema = z.object({
+  name: z.string().trim().min(2, "Informe seu nome"),
+  email: z.string().trim().email("E-mail inválido").optional().or(z.literal("")),
+  phone: z.string().trim().min(8, "Telefone inválido").optional().or(z.literal("")),
+  document: z.string().trim().optional().or(z.literal("")),
+  password: z.string().min(6, "Mínimo de 6 caracteres").optional().or(z.literal("")),
+  gender: z.enum(["MALE", "FEMALE"], {
+    required_error: "Selecione o sexo",
+    invalid_type_error: "Selecione o sexo"
+  }),
+  birthYear: z
+    .string()
+    .min(4, "Informe o ano de nascimento")
+    .regex(/^\d{4}$/, "Ano inválido")
+    .refine((value) => {
+      const year = Number(value);
+      const current = new Date().getFullYear();
+      return year >= current - 100 && year <= current - 12;
+    }, "Informe um ano de nascimento válido"),
+  goal: z.enum(["hypertrophy", "fat_loss", "conditioning"], {
+    required_error: "Selecione um objetivo"
+  }),
+  daysPerWeek: z.enum(["3", "4", "5", "6"], {
+    required_error: "Selecione a frequência"
+  }),
+  level: z.enum(["beginner", "intermediate", "advanced"], {
+    required_error: "Selecione seu nível"
+  }),
+  equipment: z.array(z.enum(["gym", "dumbbells", "bodyweight", "bands"])).min(1, "Selecione ao menos um equipamento"),
+  billingType: z.enum(["UNDEFINED", "PIX", "CREDIT_CARD"]).optional().default("UNDEFINED"),
+  acceptTerms: z.boolean().optional(),
+  acceptPrivacy: z.boolean().optional()
+});
+
+export const onboardingSchema = onboardingObjectSchema.superRefine(addEmailOrPhoneIssue);
+
+export const registerOnboardingSchema = onboardingObjectSchema
+  .extend({
+    document: cpfDocumentFieldSchema
   })
+  .superRefine(addEmailOrPhoneIssue)
   .superRefine((data, ctx) => {
-    if (!data.email && !data.phone) {
+    if (!data.password || data.password.length < 6) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Informe e-mail ou telefone",
-        path: ["email"]
+        message: "Mínimo de 6 caracteres",
+        path: ["password"]
+      });
+    }
+    if (!data.acceptTerms) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Aceite os Termos de Uso para continuar.",
+        path: ["acceptTerms"]
+      });
+    }
+    if (!data.acceptPrivacy) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Aceite a Política de Privacidade para continuar.",
+        path: ["acceptPrivacy"]
       });
     }
   });
-
-export const registerOnboardingSchema = onboardingSchema.superRefine((data, ctx) => {
-  addDocumentValidationIssues(data.document, ctx);
-  if (!data.password || data.password.length < 6) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Mínimo de 6 caracteres",
-      path: ["password"]
-    });
-  }
-  if (!data.acceptTerms) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Aceite os Termos de Uso para continuar.",
-      path: ["acceptTerms"]
-    });
-  }
-  if (!data.acceptPrivacy) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Aceite a Política de Privacidade para continuar.",
-      path: ["acceptPrivacy"]
-    });
-  }
-});
 
 export type OnboardingFormValues = z.infer<typeof onboardingSchema>;
 

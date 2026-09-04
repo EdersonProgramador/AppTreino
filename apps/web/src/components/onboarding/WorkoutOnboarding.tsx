@@ -104,6 +104,7 @@ export function WorkoutOnboarding({
   const cpfValidation = getCpfFieldValidation(documentValue);
   const showCpfStatus =
     documentValue.length > 0 || Boolean(touchedFields.document) || Boolean(errors.document) || submitCount > 0;
+  const cpfBlocksStepOne = requirePassword && step === 1 && !cpfValidation.isValid;
 
   useEffect(() => {
     const subscription = watch((values) => {
@@ -115,6 +116,12 @@ export function WorkoutOnboarding({
   async function handleNext() {
     const stepFields = requirePassword ? REGISTER_ONBOARDING_STEP_FIELDS : ONBOARDING_STEP_FIELDS;
     const fields = stepFields[step as 1 | 2 | 3 | 4];
+
+    if (requirePassword && step === 1 && !cpfValidation.isValid) {
+      await trigger("document");
+      return;
+    }
+
     const isValid = await trigger(fields);
     if (isValid) {
       setStep(step + 1);
@@ -212,6 +219,10 @@ export function WorkoutOnboarding({
                   onChange={(event) => {
                     event.target.value = formatCpf(event.target.value);
                     void register("document").onChange(event);
+                    void trigger("document");
+                  }}
+                  onBlur={() => {
+                    void trigger("document");
                   }}
                 />
                 <CpfFieldFeedback
@@ -446,12 +457,17 @@ export function WorkoutOnboarding({
           )}
 
           {step < 4 ? (
-            <button type="button" className="ui-btn-primary flex-1" onClick={() => void handleNext()}>
+            <button
+              type="button"
+              className="ui-btn-primary flex-1"
+              onClick={() => void handleNext()}
+              disabled={submitting || cpfBlocksStepOne}
+            >
               Avançar
               <ChevronRight size={16} />
             </button>
           ) : (
-            <button type="submit" className="ui-btn-primary flex-1" disabled={submitting}>
+            <button type="submit" className="ui-btn-primary flex-1" disabled={submitting || (requirePassword && !cpfValidation.isValid)}>
               {submitting ? <Loader2 className="animate-spin" size={18} /> : null}
               {mode === "register"
                 ? selectedPlanName
