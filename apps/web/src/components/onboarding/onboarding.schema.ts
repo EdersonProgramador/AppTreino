@@ -24,17 +24,15 @@ export type TrainingGoal = (typeof TRAINING_GOALS)[number]["id"];
 export type TrainingLevel = (typeof TRAINING_LEVELS)[number]["id"];
 export type EquipmentTag = (typeof EQUIPMENT_OPTIONS)[number]["id"];
 
-const registerDocumentSchema = z
-  .string()
-  .trim()
-  .superRefine((value, ctx) => {
-    const state = resolveCpfValidationState(value);
-    if (state === "valid") return;
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: getCpfValidationMessage(state, normalizeCpfDigits(value).length)
-    });
+function addDocumentValidationIssues(document: string | undefined, ctx: z.RefinementCtx) {
+  const state = resolveCpfValidationState(document);
+  if (state === "valid") return;
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    message: getCpfValidationMessage(state, normalizeCpfDigits(document ?? "").length),
+    path: ["document"]
   });
+}
 
 export const onboardingSchema = z
   .object({
@@ -80,13 +78,8 @@ export const onboardingSchema = z
     }
   });
 
-export const registerOnboardingSchema = onboardingSchema
-  .merge(
-    z.object({
-      document: registerDocumentSchema
-    })
-  )
-  .superRefine((data, ctx) => {
+export const registerOnboardingSchema = onboardingSchema.superRefine((data, ctx) => {
+  addDocumentValidationIssues(data.document, ctx);
   if (!data.password || data.password.length < 6) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
