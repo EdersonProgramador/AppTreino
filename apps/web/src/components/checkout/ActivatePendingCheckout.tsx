@@ -6,7 +6,7 @@ import { paths, unpaidStudentActivatePath } from "../../auth/paths";
 import { useAuth } from "../../auth/AuthContext";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
 import { clearCheckoutIntent, patchCheckoutIntent, readCheckoutIntent, resolveCheckoutCouponSelection, resolveCheckoutPlanSelection } from "../../lib/checkout-intent";
-import { resolvePendingPaymentForSelectedPlan } from "../../lib/checkout-pending";
+import { resolvePendingPaymentForSelectedPlan, paymentMatchesPlanPricing } from "../../lib/checkout-pending";
 import { planHasPromoDiscount, plansForCouponDisplay, resolvePlanCodeInCatalog } from "../../lib/plan-catalog";
 import { isSandboxCheckoutEnabled } from "../../lib/sandbox-checkout";
 import { pickPendingCheckoutPayment, syncCheckoutPaymentStatus } from "../../lib/checkout-payment-sync";
@@ -156,8 +156,11 @@ export function ActivatePendingCheckout() {
   }, [catalogPlans, catalogPlansLoading, initialPlanCode, planFromUrl, selectedPlan]);
 
   const plans = useMemo(
-    () => plansForCouponDisplay(catalogPlans, appliedCoupon, selectedPlan),
-    [appliedCoupon, catalogPlans, selectedPlan]
+    () =>
+      plansForCouponDisplay(catalogPlans, appliedCoupon, selectedPlan, {
+        couponValidating: catalogPlansLoading && Boolean(appliedCoupon)
+      }),
+    [appliedCoupon, catalogPlans, catalogPlansLoading, selectedPlan]
   );
 
   const selectedPlanRow = useMemo(
@@ -165,16 +168,16 @@ export function ActivatePendingCheckout() {
     [plans, selectedPlan]
   );
   const selectedPlanHasDiscount = planHasPromoDiscount(selectedPlanRow);
-  const checkoutCoupon = selectedPlanHasDiscount ? appliedCoupon : null;
+  const checkoutCoupon = couponValidForSelection && appliedCoupon ? appliedCoupon : null;
 
   useEffect(() => {
     if (!selectedPlan) return;
     patchCheckoutIntent({
       planCode: selectedPlan,
-      couponCode: appliedCoupon ?? undefined,
+      couponCode: checkoutCoupon ?? undefined,
       source: "activate"
     });
-  }, [appliedCoupon, selectedPlan]);
+  }, [checkoutCoupon, selectedPlan]);
 
   useEffect(() => {
     if (!appliedCoupon) {
@@ -305,12 +308,17 @@ export function ActivatePendingCheckout() {
     }
   }
 
-  const pendingPayment = resolvePendingPaymentForSelectedPlan(
+  const pendingPaymentForSelectedPlan = resolvePendingPaymentForSelectedPlan(
     selectedPlan,
     membership,
     payments,
     checkoutPayment
   );
+  const pendingPayment = useMemo(() => {
+    if (!pendingPaymentForSelectedPlan) return null;
+    const plan = allPlans.find((item) => item.code === selectedPlan) ?? selectedPlanRow;
+    return paymentMatchesPlanPricing(pendingPaymentForSelectedPlan, plan) ? pendingPaymentForSelectedPlan : null;
+  }, [allPlans, pendingPaymentForSelectedPlan, selectedPlan, selectedPlanRow]);
 
   if (loadingAccess) {
     return (
@@ -380,6 +388,8 @@ export function ActivatePendingCheckout() {
             setAppliedCoupon(null);
             setCouponValidForSelection(false);
             setCouponFeedback(null);
+            setCheckoutPayment(null);
+            setNativeCheckout(null);
             patchCheckoutIntent({ couponCode: undefined, source: "activate" });
             return;
           }
@@ -388,6 +398,8 @@ export function ActivatePendingCheckout() {
           setCouponFeedback(null);
           setAppliedCoupon(next);
           setCouponDraft("");
+          setCheckoutPayment(null);
+          setNativeCheckout(null);
         }}
         onRemoveCoupon={() => {
           setAppliedCoupon(null);
@@ -395,10 +407,13 @@ export function ActivatePendingCheckout() {
           setCouponApplying(false);
           setCouponDraft("");
           setCouponFeedback(null);
+          setCheckoutPayment(null);
+          setNativeCheckout(null);
           patchCheckoutIntent({ couponCode: undefined, source: "activate" });
         }}
         couponFeedback={couponFeedback}
         couponApplying={couponApplying || catalogPlansLoading}
+        couponValidForSelection={couponValidForSelection}
         selectedPlanHasDiscount={selectedPlanHasDiscount}
       />
     </SubscriptionCheckoutShell>

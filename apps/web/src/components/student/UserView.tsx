@@ -285,8 +285,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     return couponValidForSelection ? appliedCoupon : null;
   }, [appliedCoupon, catalogPlansLoading, couponApplying, couponValidForSelection]);
   const catalogPlans = useMemo(
-    () => plansForCouponDisplay(catalogPlansRaw, appliedCoupon, checkoutDraft.planCode),
-    [appliedCoupon, catalogPlansRaw, checkoutDraft.planCode]
+    () =>
+      plansForCouponDisplay(catalogPlansRaw, appliedCoupon, checkoutDraft.planCode, {
+        couponValidating: catalogPlansLoading && Boolean(appliedCoupon)
+      }),
+    [appliedCoupon, catalogPlansLoading, catalogPlansRaw, checkoutDraft.planCode]
   );
   const [assessmentForm, setAssessmentForm] = useState<PhysicalAssessmentForm | null>(null);
   const [editingAssessmentId, setEditingAssessmentId] = useState<string | null>(null);
@@ -674,7 +677,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   };
 
   const selectedCatalogPlan = catalogPlans.find((plan) => plan.code === checkoutDraft.planCode) ?? null;
-  const checkoutCoupon = planHasPromoDiscount(selectedCatalogPlan) ? appliedCoupon : null;
+  const checkoutCoupon = couponValidForSelection && appliedCoupon ? appliedCoupon : null;
 
   function resolveCheckoutCoupon(planCode: PlanCode): string | null {
     const plan = catalogPlans.find((item) => item.code === planCode);
@@ -2627,12 +2630,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               onConfirmSandbox={() => void handleConfirmSandboxPayment()}
               showSandbox={Boolean(isSandboxCheckoutEnabled() && currentCheckoutPayment && currentCheckoutPayment.status === "PENDING")}
               couponCode={checkoutCoupon}
+              stagedCouponCode={appliedCoupon}
               couponDraft={couponDraft}
               onCouponDraftChange={setCouponDraft}
               onApplyCoupon={handleApplySubscriptionCoupon}
               onRemoveCoupon={handleRemoveSubscriptionCoupon}
               couponFeedback={couponFeedback}
               couponApplying={couponApplying || catalogPlansLoading}
+              couponValidForSelection={couponValidForSelection}
               selectedPlanHasDiscount={planHasPromoDiscount(selectedCatalogPlan)}
             />
           ) : null}

@@ -99,8 +99,11 @@ export function ActivateView() {
   }, [appliedCoupon, couponApplying, couponValidForSelection, loading]);
 
   const plans = useMemo(
-    () => plansForCouponDisplay(catalogPlans, appliedCoupon, selectedPlan),
-    [appliedCoupon, catalogPlans, selectedPlan]
+    () =>
+      plansForCouponDisplay(catalogPlans, appliedCoupon, selectedPlan, {
+        couponValidating: loading && Boolean(appliedCoupon)
+      }),
+    [appliedCoupon, catalogPlans, loading, selectedPlan]
   );
 
   useEffect(() => {
@@ -131,16 +134,16 @@ export function ActivateView() {
     [plans, selectedPlan]
   );
   const selectedPlanHasDiscount = planHasPromoDiscount(selectedPlanRow);
-  const checkoutCoupon = selectedPlanHasDiscount ? appliedCoupon : null;
+  const checkoutCoupon = couponValidForSelection && appliedCoupon ? appliedCoupon : null;
 
   useEffect(() => {
     if (!selectedPlan) return;
     patchCheckoutIntent({
       planCode: selectedPlan,
-      couponCode: appliedCoupon ?? undefined,
+      couponCode: checkoutCoupon ?? undefined,
       source: "activate"
     });
-  }, [appliedCoupon, selectedPlan]);
+  }, [checkoutCoupon, selectedPlan]);
 
   useEffect(() => {
     if (!appliedCoupon) {
@@ -278,7 +281,8 @@ export function ActivateView() {
         onApplyCoupon={handleApplyCoupon}
         onRemoveCoupon={handleRemoveCoupon}
         couponFeedback={couponFeedback}
-        couponApplying={couponApplying}
+        couponApplying={couponApplying || loading}
+        couponValidForSelection={couponValidForSelection}
         selectedPlanHasDiscount={selectedPlanHasDiscount}
         accountSlot={
           <div className="activate-account-panel">

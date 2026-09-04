@@ -52,6 +52,7 @@ type SubscriptionFunnelPanelProps = {
   onRemoveCoupon?: () => void;
   couponFeedback?: string | null;
   couponApplying?: boolean;
+  couponValidForSelection?: boolean | null;
   selectedPlanHasDiscount?: boolean;
 };
 
@@ -151,11 +152,13 @@ export function SubscriptionFunnelPanel({
   onRemoveCoupon,
   couponFeedback,
   couponApplying = false,
+  couponValidForSelection = false,
   selectedPlanHasDiscount = false
 }: SubscriptionFunnelPanelProps) {
   const selectedPlan = plans.find((plan) => plan.code === selectedPlanCode) ?? plans[0] ?? null;
   const selectedPlanCheckoutError = selectedPlan ? getCheckoutMinimumAmountMessage(selectedPlan) : null;
   const canCheckoutSelectedPlan = selectedPlan ? isCheckoutEligiblePlan(selectedPlan) : false;
+  const couponBlocksCheckout = Boolean(stagedCouponCode) && (couponApplying || couponValidForSelection === null);
   const resolvedSelectedPlanHasDiscount = selectedPlanHasDiscount || planHasPromoDiscount(selectedPlan);
   const nativeBillingType = toNativeBillingType(billingType);
   const visibleCouponCode = couponCode ?? stagedCouponCode;
@@ -301,7 +304,7 @@ export function SubscriptionFunnelPanel({
             billingType={nativeBillingType}
             onBillingTypeChange={(value) => onBillingTypeChange(value)}
             loading={Boolean(checkoutLoading)}
-            prepareDisabled={!canCheckoutSelectedPlan}
+            prepareDisabled={!canCheckoutSelectedPlan || couponBlocksCheckout}
             defaultEmail={payerEmail}
             defaultPhone={payerPhone}
             defaultName={payerName}
@@ -311,6 +314,10 @@ export function SubscriptionFunnelPanel({
             onPaymentConfirmed={() => onPaymentConfirmed?.()}
             onError={(message) => onCheckoutError?.(message)}
           />
+
+          {couponBlocksCheckout ? (
+            <p className="activate-coupon-feedback">Aguarde a validação do cupom para gerar o pagamento.</p>
+          ) : null}
 
           {showSandbox && onConfirmSandbox ? (
             <button type="button" className="ui-btn-secondary activate-funnel-secondary" onClick={onConfirmSandbox} disabled={Boolean(checkoutLoading)}>

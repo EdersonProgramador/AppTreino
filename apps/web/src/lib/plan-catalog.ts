@@ -82,9 +82,11 @@ export function clearPlanPromoDisplay(plan: CatalogPlan): CatalogPlan {
 export function plansForCouponDisplay(
   plans: CatalogPlan[],
   appliedCoupon: string | null | undefined,
-  selectedPlanCode: string | null | undefined
+  selectedPlanCode: string | null | undefined,
+  options?: { couponValidating?: boolean }
 ): CatalogPlan[] {
   if (!appliedCoupon?.trim()) return plans;
+  if (options?.couponValidating) return plans;
   const selected = plans.find((plan) => plan.code === selectedPlanCode) ?? null;
   if (!selected || !planHasPromoDiscount(selected)) {
     return plans.map(clearPlanPromoDisplay);
