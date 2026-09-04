@@ -27425,6 +27425,14 @@ html.light .student-app-shell .student-hero-card {
 .activate-coupon-applied {
   margin: 0;
   font-size: 0.6875rem;
+  color: #8a98ae;
+}
+
+.activate-coupon-applied.is-validating {
+  color: var(--brand-gold-soft);
+}
+
+.activate-coupon-applied.is-applied {
   color: #86efac;
 }
 
@@ -27763,6 +27771,14 @@ html.light .activate-page.home-command .activate-coupon-field__hint,
 html.light .activate-page.home-command .activate-coupon-apply,
 html.light .activate-page.home-command .activate-coupon-feedback {
   color: #8a98ae !important;
+}
+
+html.light .activate-page.home-command .activate-coupon-applied.is-validating {
+  color: var(--brand-gold) !important;
+}
+
+html.light .activate-page.home-command .activate-coupon-applied.is-applied {
+  color: #16a34a !important;
 }
 
 html.light .activate-page.home-command .activate-coupon-field__row input {

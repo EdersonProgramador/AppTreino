@@ -213,7 +213,11 @@ export function SubscriptionFunnelPanel({
             <div className="activate-coupon-box">
               {showAppliedCouponRow && visibleCouponCode ? (
                 <div className="activate-coupon-applied-row">
-                  <span className="activate-coupon-applied">
+                  <span
+                    className={`activate-coupon-applied${
+                      couponValidForSelection === null ? " is-validating" : " is-applied"
+                    }`}
+                  >
                     Cupom <strong>{visibleCouponCode}</strong> {couponApplying ? "validando…" : "aplicado"}
                   </span>
                   {onRemoveCoupon ? (
