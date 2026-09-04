@@ -268,10 +268,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     planCode: (initialCheckoutIntent?.planCode as PlanCode | undefined) ?? "monthly",
     billingType: "UNDEFINED"
   });
-  const catalogCouponQuery = useMemo(
-    () => buildCatalogCouponQuery(appliedCoupon, couponValidForSelection),
-    [appliedCoupon, couponValidForSelection]
-  );
+  const catalogCouponQuery = useMemo(() => buildCatalogCouponQuery(appliedCoupon), [appliedCoupon]);
   const {
     plans: catalogPlansRaw,
     allPlans: catalogAllPlans,

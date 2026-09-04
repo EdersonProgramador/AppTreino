@@ -68,13 +68,13 @@ export function planHasPromoDiscount(plan: CatalogPlan | null | undefined): bool
   return (plan.discountInCents ?? 0) > 0 && getEffectivePriceCents(plan) < getOriginalPriceCents(plan);
 }
 
-export function buildCatalogCouponQuery(
-  appliedCoupon: string | null | undefined,
-  couponValidForSelection: boolean | null
-): string | null {
+export function buildCatalogCouponQuery(appliedCoupon: string | null | undefined): string | null {
   if (!appliedCoupon?.trim()) return null;
-  if (couponValidForSelection === false) return null;
   return appliedCoupon.trim().toUpperCase();
+}
+
+export function couponAppliesToAnyCatalogPlan(allPlans: CatalogPlan[]): boolean {
+  return allPlans.some((plan) => planHasPromoDiscount(plan));
 }
 
 export function evaluateCouponForSelectedPlan(
@@ -82,24 +82,30 @@ export function evaluateCouponForSelectedPlan(
   selectedPlanCode: string | null | undefined,
   allPlans: CatalogPlan[],
   options: { couponCatalogReady: boolean; loadedCouponCode: string | null }
-): { pending: true } | { pending: false; valid: boolean; feedback: string | null } {
+): { pending: true } | { pending: false; valid: boolean; feedback: string | null; appliesElsewhere: boolean } {
   if (!options.couponCatalogReady) return { pending: true };
 
   const expectedCoupon = appliedCoupon?.trim().toUpperCase() || null;
   if (expectedCoupon && options.loadedCouponCode !== expectedCoupon) return { pending: true };
 
   if (!expectedCoupon) {
-    return { pending: false, valid: false, feedback: null };
+    return { pending: false, valid: false, feedback: null, appliesElsewhere: false };
   }
 
   const planCode = resolvePlanCodeInCatalog(selectedPlanCode, allPlans) || selectedPlanCode || "";
   const plan = allPlans.find((item) => item.code === planCode) ?? null;
   const valid = Boolean(plan && planHasPromoDiscount(plan));
+  const appliesElsewhere = !valid && couponAppliesToAnyCatalogPlan(allPlans);
 
   return {
     pending: false,
     valid,
-    feedback: valid ? null : "Código inválido ou indisponível para este plano."
+    appliesElsewhere,
+    feedback: valid
+      ? null
+      : appliesElsewhere
+        ? "Este cupom não vale para o plano selecionado."
+        : "Código inválido ou indisponível para este plano."
   };
 }
 
@@ -111,14 +117,16 @@ export type CouponValidationState = {
   clearedInvalidCoupon: boolean;
 };
 
-/** Valida cupom após catálogo carregar; cupom inválido é removido (não fica em validando). */
+/** Valida cupom após catálogo carregar; só remove códigos inexistentes. */
 export function resolveCouponValidationState(
   appliedCoupon: string | null | undefined,
   selectedPlanCode: string | null | undefined,
   allPlans: CatalogPlan[],
   options: { couponCatalogReady: boolean; loadedCouponCode: string | null }
 ): CouponValidationState {
-  if (!appliedCoupon?.trim()) {
+  const normalizedCoupon = appliedCoupon?.trim().toUpperCase() || null;
+
+  if (!normalizedCoupon) {
     return {
       appliedCoupon: null,
       couponValidForSelection: false,
@@ -128,10 +136,10 @@ export function resolveCouponValidationState(
     };
   }
 
-  const result = evaluateCouponForSelectedPlan(appliedCoupon, selectedPlanCode, allPlans, options);
+  const result = evaluateCouponForSelectedPlan(normalizedCoupon, selectedPlanCode, allPlans, options);
   if (result.pending) {
     return {
-      appliedCoupon: appliedCoupon.trim().toUpperCase(),
+      appliedCoupon: normalizedCoupon,
       couponValidForSelection: null,
       couponApplying: true,
       couponFeedback: null,
@@ -140,6 +148,16 @@ export function resolveCouponValidationState(
   }
 
   if (!result.valid) {
+    if (result.appliesElsewhere) {
+      return {
+        appliedCoupon: normalizedCoupon,
+        couponValidForSelection: false,
+        couponApplying: false,
+        couponFeedback: result.feedback,
+        clearedInvalidCoupon: false
+      };
+    }
+
     return {
       appliedCoupon: null,
       couponValidForSelection: false,
@@ -150,7 +168,7 @@ export function resolveCouponValidationState(
   }
 
   return {
-    appliedCoupon: appliedCoupon.trim().toUpperCase(),
+    appliedCoupon: normalizedCoupon,
     couponValidForSelection: true,
     couponApplying: false,
     couponFeedback: null,
@@ -168,19 +186,15 @@ export function clearPlanPromoDisplay(plan: CatalogPlan): CatalogPlan {
   };
 }
 
-/** Cards do funil: se cupom não vale para o plano selecionado, nenhum card mostra promo. */
+/** Cards do funil: mantém preços por plano vindos do catálogo (com cupom na query). */
 export function plansForCouponDisplay(
   plans: CatalogPlan[],
   appliedCoupon: string | null | undefined,
-  selectedPlanCode: string | null | undefined,
+  _selectedPlanCode: string | null | undefined,
   options?: { couponValidating?: boolean }
 ): CatalogPlan[] {
   if (!appliedCoupon?.trim()) return plans;
   if (options?.couponValidating) return plans;
-  const selected = plans.find((plan) => plan.code === selectedPlanCode) ?? null;
-  if (!selected || !planHasPromoDiscount(selected)) {
-    return plans.map(clearPlanPromoDisplay);
-  }
   return plans;
 }
 

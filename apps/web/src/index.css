@@ -27436,6 +27436,10 @@ html.light .student-app-shell .student-hero-card {
   color: #86efac;
 }
 
+.activate-coupon-applied.is-rejected {
+  color: #ff9a9a;
+}
+
 .activate-coupon-applied-row {
   display: flex;
   align-items: center;
@@ -27779,6 +27783,10 @@ html.light .activate-page.home-command .activate-coupon-applied.is-validating {
 
 html.light .activate-page.home-command .activate-coupon-applied.is-applied {
   color: #16a34a !important;
+}
+
+html.light .activate-page.home-command .activate-coupon-applied.is-rejected {
+  color: #dc2626 !important;
 }
 
 html.light .activate-page.home-command .activate-coupon-field__row input {

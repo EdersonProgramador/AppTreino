@@ -81,10 +81,7 @@ export function ActivateView() {
     }
   }, [couponFromUrl, preferUrlParams]);
 
-  const catalogCouponQuery = useMemo(
-    () => buildCatalogCouponQuery(appliedCoupon, couponValidForSelection),
-    [appliedCoupon, couponValidForSelection]
-  );
+  const catalogCouponQuery = useMemo(() => buildCatalogCouponQuery(appliedCoupon), [appliedCoupon]);
 
   const {
     plans: catalogPlans,
@@ -134,8 +131,8 @@ export function ActivateView() {
   }, [initialPlanCode, loading, planFromUrl, plans, selectedPlan, syncSelectedPlan]);
 
   const selectedPlanRow = useMemo(
-    () => plans.find((plan) => plan.code === selectedPlan) ?? plans[0] ?? null,
-    [plans, selectedPlan]
+    () => catalogPlans.find((plan) => plan.code === selectedPlan) ?? allPlans.find((plan) => plan.code === selectedPlan) ?? null,
+    [allPlans, catalogPlans, selectedPlan]
   );
   const selectedPlanHasDiscount = planHasPromoDiscount(selectedPlanRow);
   const checkoutCoupon = couponValidForSelection && appliedCoupon ? appliedCoupon : null;
