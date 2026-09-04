@@ -31,3 +31,40 @@ export function isValidCpf(raw: string | null | undefined) {
   if (check === 10) check = 0;
   return check === Number(cpf[10]);
 }
+
+export type CpfValidationState = "empty" | "incomplete" | "invalid" | "valid";
+
+export function resolveCpfValidationState(raw: string | null | undefined): CpfValidationState {
+  const digits = normalizeCpfDigits(raw);
+  if (digits.length === 0) return "empty";
+  if (digits.length < 11) return "incomplete";
+  if (!isValidCpf(digits)) return "invalid";
+  return "valid";
+}
+
+export function getCpfValidationMessage(state: CpfValidationState, digits = 0) {
+  switch (state) {
+    case "empty":
+      return "Informe seu CPF.";
+    case "incomplete": {
+      const missing = Math.max(11 - digits, 1);
+      return missing === 1
+        ? "CPF incompleto — falta 1 dígito."
+        : `CPF incompleto — faltam ${missing} dígitos.`;
+    }
+    case "invalid":
+      return "CPF inválido — confira os números digitados.";
+    case "valid":
+      return "CPF válido.";
+  }
+}
+
+export function getCpfFieldValidation(raw: string | null | undefined) {
+  const digits = normalizeCpfDigits(raw).length;
+  const state = resolveCpfValidationState(raw);
+  return {
+    state,
+    message: getCpfValidationMessage(state, digits),
+    isValid: state === "valid"
+  };
+}

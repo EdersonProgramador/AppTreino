@@ -1,8 +1,9 @@
+import { formatCpf } from "@app-treino/shared";
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError, apiGet, apiPost } from "../../api";
-import { paths, unpaidStudentActivatePath } from "../../auth/paths";
+import { paths, unpaidStudentActivateAccountPath, unpaidStudentActivatePath } from "../../auth/paths";
 import { useAuth } from "../../auth/AuthContext";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
 import { clearCheckoutIntent, patchCheckoutIntent, readCheckoutIntent, resolveCheckoutCouponSelection, resolveCheckoutPlanSelection } from "../../lib/checkout-intent";
@@ -23,6 +24,8 @@ export function ActivatePendingCheckout() {
   const [searchParams] = useSearchParams();
   const planFromUrl = searchParams.get("plan");
   const couponFromUrl = searchParams.get("coupon");
+  const stepFromUrl = searchParams.get("step");
+  const funnelStep: 2 | 3 = stepFromUrl === "account" ? 2 : 3;
   const checkoutIntent = readCheckoutIntent();
 
   const [loadingAccess, setLoadingAccess] = useState(true);
@@ -361,8 +364,58 @@ export function ActivatePendingCheckout() {
       backHref={paths.home}
     >
       <SubscriptionFunnelPanel
-        step={3}
-        showPaymentStep
+        step={funnelStep}
+        showPaymentStep={funnelStep === 3}
+        onBackToAccount={
+          funnelStep === 3
+            ? () => {
+                uiSounds.radioSelect();
+                navigate(unpaidStudentActivateAccountPath(membership, selectedPlan, appliedCoupon ?? undefined), {
+                  replace: true
+                });
+              }
+            : undefined
+        }
+        accountSlot={
+          funnelStep === 2 ? (
+            <div className="activate-account-panel">
+              <div className="activate-account-summary">
+                <p>
+                  <span>Nome</span>
+                  <strong>{profile?.name ?? user?.name ?? "—"}</strong>
+                </p>
+                <p>
+                  <span>E-mail</span>
+                  <strong>{profile?.email ?? user?.email ?? "—"}</strong>
+                </p>
+                <p>
+                  <span>Telefone</span>
+                  <strong>{profile?.phone ?? "—"}</strong>
+                </p>
+                <p>
+                  <span>CPF</span>
+                  <strong>{profile?.document ? formatCpf(profile.document) : "—"}</strong>
+                </p>
+              </div>
+              <p className="activate-login-hint">
+                Revise seus dados antes de concluir o pagamento do plano{" "}
+                <strong>{selectedPlanRow?.name ?? "selecionado"}</strong>.
+              </p>
+              <button
+                type="button"
+                className="ui-btn-primary activate-funnel-cta"
+                onClick={() => {
+                  uiSounds.radioSelect();
+                  navigate(unpaidStudentActivatePath(membership, selectedPlan, appliedCoupon ?? undefined), {
+                    replace: true
+                  });
+                }}
+              >
+                Continuar para pagamento
+              </button>
+            </div>
+          ) : undefined
+        }
         plans={plans}
         plansLoading={catalogPlansLoading}
         monthlyBaseline={monthlyBaseline}

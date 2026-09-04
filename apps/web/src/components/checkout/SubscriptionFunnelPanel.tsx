@@ -43,6 +43,7 @@ type SubscriptionFunnelPanelProps = {
   onConfirmSandbox?: () => void;
   showSandbox?: boolean;
   showPaymentStep?: boolean;
+  onBackToAccount?: () => void;
   accountSlot?: ReactNode;
   couponCode?: string | null;
   /** Cupom da URL/intent ainda em validação ou aguardando plano compatível. */
@@ -146,6 +147,7 @@ export function SubscriptionFunnelPanel({
   onConfirmSandbox,
   showSandbox,
   showPaymentStep = false,
+  onBackToAccount,
   accountSlot,
   couponCode,
   stagedCouponCode = null,
@@ -353,6 +355,12 @@ export function SubscriptionFunnelPanel({
           {showSandbox && onConfirmSandbox ? (
             <button type="button" className="ui-btn-secondary activate-funnel-secondary" onClick={onConfirmSandbox} disabled={Boolean(checkoutLoading)}>
               Finalizar sandbox (dev)
+            </button>
+          ) : null}
+
+          {onBackToAccount ? (
+            <button type="button" className="activate-back-step" onClick={onBackToAccount}>
+              ← Voltar para Conta
             </button>
           ) : null}
         </section>

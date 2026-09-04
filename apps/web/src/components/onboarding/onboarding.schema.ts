@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isValidCpf } from "@app-treino/shared";
+import { getCpfValidationMessage, normalizeCpfDigits, resolveCpfValidationState } from "@app-treino/shared";
 
 export const TRAINING_GOALS = [
   { id: "hypertrophy", label: "Ganhar massa muscular (hipertrofia)" },
@@ -23,6 +23,18 @@ export const EQUIPMENT_OPTIONS = [
 export type TrainingGoal = (typeof TRAINING_GOALS)[number]["id"];
 export type TrainingLevel = (typeof TRAINING_LEVELS)[number]["id"];
 export type EquipmentTag = (typeof EQUIPMENT_OPTIONS)[number]["id"];
+
+const registerDocumentSchema = z
+  .string()
+  .trim()
+  .superRefine((value, ctx) => {
+    const state = resolveCpfValidationState(value);
+    if (state === "valid") return;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: getCpfValidationMessage(state, normalizeCpfDigits(value).length)
+    });
+  });
 
 export const onboardingSchema = z
   .object({
@@ -68,14 +80,13 @@ export const onboardingSchema = z
     }
   });
 
-export const registerOnboardingSchema = onboardingSchema.superRefine((data, ctx) => {
-  if (!data.document || !isValidCpf(data.document)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Informe um CPF válido",
-      path: ["document"]
-    });
-  }
+export const registerOnboardingSchema = onboardingSchema
+  .merge(
+    z.object({
+      document: registerDocumentSchema
+    })
+  )
+  .superRefine((data, ctx) => {
   if (!data.password || data.password.length < 6) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,

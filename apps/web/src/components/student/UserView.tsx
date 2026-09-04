@@ -2725,6 +2725,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               rejectedCouponCode={rejectedCouponCode}
               onRejectedCouponDismissed={() => setRejectedCouponCode(null)}
               selectedPlanHasDiscount={planHasPromoDiscount(selectedCatalogPlan)}
+              onBackToAccount={() => {
+                uiSounds.radioSelect();
+                goToSection("settings");
+              }}
             />
           ) : null}
 

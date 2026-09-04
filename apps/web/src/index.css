@@ -28185,6 +28185,34 @@ html.light .student-app-shell .student-hero-card {
   line-height: 1.5;
 }
 
+.activate-account-summary {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid rgba(180, 210, 255, 0.14);
+  border-radius: 0.875rem;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.activate-account-summary p {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0;
+}
+
+.activate-account-summary span {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a98ae;
+}
+
+.activate-account-summary strong {
+  font-size: 0.9375rem;
+  color: #ecf2fa;
+}
+
 .activate-back-step {
   justify-self: start;
   border: 0;
@@ -28282,6 +28310,40 @@ html.light .student-app-shell .student-hero-card {
 
 .activate-page .ui-input::placeholder {
   color: #8a98ae;
+}
+
+.ui-input--invalid,
+.native-checkout__input--invalid {
+  border-color: rgba(255, 143, 122, 0.72) !important;
+  box-shadow: 0 0 0 1px rgba(255, 143, 122, 0.18);
+}
+
+.ui-input--valid,
+.native-checkout__input--valid {
+  border-color: rgba(74, 222, 128, 0.55) !important;
+  box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.14);
+}
+
+.cpf-field-feedback {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.cpf-field-feedback--idle {
+  color: var(--sand-muted, #8a98ae);
+  font-weight: 600;
+}
+
+.cpf-field-feedback--valid {
+  color: #4ade80;
+  font-weight: 700;
+}
+
+.cpf-field-feedback--invalid {
+  color: #ff8f7a;
+  font-weight: 700;
 }
 
 /* Keep /ativar readable when the global app theme is light */

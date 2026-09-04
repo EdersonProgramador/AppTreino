@@ -52,3 +52,18 @@ export function unpaidStudentActivatePath(
   if (couponCode?.trim()) params.set("coupon", couponCode.trim());
   return `${paths.activate}?${params.toString()}`;
 }
+
+/** Revisão da conta antes do pagamento no funil /ativar. */
+export function unpaidStudentActivateAccountPath(
+  membership?: StudentMembershipRow | null,
+  planCode?: string | null,
+  couponCode?: string | null
+) {
+  const params = new URLSearchParams({ step: "account" });
+  const chosenPlan = planCode?.trim();
+  const membershipPlan = membership?.plan?.code?.trim();
+  const plan = chosenPlan || membershipPlan;
+  if (plan) params.set("plan", plan);
+  if (couponCode?.trim()) params.set("coupon", couponCode.trim());
+  return `${paths.activate}?${params.toString()}`;
+}

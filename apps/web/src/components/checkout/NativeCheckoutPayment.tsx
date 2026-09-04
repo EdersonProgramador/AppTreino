@@ -1,9 +1,10 @@
 import { Check, Copy, CreditCard, Loader2, QrCode, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { formatCpf, formatPriceInBRL, isValidCpf } from "@app-treino/shared";
+import { formatCpf, formatPriceInBRL, getCpfFieldValidation, isValidCpf } from "@app-treino/shared";
 import { apiGet, apiPost } from "../../api";
 import type { CheckoutSessionResponse, NativeCheckoutPayload, PaymentRow } from "../../types/shared";
 import { brand } from "../../lib/brand";
+import { CpfFieldFeedback } from "../shared/CpfFieldFeedback";
 import {
   defaultAnnualInstallmentCount,
   formatCardInstallmentLabel,
@@ -263,13 +264,15 @@ export function NativeCheckoutPayment({
   const cardReady = Boolean(payment?.id);
   const prepareCheckoutDisabled = loading || prepareDisabled || !onPrepareCheckout;
   const pixCpfDigits = onlyDigits(pixCpf);
-  const pixCpfReady = hasStoredDocument || isValidCpf(pixCpfDigits);
+  const pixCpfValidation = getCpfFieldValidation(pixCpf);
+  const pixCpfReady = hasStoredDocument || pixCpfValidation.isValid;
+  const showPixCpfStatus = !hasStoredDocument && pixCpf.length > 0;
   const pixPrepareDisabled = prepareCheckoutDisabled || !pixCpfReady;
 
   function handlePreparePixCheckout() {
     if (!onPrepareCheckout) return;
     if (!pixCpfReady) {
-      onError("Informe um CPF válido para gerar o Pix.");
+      onError(pixCpfValidation.state === "empty" ? "Informe seu CPF para gerar o Pix." : pixCpfValidation.message);
       return;
     }
     onPrepareCheckout({
@@ -348,15 +351,20 @@ export function NativeCheckoutPayment({
                 <label className="native-checkout__field native-checkout__full">
                   <span className="native-checkout__label">CPF do titular</span>
                   <input
-                    className="native-checkout__input"
+                    className={`native-checkout__input${showPixCpfStatus && !pixCpfValidation.isValid ? " native-checkout__input--invalid" : ""}${showPixCpfStatus && pixCpfValidation.isValid ? " native-checkout__input--valid" : ""}`}
                     value={pixCpf}
                     onChange={(event) => setPixCpf(formatCpf(event.target.value))}
                     placeholder="000.000.000-00"
                     inputMode="numeric"
                     autoComplete="off"
+                    aria-invalid={showPixCpfStatus && !pixCpfValidation.isValid}
                     required
                   />
-                  <span className="native-checkout__hint">Obrigatório para emissão da cobrança Pix.</span>
+                  <CpfFieldFeedback
+                    value={pixCpf}
+                    showStatus={showPixCpfStatus}
+                    idleHint="Obrigatório para emissão da cobrança Pix."
+                  />
                 </label>
               ) : (
                 <p className="native-checkout__hint">CPF cadastrado: {formatCpf(storedDocument)}</p>

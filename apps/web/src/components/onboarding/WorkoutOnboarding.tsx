@@ -1,9 +1,10 @@
-import { formatCpf } from "@app-treino/shared";
+import { formatCpf, getCpfFieldValidation } from "@app-treino/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
+import { CpfFieldFeedback } from "../shared/CpfFieldFeedback";
 import {
   EQUIPMENT_OPTIONS,
   ONBOARDING_STEP_FIELDS,
@@ -87,7 +88,7 @@ export function WorkoutOnboarding({
     watch,
     trigger,
     getValues,
-    formState: { errors }
+    formState: { errors, touchedFields, submitCount }
   } = useForm<OnboardingFormValues>({
     resolver: zodResolver(requirePassword ? registerOnboardingSchema : onboardingSchema) as never,
     mode: "onChange",
@@ -99,6 +100,10 @@ export function WorkoutOnboarding({
   const selectedEquipment = watch("equipment") ?? [];
   const selectedGender = watch("gender");
   const selectedDays = watch("daysPerWeek");
+  const documentValue = watch("document") ?? "";
+  const cpfValidation = getCpfFieldValidation(documentValue);
+  const showCpfStatus =
+    documentValue.length > 0 || Boolean(touchedFields.document) || Boolean(errors.document) || submitCount > 0;
 
   useEffect(() => {
     const subscription = watch((values) => {
@@ -199,16 +204,22 @@ export function WorkoutOnboarding({
                 CPF
                 <input
                   {...register("document")}
-                  className="ui-input"
+                  className={`ui-input${showCpfStatus && !cpfValidation.isValid ? " ui-input--invalid" : ""}${showCpfStatus && cpfValidation.isValid ? " ui-input--valid" : ""}`}
                   inputMode="numeric"
                   placeholder="000.000.000-00"
                   autoComplete="off"
+                  aria-invalid={showCpfStatus && !cpfValidation.isValid}
                   onChange={(event) => {
                     event.target.value = formatCpf(event.target.value);
                     void register("document").onChange(event);
                   }}
                 />
-                {errors.document && <span className="text-xs font-bold text-[#ff8f7a]">{errors.document.message}</span>}
+                <CpfFieldFeedback
+                  value={documentValue}
+                  showStatus={showCpfStatus}
+                  errorMessage={errors.document?.message}
+                  idleHint="Informe os 11 dígitos do CPF. Obrigatório para pagamento via Pix."
+                />
               </label>
             ) : null}
             {requirePassword && (
