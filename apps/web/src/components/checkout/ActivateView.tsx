@@ -41,6 +41,7 @@ export function ActivateView() {
   const [couponValidForSelection, setCouponValidForSelection] = useState<boolean | null>(
     couponFromUrl?.trim() ? null : false
   );
+  const [rejectedCouponCode, setRejectedCouponCode] = useState<string | null>(null);
 
   const [step, setStep] = useState<1 | 2>(initialStep as 1 | 2);
   const [selectedPlan, setSelectedPlan] = useState(planFromUrl ?? selectedPlanCode ?? "");
@@ -158,8 +159,10 @@ export function ActivateView() {
     setCouponApplying(next.couponApplying);
     setCouponFeedback(next.couponFeedback);
     if (next.clearedInvalidCoupon) {
-      const rejected = appliedCoupon?.trim().toUpperCase();
-      if (rejected) setCouponDraft(rejected);
+      if (next.rejectedCouponCode) {
+        setCouponDraft(next.rejectedCouponCode);
+        setRejectedCouponCode(next.rejectedCouponCode);
+      }
       patchCheckoutIntent({ couponCode: undefined, source: "activate" });
       if (couponFromUrl?.trim()) {
         navigate(activatePath(selectedPlan), { replace: true });
@@ -173,8 +176,10 @@ export function ActivateView() {
       setAppliedCoupon(null);
       setCouponValidForSelection(false);
       setCouponFeedback(null);
+      setRejectedCouponCode(null);
       return;
     }
+    setRejectedCouponCode(null);
     setCouponApplying(true);
     setCouponValidForSelection(null);
     setCouponFeedback(null);
@@ -188,6 +193,7 @@ export function ActivateView() {
     setCouponApplying(false);
     setCouponDraft("");
     setCouponFeedback(null);
+    setRejectedCouponCode(null);
     patchCheckoutIntent({ couponCode: undefined, source: "activate" });
   };
 
@@ -290,6 +296,8 @@ export function ActivateView() {
         couponFeedback={couponFeedback}
         couponApplying={couponApplying}
         couponValidForSelection={couponValidForSelection}
+        rejectedCouponCode={rejectedCouponCode}
+        onRejectedCouponDismissed={() => setRejectedCouponCode(null)}
         selectedPlanHasDiscount={selectedPlanHasDiscount}
         accountSlot={
           <div className="activate-account-panel">

@@ -58,6 +58,7 @@ export function ActivatePendingCheckout() {
   const [couponValidForSelection, setCouponValidForSelection] = useState<boolean | null>(
     couponFromUrl?.trim() ? null : false
   );
+  const [rejectedCouponCode, setRejectedCouponCode] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -194,8 +195,10 @@ export function ActivatePendingCheckout() {
     setCouponApplying(next.couponApplying);
     setCouponFeedback(next.couponFeedback);
     if (next.clearedInvalidCoupon) {
-      const rejected = appliedCoupon?.trim().toUpperCase();
-      if (rejected) setCouponDraft(rejected);
+      if (next.rejectedCouponCode) {
+        setCouponDraft(next.rejectedCouponCode);
+        setRejectedCouponCode(next.rejectedCouponCode);
+      }
       patchCheckoutIntent({ couponCode: undefined, source: "activate" });
       if (couponFromUrl?.trim()) {
         navigate(unpaidStudentActivatePath(membership, selectedPlan), { replace: true });
@@ -398,11 +401,13 @@ export function ActivatePendingCheckout() {
             setAppliedCoupon(null);
             setCouponValidForSelection(false);
             setCouponFeedback(null);
+            setRejectedCouponCode(null);
             setCheckoutPayment(null);
             setNativeCheckout(null);
             patchCheckoutIntent({ couponCode: undefined, source: "activate" });
             return;
           }
+          setRejectedCouponCode(null);
           setCouponApplying(true);
           setCouponValidForSelection(null);
           setCouponFeedback(null);
@@ -417,6 +422,7 @@ export function ActivatePendingCheckout() {
           setCouponApplying(false);
           setCouponDraft("");
           setCouponFeedback(null);
+          setRejectedCouponCode(null);
           setCheckoutPayment(null);
           setNativeCheckout(null);
           patchCheckoutIntent({ couponCode: undefined, source: "activate" });
@@ -424,6 +430,8 @@ export function ActivatePendingCheckout() {
         couponFeedback={couponFeedback}
         couponApplying={couponApplying}
         couponValidForSelection={couponValidForSelection}
+        rejectedCouponCode={rejectedCouponCode}
+        onRejectedCouponDismissed={() => setRejectedCouponCode(null)}
         selectedPlanHasDiscount={selectedPlanHasDiscount}
       />
     </SubscriptionCheckoutShell>

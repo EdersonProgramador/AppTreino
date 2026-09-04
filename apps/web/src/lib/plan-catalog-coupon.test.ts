@@ -91,7 +91,8 @@ describe("resolveCouponValidationState", () => {
 
     assert.equal(result.appliedCoupon, null);
     assert.equal(result.clearedInvalidCoupon, true);
-    assert.match(result.couponFeedback ?? "", /não vale para o plano selecionado/i);
+    assert.equal(result.rejectedCouponCode, "CINCO");
+    assert.equal(result.couponFeedback, "Cupom inválido.");
   });
 
   it("valida cupom no plano correto", () => {

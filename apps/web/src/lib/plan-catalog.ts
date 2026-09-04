@@ -101,11 +101,7 @@ export function evaluateCouponForSelectedPlan(
     pending: false,
     valid,
     appliesElsewhere,
-    feedback: valid
-      ? null
-      : appliesElsewhere
-        ? "Este cupom não vale para o plano selecionado."
-        : "Código inválido ou indisponível para este plano."
+    feedback: valid ? null : "Cupom inválido."
   };
 }
 
@@ -115,6 +111,7 @@ export type CouponValidationState = {
   couponApplying: boolean;
   couponFeedback: string | null;
   clearedInvalidCoupon: boolean;
+  rejectedCouponCode: string | null;
 };
 
 /** Valida cupom após catálogo carregar; só remove códigos inexistentes. */
@@ -132,7 +129,8 @@ export function resolveCouponValidationState(
       couponValidForSelection: false,
       couponApplying: false,
       couponFeedback: null,
-      clearedInvalidCoupon: false
+      clearedInvalidCoupon: false,
+      rejectedCouponCode: null
     };
   }
 
@@ -143,7 +141,8 @@ export function resolveCouponValidationState(
       couponValidForSelection: null,
       couponApplying: true,
       couponFeedback: null,
-      clearedInvalidCoupon: false
+      clearedInvalidCoupon: false,
+      rejectedCouponCode: null
     };
   }
 
@@ -152,8 +151,9 @@ export function resolveCouponValidationState(
       appliedCoupon: null,
       couponValidForSelection: false,
       couponApplying: false,
-      couponFeedback: result.feedback,
-      clearedInvalidCoupon: true
+      couponFeedback: result.feedback ?? "Cupom inválido.",
+      clearedInvalidCoupon: true,
+      rejectedCouponCode: normalizedCoupon
     };
   }
 
@@ -162,7 +162,8 @@ export function resolveCouponValidationState(
     couponValidForSelection: true,
     couponApplying: false,
     couponFeedback: null,
-    clearedInvalidCoupon: false
+    clearedInvalidCoupon: false,
+    rejectedCouponCode: null
   };
 }
 

@@ -1,5 +1,5 @@
 import { ArrowRight, Check, Sparkles } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { formatPriceInBRL } from "@app-treino/shared";
 import { brand } from "../../lib/brand";
 import { heroTrustItems } from "../../lib/home-content";
@@ -53,6 +53,8 @@ type SubscriptionFunnelPanelProps = {
   couponFeedback?: string | null;
   couponApplying?: boolean;
   couponValidForSelection?: boolean | null;
+  rejectedCouponCode?: string | null;
+  onRejectedCouponDismissed?: () => void;
   selectedPlanHasDiscount?: boolean;
 };
 
@@ -153,6 +155,8 @@ export function SubscriptionFunnelPanel({
   couponFeedback,
   couponApplying = false,
   couponValidForSelection = false,
+  rejectedCouponCode = null,
+  onRejectedCouponDismissed,
   selectedPlanHasDiscount = false
 }: SubscriptionFunnelPanelProps) {
   const selectedPlan = plans.find((plan) => plan.code === selectedPlanCode) ?? null;
@@ -162,11 +166,26 @@ export function SubscriptionFunnelPanel({
   const resolvedSelectedPlanHasDiscount = selectedPlanHasDiscount || planHasPromoDiscount(selectedPlan);
   const nativeBillingType = toNativeBillingType(billingType);
   const visibleCouponCode = couponCode ?? stagedCouponCode;
-  const showAppliedCouponRow = Boolean(
-    stagedCouponCode && (couponValidForSelection === true || couponValidForSelection === null)
+  const showRejectedCouponRow = Boolean(rejectedCouponCode);
+  const showAppliedCouponRow =
+    showRejectedCouponRow ||
+    Boolean(stagedCouponCode && (couponValidForSelection === true || couponValidForSelection === null));
+  const couponStatusClass = showRejectedCouponRow
+    ? " is-rejected"
+    : couponValidForSelection === null
+      ? " is-validating"
+      : couponValidForSelection === true
+        ? " is-applied"
+        : "";
+  const couponFeedbackIsError = Boolean(
+    couponFeedback && (showRejectedCouponRow || couponFeedback.toLowerCase().includes("inválido") || couponFeedback.includes("não vale"))
   );
-  const couponStatusClass =
-    couponValidForSelection === null ? " is-validating" : couponValidForSelection === true ? " is-applied" : "";
+
+  useEffect(() => {
+    if (!rejectedCouponCode) return;
+    const timer = window.setTimeout(() => onRejectedCouponDismissed?.(), 1400);
+    return () => window.clearTimeout(timer);
+  }, [onRejectedCouponDismissed, rejectedCouponCode]);
 
   return (
     <div className="activate-funnel-panel">
@@ -212,13 +231,13 @@ export function SubscriptionFunnelPanel({
 
           {(step === 1 || showPaymentStep) && onApplyCoupon && onCouponDraftChange ? (
             <div className="activate-coupon-box">
-              {showAppliedCouponRow && visibleCouponCode ? (
+              {showAppliedCouponRow && (showRejectedCouponRow ? rejectedCouponCode : visibleCouponCode) ? (
                 <div className="activate-coupon-applied-row">
                   <span className={`activate-coupon-applied${couponStatusClass}`}>
-                    Cupom <strong>{visibleCouponCode}</strong>{" "}
-                    {couponValidForSelection === null ? "validando…" : "aplicado"}
+                    Cupom <strong>{showRejectedCouponRow ? rejectedCouponCode : visibleCouponCode}</strong>{" "}
+                    {showRejectedCouponRow ? "inválido" : couponValidForSelection === null ? "validando…" : "aplicado"}
                   </span>
-                  {onRemoveCoupon && couponValidForSelection !== null ? (
+                  {onRemoveCoupon && couponValidForSelection === true ? (
                     <button type="button" className="activate-coupon-apply" onClick={onRemoveCoupon}>
                       Remover
                     </button>
@@ -247,10 +266,8 @@ export function SubscriptionFunnelPanel({
                   </div>
                 </div>
               )}
-              {couponFeedback ? (
-                <p className={`activate-coupon-feedback${couponFeedback.includes("inválido") || couponFeedback.includes("não vale") ? " is-error" : ""}`}>
-                  {couponFeedback}
-                </p>
+              {couponFeedback && !showRejectedCouponRow ? (
+                <p className={`activate-coupon-feedback${couponFeedbackIsError ? " is-error" : ""}`}>{couponFeedback}</p>
               ) : null}
             </div>
           ) : null}

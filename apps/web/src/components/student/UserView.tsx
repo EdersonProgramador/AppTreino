@@ -261,6 +261,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [couponValidForSelection, setCouponValidForSelection] = useState<boolean | null>(
     initialCouponCode ? null : false
   );
+  const [rejectedCouponCode, setRejectedCouponCode] = useState<string | null>(null);
   const [checkoutDraft, setCheckoutDraft] = useState<{
     planCode: PlanCode;
     billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED";
@@ -637,8 +638,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     setCouponApplying(next.couponApplying);
     setCouponFeedback(next.couponFeedback);
     if (next.clearedInvalidCoupon) {
-      const rejected = appliedCoupon?.trim().toUpperCase();
-      if (rejected) setCouponDraft(rejected);
+      if (next.rejectedCouponCode) {
+        setCouponDraft(next.rejectedCouponCode);
+        setRejectedCouponCode(next.rejectedCouponCode);
+      }
       if (searchParams.get("coupon")?.trim()) {
         const cleaned = new URLSearchParams(searchParams);
         cleaned.delete("coupon");
@@ -653,10 +656,12 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       setAppliedCoupon(null);
       setCouponValidForSelection(false);
       setCouponFeedback(null);
+      setRejectedCouponCode(null);
       setCheckoutPayment(null);
       setNativeCheckout(null);
       return;
     }
+    setRejectedCouponCode(null);
     setCouponApplying(true);
     setCouponValidForSelection(null);
     setCouponFeedback(null);
@@ -672,6 +677,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     setCouponApplying(false);
     setCouponDraft("");
     setCouponFeedback(null);
+    setRejectedCouponCode(null);
     setCheckoutPayment(null);
     setNativeCheckout(null);
 
@@ -2642,6 +2648,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               couponFeedback={couponFeedback}
               couponApplying={couponApplying}
               couponValidForSelection={couponValidForSelection}
+              rejectedCouponCode={rejectedCouponCode}
+              onRejectedCouponDismissed={() => setRejectedCouponCode(null)}
               selectedPlanHasDiscount={planHasPromoDiscount(selectedCatalogPlan)}
             />
           ) : null}
