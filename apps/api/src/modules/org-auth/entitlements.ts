@@ -1,9 +1,14 @@
 import { PLAN_FEATURE_KEYS, type PlanFeatureKey } from "@app-treino/shared";
+import { isPlatformAdminUser } from "../../auth.js";
 import { prisma } from "../../prisma.js";
 import { validActiveMembershipWhere } from "../membership.utils.js";
 
 /** Entitlements individuais — independentes de vínculo organizacional. */
 export async function listUserPlanFeatures(userId: string): Promise<PlanFeatureKey[]> {
+  if (await isPlatformAdminUser(userId)) {
+    return [...PLAN_FEATURE_KEYS];
+  }
+
   const membership = await prisma.membership.findFirst({
     where: {
       userId,

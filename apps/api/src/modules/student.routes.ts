@@ -447,7 +447,7 @@ export async function getTodayWorkout(
 export async function getPublishedWorkouts(
   userId: string,
   dayNumber: number,
-  options?: { bypassEnrollment?: boolean }
+  options?: { bypassEnrollment?: boolean; includeAllGenders?: boolean }
 ) {
   if (!options?.bypassEnrollment) {
     const status = await getEnrollmentStatus(userId);
@@ -456,7 +456,9 @@ export async function getPublishedWorkouts(
     }
   }
 
-  await assertIndividualFeature(userId, "fixed_training_programs");
+  if (!options?.bypassEnrollment) {
+    await assertIndividualFeature(userId, "fixed_training_programs");
+  }
 
   const student = await prisma.user.findUnique({
     where: { id: userId },
@@ -469,6 +471,7 @@ export async function getPublishedWorkouts(
     }
   });
   const studentGender = student?.profile?.gender ?? null;
+  const includeAllGenders = Boolean(options?.includeAllGenders);
 
   let publishedPrograms = await prisma.program.findMany({
     where: {
@@ -487,13 +490,15 @@ export async function getPublishedWorkouts(
           }
         }
       },
-      ...(studentGender
-        ? {
-            OR: [{ targetGender: "ALL" as const }, { targetGender: studentGender }]
-          }
-        : {
-            targetGender: "ALL"
-          }),
+      ...(includeAllGenders
+        ? {}
+        : studentGender
+          ? {
+              OR: [{ targetGender: "ALL" as const }, { targetGender: studentGender }]
+            }
+          : {
+              targetGender: "ALL"
+            }),
       AND: [
         {
           OR: [
@@ -516,9 +521,11 @@ export async function getPublishedWorkouts(
     orderBy: [{ sortOrder: "asc" }, { publishedAt: "desc" }, { createdAt: "asc" }]
   });
 
-  publishedPrograms = publishedPrograms.filter((program) =>
-    studentMatchesProgramTargetGender(program.targetGender, studentGender)
-  );
+  if (!includeAllGenders) {
+    publishedPrograms = publishedPrograms.filter((program) =>
+      studentMatchesProgramTargetGender(program.targetGender, studentGender)
+    );
+  }
 
   const assignedPrograms = await prisma.userProgram.findMany({
     where: {
@@ -989,8 +996,11 @@ export async function registerStudentRoutes(app: FastifyInstance) {
   app.get("/student/workout/programs", async (request) => {
     requireDatabase();
     const authUser = await requireActiveEnrollment(app, request);
+    const query = request.query as { includeAllGenders?: string };
+    const previewMode = isAdminStudentPreview(authUser);
     const workouts = await getPublishedWorkouts(authUser.id, 1, {
-      bypassEnrollment: isAdminStudentPreview(authUser)
+      bypassEnrollment: previewMode,
+      includeAllGenders: previewMode && query.includeAllGenders === "true"
     });
     const [favoritedProgramIds, ratedAssignmentIds] = await Promise.all([
       prisma.workoutFavorite.findMany({

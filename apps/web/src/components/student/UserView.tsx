@@ -166,6 +166,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const { user: authUser, exitAdminPreview } = useAuth();
   const isAdminPreview = Boolean(authUser?.previewMode && authUser?.canReturnToAdmin);
   const [previewExiting, setPreviewExiting] = useState(false);
+  const [previewGenderFilter, setPreviewGenderFilter] = useState<"ALL" | "MALE" | "FEMALE">("ALL");
+  const [previewGenderSaving, setPreviewGenderSaving] = useState(false);
   const emitSystemEvent = useStudentSyncStore((state) => state.emit);
   const syncNavigateTo = useStudentSyncStore((state) => state.navigateTo);
   const syncPendingRefresh = useStudentSyncStore((state) => state.pendingRefresh);
@@ -426,10 +428,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [studentLightbox]);
 
-  async function loadUserData(options?: { soft?: boolean }) {
+  async function loadUserData(options?: { soft?: boolean; previewGender?: "ALL" | "MALE" | "FEMALE" }) {
     if (!token) return;
 
     try {
+      const genderFilter = options?.previewGender ?? previewGenderFilter;
       const [profileResponse, membershipResponse, paymentsResponse] = await Promise.all([
         apiGet<{ profile: StudentProfile }>("/user/profile", token),
         apiGet<{ membership: StudentMembershipRow | null }>("/user/membership", token),
@@ -467,8 +470,12 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       }
 
       const hasAccess = isAdminPreview || hasStudentWorkoutAccess(profile, membership);
+      const workoutProgramsPath =
+        isAdminPreview && genderFilter === "ALL"
+          ? "/student/workout/programs?includeAllGenders=true"
+          : "/student/workout/programs";
       const workoutProgramsResponse = hasAccess
-        ? await apiGet<StudentWorkoutProgramsResponse>("/student/workout/programs", token)
+        ? await apiGet<StudentWorkoutProgramsResponse>(workoutProgramsPath, token)
         : { workouts: [] as StudentWorkoutProgramsResponse["workouts"] };
       const firstPublishedWorkout = workoutProgramsResponse.workouts[0] ?? null;
       const restoredProgramId = selectedWorkoutProgramId ?? restoredPanel?.programId ?? null;
@@ -1637,7 +1644,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         avatarUrl = uploaded.file.url;
       }
 
-      // Sexo não é enviado na edição: só cadastro/onboarding (quando ainda vazio) ou admin.
+      // Sexo editável no preview do proprietário; caso contrário só no cadastro inicial.
+      const genderValue = String(data.get("gender") ?? "").trim();
       const response = await apiPut<{ profile: StudentProfile }>(
         "/user/profile",
         {
@@ -1649,7 +1657,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           level: level || undefined,
           city: city || undefined,
           state: state || undefined,
-          avatarUrl
+          avatarUrl,
+          ...(isAdminPreview && (genderValue === "MALE" || genderValue === "FEMALE") ? { gender: genderValue } : {})
         },
         token
       );
@@ -2266,6 +2275,35 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   /** Liberação: membership/enrollment ativos, ou admin em modo preview blindado. */
   const hasStudentAreaAccess = hasActiveMembership || hasAdminEnrollment || isAdminPreview;
 
+  async function handlePreviewGenderFilter(next: "ALL" | "MALE" | "FEMALE") {
+    if (!token || !isAdminPreview || previewGenderSaving) return;
+    setPreviewGenderFilter(next);
+    if (next === "ALL") {
+      await loadUserData({ soft: true, previewGender: next });
+      return;
+    }
+    if (profile?.gender === next) {
+      await loadUserData({ soft: true, previewGender: next });
+      return;
+    }
+
+    setPreviewGenderSaving(true);
+    setError(null);
+    try {
+      const response = await apiPut<{ profile: StudentProfile }>("/user/profile", { gender: next }, token);
+      setProfile((current) => ({
+        ...current,
+        ...response.profile,
+        enrollmentStatus: current?.enrollmentStatus ?? response.profile.enrollmentStatus
+      }));
+      await loadUserData({ soft: true, previewGender: next });
+    } catch (genderError) {
+      setError(genderError instanceof ApiError ? genderError.message : "Não foi possível alterar o sexo no preview.");
+    } finally {
+      setPreviewGenderSaving(false);
+    }
+  }
+
   async function handleExitAdminPreview() {
     if (previewExiting) return;
     setPreviewExiting(true);
@@ -2284,23 +2322,42 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         <Eye size={16} />
         <span>
           <strong>Modo preview</strong>
-          · você está vendo o app como atleta com a sua conta
+          · painel completo do aluno · sem exigir perfil ou assinatura
         </span>
       </div>
-      <button
-        type="button"
-        className="admin-preview-banner-action"
-        disabled={previewExiting}
-        onClick={() => {
-          void handleExitAdminPreview();
-        }}
-      >
-        {previewExiting ? <Loader2 className="spin" size={16} /> : <ShieldCheck size={16} />}
-        Voltar ao admin
-      </button>
+      <div className="admin-preview-banner-controls">
+        <div className="admin-preview-gender-toggle" aria-label="Filtrar modalidades por sexo">
+          <span>Sexo</span>
+          {(["ALL", "MALE", "FEMALE"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              className={`admin-preview-gender-toggle__btn${previewGenderFilter === option ? " is-active" : ""}`}
+              disabled={previewGenderSaving}
+              onClick={() => {
+                void handlePreviewGenderFilter(option);
+              }}
+            >
+              {option === "ALL" ? "Todos" : option === "MALE" ? "Masc." : "Fem."}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="admin-preview-banner-action"
+          disabled={previewExiting}
+          onClick={() => {
+            void handleExitAdminPreview();
+          }}
+        >
+          {previewExiting ? <Loader2 className="spin" size={16} /> : <ShieldCheck size={16} />}
+          Voltar ao admin
+        </button>
+      </div>
     </div>
   ) : null;
-  const needsOnboarding = Boolean(profile && (!profile.gender || !profile.objective || !profile.level));
+  const needsOnboarding =
+    !isAdminPreview && Boolean(profile && (!profile.gender || !profile.objective || !profile.level));
   const lockedFeatures = [
     {
       icon: Dumbbell,
@@ -4639,20 +4696,24 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                     disabled={!studentProfileEditing}
                   />
                 </label>
-                <label className="student-profile-locked-field">
+                <label className={isAdminPreview ? undefined : "student-profile-locked-field"}>
                   Sexo
                   <select
                     name="gender"
                     defaultValue={profile?.gender ?? ""}
-                    disabled
-                    aria-readonly="true"
-                    title="Definido no cadastro. Somente a academia pode alterar."
+                    disabled={!isAdminPreview && !studentProfileEditing}
+                    aria-readonly={!isAdminPreview && !studentProfileEditing}
+                    title={
+                      isAdminPreview
+                        ? "Altere para analisar modalidades por sexo no preview."
+                        : "Definido no cadastro. Somente a academia pode alterar."
+                    }
                   >
                     <option value="">Não informado</option>
                     <option value="MALE">Masculino</option>
                     <option value="FEMALE">Feminino</option>
                   </select>
-                  <small>Definido no cadastro · só a academia altera</small>
+                  {!isAdminPreview ? <small>Definido no cadastro · só a academia altera</small> : null}
                 </label>
               </fieldset>
 

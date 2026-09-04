@@ -38,6 +38,14 @@ export function isAdminStudentPreview(user: AuthTokenPayload | null | undefined)
   );
 }
 
+export async function isPlatformAdminUser(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, status: true, deletedAt: true }
+  });
+  return Boolean(user && !user.deletedAt && user.status === "ACTIVE" && user.role === "ADMIN");
+}
+
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString("hex");
   const derivedKey = (await scrypt(password, salt, keyLength)) as Buffer;

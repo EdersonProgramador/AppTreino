@@ -14504,6 +14504,72 @@ html.light .dash-quick-actions button {
   cursor: wait;
 }
 
+.admin-preview-banner-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.admin-preview-gender-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid rgba(240, 180, 90, 0.28);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.admin-preview-gender-toggle > span {
+  padding-left: 8px;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(247, 231, 200, 0.72);
+}
+
+.admin-preview-gender-toggle__btn {
+  min-height: 28px;
+  border: none;
+  border-radius: 999px;
+  padding: 0 10px;
+  background: transparent;
+  color: #f7e7c8;
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.admin-preview-gender-toggle__btn.is-active {
+  background: rgba(240, 180, 90, 0.24);
+  color: #fff8ef;
+}
+
+.admin-preview-gender-toggle__btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+html.light .admin-preview-gender-toggle {
+  border-color: rgba(154, 100, 16, 0.22);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+html.light .admin-preview-gender-toggle > span {
+  color: rgba(58, 42, 18, 0.72);
+}
+
+html.light .admin-preview-gender-toggle__btn {
+  color: #3a2a12;
+}
+
+html.light .admin-preview-gender-toggle__btn.is-active {
+  background: rgba(240, 180, 90, 0.42);
+}
+
 html.light .admin-preview-banner {
   border-bottom-color: rgba(120, 78, 18, 0.22);
   background: linear-gradient(90deg, #fff7e8, #fff1d6);

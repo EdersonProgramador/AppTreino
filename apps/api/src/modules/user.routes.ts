@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { requireAuth, requirePathRole, requestPathname } from "../auth.js";
+import { isAdminStudentPreview, isPlatformAdminUser, requireAuth, requirePathRole, requestPathname } from "../auth.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { isImageUploadExtension, optimizeUploadedImage } from "../media-optimize.js";
@@ -321,16 +321,31 @@ export async function registerUserRoutes(app: FastifyInstance) {
       select: { profile: { select: { gender: true } } }
     });
     const currentGender = current?.profile?.gender ?? null;
+    const previewSession = isAdminStudentPreview(user);
+    const platformAdmin = previewSession || (await isPlatformAdminUser(user.id));
 
     // Sexo só pode ser definido uma vez pelo aluno (cadastro/onboarding). Depois só admin altera.
-    if (currentGender && body.gender !== undefined && body.gender !== null && body.gender !== currentGender) {
+    if (
+      !platformAdmin &&
+      currentGender &&
+      body.gender !== undefined &&
+      body.gender !== null &&
+      body.gender !== currentGender
+    ) {
       return reply.code(403).send({
         message: "O sexo só pode ser definido no cadastro. Peça à academia para alterar, se necessário."
       });
     }
 
     const genderForCreate = body.gender || null;
-    const genderForUpdate = currentGender ? undefined : body.gender === undefined ? undefined : body.gender || null;
+    const genderForUpdate =
+      platformAdmin && body.gender !== undefined
+        ? body.gender || null
+        : currentGender
+          ? undefined
+          : body.gender === undefined
+            ? undefined
+            : body.gender || null;
 
     const updated = await prisma.user.update({
       where: { id: user.id },
