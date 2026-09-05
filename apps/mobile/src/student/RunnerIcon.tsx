@@ -3,7 +3,7 @@ import { Image, type ImageStyle, type StyleProp } from "react-native";
 type Gender = "MALE" | "FEMALE" | null | undefined;
 
 const maleSrc = require("../../assets/corrida-homem-mask.png");
-const femaleSrc = require("../../assets/corrida-mulher-mask.png");
+const femaleSrc = require("../../assets/corrida-mulher-transparente.png");
 
 export function RunnerIcon({
   size = 22,

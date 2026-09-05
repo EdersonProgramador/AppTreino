@@ -3,7 +3,7 @@ import type { HTMLAttributes } from "react";
 type Gender = "MALE" | "FEMALE" | null | undefined;
 
 const MALE_SRC = "/assets/corrida-homem-mask.png";
-const FEMALE_SRC = "/assets/corrida-mulher-mask.png";
+const FEMALE_SRC = "/assets/corrida-mulher-transparente.png";
 
 /** Ícone de corrida por sexo do atleta (homem / mulher). */
 export function RunnerIcon({
