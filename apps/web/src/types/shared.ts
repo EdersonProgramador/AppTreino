@@ -313,6 +313,7 @@ export interface CouponRow {
   startsAt?: string | null;
   endsAt?: string | null;
   createdAt: string;
+  planId?: string | null;
   linkedPlans?: Array<{ id: string; name: string; code: string }>;
 }
 

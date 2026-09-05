@@ -246,7 +246,12 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : error instanceof Error ? error.message : fallback;
 }
 
-function planCouponLabel(plan: PlanRow) {
+function planCouponLabel(plan: PlanRow, coupons: CouponRow[]) {
+  const linked = coupons
+    .filter((coupon) => coupon.linkedPlans?.some((entry) => entry.id === plan.id))
+    .map((coupon) => coupon.code.trim())
+    .filter(Boolean);
+  if (linked.length > 0) return linked.join(", ");
   if (plan.couponCode?.trim()) return plan.couponCode.trim();
   return "—";
 }
@@ -297,7 +302,8 @@ function PlanPromoFields({
       <div className="finance-inline-coupon__head">
         <strong>Cupom deste plano</strong>
         <span className="text-xs text-sand-muted">
-          Um cupom por plano. O nome abaixo é o código que o aluno vê no checkout (ex.: LANCAMENTO, START5).
+          Você pode ter vários cupons por plano. O nome abaixo é o código que o aluno digita no checkout (ex.:
+          LANCAMENTO, START5).
         </span>
       </div>
 
@@ -499,6 +505,14 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
   const [coupons, setCoupons] = useState<CouponRow[]>([]);
   const [loadingCoupons, setLoadingCoupons] = useState(false);
   const [couponFeedback, setCouponFeedback] = useState<string | null>(null);
+  const [creatingCoupon, setCreatingCoupon] = useState(false);
+  const [couponDraft, setCouponDraft] = useState({
+    planId: "",
+    code: "",
+    mode: "PERCENT" as PlanPromoDiscountMode,
+    value: "",
+    maxUses: ""
+  });
 
   async function refreshCoupons() {
     setLoadingCoupons(true);
@@ -529,6 +543,63 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
       await handleChanged("Cupom removido.");
     } catch (error) {
       setCouponFeedback(errorMessage(error, "Não foi possível remover o cupom."));
+    }
+  }
+
+  async function handleCreateStandaloneCoupon(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!couponDraft.planId) {
+      setCouponFeedback("Selecione o plano do cupom.");
+      return;
+    }
+    if (!couponDraft.code.trim()) {
+      setCouponFeedback("Informe o código do cupom.");
+      return;
+    }
+    if (!couponDraft.value.trim()) {
+      setCouponFeedback("Informe o valor do desconto.");
+      return;
+    }
+
+    const selectedPlan = plans.find((plan) => plan.id === couponDraft.planId);
+    if (!selectedPlan) {
+      setCouponFeedback("Plano selecionado não encontrado.");
+      return;
+    }
+
+    setCreatingCoupon(true);
+    setCouponFeedback(null);
+    try {
+      const payload: Record<string, unknown> = {
+        code: couponDraft.code.trim(),
+        planId: couponDraft.planId,
+        description: `Promo · ${selectedPlan.name}`,
+        ...(couponDraft.maxUses.trim() ? { maxUses: Number.parseInt(couponDraft.maxUses, 10) } : {})
+      };
+
+      if (couponDraft.mode === "PERCENT") {
+        payload.percentOff = Number.parseInt(couponDraft.value, 10);
+      } else {
+        const amountOffCents = parseBRLMoneyToCents(couponDraft.value);
+        if (amountOffCents == null || amountOffCents < 1) {
+          throw new Error("Informe um valor de desconto válido.");
+        }
+        payload.amountOffCents = amountOffCents;
+      }
+
+      await apiPost("/admin/subscription-coupons", payload, token);
+      setCouponDraft({
+        planId: couponDraft.planId,
+        code: "",
+        mode: "PERCENT",
+        value: "",
+        maxUses: ""
+      });
+      await handleChanged("Cupom adicionado ao plano.");
+    } catch (error) {
+      setCouponFeedback(errorMessage(error, "Não foi possível criar o cupom."));
+    } finally {
+      setCreatingCoupon(false);
     }
   }
 
@@ -587,7 +658,7 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
       <div className={panelTitleClass}>
         <div>
           <h2>Planos de assinatura</h2>
-          <p>Valor, cupom exclusivo por plano e benefícios exibidos no funil `/ativar`.</p>
+          <p>Valor, cupons promocionais por plano e benefícios exibidos no funil `/ativar`.</p>
         </div>
         <span>{plans.length}</span>
       </div>
@@ -626,7 +697,7 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
                   </small>
                 ) : null}
               </span>
-              <span className="text-sm text-sand-muted finance-mono">{planCouponLabel(item)}</span>
+              <span className="text-sm text-sand-muted finance-mono">{planCouponLabel(item, coupons)}</span>
               <span className="finance-row-actions">
                 <button type="button" className="admin-icon-button" aria-label="Editar plano" onClick={() => startEdit(item)}>
                   <Pencil size={17} />
@@ -668,12 +739,86 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
         <div className={panelTitleClass}>
           <div>
             <h2>Cupons de assinatura</h2>
-            <p>Histórico dos cupons criados nos planos. Cada cupom fica vinculado ao plano onde foi configurado.</p>
+            <p>Crie quantos cupons quiser por plano. Cada código funciona no checkout do plano vinculado.</p>
           </div>
           <span>{coupons.length}</span>
         </div>
 
         {couponFeedback ? <p className="mb-3 text-sm text-red-400">{couponFeedback}</p> : null}
+
+        <form className={`${crudFormClass} finance-form finance-form--plans mb-4`} onSubmit={handleCreateStandaloneCoupon}>
+          <label>
+            Plano
+            <select
+              value={couponDraft.planId}
+              onChange={(event) => setCouponDraft((current) => ({ ...current, planId: event.target.value }))}
+              required
+            >
+              <option value="">Selecione</option>
+              {plans.map((plan) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.name} ({plan.code})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Código do cupom
+            <input
+              value={couponDraft.code}
+              onChange={(event) =>
+                setCouponDraft((current) => ({
+                  ...current,
+                  code: event.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "")
+                }))
+              }
+              placeholder="LANCAMENTO"
+              required
+            />
+          </label>
+          <div className="finance-form-span">
+            <span className="text-xs text-sand-muted">Tipo de desconto</span>
+            <div className="finance-promo-mode" role="group" aria-label="Tipo de desconto do cupom">
+              {(["PERCENT", "AMOUNT_OFF"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={couponDraft.mode === mode ? "active" : ""}
+                  onClick={() => setCouponDraft((current) => ({ ...current, mode, value: "" }))}
+                >
+                  {promoModeLabel(mode)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label>
+            {couponDraft.mode === "PERCENT" ? "Desconto (%)" : "Valor a descontar (R$)"}
+            <input
+              value={couponDraft.value}
+              onChange={(event) => setCouponDraft((current) => ({ ...current, value: event.target.value }))}
+              type={couponDraft.mode === "PERCENT" ? "number" : "text"}
+              inputMode={couponDraft.mode === "PERCENT" ? "numeric" : "decimal"}
+              min={couponDraft.mode === "PERCENT" ? 1 : undefined}
+              max={couponDraft.mode === "PERCENT" ? 100 : undefined}
+              placeholder={couponDraft.mode === "PERCENT" ? "10" : "5,00"}
+              required
+            />
+          </label>
+          <label>
+            Máx. usos
+            <input
+              value={couponDraft.maxUses}
+              onChange={(event) => setCouponDraft((current) => ({ ...current, maxUses: event.target.value }))}
+              type="number"
+              min={1}
+              placeholder="Ilimitado"
+            />
+          </label>
+          <button className="primary-button finance-form-span" type="submit" disabled={creatingCoupon || plans.length === 0}>
+            {creatingCoupon ? <Loader2 size={18} className="animate-spin" /> : <Tag size={18} />}
+            Adicionar cupom ao plano
+          </button>
+        </form>
 
         {loadingCoupons ? (
           <div className="dash-empty">
@@ -707,7 +852,7 @@ export function SubscriptionPlansAdminPanel({ token, plans, onChanged, onDelete 
         ) : (
           <div className="dash-empty">
             <Tag size={18} />
-            Nenhum cupom cadastrado. Ative a promo ao salvar um plano acima.
+            Nenhum cupom cadastrado. Use o formulário acima ou ative a promo ao salvar um plano.
           </div>
         )}
       </article>

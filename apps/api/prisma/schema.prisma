@@ -174,7 +174,8 @@ model Plan {
   sortOrder    Int          @default(0) @map("sort_order")
   showOnFunnel Boolean      @default(true) @map("show_on_funnel")
   couponId     String?      @map("coupon_id")
-  coupon       Coupon?      @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  coupon       Coupon?      @relation("PlanFeaturedCoupon", fields: [couponId], references: [id], onDelete: SetNull)
+  promoCoupons Coupon[]     @relation("PlanPromoCoupons")
   deletedAt    DateTime?    @map("deleted_at")
   memberships  Membership[]
   features     PlanFeature[]
@@ -967,11 +968,14 @@ model Coupon {
   deletedAt      DateTime?   @map("deleted_at")
   createdAt      DateTime    @default(now()) @map("created_at")
   updatedAt      DateTime    @updatedAt @map("updated_at")
+  planId         String?     @map("plan_id")
+  plan           Plan?       @relation("PlanPromoCoupons", fields: [planId], references: [id], onDelete: SetNull)
 
-  orders   Order[]
-  plans    Plan[]
-  payments Payment[]
+  orders         Order[]
+  featuredPlans  Plan[]      @relation("PlanFeaturedCoupon")
+  payments       Payment[]
 
+  @@index([planId])
   @@map("coupons")
 }
 

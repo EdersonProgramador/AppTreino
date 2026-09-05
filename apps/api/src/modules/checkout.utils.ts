@@ -2,6 +2,7 @@ import type { Coupon, Plan } from "@prisma/client";
 import { normalizePromoCouponCode } from "@app-treino/shared";
 import { prisma } from "../prisma.js";
 import { findValidCoupon } from "./commerce.utils.js";
+import { isCouponLinkedToPlan } from "./plan-promo.service.js";
 
 export type SubscriptionCheckoutPricing = {
   originalAmountInCents: number;
@@ -258,7 +259,8 @@ export async function resolveSubscriptionCheckoutPricing(
     return buildSubscriptionPricingFromCoupon(originalAmountInCents, null, 0);
   }
 
-  if (resolved.coupon.id !== plan.couponId) {
+  const linkedToPlan = await isCouponLinkedToPlan(resolved.coupon.id, plan.id);
+  if (!linkedToPlan) {
     if (options?.forgiveInvalidExplicitCoupon) {
       return buildSubscriptionPricingFromCoupon(originalAmountInCents, null, 0);
     }

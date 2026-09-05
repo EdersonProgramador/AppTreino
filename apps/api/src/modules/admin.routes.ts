@@ -3959,6 +3959,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     .object({
       code: z.string().trim().min(2).max(40),
       description: z.string().trim().max(200).optional().nullable(),
+      planId: z.string().min(1).optional(),
       percentOff: z.number().int().min(1).max(100).nullable().optional(),
       amountOffCents: z.number().int().min(1).nullable().optional(),
       minOrderCents: z.number().int().min(0).default(0),
@@ -3990,7 +3991,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         scope: { in: ["SUBSCRIPTION", "ALL"] }
       },
       include: {
-        plans: {
+        plan: {
+          select: { id: true, name: true, code: true }
+        },
+        featuredPlans: {
           where: { deletedAt: null },
           select: { id: true, name: true, code: true }
         }
@@ -3998,22 +4002,29 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       orderBy: { createdAt: "desc" }
     });
     return {
-      coupons: coupons.map((coupon) => ({
-        id: coupon.id,
-        code: coupon.code,
-        description: coupon.description,
-        scope: coupon.scope,
-        percentOff: coupon.percentOff,
-        amountOffCents: coupon.amountOffCents,
-        minOrderCents: coupon.minOrderCents,
-        maxUses: coupon.maxUses,
-        usedCount: coupon.usedCount,
-        isActive: coupon.isActive,
-        startsAt: coupon.startsAt,
-        endsAt: coupon.endsAt,
-        createdAt: coupon.createdAt,
-        linkedPlans: coupon.plans.map((plan) => ({ id: plan.id, name: plan.name, code: plan.code }))
-      }))
+      coupons: coupons.map((coupon) => {
+        const linkedPlans = [
+          ...(coupon.plan ? [coupon.plan] : []),
+          ...coupon.featuredPlans.filter((plan) => plan.id !== coupon.plan?.id)
+        ];
+        return {
+          id: coupon.id,
+          code: coupon.code,
+          description: coupon.description,
+          scope: coupon.scope,
+          percentOff: coupon.percentOff,
+          amountOffCents: coupon.amountOffCents,
+          minOrderCents: coupon.minOrderCents,
+          maxUses: coupon.maxUses,
+          usedCount: coupon.usedCount,
+          isActive: coupon.isActive,
+          startsAt: coupon.startsAt,
+          endsAt: coupon.endsAt,
+          createdAt: coupon.createdAt,
+          planId: coupon.planId,
+          linkedPlans
+        };
+      })
     };
   });
 
@@ -4030,8 +4041,16 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       isActive: body.isActive,
       startsAt: body.startsAt ?? null,
       endsAt: body.endsAt ?? null,
-      deletedAt: null
+      deletedAt: null,
+      planId: body.planId ?? null
     };
+
+    if (body.planId) {
+      const plan = await prisma.plan.findFirst({ where: { id: body.planId, deletedAt: null } });
+      if (!plan) {
+        throw httpError(404, "Plano não encontrado.");
+      }
+    }
 
     const existing = await prisma.coupon.findUnique({ where: { code } });
     let coupon;
@@ -4060,12 +4079,24 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           scope: "ALL"
         }
       });
+    } else if (body.planId && existing.planId === body.planId) {
+      coupon = await prisma.coupon.update({
+        where: { id: existing.id },
+        data: couponData
+      });
     } else {
       const error = new Error(`Já existe um cupom ativo com o código "${code}".`) as Error & {
         statusCode: number;
       };
       error.statusCode = 409;
       throw error;
+    }
+
+    if (body.planId) {
+      await prisma.plan.update({
+        where: { id: body.planId },
+        data: { couponId: coupon.id }
+      });
     }
 
     return reply.code(201).send({ coupon });
@@ -4115,10 +4146,21 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.delete("/admin/subscription-coupons/:id", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
-    await prisma.plan.updateMany({ where: { couponId: id }, data: { couponId: null } });
+    const linkedPlans = await prisma.plan.findMany({
+      where: {
+        deletedAt: null,
+        OR: [{ couponId: id }, { promoCoupons: { some: { id } } }]
+      },
+      select: { id: true, couponId: true }
+    });
+
+    for (const plan of linkedPlans) {
+      await clearPlanPromoCoupon(plan.id, id);
+    }
+
     await prisma.coupon.update({
       where: { id },
-      data: { deletedAt: new Date(), isActive: false }
+      data: { deletedAt: new Date(), isActive: false, planId: null }
     });
     return { ok: true };
   });
