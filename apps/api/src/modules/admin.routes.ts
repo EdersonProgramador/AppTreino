@@ -6,6 +6,11 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { hashPassword, requirePathRole, requireRole } from "../auth.js";
 import { env } from "../env.js";
+import {
+  notifyMembershipCanceled,
+  notifyPaymentRefundOrCancel,
+  notifySupportReply
+} from "../email-notifications.js";
 import { prisma } from "../prisma.js";
 import { isImageUploadExtension, optimizeUploadedImage } from "../media-optimize.js";
 import { isVideoUploadExtension, saveValidatedUpload, uploadsDir } from "../upload-security.js";
@@ -4216,6 +4221,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
     const body = membershipSchema.partial().parse(request.body);
+    const current = await prisma.membership.findUniqueOrThrow({
+      where: { id },
+      include: { plan: true }
+    });
     const membership = await prisma.membership.update({
       where: { id },
       data: body,
@@ -4226,6 +4235,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     });
 
     await syncUserEnrollmentFromMemberships(prisma, membership.userId);
+
+    if (body.status === "CANCELED" && current.status !== "CANCELED") {
+      notifyMembershipCanceled({ userId: membership.userId, planName: membership.plan.name });
+    }
 
     return { membership };
   });
@@ -4313,10 +4326,28 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
     const body = paymentUpdateSchema.parse(request.body);
+    const current = await prisma.payment.findUniqueOrThrow({
+      where: { id },
+      include: {
+        membership: {
+          include: { plan: true }
+        }
+      }
+    });
     const payment = await prisma.payment.update({
       where: { id },
       data: body
     });
+
+    if (body.status && body.status !== current.status) {
+      if (body.status === "REFUNDED" || body.status === "CANCELED") {
+        notifyPaymentRefundOrCancel({
+          userId: current.membership.userId,
+          planName: current.membership.plan.name,
+          kind: body.status
+        });
+      }
+    }
 
     return { payment };
   });
@@ -4610,6 +4641,12 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       sourceId: ticket.id
     });
 
+    notifySupportReply({
+      user: ticket.user,
+      ticketSubject: ticket.subject,
+      messagePreview: body.body
+    });
+
     return { ticket };
   });
 
@@ -4641,6 +4678,12 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       targetSection: "support",
       sourceType: "support_ticket",
       sourceId: ticket.id
+    });
+
+    notifySupportReply({
+      user: ticket.user,
+      ticketSubject: ticket.subject,
+      messagePreview: FINALIZE_PROMPT
     });
 
     return { ticket };

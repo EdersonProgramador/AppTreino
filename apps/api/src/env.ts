@@ -38,6 +38,9 @@ const envSchema = z.object({
     .default(false),
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
+  ENABLE_WEEKLY_DIGEST_EMAIL: z
+    .preprocess((value) => value === "true" || value === "1", z.boolean())
+    .default(false),
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),

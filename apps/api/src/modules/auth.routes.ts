@@ -4,6 +4,7 @@ import { z } from "zod";
 import { homePathForRole, isValidCpf, normalizeCpfDigits, permissionsFor, type UserRole } from "@app-treino/shared";
 import { getAuthUser, hashPassword, isAdminStudentPreview, toAuthUser, verifyPassword } from "../auth.js";
 import { buildPasswordResetUrl, isDeliverableEmail, sendPasswordResetEmail } from "../email.js";
+import { notifyWelcomeEmail } from "../email-notifications.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import {
@@ -359,6 +360,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     });
 
     await recordDailyAttendance(user.id, user.role);
+    notifyWelcomeEmail(user);
     const authUser = toAuthUser(user);
     const token = app.jwt.sign(authUser);
 
@@ -426,6 +428,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           }
         }
       });
+      notifyWelcomeEmail(user);
     } else if (!user.googleId) {
       // Vincula Google a conta existente sem remover a senha de e-mail.
       user = await prisma.user.update({

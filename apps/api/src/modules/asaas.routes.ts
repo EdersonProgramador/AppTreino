@@ -5,6 +5,7 @@ import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { parseOrderExternalReference, parsePurchaseExternalReference } from "./asaas.client.js";
 import { applySubscriptionPaymentConfirmation } from "./asaas-payment-sync.js";
+import { notifyOrderStatusChange } from "../email-notifications.js";
 import {
   applyOrderStatusSideEffects,
   applyPurchaseStatusSideEffects,
@@ -202,7 +203,7 @@ export async function registerAsaasRoutes(app: FastifyInstance) {
     if (orderRefId) {
       const order = await prisma.order.findFirst({
         where: { id: orderRefId, deletedAt: null },
-        include: { items: true }
+        include: { items: true, user: true }
       });
       if (!order) {
         request.log.warn({ externalReference: paymentId }, "Asaas webhook order not found");
@@ -232,6 +233,11 @@ export async function registerAsaasRoutes(app: FastifyInstance) {
       });
       if (nextOrderStatus && nextOrderStatus !== order.status) {
         await applyOrderStatusSideEffects(order, order.status, nextOrderStatus);
+        notifyOrderStatusChange({
+          order: { ...updatedOrder, user: order.user, items: order.items },
+          previousStatus: order.status,
+          nextStatus: nextOrderStatus
+        });
       }
       return reply.code(200).send({ received: true, orderId: updatedOrder.id });
     }

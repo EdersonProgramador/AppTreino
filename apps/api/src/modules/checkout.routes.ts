@@ -3,6 +3,7 @@ import type { PaymentStatus, Prisma, Payment } from "@prisma/client";
 import { isValidCpf, normalizeCpfDigits } from "@app-treino/shared";
 import { z } from "zod";
 import { hashPassword, isAdminStudentPreview, requireAuth, toAuthUser } from "../auth.js";
+import { notifySubscriptionPaymentPending, notifyWelcomeEmail } from "../email-notifications.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import {
@@ -219,6 +220,7 @@ async function finalizeNativeSubscriptionCheckout(input: {
   cpfCnpj?: string | null;
 }) {
   const user = await loadCheckoutUser(input.userId);
+  const previousAsaasPaymentId = input.payment.asaasPaymentId ?? null;
   const native = await prepareNativeSubscriptionCheckout({
     payment: input.payment as Payment,
     membership: input.membership as never,
@@ -227,6 +229,20 @@ async function finalizeNativeSubscriptionCheckout(input: {
     billingType: input.billingType,
     cpfCnpj: input.cpfCnpj
   });
+
+  if (
+    native.nativeCheckout?.billingType === "PIX" &&
+    native.payment.asaasPaymentId &&
+    native.payment.asaasPaymentId !== previousAsaasPaymentId
+  ) {
+    notifySubscriptionPaymentPending({
+      userId: input.userId,
+      planName: input.planName,
+      amountInCents: native.payment.amountInCents,
+      dueDate: native.payment.dueDate,
+      paymentUrl: native.payment.paymentUrl
+    });
+  }
 
   return buildNativeCheckoutResponse({
     membership: input.membership as never,
@@ -768,6 +784,8 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       planName: planSeed.name,
       billingType: body.billingType
     });
+
+    notifyWelcomeEmail(user);
 
     const authUser = toAuthUser(user);
     const token = app.jwt.sign(authUser);

@@ -25,6 +25,7 @@ import { registerSocialInfraRoutes } from "./modules/social-infra.routes.js";
 import { registerSocialSockets } from "./modules/social-socket.js";
 import { registerCommerceRoutes } from "./modules/commerce.routes.js";
 import { startMembershipMaintenanceJobs } from "./modules/membership-jobs.js";
+import { startEmailJobs } from "./email-jobs.js";
 import { ensurePlatformOwnerAccount } from "./platform-owner.js";
 import { registerMusicRoutes } from "./modules/music.routes.js";
 import { registerUserRoutes } from "./modules/user.routes.js";
@@ -271,6 +272,7 @@ try {
   const httpServer = app.server as HttpServer;
   registerSocialSockets(app, httpServer);
   startMembershipMaintenanceJobs(app.log);
+  startEmailJobs(app.log);
 } catch (error) {
   app.log.error(error);
   process.exit(1);

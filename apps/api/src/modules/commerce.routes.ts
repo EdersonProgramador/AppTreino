@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { isAdminStudentPreview, requireAuth, requireRole } from "../auth.js";
+import { notifyOrderPlaced, notifyOrderStatusChange } from "../email-notifications.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { createAsaasCheckout, orderExternalReference, vitrineCheckoutCallbacks, type AsaasBillingType } from "./asaas.client.js";
@@ -507,6 +508,8 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
         })
       : order;
 
+    notifyOrderPlaced(updatedOrder);
+
     return reply.code(201).send({ order: updatedOrder });
   });
 
@@ -790,6 +793,11 @@ export async function registerCommerceRoutes(app: FastifyInstance) {
 
     if (body.status !== current.status) {
       await applyOrderStatusSideEffects(current, current.status, body.status);
+      notifyOrderStatusChange({
+        order,
+        previousStatus: current.status,
+        nextStatus: body.status
+      });
     }
 
     return { order };

@@ -1,4 +1,9 @@
 import type { Membership, Payment, Plan } from "@prisma/client";
+import {
+  notifySubscriptionActivated,
+  notifySubscriptionPaymentOverdueFromPayment,
+  notifyPaymentRefundOrCancel
+} from "../email-notifications.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { getAsaasPayment, findAsaasPaymentByExternalReference } from "./asaas.client.js";
@@ -98,6 +103,32 @@ export async function applySubscriptionPaymentConfirmation(
       include: {
         plan: true
       }
+    });
+  }
+
+  if (shouldExtendMembership) {
+    notifySubscriptionActivated({
+      userId: membership.userId,
+      planName: membership.plan.name,
+      endsAt: membership.endsAt
+    });
+  } else if (nextStatus === "REFUNDED" && payment.status !== "REFUNDED") {
+    notifyPaymentRefundOrCancel({
+      userId: membership.userId,
+      planName: membership.plan.name,
+      kind: "REFUNDED"
+    });
+  } else if (nextStatus === "CANCELED" && payment.status !== "CANCELED") {
+    notifyPaymentRefundOrCancel({
+      userId: membership.userId,
+      planName: membership.plan.name,
+      kind: "CANCELED"
+    });
+  } else {
+    notifySubscriptionPaymentOverdueFromPayment({
+      payment: { ...updatedPayment, membership },
+      previousStatus: payment.status,
+      nextStatus: nextStatus
     });
   }
 
