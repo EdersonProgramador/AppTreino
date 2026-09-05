@@ -11806,6 +11806,39 @@ label.runner-share-secondary {
   opacity: 0.78;
 }
 
+.student-store-payment-panel {
+  margin-bottom: 18px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.student-store-payment-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.student-store-payment-panel-head strong {
+  display: block;
+}
+
+.student-store-payment-panel-head span {
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.student-store-payment-panel-close {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  opacity: 0.75;
+  cursor: pointer;
+}
+
 .student-store-history {
   display: grid;
   gap: 10px;

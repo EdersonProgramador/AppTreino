@@ -68,6 +68,30 @@ export function getCreditCardCheckoutError(
   return null;
 }
 
+export function resolveStoreCardInstallment(input: {
+  installmentCount?: number | null;
+  amountInCents: number;
+}):
+  | { ok: true; installmentCount: number }
+  | { ok: false; error: string } {
+  const installmentCount = input.installmentCount ?? 1;
+
+  if (installmentCount === 1) {
+    return { ok: true, installmentCount: 1 };
+  }
+
+  if (installmentCount < 2 || installmentCount > MAX_ANNUAL_CARD_INSTALLMENTS) {
+    return { ok: false, error: `Escolha de 2 a ${MAX_ANNUAL_CARD_INSTALLMENTS} parcelas.` };
+  }
+
+  const installmentValueCents = Math.ceil(input.amountInCents / installmentCount);
+  if (installmentValueCents < ASAAS_MIN_CHECKOUT_CENTS) {
+    return { ok: false, error: "Valor mínimo por parcela não atingido." };
+  }
+
+  return { ok: true, installmentCount };
+}
+
 export function resolveCheckoutCardInstallment(input: {
   billingCycle?: string | null;
   installmentCount?: number | null;

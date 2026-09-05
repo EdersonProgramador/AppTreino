@@ -461,6 +461,32 @@ export interface CheckoutSessionResponse {
   nativeCheckout?: NativeCheckoutPayload;
 }
 
+export interface StoreOrderCheckoutResponse {
+  order: OrderRow;
+  alreadyPaid: boolean;
+  paymentProviderError?: string;
+  nativeCheckout?: NativeCheckoutPayload;
+}
+
+export interface StorePurchaseCheckoutResponse {
+  purchase: PurchaseRow;
+  alreadyPaid: boolean;
+  paymentProviderError?: string;
+  nativeCheckout?: NativeCheckoutPayload;
+}
+
+export interface StoreOrderPaymentStatusResponse {
+  order: OrderRow;
+  alreadyPaid: boolean;
+  syncedFromAsaas?: boolean;
+}
+
+export interface StorePurchasePaymentStatusResponse {
+  purchase: PurchaseRow;
+  alreadyPaid: boolean;
+  syncedFromAsaas?: boolean;
+}
+
 export interface UploadResponse {
   file: {
     url: string;

@@ -3,6 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatPriceInBRL } from "@app-treino/shared";
 import { ApiError, apiGet, apiPost, apiPut } from "../../api";
 import {
+  NativeCheckoutPayment,
+  type NativeBillingType,
+  type NativeCheckoutPrepareInput
+} from "../checkout/NativeCheckoutPayment";
+import {
   labelProductKind,
   labelShippingMethod
 } from "../../lib/commerce";
@@ -17,7 +22,29 @@ import {
   type StoreHistoryEntry,
   type StoreTab
 } from "../../lib/store-commerce";
-import type { CartRow, OrderRow, ProductRow, PurchaseRow, ShippingDestination, ShippingQuotePreview } from "../../types/shared";
+import type {
+  CartRow,
+  NativeCheckoutPayload,
+  OrderRow,
+  ProductRow,
+  PurchaseRow,
+  ShippingDestination,
+  ShippingQuotePreview,
+  StoreOrderCheckoutResponse,
+  StorePurchaseCheckoutResponse
+} from "../../types/shared";
+
+type StorePaymentTarget =
+  | {
+      kind: "order";
+      order: OrderRow;
+      nativeCheckout: NativeCheckoutPayload | null;
+    }
+  | {
+      kind: "purchase";
+      purchase: PurchaseRow;
+      nativeCheckout: NativeCheckoutPayload | null;
+    };
 
 type Props = {
   token: string;
@@ -32,10 +59,6 @@ type Props = {
   paymentNotice?: string | null;
   onPaymentNoticeConsumed?: () => void;
 };
-
-function openCheckoutUrl(url: string) {
-  window.location.href = url;
-}
 
 function emptyDestination(): ShippingDestination {
   return {
@@ -85,6 +108,10 @@ export function StudentStoreSection({
   const [directSubmitting, setDirectSubmitting] = useState(false);
   const [billingType, setBillingType] = useState<StoreBillingType>("PIX");
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
+  const [paymentTarget, setPaymentTarget] = useState<StorePaymentTarget | null>(null);
+  const [checkoutBillingType, setCheckoutBillingType] = useState<NativeBillingType>("PIX");
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const onCartUpdatedRef = useRef(onCartUpdated);
   const onFlashErrorRef = useRef(onFlashError);
@@ -324,7 +351,7 @@ export function StudentStoreSection({
     setDirectSubmitting(true);
     try {
       const selected = directQuote?.services.find((service) => service.id === directServiceId);
-      const response = await apiPost<{ purchase: PurchaseRow }>(
+      const response = await apiPost<StorePurchaseCheckoutResponse>(
         "/student/purchases",
         {
           productId: directProduct.id,
@@ -339,11 +366,13 @@ export function StudentStoreSection({
       );
       setPurchases((current) => [response.purchase, ...current]);
       closeDirectPurchase();
-      if (response.purchase.paymentUrl) {
-        openCheckoutUrl(response.purchase.paymentUrl);
-        return;
-      }
-      onFlashSuccess?.("Compra registrada. Aguardando confirmação de pagamento.");
+      setCheckoutBillingType(billingType === "CREDIT_CARD" ? "CREDIT_CARD" : "PIX");
+      setCheckoutError(response.paymentProviderError ?? null);
+      setPaymentTarget({
+        kind: "purchase",
+        purchase: response.purchase,
+        nativeCheckout: response.nativeCheckout ?? null
+      });
       onTabChange("orders");
     } catch (error) {
       onFlashError?.(error instanceof ApiError ? error.message : "Não foi possível concluir a compra.");
@@ -416,34 +445,35 @@ export function StudentStoreSection({
       return;
     }
     setCartCheckingOut(true);
+    setCheckoutError(null);
     try {
-      const response = await apiPost<{ order: OrderRow }>(
+      const response = await apiPost<StoreOrderCheckoutResponse>(
         "/student/cart/checkout",
         { billingType },
         token
       );
       setOrders((current) => [response.order, ...current]);
-      if (response.order.paymentUrl) {
-        syncCart({
-          id: cart?.id ?? "empty",
-          items: [],
-          subtotalInCents: 0,
-          discountInCents: 0,
-          shippingInCents: 0,
-          shippingMethod: "PICKUP",
-          amountInCents: 0,
-          itemCount: 0,
-          couponCode: null
-        });
-        setCartCouponInput("");
-        setDestination(emptyDestination());
-        setSelectedServiceId(null);
-        openCheckoutUrl(response.order.paymentUrl);
-        return;
-      }
-      await refreshAll();
-      onFlashSuccess?.("Pedido criado. Aguardando confirmação de pagamento.");
-      onTabChange("orders");
+      syncCart({
+        id: cart?.id ?? "empty",
+        items: [],
+        subtotalInCents: 0,
+        discountInCents: 0,
+        shippingInCents: 0,
+        shippingMethod: "PICKUP",
+        amountInCents: 0,
+        itemCount: 0,
+        couponCode: null
+      });
+      setCartCouponInput("");
+      setDestination(emptyDestination());
+      setSelectedServiceId(null);
+      setCheckoutBillingType(billingType === "CREDIT_CARD" ? "CREDIT_CARD" : "PIX");
+      setCheckoutError(response.paymentProviderError ?? null);
+      setPaymentTarget({
+        kind: "order",
+        order: response.order,
+        nativeCheckout: response.nativeCheckout ?? null
+      });
     } catch (error) {
       onFlashError?.(error instanceof ApiError ? error.message : "Não foi possível finalizar o pedido.");
       await refreshAll();
@@ -452,40 +482,99 @@ export function StudentStoreSection({
     }
   }
 
-  async function handlePayEntry(entry: StoreHistoryEntry) {
-    setPayingEntryId(entry.id);
+  async function openStorePaymentSession(
+    target: StorePaymentTarget,
+    nextBillingType: NativeBillingType,
+    input?: NativeCheckoutPrepareInput
+  ) {
+    setCheckoutLoading(true);
+    setCheckoutError(null);
     try {
-      if (entry.paymentUrl) {
-        openCheckoutUrl(entry.paymentUrl);
-        return;
-      }
-      if (entry.kind === "order") {
-        const response = await apiPost<{ order: OrderRow; alreadyPaid?: boolean }>(
-          `/student/orders/${entry.id}/checkout`,
-          { billingType },
+      const sessionBillingType = nextBillingType === "CREDIT_CARD" ? "CREDIT_CARD" : "PIX";
+      if (target.kind === "order") {
+        const response = await apiPost<StoreOrderCheckoutResponse>(
+          `/student/orders/${target.order.id}/payment/session`,
+          { billingType: sessionBillingType, cpfCnpj: input?.cpfCnpj },
           token
         );
-        setOrders((current) => current.map((order) => (order.id === entry.id ? response.order : order)));
-        if (response.alreadyPaid) {
+        setOrders((current) => current.map((order) => (order.id === response.order.id ? response.order : order)));
+        setPaymentTarget({
+          kind: "order",
+          order: response.order,
+          nativeCheckout: response.nativeCheckout ?? null
+        });
+        if (response.paymentProviderError) setCheckoutError(response.paymentProviderError);
+        return response;
+      }
+
+      const response = await apiPost<StorePurchaseCheckoutResponse>(
+        `/student/purchases/${target.purchase.id}/payment/session`,
+        { billingType: sessionBillingType, cpfCnpj: input?.cpfCnpj },
+        token
+      );
+      setPurchases((current) =>
+        current.map((purchase) => (purchase.id === response.purchase.id ? response.purchase : purchase))
+      );
+      setPaymentTarget({
+        kind: "purchase",
+        purchase: response.purchase,
+        nativeCheckout: response.nativeCheckout ?? null
+      });
+      if (response.paymentProviderError) setCheckoutError(response.paymentProviderError);
+      return response;
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Não foi possível preparar o pagamento.";
+      setCheckoutError(message);
+      onFlashError?.(message);
+      return null;
+    } finally {
+      setCheckoutLoading(false);
+    }
+  }
+
+  async function handlePayEntry(entry: StoreHistoryEntry) {
+    setPayingEntryId(entry.id);
+    setCheckoutError(null);
+    try {
+      const nextBillingType: NativeBillingType = billingType === "CREDIT_CARD" ? "CREDIT_CARD" : "PIX";
+      setCheckoutBillingType(nextBillingType);
+
+      if (entry.kind === "order") {
+        const order = orders.find((item) => item.id === entry.id);
+        if (!order) {
+          onFlashError?.("Pedido não encontrado.");
+          return;
+        }
+        if (order.status !== "PENDING") {
           await refreshAll();
           return;
         }
-        if (response.order.paymentUrl) openCheckoutUrl(response.order.paymentUrl);
-        else onFlashError?.("Link de pagamento indisponível. Aguarde a confirmação da academia.");
+        const target: StorePaymentTarget = {
+          kind: "order",
+          order,
+          nativeCheckout: null
+        };
+        setPaymentTarget(target);
+        await openStorePaymentSession(target, nextBillingType);
         return;
       }
-      const response = await apiPost<{ purchase: PurchaseRow; alreadyPaid?: boolean }>(
-        `/student/purchases/${entry.id}/checkout`,
-        { billingType },
-        token
-      );
-      setPurchases((current) => current.map((purchase) => (purchase.id === entry.id ? response.purchase : purchase)));
-      if (response.alreadyPaid) {
+
+      const purchase = purchases.find((item) => item.id === entry.id);
+      if (!purchase) {
+        onFlashError?.("Compra não encontrada.");
+        return;
+      }
+      if (purchase.status !== "PENDING") {
         await refreshAll();
         return;
       }
-      if (response.purchase.paymentUrl) openCheckoutUrl(response.purchase.paymentUrl);
-      else onFlashError?.("Link de pagamento indisponível. Aguarde a confirmação da academia.");
+      const target: StorePaymentTarget = {
+        kind: "purchase",
+        purchase,
+        nativeCheckout: null
+      };
+      setPaymentTarget(target);
+      await openStorePaymentSession(target, nextBillingType);
     } catch (error) {
       onFlashError?.(error instanceof ApiError ? error.message : "Não foi possível abrir o pagamento.");
     } finally {
@@ -493,19 +582,127 @@ export function StudentStoreSection({
     }
   }
 
+  function handleStorePaymentConfirmed() {
+    setPaymentTarget(null);
+    setCheckoutError(null);
+    void refreshAll().then(() => {
+      onFlashSuccess?.("Pagamento confirmado.");
+      onTabChange("orders");
+    });
+  }
+
+  function handleStoreSessionResponse(
+    response: StoreOrderCheckoutResponse | StorePurchaseCheckoutResponse
+  ) {
+    if ("order" in response) {
+      setOrders((current) => current.map((order) => (order.id === response.order.id ? response.order : order)));
+      setPaymentTarget({
+        kind: "order",
+        order: response.order,
+        nativeCheckout: response.nativeCheckout ?? paymentTarget?.nativeCheckout ?? null
+      });
+    } else {
+      setPurchases((current) =>
+        current.map((purchase) => (purchase.id === response.purchase.id ? response.purchase : purchase))
+      );
+      setPaymentTarget({
+        kind: "purchase",
+        purchase: response.purchase,
+        nativeCheckout: response.nativeCheckout ?? paymentTarget?.nativeCheckout ?? null
+      });
+    }
+    if (response.paymentProviderError) setCheckoutError(response.paymentProviderError);
+  }
+
   const cartCount = cart?.itemCount ?? 0;
   const pendingCount = history.filter((entry) => entry.status === "PENDING").length;
   const canPickup = cart?.canPickup ?? true;
   const canDeliver = cart?.canDeliver ?? false;
   const showDeliveryForm = fulfillmentMethod === "DELIVERY" && canDeliver;
+  const paymentSummary = useMemo(() => {
+    if (!paymentTarget) return null;
+    if (paymentTarget.kind === "order") {
+      return {
+        title: paymentTarget.order.items.map((item) => item.productName).join(", ") || "Pedido da vitrine",
+        amountInCents: paymentTarget.order.amountInCents,
+        entityId: paymentTarget.order.id,
+        storeKind: "order" as const,
+        pending: paymentTarget.order.status === "PENDING"
+      };
+    }
+    return {
+      title: paymentTarget.purchase.product.name,
+      amountInCents: paymentTarget.purchase.amountInCents,
+      entityId: paymentTarget.purchase.id,
+      storeKind: "purchase" as const,
+      pending: paymentTarget.purchase.status === "PENDING"
+    };
+  }, [paymentTarget]);
 
   return (
     <section className="student-sheet student-store-sheet">
       <div className="student-sheet-heading">
         <span>Loja da academia</span>
         <h1>Vitrine</h1>
-        <p>Catálogo, carrinho e histórico de compras em um só lugar — pagamento seguro via Asaas.</p>
+        <p>Catálogo, carrinho e histórico de compras em um só lugar — pagamento Pix e cartão sem sair do app.</p>
       </div>
+
+      {paymentTarget && paymentSummary ? (
+        <article className="student-store-payment-panel activate-page">
+          <div className="student-store-payment-panel-head">
+            <div>
+              <strong>Pagamento do pedido</strong>
+              <span>{formatPriceInBRL(paymentSummary.amountInCents)}</span>
+            </div>
+            <button
+              type="button"
+              className="student-store-payment-panel-close"
+              onClick={() => {
+                setPaymentTarget(null);
+                setCheckoutError(null);
+              }}
+            >
+              Fechar
+            </button>
+          </div>
+          <NativeCheckoutPayment
+            token={token}
+            mode="store"
+            storeKind={paymentSummary.storeKind}
+            storeEntityId={paymentSummary.entityId}
+            storeEntityPending={paymentSummary.pending}
+            planName={paymentSummary.title}
+            amountInCents={paymentSummary.amountInCents}
+            payment={null}
+            nativeCheckout={paymentTarget.nativeCheckout}
+            billingType={checkoutBillingType}
+            onBillingTypeChange={(value) => {
+              setCheckoutBillingType(value);
+              setCheckoutError(null);
+              setPaymentTarget((current) =>
+                current
+                  ? {
+                      ...current,
+                      nativeCheckout: null
+                    }
+                  : current
+              );
+            }}
+            loading={checkoutLoading}
+            error={checkoutError}
+            onStoreSessionResponse={handleStoreSessionResponse}
+            onSessionResponse={() => undefined}
+            onPaymentConfirmed={handleStorePaymentConfirmed}
+            onError={(message) => setCheckoutError(message)}
+            onPrepareCheckout={(input) => {
+              if (!paymentTarget) return;
+              void openStorePaymentSession(paymentTarget, checkoutBillingType, input);
+            }}
+            allowCreditCard
+            allowInstallments
+          />
+        </article>
+      ) : null}
 
       <div className="student-store-tabs" role="tablist" aria-label="Seções da vitrine">
         {productsEnabled ? (
@@ -891,10 +1088,10 @@ export function StudentStoreSection({
                     disabled={cartCheckingOut || !purchasesEnabled || shippingSaving}
                     onClick={() => void handleCartCheckout()}
                   >
-                    {cartCheckingOut ? "Finalizando pedido…" : "Ir para pagamento seguro"}
+                    {cartCheckingOut ? "Finalizando pedido…" : "Ir para pagamento"}
                   </button>
                   <p className="student-store-payment-note">
-                    Você será redirecionado ao checkout Asaas. Após pagar, volte aqui em Meus pedidos.
+                    Pix ou cartão de crédito, processados com segurança sem redirecionamento.
                   </p>
                 </div>
               </div>

@@ -2,7 +2,13 @@ import { Check, Copy, CreditCard, Loader2, QrCode, ShieldCheck } from "lucide-re
 import { useEffect, useMemo, useState } from "react";
 import { formatCpf, formatPriceInBRL, getCpfFieldValidation, isValidCpf } from "@app-treino/shared";
 import { apiGet, apiPost } from "../../api";
-import type { CheckoutSessionResponse, NativeCheckoutPayload, PaymentRow } from "../../types/shared";
+import type {
+  CheckoutSessionResponse,
+  NativeCheckoutPayload,
+  PaymentRow,
+  StoreOrderCheckoutResponse,
+  StorePurchaseCheckoutResponse
+} from "../../types/shared";
 import { brand } from "../../lib/brand";
 import { CpfFieldFeedback, buildCpfInputClassName } from "../shared/CpfFieldFeedback";
 import {
@@ -18,6 +24,9 @@ export type NativeBillingType = "PIX" | "CREDIT_CARD";
 export type NativeCheckoutPrepareInput = {
   cpfCnpj?: string;
 };
+
+export type NativeCheckoutMode = "subscription" | "store";
+export type StoreCheckoutKind = "order" | "purchase";
 
 type NativeCheckoutPaymentProps = {
   token: string;
@@ -35,10 +44,17 @@ type NativeCheckoutPaymentProps = {
   defaultName?: string | null;
   defaultDocument?: string | null;
   onSessionResponse: (response: CheckoutSessionResponse) => void;
+  onStoreSessionResponse?: (response: StoreOrderCheckoutResponse | StorePurchaseCheckoutResponse) => void;
   onPaymentConfirmed: () => void;
   onError: (message: string) => void;
   onPrepareCheckout?: (input?: NativeCheckoutPrepareInput) => void;
   prepareDisabled?: boolean;
+  mode?: NativeCheckoutMode;
+  storeKind?: StoreCheckoutKind;
+  storeEntityId?: string | null;
+  storeEntityPending?: boolean;
+  allowCreditCard?: boolean;
+  allowInstallments?: boolean;
 };
 
 type CardFormState = {
@@ -94,22 +110,31 @@ export function NativeCheckoutPayment({
   defaultName,
   defaultDocument,
   onSessionResponse,
+  onStoreSessionResponse,
   onPaymentConfirmed,
   onError,
   onPrepareCheckout,
-  prepareDisabled = false
+  prepareDisabled = false,
+  mode = "subscription",
+  storeKind = "order",
+  storeEntityId = null,
+  storeEntityPending = false,
+  allowCreditCard,
+  allowInstallments
 }: NativeCheckoutPaymentProps) {
+  const isStoreMode = mode === "store";
+  const creditCardEnabled = allowCreditCard ?? (isStoreMode ? true : planAllowsCreditCardCheckout({ billingCycle }));
+  const installmentsEnabled = allowInstallments ?? (isStoreMode ? true : creditCardEnabled);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const [cardSubmitting, setCardSubmitting] = useState(false);
   const [pixVerifying, setPixVerifying] = useState(false);
   const [pixConfirmed, setPixConfirmed] = useState(false);
-  const isAnnualPlan = planAllowsCreditCardCheckout({ billingCycle });
   const installmentOptions = useMemo(
-    () => (isAnnualPlan ? listAnnualInstallmentCounts(amountInCents) : [1]),
-    [amountInCents, isAnnualPlan]
+    () => (installmentsEnabled ? listAnnualInstallmentCounts(amountInCents) : [1]),
+    [amountInCents, installmentsEnabled]
   );
   const [installmentCount, setInstallmentCount] = useState(() =>
-    isAnnualPlan ? defaultAnnualInstallmentCount(amountInCents) : 1
+    installmentsEnabled ? defaultAnnualInstallmentCount(amountInCents) : 1
   );
   const storedDocument = useMemo(() => onlyDigits(defaultDocument ?? ""), [defaultDocument]);
   const hasStoredDocument = isValidCpf(storedDocument);
@@ -128,25 +153,41 @@ export function NativeCheckoutPayment({
   });
 
   const pixPayload = nativeCheckout?.billingType === "PIX" ? nativeCheckout.pix : null;
-  const waitingPix = Boolean(payment?.id && pixPayload && payment.status === "PENDING" && !pixConfirmed);
+  const entityPending = isStoreMode ? storeEntityPending : payment?.status === "PENDING";
+  const waitingPix = Boolean(
+    (isStoreMode ? storeEntityId : payment?.id) && pixPayload && entityPending && !pixConfirmed
+  );
 
   async function pollPixPaymentStatus(options?: { manual?: boolean }) {
-    if (!payment?.id) return false;
+    const entityId = isStoreMode ? storeEntityId : payment?.id;
+    if (!entityId) return false;
 
     if (options?.manual) {
       setPixVerifying(true);
     }
 
     try {
-      const response = await apiGet<{
-        payment: PaymentRow;
-        alreadyActive: boolean;
-      }>(`/checkout/payments/${payment.id}/status`, token);
+      if (isStoreMode) {
+        const response = await apiGet<{ alreadyPaid: boolean }>(
+          `/student/${storeKind}s/${entityId}/payment/status`,
+          token
+        );
+        if (response.alreadyPaid) {
+          setPixConfirmed(true);
+          onPaymentConfirmed();
+          return true;
+        }
+      } else {
+        const response = await apiGet<{
+          payment: PaymentRow;
+          alreadyActive: boolean;
+        }>(`/checkout/payments/${entityId}/status`, token);
 
-      if (response.alreadyActive || response.payment?.status === "CONFIRMED") {
-        setPixConfirmed(true);
-        onPaymentConfirmed();
-        return true;
+        if (response.alreadyActive || response.payment?.status === "CONFIRMED") {
+          setPixConfirmed(true);
+          onPaymentConfirmed();
+          return true;
+        }
       }
     } catch {
       if (options?.manual) {
@@ -162,24 +203,25 @@ export function NativeCheckoutPayment({
   }
 
   useEffect(() => {
-    if (!isAnnualPlan) {
+    if (!installmentsEnabled) {
       setInstallmentCount(1);
       return;
     }
     setInstallmentCount((current) =>
       installmentOptions.includes(current) ? current : defaultAnnualInstallmentCount(amountInCents)
     );
-  }, [amountInCents, installmentOptions, isAnnualPlan]);
+  }, [amountInCents, installmentOptions, installmentsEnabled]);
 
   useEffect(() => {
-    if (isAnnualPlan) return;
+    if (creditCardEnabled) return;
     if (billingType !== "PIX") {
       onBillingTypeChange("PIX");
     }
-  }, [billingType, isAnnualPlan, onBillingTypeChange]);
+  }, [billingType, creditCardEnabled, onBillingTypeChange]);
 
   useEffect(() => {
-    if (!payment?.id || !waitingPix) return;
+    const entityId = isStoreMode ? storeEntityId : payment?.id;
+    if (!entityId || !waitingPix) return;
 
     let cancelled = false;
     void pollPixPaymentStatus();
@@ -193,7 +235,7 @@ export function NativeCheckoutPayment({
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [payment?.id, waitingPix, token, onPaymentConfirmed]);
+  }, [isStoreMode, payment?.id, storeEntityId, waitingPix, token, onPaymentConfirmed]);
 
   const summaryLine = useMemo(
     () => `${planName} · ${formatPriceInBRL(amountInCents)}`,
@@ -201,12 +243,12 @@ export function NativeCheckoutPayment({
   );
 
   const cardPayLabel = useMemo(() => {
-    if (!isAnnualPlan || installmentCount === 1) {
+    if (!installmentsEnabled || installmentCount === 1) {
       return `Pagar ${formatPriceInBRL(amountInCents)} com cartão de crédito`;
     }
     const installmentValueCents = Math.ceil(amountInCents / installmentCount);
     return `Pagar ${installmentCount}× de ${formatPriceInBRL(installmentValueCents)}`;
-  }, [amountInCents, installmentCount, isAnnualPlan]);
+  }, [amountInCents, installmentCount, installmentsEnabled]);
 
   async function handleCopyPix() {
     if (!pixPayload?.copyPaste) return;
@@ -221,36 +263,51 @@ export function NativeCheckoutPayment({
 
   async function handleSubmitCard(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!payment?.id) {
+    const entityId = isStoreMode ? storeEntityId : payment?.id;
+    if (!entityId) {
       onError("Gere o pagamento antes de enviar o cartão.");
       return;
     }
 
     setCardSubmitting(true);
     try {
-      const response = await apiPost<CheckoutSessionResponse>(
-        `/checkout/payments/${payment.id}/card`,
-        {
-          holderName: cardForm.holderName.trim(),
-          number: onlyDigits(cardForm.number),
-          expiryMonth: cardForm.expiryMonth.trim(),
-          expiryYear: cardForm.expiryYear.trim(),
-          ccv: cardForm.ccv.trim(),
-          holderEmail: cardForm.holderEmail.trim(),
-          holderCpfCnpj: onlyDigits(cardForm.holderCpfCnpj),
-          holderPostalCode: onlyDigits(cardForm.holderPostalCode),
-          holderAddressNumber: cardForm.holderAddressNumber.trim(),
-          holderPhone: onlyDigits(cardForm.holderPhone),
-          installmentCount: isAnnualPlan ? installmentCount : 1
-        },
-        token
-      );
+      const cardPayload = {
+        holderName: cardForm.holderName.trim(),
+        number: onlyDigits(cardForm.number),
+        expiryMonth: cardForm.expiryMonth.trim(),
+        expiryYear: cardForm.expiryYear.trim(),
+        ccv: cardForm.ccv.trim(),
+        holderEmail: cardForm.holderEmail.trim(),
+        holderCpfCnpj: onlyDigits(cardForm.holderCpfCnpj),
+        holderPostalCode: onlyDigits(cardForm.holderPostalCode),
+        holderAddressNumber: cardForm.holderAddressNumber.trim(),
+        holderPhone: onlyDigits(cardForm.holderPhone),
+        installmentCount: installmentsEnabled ? installmentCount : 1
+      };
 
-      onSessionResponse(response);
-      if (response.alreadyActive || response.payment?.status === "CONFIRMED") {
-        onPaymentConfirmed();
-        return;
+      const response = isStoreMode
+        ? await apiPost<StoreOrderCheckoutResponse | StorePurchaseCheckoutResponse>(
+            `/student/${storeKind}s/${entityId}/payment/card`,
+            cardPayload,
+            token
+          )
+        : await apiPost<CheckoutSessionResponse>(`/checkout/payments/${entityId}/card`, cardPayload, token);
+
+      if (isStoreMode) {
+        onStoreSessionResponse?.(response as StoreOrderCheckoutResponse | StorePurchaseCheckoutResponse);
+        if ((response as StoreOrderCheckoutResponse | StorePurchaseCheckoutResponse).alreadyPaid) {
+          onPaymentConfirmed();
+          return;
+        }
+      } else {
+        onSessionResponse(response as CheckoutSessionResponse);
+        const subscriptionResponse = response as CheckoutSessionResponse;
+        if (subscriptionResponse.alreadyActive || subscriptionResponse.payment?.status === "CONFIRMED") {
+          onPaymentConfirmed();
+          return;
+        }
       }
+
       if (response.paymentProviderError) {
         onError(response.paymentProviderError);
       }
@@ -261,7 +318,9 @@ export function NativeCheckoutPayment({
     }
   }
 
-  const cardReady = Boolean(payment?.id);
+  const cardReady = isStoreMode
+    ? Boolean(storeEntityId && nativeCheckout?.billingType === "CREDIT_CARD")
+    : Boolean(payment?.id);
   const prepareCheckoutDisabled = loading || prepareDisabled || !onPrepareCheckout;
   const pixCpfDigits = onlyDigits(pixCpf);
   const pixCpfValidation = getCpfFieldValidation(pixCpf);
@@ -293,7 +352,7 @@ export function NativeCheckoutPayment({
       </div>
 
       <div
-        className={`native-checkout__methods${isAnnualPlan ? "" : " native-checkout__methods--single"}`}
+        className={`native-checkout__methods${creditCardEnabled ? "" : " native-checkout__methods--single"}`}
         role="tablist"
         aria-label="Forma de pagamento"
       >
@@ -312,7 +371,7 @@ export function NativeCheckoutPayment({
             <small>Aprovação imediata</small>
           </span>
         </button>
-        {isAnnualPlan ? (
+        {creditCardEnabled ? (
           <button
             type="button"
             role="tab"
@@ -336,7 +395,7 @@ export function NativeCheckoutPayment({
       {!billingType ? (
         <div className="native-checkout__panel native-checkout__panel--idle">
           <p className="native-checkout__idle-copy">
-            {isAnnualPlan
+            {creditCardEnabled
               ? "Escolha Pix ou cartão de crédito para continuar o pagamento."
               : "Use Pix para continuar o pagamento."}
           </p>
@@ -411,7 +470,7 @@ export function NativeCheckoutPayment({
                 {pixConfirmed ? <Check size={18} /> : pixVerifying ? <Loader2 className="spin" size={18} /> : <Loader2 className="spin" size={18} />}
                 <span>
                   {pixConfirmed
-                    ? "Pagamento confirmado. Liberando seu acesso…"
+                    ? "Pagamento confirmado. Atualizando seu pedido…"
                     : pixVerifying
                       ? "Consultando confirmação no Asaas…"
                       : "Aguardando confirmação do Pix…"}
@@ -435,8 +494,8 @@ export function NativeCheckoutPayment({
           <div className="native-checkout__empty">
             <strong>Pague com cartão de crédito</strong>
             <p>Na próxima etapa, preencha os dados do cartão com segurança.</p>
-            {isAnnualPlan ? (
-              <p className="native-checkout__hint">Plano anual: parcelamento em até 12× no cartão de crédito.</p>
+            {installmentsEnabled ? (
+              <p className="native-checkout__hint">Parcelamento em até 12× no cartão de crédito, quando disponível.</p>
             ) : (
               <p className="native-checkout__hint">Débito não está disponível nesta tela. Use Pix para pagamento imediato.</p>
             )}
@@ -460,12 +519,12 @@ export function NativeCheckoutPayment({
             </div>
           </div>
           <p className="native-checkout__hint native-checkout__full">
-            {isAnnualPlan
+            {installmentsEnabled
               ? "Escolha à vista ou parcele em até 12× no cartão de crédito. Débito não está disponível nesta tela."
               : "Pagamento à vista no cartão de crédito. Débito não está disponível nesta tela."}
           </p>
 
-          {isAnnualPlan ? (
+          {installmentsEnabled ? (
             <div className="native-checkout__section">
               <span className="native-checkout__section-title">Parcelamento</span>
               <label className="native-checkout__field native-checkout__full">
@@ -481,7 +540,11 @@ export function NativeCheckoutPayment({
                     </option>
                   ))}
                 </select>
-                <span className="native-checkout__hint">Cobrança única do plano anual, parcelada na fatura do cartão.</span>
+                <span className="native-checkout__hint">
+                  {isStoreMode
+                    ? "Cobrança única do pedido, parcelada na fatura do cartão."
+                    : "Cobrança única do plano anual, parcelada na fatura do cartão."}
+                </span>
               </label>
             </div>
           ) : null}

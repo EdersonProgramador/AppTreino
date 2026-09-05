@@ -10,12 +10,11 @@ import {
 
 export type StoreTab = "catalog" | "cart" | "orders";
 
-export type StoreBillingType = "PIX" | "CREDIT_CARD" | "UNDEFINED";
+export type StoreBillingType = "PIX" | "CREDIT_CARD";
 
 export const storeBillingOptions: Array<{ value: StoreBillingType; label: string; hint: string }> = [
-  { value: "PIX", label: "PIX", hint: "Confirmação rápida via Asaas" },
-  { value: "CREDIT_CARD", label: "Cartão", hint: "Crédito no checkout seguro Asaas" },
-  { value: "UNDEFINED", label: "Escolher depois", hint: "Selecione PIX ou cartão na página de pagamento" }
+  { value: "PIX", label: "PIX", hint: "QR Code e confirmação rápida" },
+  { value: "CREDIT_CARD", label: "Cartão", hint: "Crédito com parcelamento disponível" }
 ];
 
 export type StoreHistoryEntry =
@@ -108,7 +107,7 @@ export function storeHistoryPendingCount(entries: StoreHistoryEntry[]) {
 }
 
 export function storePaymentMethodLabel(method: string | null | undefined) {
-  if (!method || method === "UNDEFINED") return "A definir no checkout";
+  if (!method || method === "UNDEFINED") return "Pix ou cartão";
   if (method === "PIX") return "PIX";
   if (method === "CREDIT_CARD") return "Cartão de crédito";
   if (method === "BOLETO") return "Boleto";

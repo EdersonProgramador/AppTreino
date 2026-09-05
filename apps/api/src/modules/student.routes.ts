@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { isValidCpf } from "@app-treino/shared";
 import { requireAuth, requirePathRole, isAdminStudentPreview } from "../auth.js";
 import type { AuthTokenPayload } from "../auth.js";
 import { env } from "../env.js";
@@ -17,8 +18,14 @@ import {
   blockingPurchaseStatusesForProduct,
   PURCHASE_PAID_STATUSES
 } from "./commerce.utils.js";
-import { createAsaasCheckout, purchaseExternalReference, vitrineCheckoutCallbacks, type AsaasBillingType } from "./asaas.client.js";
-import { asaasCheckoutItemName } from "./checkout.utils.js";
+import {
+  buildStorePurchaseCheckoutResponse,
+  finalizeNativePurchaseCheckout,
+  payNativePurchaseWithCard,
+  resolveStorePixCpf,
+  syncPurchasePaymentFromAsaas
+} from "./commerce.checkout.native.js";
+import { getAsaasCheckoutAmountError, resolveStoreCardInstallment } from "./checkout.utils.js";
 import {
   formatShippingAddress,
   productToShippingInput,
@@ -1942,7 +1949,26 @@ export async function registerStudentRoutes(app: FastifyInstance) {
   });
 
   const studentPurchaseCheckoutSchema = z.object({
-    billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED")
+    billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("PIX"),
+    cpfCnpj: z.string().trim().optional()
+  });
+
+  const storeCardPaymentSchema = z.object({
+    holderName: z.string().trim().min(3, "Informe o nome impresso no cartão."),
+    number: z.string().trim().min(13, "Informe o número do cartão."),
+    expiryMonth: z.string().trim().min(2).max(2),
+    expiryYear: z.string().trim().min(2).max(4),
+    ccv: z.string().trim().min(3).max(4),
+    holderEmail: z.string().trim().email("Informe um e-mail válido."),
+    holderCpfCnpj: z
+      .string()
+      .trim()
+      .min(11, "Informe o CPF do titular.")
+      .refine((value) => isValidCpf(value), "Informe um CPF valido."),
+    holderPostalCode: z.string().trim().min(8, "Informe o CEP."),
+    holderAddressNumber: z.string().trim().min(1, "Informe o número do endereço."),
+    holderPhone: z.string().trim().min(8, "Informe o telefone do titular."),
+    installmentCount: z.coerce.number().int().min(1).max(12).optional()
   });
 
   app.get("/student/products", async (request) => {
@@ -2165,37 +2191,23 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       }
     });
 
-    let asaasCheckout: Awaited<ReturnType<typeof createAsaasCheckout>> = null;
-    try {
-      asaasCheckout = await createAsaasCheckout({
-        externalReference: purchaseExternalReference(purchase.id),
-        itemName: asaasCheckoutItemName(product.name),
-        itemDescription: `Pedido vitrine - ${authUser.name}`,
-        amountInCents: purchase.amountInCents,
-        billingType: body.billingType as AsaasBillingType,
-        callbacks: vitrineCheckoutCallbacks({ purchaseId: purchase.id })
-      });
-    } catch {
+    const amountError = getAsaasCheckoutAmountError(purchase.amountInCents);
+    if (amountError) {
       await prisma.purchase.delete({ where: { id: purchase.id } });
-      const error = new Error("Pagamento online indisponível no momento. Tente novamente.") as Error & {
-        statusCode: number;
-      };
-      error.statusCode = 503;
+      const error = new Error(amountError) as Error & { statusCode: number };
+      error.statusCode = 400;
       throw error;
     }
 
-    const updatedPurchase = asaasCheckout
-      ? await prisma.purchase.update({
-          where: { id: purchase.id },
-          data: {
-            asaasPaymentId: asaasCheckout.id,
-            paymentUrl: asaasCheckout.url
-          },
-          include: { product: true }
-        })
-      : purchase;
+    const cpfResolution = await resolveStorePixCpf(authUser.id, body.billingType);
+    const checkoutResult = await finalizeNativePurchaseCheckout({
+      purchase,
+      userId: authUser.id,
+      billingType: body.billingType,
+      cpfCnpj: "error" in cpfResolution ? null : cpfResolution.cpfCnpj
+    });
 
-    return reply.code(201).send({ purchase: updatedPurchase });
+    return reply.code(201).send(checkoutResult);
   });
 
   app.post("/student/purchases/:id/checkout", async (request, reply) => {
@@ -2231,38 +2243,182 @@ export async function registerStudentRoutes(app: FastifyInstance) {
       throw error;
     }
 
-    if (purchase.paymentUrl) {
-      return { purchase, alreadyPaid: false };
-    }
-
-    const asaasCheckout = await createAsaasCheckout({
-      externalReference: purchaseExternalReference(purchase.id),
-      itemName: asaasCheckoutItemName(purchase.product.name),
-      itemDescription: `Pedido vitrine - ${authUser.name}`,
-      amountInCents: purchase.amountInCents,
-      billingType: body.billingType as AsaasBillingType,
-      callbacks: vitrineCheckoutCallbacks({ purchaseId: purchase.id })
-    });
-
-    if (!asaasCheckout) {
-      const error = new Error(
-        "Pagamento online indisponível no momento. A academia confirmará seu pedido manualmente."
-      ) as Error & { statusCode: number };
-      error.statusCode = 503;
+    const amountError = getAsaasCheckoutAmountError(purchase.amountInCents);
+    if (amountError) {
+      const error = new Error(amountError) as Error & { statusCode: number };
+      error.statusCode = 400;
       throw error;
     }
 
-    const updatedPurchase = await prisma.purchase.update({
-      where: { id: purchase.id },
-      data: {
-        asaasPaymentId: asaasCheckout.id,
-        paymentUrl: asaasCheckout.url,
-        paymentMethod: body.billingType === "UNDEFINED" ? purchase.paymentMethod : body.billingType
+    const cpfResolution = await resolveStorePixCpf(authUser.id, body.billingType, body.cpfCnpj);
+    if ("error" in cpfResolution && cpfResolution.error) {
+      const error = new Error(cpfResolution.error) as Error & { statusCode: number };
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return finalizeNativePurchaseCheckout({
+      purchase,
+      userId: authUser.id,
+      billingType: body.billingType,
+      cpfCnpj: cpfResolution.cpfCnpj
+    });
+  });
+
+  app.post("/student/purchases/:id/payment/session", async (request, reply) => {
+    requireDatabase();
+    await assertModuleEnabled("module_purchases");
+    const authUser = await requireAuth(app, request);
+    assertNotAdminPreview(authUser);
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const body = studentPurchaseCheckoutSchema.parse(request.body ?? {});
+
+    const purchase = await prisma.purchase.findFirst({
+      where: {
+        id,
+        userId: authUser.id,
+        deletedAt: null
       },
       include: { product: true }
     });
 
-    return reply.send({ purchase: updatedPurchase, alreadyPaid: false });
+    if (!purchase) {
+      const error = new Error("Pedido não encontrado.") as Error & { statusCode: number };
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (PURCHASE_PAID_STATUSES.includes(purchase.status)) {
+      return buildStorePurchaseCheckoutResponse({ purchase, alreadyPaid: true });
+    }
+
+    if (purchase.status !== "PENDING") {
+      const error = new Error("Este pedido não pode mais ser pago.") as Error & { statusCode: number };
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const amountError = getAsaasCheckoutAmountError(purchase.amountInCents);
+    if (amountError) {
+      const error = new Error(amountError) as Error & { statusCode: number };
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const cpfResolution = await resolveStorePixCpf(authUser.id, body.billingType, body.cpfCnpj);
+    if ("error" in cpfResolution && cpfResolution.error) {
+      const error = new Error(cpfResolution.error) as Error & { statusCode: number };
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return finalizeNativePurchaseCheckout({
+      purchase,
+      userId: authUser.id,
+      billingType: body.billingType,
+      cpfCnpj: cpfResolution.cpfCnpj
+    });
+  });
+
+  app.get("/student/purchases/:id/payment/status", async (request) => {
+    requireDatabase();
+    await assertModuleEnabled("module_purchases");
+    const authUser = await requireAuth(app, request);
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+
+    let purchase = await prisma.purchase.findFirst({
+      where: { id, userId: authUser.id, deletedAt: null },
+      include: { product: true }
+    });
+
+    if (!purchase) {
+      const error = new Error("Pedido não encontrado.") as Error & { statusCode: number };
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (purchase.status === "PENDING") {
+      try {
+        const synced = await syncPurchasePaymentFromAsaas(purchase);
+        if (synced) purchase = synced.purchase;
+      } catch (error) {
+        request.log.warn({ err: error, purchaseId: purchase.id }, "Asaas purchase status sync failed");
+      }
+    }
+
+    return {
+      purchase,
+      alreadyPaid: PURCHASE_PAID_STATUSES.includes(purchase.status),
+      syncedFromAsaas: PURCHASE_PAID_STATUSES.includes(purchase.status)
+    };
+  });
+
+  app.post("/student/purchases/:id/payment/card", async (request, reply) => {
+    requireDatabase();
+    await assertModuleEnabled("module_purchases");
+    const authUser = await requireAuth(app, request);
+    assertNotAdminPreview(authUser);
+
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const body = storeCardPaymentSchema.parse(request.body);
+
+    const purchase = await prisma.purchase.findFirst({
+      where: { id, userId: authUser.id, deletedAt: null, status: "PENDING" },
+      include: { product: true }
+    });
+
+    if (!purchase) {
+      const error = new Error("Pedido não encontrado.") as Error & { statusCode: number };
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (PURCHASE_PAID_STATUSES.includes(purchase.status)) {
+      return buildStorePurchaseCheckoutResponse({ purchase, alreadyPaid: true });
+    }
+
+    const installmentResolution = resolveStoreCardInstallment({
+      installmentCount: body.installmentCount,
+      amountInCents: purchase.amountInCents
+    });
+    if (!installmentResolution.ok) {
+      const error = new Error(installmentResolution.error) as Error & { statusCode: number };
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: authUser.id },
+      include: { profile: true }
+    });
+
+    const cardResult = await payNativePurchaseWithCard({
+      purchase,
+      user,
+      creditCard: {
+        holderName: body.holderName,
+        number: body.number,
+        expiryMonth: body.expiryMonth,
+        expiryYear: body.expiryYear,
+        ccv: body.ccv
+      },
+      creditCardHolderInfo: {
+        name: body.holderName,
+        email: body.holderEmail,
+        cpfCnpj: body.holderCpfCnpj,
+        postalCode: body.holderPostalCode,
+        addressNumber: body.holderAddressNumber,
+        phone: body.holderPhone
+      },
+      remoteIp: request.ip,
+      installmentCount: installmentResolution.installmentCount
+    });
+
+    return buildStorePurchaseCheckoutResponse({
+      purchase: cardResult.purchase,
+      alreadyPaid: PURCHASE_PAID_STATUSES.includes(cardResult.purchase.status),
+      paymentProviderError: cardResult.providerError
+    });
   });
 
   app.get("/student/purchases", async (request) => {
