@@ -47,7 +47,7 @@ import {
   LAP_RADIUS_M,
   updateLapCrossing
 } from "../../lib/activity-geo";
-import { activityMapSrc, mapsConfigMessage } from "../../lib/activity-map-src";
+import { activityMapSrc, hasActivityMapProvider, mapsConfigMessage } from "../../lib/activity-map-src";
 import { WebGpsPipeline, fixFromGeolocation } from "../../lib/gps-filter";
 import { WebStepCounter } from "../../lib/step-counter";
 import { WebHeartRateMonitor } from "../../lib/web-heart-rate";
@@ -285,6 +285,7 @@ export function StudentActivitySection({
   weightKg?: number | null;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const replayMapReadyRef = useRef<() => void>(() => {});
   const dockRef = useRef<HTMLDivElement>(null);
   const watchRef = useRef<number | null>(null);
   const idleWatchRef = useRef<number | null>(null);
@@ -564,42 +565,47 @@ export function StudentActivitySection({
     postToMap(config);
   }
 
+  function replayMapReady() {
+    pushMapsConfig();
+    postToMap({ type: "setMapType", mapType });
+    postToMap({ type: "setActivityMap", mode: activityMap });
+    postToMap({ type: "setLayers", layers });
+    postToMap({ type: "set3d", on: is3d });
+    postToMap({ type: "setFollow", on: followMapRef.current });
+    postToMap({ type: "setSport", sport, gender: athleteGender === "FEMALE" ? "FEMALE" : "MALE" });
+    postToMap({ type: "setHeat", tracks: [], cells: [] });
+    const review = reviewTrackRef.current;
+    if (running || paused) {
+      if (points.length) paintTrack(points, !running);
+    } else if (review && review.length > 1) {
+      postToMap({ type: "setFollow", on: false });
+      postToMap({ type: "setTrack", points: review, fit: true });
+    } else {
+      postToMap({ type: "setTrack", points: [], fit: false });
+    }
+    if (lapCounterOn && lapMarker) postToMap({ type: "setLapMarker", marker: lapMarker });
+    if (laps.length) postToMap({ type: "setLaps", laps });
+    postToMap({ type: "setPickMode", on: pickingLapStart });
+    pushChromeInset();
+    if (!(review && review.length > 1)) {
+      const cached = lastFixRef.current ?? readStoredFix();
+      if (cached) {
+        postToMap(liveFixMessage(cached.lat, cached.lng, true));
+        postToMap({ type: "setView", lat: cached.lat, lng: cached.lng, zoom: 18 });
+      }
+      locate(true);
+    }
+  }
+
+  replayMapReadyRef.current = replayMapReady;
+
   useEffect(() => {
     const onMsg = (event: MessageEvent) => {
       if (event.source !== iframeRef.current?.contentWindow) return;
       const type = event.data?.type;
       if (type === "ready") {
-        pushMapsConfig();
-        postToMap({ type: "setMapType", mapType });
-        postToMap({ type: "setActivityMap", mode: activityMap });
-        postToMap({ type: "setLayers", layers });
-        postToMap({ type: "set3d", on: is3d });
-        postToMap({ type: "setFollow", on: followMapRef.current });
-        postToMap({ type: "setSport", sport, gender: athleteGender === "FEMALE" ? "FEMALE" : "MALE" });
-        postToMap({ type: "setHeat", tracks: [], cells: [] });
-        const review = reviewTrackRef.current;
-        if (running || paused) {
-          if (points.length) paintTrack(points, !running);
-        } else if (review && review.length > 1) {
-          postToMap({ type: "setFollow", on: false });
-          postToMap({ type: "setTrack", points: review, fit: true });
-        } else {
-          postToMap({ type: "setTrack", points: [], fit: false });
-        }
-        if (lapCounterOn && lapMarker) postToMap({ type: "setLapMarker", marker: lapMarker });
-        if (laps.length) postToMap({ type: "setLaps", laps });
-        postToMap({ type: "setPickMode", on: pickingLapStart });
-        pushChromeInset();
-        if (!(review && review.length > 1)) {
-          const cached = lastFixRef.current ?? readStoredFix();
-          if (cached) {
-            postToMap(
-              liveFixMessage(cached.lat, cached.lng, true)
-            );
-            postToMap({ type: "setView", lat: cached.lat, lng: cached.lng, zoom: 18 });
-          }
-          locate(true);
-        }
+        replayMapReadyRef.current();
+        return;
       }
       if (type === "open-layers") setLayersOpen(true);
       if (type === "toggle-3d") setIs3d(Boolean(event.data.on));
@@ -624,7 +630,7 @@ export function StudentActivitySection({
     };
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  });
+  }, []);
 
   useEffect(() => {
     const gen = ++liveHydrateGen.current;
@@ -1732,8 +1738,16 @@ export function StudentActivitySection({
           onLoad={() => {
             pushMapsConfig();
             pushChromeInset();
+            replayMapReadyRef.current();
+            [120, 400, 900, 1800].forEach((ms) => window.setTimeout(() => replayMapReadyRef.current(), ms));
           }}
         />
+        {!hasActivityMapProvider() ? (
+          <div className="student-activity-map-config-hint" role="status">
+            Mapa indisponível: configure <code>VITE_MAPBOX_ACCESS_TOKEN</code> ou{" "}
+            <code>VITE_GOOGLE_MAPS_API_KEY</code> no deploy e faça um novo build.
+          </div>
+        ) : null}
         {weather ? (
           <div className="student-activity-weather">
             <StudentWeatherChip weather={weather} sport={sport} compact />

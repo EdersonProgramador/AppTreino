@@ -24142,6 +24142,27 @@ html.is-native-app.keyboard-open .login-shell {
   overflow: hidden;
 }
 
+.student-activity-map-config-hint {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 58px;
+  z-index: 6;
+  background: rgba(120, 24, 24, 0.92);
+  color: #fff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.student-activity-map-config-hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
 .student-activity-map::after {
   content: "";
   position: absolute;

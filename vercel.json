@@ -14,7 +14,7 @@
       "destination": "https://api.atlly.com.br/public/posts/:path*"
     },
     {
-      "source": "/((?!assets/|activity-map\\.html|live-room\\.html).*)",
+      "source": "/((?!assets/|activity-map\\.html|activity-map-google\\.html|live-room\\.html).*)",
       "destination": "/index.html"
     }
   ],
