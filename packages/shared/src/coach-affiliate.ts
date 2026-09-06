@@ -1,0 +1,17 @@
+/** Comissão recorrente do coach sobre pagamentos confirmados de alunos indicados. */
+export const COACH_COMMISSION_RATE = 0.08;
+
+/** Carência antes de liberar comissão para saque (dias). */
+export const COACH_COMMISSION_HOLDING_DAYS = 14;
+
+/** Saque mínimo em centavos (R$ 50,00). */
+export const COACH_MIN_WITHDRAWAL_CENTS = 5000;
+
+export function calculateCoachCommission(amountInCents: number): number {
+  if (!Number.isFinite(amountInCents) || amountInCents <= 0) return 0;
+  return Math.floor(amountInCents * COACH_COMMISSION_RATE);
+}
+
+export function formatCoachCommissionRate(): string {
+  return `${Math.round(COACH_COMMISSION_RATE * 100)}%`;
+}

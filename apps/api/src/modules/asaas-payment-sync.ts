@@ -8,6 +8,11 @@ import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { getAsaasPayment, findAsaasPaymentByExternalReference } from "./asaas.client.js";
 import { addCycleDate, asaasStatusToPaymentStatus, shouldActivateMembership } from "./asaas.routes.js";
+import {
+  accrueCoachCommissionForPayment,
+  reverseCoachCommissionForPayment,
+  syncReferralAttributionMembershipStatus
+} from "./coach-affiliate.service.js";
 
 type PaymentWithMembership = Payment & {
   membership: Membership & {
@@ -130,6 +135,21 @@ export async function applySubscriptionPaymentConfirmation(
       previousStatus: payment.status,
       nextStatus: nextStatus
     });
+  }
+
+  if (nextStatus === "CONFIRMED") {
+    await syncReferralAttributionMembershipStatus(membership.userId, membership.status);
+    await accrueCoachCommissionForPayment({
+      ...updatedPayment,
+      membership: {
+        userId: membership.userId,
+        status: membership.status
+      }
+    });
+  } else if (nextStatus === "REFUNDED") {
+    await reverseCoachCommissionForPayment(updatedPayment.id);
+  } else if (["CANCELED", "OVERDUE"].includes(nextStatus)) {
+    await syncReferralAttributionMembershipStatus(membership.userId, membership.status);
   }
 
   return {

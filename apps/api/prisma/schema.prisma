@@ -86,6 +86,13 @@ model User {
   userProgramsAssigned        UserProgram[]            @relation("UserProgramAssigner")
   auditLogs                   AuditLog[]
   platformOperator            PlatformOperator?
+  coachReferralLinks          CoachReferralLink[]       @relation("CoachReferralLinks")
+  referralAttributionAsAthlete UserReferralAttribution? @relation("ReferralAthlete")
+  referralAttributionsAsCoach UserReferralAttribution[] @relation("ReferralCoach")
+  coachCommissionEntries      CoachCommissionEntry[]    @relation("CoachCommissionEntries")
+  coachWallet                 CoachWallet?              @relation("CoachWallet")
+  coachWithdrawalRequests     CoachWithdrawalRequest[]  @relation("CoachWithdrawalRequests")
+  coachWithdrawalsApproved    CoachWithdrawalRequest[]  @relation("WithdrawalApprover")
   createdAt           DateTime             @default(now()) @map("created_at")
   updatedAt           DateTime             @updatedAt @map("updated_at")
 
@@ -224,6 +231,7 @@ model Payment {
   updatedAt             DateTime      @updatedAt @map("updated_at")
 
   @@index([membershipId])
+  coachCommission CoachCommissionEntry?
   @@map("payments")
 }
 
@@ -1951,6 +1959,8 @@ model Organization {
   userPrograms            UserProgram[]
   nutritionPlans          NutritionPlan[]
   auditLogs               AuditLog[]
+  coachReferralLinks      CoachReferralLink[]
+  referralAttributions    UserReferralAttribution[]
 
   @@index([status, deletedAt])
   @@map("organizations")
@@ -2211,4 +2221,122 @@ model AuditLog {
   @@index([organizationId, createdAt])
   @@index([userId, createdAt])
   @@map("audit_logs")
+}
+
+enum ReferralAttributionStatus {
+  ACTIVE
+  INACTIVE
+
+  @@map("referral_attribution_status")
+}
+
+enum CoachCommissionStatus {
+  PENDING
+  AVAILABLE
+  LOCKED
+  PAID
+  REVERSED
+
+  @@map("coach_commission_status")
+}
+
+enum CoachWithdrawalStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
+  CANCELED
+
+  @@map("coach_withdrawal_status")
+}
+
+model CoachReferralLink {
+  id             String        @id @default(cuid())
+  coachUserId    String        @map("coach_user_id")
+  coach          User          @relation("CoachReferralLinks", fields: [coachUserId], references: [id], onDelete: Cascade)
+  organizationId String?       @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  slug           String        @unique
+  isActive       Boolean       @default(true) @map("is_active")
+  clickCount     Int           @default(0) @map("click_count")
+  signupCount    Int           @default(0) @map("signup_count")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  attributions   UserReferralAttribution[]
+  commissionEntries CoachCommissionEntry[]
+
+  @@index([coachUserId, isActive])
+  @@map("coach_referral_links")
+}
+
+model UserReferralAttribution {
+  id             String                    @id @default(cuid())
+  athleteUserId  String                    @unique @map("athlete_user_id")
+  athlete        User                      @relation("ReferralAthlete", fields: [athleteUserId], references: [id], onDelete: Cascade)
+  coachUserId    String                    @map("coach_user_id")
+  coach          User                      @relation("ReferralCoach", fields: [coachUserId], references: [id], onDelete: Cascade)
+  referralLinkId String?                   @map("referral_link_id")
+  referralLink   CoachReferralLink?        @relation(fields: [referralLinkId], references: [id], onDelete: SetNull)
+  organizationId String?                   @map("organization_id")
+  organization   Organization?             @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  status         ReferralAttributionStatus @default(ACTIVE)
+  capturedAt     DateTime                  @default(now()) @map("captured_at")
+  updatedAt      DateTime                  @updatedAt @map("updated_at")
+
+  @@index([coachUserId, status])
+  @@map("user_referral_attributions")
+}
+
+model CoachCommissionEntry {
+  id             String                @id @default(cuid())
+  coachUserId    String                @map("coach_user_id")
+  coach          User                  @relation("CoachCommissionEntries", fields: [coachUserId], references: [id], onDelete: Cascade)
+  athleteUserId  String                @map("athlete_user_id")
+  paymentId      String                @unique @map("payment_id")
+  payment        Payment               @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  referralLinkId String?               @map("referral_link_id")
+  referralLink   CoachReferralLink?    @relation(fields: [referralLinkId], references: [id], onDelete: SetNull)
+  amountInCents  Int                   @map("amount_in_cents")
+  commissionRate Float                 @map("commission_rate")
+  status         CoachCommissionStatus @default(PENDING)
+  availableAt    DateTime?             @map("available_at")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+
+  @@index([coachUserId, status])
+  @@index([athleteUserId])
+  @@map("coach_commission_entries")
+}
+
+model CoachWallet {
+  coachUserId      String   @id @map("coach_user_id")
+  coach            User     @relation("CoachWallet", fields: [coachUserId], references: [id], onDelete: Cascade)
+  availableInCents Int      @default(0) @map("available_in_cents")
+  pendingInCents   Int      @default(0) @map("pending_in_cents")
+  lockedInCents    Int      @default(0) @map("locked_in_cents")
+  withdrawnInCents Int      @default(0) @map("withdrawn_in_cents")
+  pixKey           String?  @map("pix_key")
+  pixKeyType       String?  @map("pix_key_type")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("coach_wallets")
+}
+
+model CoachWithdrawalRequest {
+  id            String                @id @default(cuid())
+  coachUserId   String                @map("coach_user_id")
+  coach         User                  @relation("CoachWithdrawalRequests", fields: [coachUserId], references: [id], onDelete: Cascade)
+  amountInCents Int                   @map("amount_in_cents")
+  pixKey        String                @map("pix_key")
+  pixKeyType    String?               @map("pix_key_type")
+  status        CoachWithdrawalStatus @default(PENDING)
+  adminNote     String?               @map("admin_note")
+  approvedById  String?               @map("approved_by_id")
+  approvedBy    User?                 @relation("WithdrawalApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  paidAt        DateTime?             @map("paid_at")
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+
+  @@index([coachUserId, status])
+  @@map("coach_withdrawal_requests")
 }

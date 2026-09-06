@@ -28,7 +28,7 @@ import {
   readStoredUser
 } from "./session";
 import { paths, unpaidStudentActivatePath } from "./paths";
-import { clearCheckoutIntent, readCheckoutIntent, resolveCheckoutCouponSelection, resolveCheckoutPlanSelection } from "../lib/checkout-intent";
+import { clearCheckoutIntent, readCheckoutIntent, resolveCheckoutCouponSelection, resolveCheckoutPlanSelection, resolveCheckoutReferralSelection } from "../lib/checkout-intent";
 import { fetchStudentPortalAccess } from "../lib/student-portal-access";
 import { preloadAdminPanel, preloadStudentPanel } from "./RouteGuards";
 import { useMusicPlayerStore } from "../stores/musicPlayerStore";
@@ -344,6 +344,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         null;
       const couponForCheckout =
         resolveCheckoutCouponSelection({ checkoutIntent }) || null;
+      const referralSlug =
+        resolveCheckoutReferralSelection({ checkoutIntent }) || null;
       const isCheckoutRegister = mode === "register" && Boolean(planCode);
       const endpoint =
         provider === "GOOGLE"
@@ -394,6 +396,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   password,
                   planCode,
                   couponCode: couponForCheckout,
+                  referralSlug,
                   billingType,
                   acceptTerms: acceptTerms ? true : undefined,
                   acceptPrivacy: acceptPrivacy ? true : undefined
@@ -411,6 +414,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   equipmentTags,
                   password,
                   provider,
+                  referralSlug,
                   acceptTerms: acceptTerms ? true : undefined,
                   acceptPrivacy: acceptPrivacy ? true : undefined
                 };

@@ -5,7 +5,8 @@ import { formatPriceInBRL } from "@app-treino/shared";
 import { useAuth } from "../../auth/AuthContext";
 import { paths, activatePath } from "../../auth/paths";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
-import { patchCheckoutIntent, readCheckoutIntent, resolveCheckoutCouponSelection } from "../../lib/checkout-intent";
+import { patchCheckoutIntent, readCheckoutIntent, resolveCheckoutCouponSelection, resolveCheckoutReferralSelection } from "../../lib/checkout-intent";
+import { apiGet } from "../../api";
 import { getEffectivePriceCents, buildCatalogCouponQuery, planHasPromoDiscount, plansForCouponDisplay, resolveCouponValidationState, resolvePlanCodeInCatalog } from "../../lib/plan-catalog";
 import { WorkoutOnboarding, type WorkoutOnboardingSubmitPayload } from "../onboarding/WorkoutOnboarding";
 import { SubscriptionCheckoutShell } from "./SubscriptionCheckoutShell";
@@ -20,12 +21,13 @@ export function ActivateView() {
   const [searchParams] = useSearchParams();
   const planFromUrl = searchParams.get("plan");
   const couponFromUrl = searchParams.get("coupon");
+  const referralFromUrl = searchParams.get("ref");
   const stepParam = searchParams.get("step");
   const initialStep = stepParam === "account" ? 2 : 1;
 
   const [portalState, setPortalState] = useState<"loading" | "guest" | "paid" | "unpaid">("loading");
 
-  const preferUrlParams = Boolean(planFromUrl?.trim() || couponFromUrl?.trim());
+  const preferUrlParams = Boolean(planFromUrl?.trim() || couponFromUrl?.trim() || referralFromUrl?.trim());
 
   const [couponDraft, setCouponDraft] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(() => {
@@ -81,6 +83,17 @@ export function ActivateView() {
       setCouponValidForSelection(null);
     }
   }, [couponFromUrl, preferUrlParams]);
+
+  useEffect(() => {
+    const slug = resolveCheckoutReferralSelection({
+      checkoutIntent: readCheckoutIntent(),
+      referralFromUrl,
+      preferUrl: preferUrlParams
+    });
+    if (!slug) return;
+    patchCheckoutIntent({ referralSlug: slug, source: "activate" });
+    void apiGet(`/public/coach-ref/${encodeURIComponent(slug)}`).catch(() => undefined);
+  }, [referralFromUrl, preferUrlParams]);
 
   const catalogCouponQuery = useMemo(() => buildCatalogCouponQuery(appliedCoupon), [appliedCoupon]);
 

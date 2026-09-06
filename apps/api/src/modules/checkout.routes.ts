@@ -24,6 +24,7 @@ import {
   resolveSubscriptionCheckoutPricing
 } from "./checkout.utils.js";
 import { syncSubscriptionPaymentFromAsaas } from "./asaas-payment-sync.js";
+import { applyReferralAttributionForUser } from "./coach-affiliate.service.js";
 
 const planCodeSchema = z.string().trim().min(1).max(80);
 
@@ -49,6 +50,7 @@ const checkoutRegisterSchema = z
     planCode: planCodeSchema,
     billingType: z.enum(["BOLETO", "CREDIT_CARD", "PIX", "UNDEFINED"]).default("UNDEFINED"),
     couponCode: z.string().trim().max(40).optional().nullable(),
+    referralSlug: z.string().trim().max(80).optional().nullable(),
     acceptTerms: z.literal(true, {
       errorMap: () => ({ message: "Aceite os Termos de Uso para continuar." })
     }),
@@ -786,6 +788,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
     });
 
     notifyWelcomeEmail(user);
+    await applyReferralAttributionForUser(user.id, body.referralSlug);
 
     const authUser = toAuthUser(user);
     const token = app.jwt.sign(authUser);

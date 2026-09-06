@@ -7,6 +7,7 @@ import { buildPasswordResetUrl, isDeliverableEmail, sendPasswordResetEmail } fro
 import { notifyWelcomeEmail } from "../email-notifications.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
+import { applyReferralAttributionForUser } from "./coach-affiliate.service.js";
 import {
   findUserByPhone,
   loginAccountNotFoundMessage,
@@ -79,7 +80,8 @@ const registerSchema = z
     }),
     acceptPrivacy: z.literal(true, {
       errorMap: () => ({ message: "Aceite a Política de Privacidade para continuar." })
-    })
+    }),
+    referralSlug: z.string().trim().max(80).optional().nullable()
   })
   .superRefine((data, ctx) => {
     const hasIdentifier = Boolean(data.email || data.phone);
@@ -360,6 +362,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     });
 
     await recordDailyAttendance(user.id, user.role);
+    await applyReferralAttributionForUser(user.id, body.referralSlug);
     notifyWelcomeEmail(user);
     const authUser = toAuthUser(user);
     const token = app.jwt.sign(authUser);

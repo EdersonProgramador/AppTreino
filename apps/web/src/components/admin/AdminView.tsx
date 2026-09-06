@@ -182,6 +182,7 @@ import { OutdoorModerationAdminPanel } from "./OutdoorModerationAdminPanel";
 import { OrgAdminPanel } from "./OrgAdminPanel";
 import { PlanFeaturesAdminPanel } from "./PlanFeaturesAdminPanel";
 import { SubscriptionPlansAdminPanel } from "./SubscriptionPlansAdminPanel";
+import { CoachWithdrawalsAdminPanel } from "./CoachWithdrawalsAdminPanel";
 
 type AdminSelfProfile = {
   id: string;
@@ -5804,6 +5805,12 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
               plans={plans.map((item) => ({ id: item.id, name: item.name, code: item.code }))}
             />
           )}
+
+          {token ? (
+            <div className="mt-6">
+              <CoachWithdrawalsAdminPanel token={token} />
+            </div>
+          ) : null}
 
           {financeTab === "memberships" && (
             <article className="table-panel finance-panel" id="admin-memberships">

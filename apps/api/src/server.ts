@@ -30,6 +30,7 @@ import { ensurePlatformOwnerAccount } from "./platform-owner.js";
 import { registerMusicRoutes } from "./modules/music.routes.js";
 import { registerUserRoutes } from "./modules/user.routes.js";
 import { registerOrgRoutes } from "./modules/org.routes.js";
+import { registerCoachAffiliateRoutes } from "./modules/coach-affiliate.routes.js";
 import type { Server as HttpServer } from "node:http";
 
 const app = Fastify({
@@ -229,6 +230,7 @@ await registerAuthRoutes(app);
 await registerCheckoutRoutes(app);
 await registerAdminRoutes(app);
 await registerOrgRoutes(app);
+await registerCoachAffiliateRoutes(app);
 await registerUserRoutes(app);
 await registerStudentRoutes(app);
 await registerSocialRoutes(app);

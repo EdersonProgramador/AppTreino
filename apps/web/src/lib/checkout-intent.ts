@@ -3,6 +3,7 @@ const CHECKOUT_INTENT_KEY = "atlly-checkout-intent";
 export type CheckoutIntent = {
   planCode?: string;
   couponCode?: string;
+  referralSlug?: string;
   source?: "activate" | "landing" | "login";
 };
 
@@ -92,6 +93,21 @@ export function patchCheckoutIntent(patch: CheckoutIntent) {
   setCheckoutIntent({
     planCode: "planCode" in patch ? patch.planCode : current?.planCode,
     couponCode: "couponCode" in patch ? patch.couponCode : current?.couponCode,
+    referralSlug: "referralSlug" in patch ? patch.referralSlug : current?.referralSlug,
     source: patch.source ?? current?.source ?? "activate"
   });
+}
+
+export function resolveCheckoutReferralSelection(input: {
+  checkoutIntent?: CheckoutIntent | null;
+  referralFromUrl?: string | null;
+  preferUrl?: boolean;
+}): string {
+  const fromUrl = input.referralFromUrl?.trim().toLowerCase();
+  const fromIntent = input.checkoutIntent?.referralSlug?.trim().toLowerCase();
+
+  if (input.preferUrl && fromUrl) return fromUrl;
+  if (fromIntent) return fromIntent;
+  if (fromUrl) return fromUrl;
+  return "";
 }

@@ -158,6 +158,7 @@ export const ORG_ROLE_PERMISSIONS: Record<OrganizationMemberRole, readonly OrgPe
     "training.view",
     "training.create",
     "training.update",
+    "training.publish",
     "training.assign",
     "classes.view",
     "classes.assign_athletes"

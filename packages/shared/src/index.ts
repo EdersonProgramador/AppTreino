@@ -30,6 +30,13 @@ export {
   resolvePlatformOwnerEmail,
   isPlatformOwnerEmail
 } from "./platform-owner.js";
+export {
+  COACH_COMMISSION_RATE,
+  COACH_COMMISSION_HOLDING_DAYS,
+  COACH_MIN_WITHDRAWAL_CENTS,
+  calculateCoachCommission,
+  formatCoachCommissionRate
+} from "./coach-affiliate.js";
 
 export type MembershipStatus = "ACTIVE" | "PENDING" | "OVERDUE" | "CANCELED";
 

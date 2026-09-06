@@ -10,13 +10,15 @@ import {
   RefreshCw,
   ShieldCheck,
   UsersRound,
-  Utensils
+  Utensils,
+  Wallet
 } from "lucide-react";
 import { apiGet, apiPost } from "../../api";
 import { brand } from "../../lib/brand";
 import { assetUrl } from "../../lib/urls";
 import { paths } from "../../auth/paths";
 import { OrgProgramsPanel } from "../admin/OrgProgramsPanel";
+import { CoachRevenuePanel } from "./CoachRevenuePanel";
 
 type OrgUser = { id: string; name: string; email: string | null };
 type Unit = { id: string; name: string };
@@ -106,7 +108,7 @@ type Props = {
   onLogout: () => void;
 };
 
-type Tab = "overview" | "athletes" | "classes" | "programs" | "nutrition";
+type Tab = "overview" | "athletes" | "classes" | "programs" | "nutrition" | "revenue";
 
 export function CoachView({ token, userName, onLogout }: Props) {
   const [searchParams] = useSearchParams();
@@ -191,7 +193,8 @@ export function CoachView({ token, userName, onLogout }: Props) {
     { id: "athletes", label: "Alunos", icon: UsersRound },
     { id: "classes", label: "Turmas", icon: UsersRound },
     { id: "programs", label: "Programas", icon: Dumbbell },
-    { id: "nutrition", label: "Nutrição", icon: Utensils }
+    { id: "nutrition", label: "Nutrição", icon: Utensils },
+    { id: "revenue", label: "Receitas", icon: Wallet }
   ];
 
   if (loading && !workspace) {
@@ -665,6 +668,15 @@ export function CoachView({ token, userName, onLogout }: Props) {
               )}
             </article>
           </section>
+        )}
+
+        {tab === "revenue" && (
+          <CoachRevenuePanel
+            token={token}
+            busy={busy}
+            onBusy={runAction}
+            onError={(message) => setError(message)}
+          />
         )}
       </main>
       </div>
