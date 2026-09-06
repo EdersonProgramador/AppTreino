@@ -76,18 +76,34 @@ export async function registerCoachAffiliateRoutes(app: FastifyInstance) {
     };
   });
 
-  app.get("/coach/affiliate/summary", async (request) => {
-    const user = await requireAuth(app, request);
-    await requireCoachStaff(user);
-    const summary = await getCoachAffiliateSummary(user.id);
-    const origin = webAppOrigin();
+  app.get("/coach/affiliate/summary", async (request, reply) => {
+    try {
+      const user = await requireAuth(app, request);
+      await requireCoachStaff(user);
+      const summary = await getCoachAffiliateSummary(user.id);
+      const origin = webAppOrigin();
 
-    return {
-      ...summary,
-      referralUrl: summary.referralLink
-        ? `${origin}/ativar?ref=${encodeURIComponent(summary.referralLink.slug)}`
-        : null
-    };
+      return {
+        ...summary,
+        referralUrl: summary.referralLink
+          ? `${origin}/ativar?ref=${encodeURIComponent(summary.referralLink.slug)}`
+          : null
+      };
+    } catch (error) {
+      request.log.error({ err: error }, "coach affiliate summary failed");
+      const statusCode =
+        error && typeof error === "object" && "statusCode" in error && typeof error.statusCode === "number"
+          ? error.statusCode
+          : 500;
+      return reply.code(statusCode).send({
+        message:
+          statusCode === 500
+            ? "Painel de receitas indisponível. Tente atualizar em instantes."
+            : error instanceof Error
+              ? error.message
+              : "Falha ao carregar receitas."
+      });
+    }
   });
 
   app.put("/coach/affiliate/pix", async (request) => {

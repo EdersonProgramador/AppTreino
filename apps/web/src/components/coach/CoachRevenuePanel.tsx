@@ -42,28 +42,29 @@ type Props = {
   token: string;
   busy: boolean;
   onBusy: (action: () => Promise<void>, success: string) => Promise<void>;
-  onError: (message: string) => void;
 };
 
-export function CoachRevenuePanel({ token, busy, onBusy, onError }: Props) {
+export function CoachRevenuePanel({ token, busy, onBusy }: Props) {
   const [summary, setSummary] = useState<AffiliateSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [panelError, setPanelError] = useState<string | null>(null);
   const [pixKey, setPixKey] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setPanelError(null);
     try {
       const data = await apiGet<AffiliateSummary>("/coach/affiliate/summary", token);
       setSummary(data);
       setPixKey(data.wallet.pixKey ?? "");
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Falha ao carregar receitas.");
+      setPanelError(err instanceof Error ? err.message : "Falha ao carregar receitas.");
     } finally {
       setLoading(false);
     }
-  }, [onError, token]);
+  }, [token]);
 
   useEffect(() => {
     void load();
@@ -89,7 +90,13 @@ export function CoachRevenuePanel({ token, busy, onBusy, onError }: Props) {
     );
   }
 
-  if (!summary) return null;
+  if (!summary) {
+    return (
+      <div className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5 text-sm text-red-400">
+        {panelError ?? "Não foi possível carregar receitas."}
+      </div>
+    );
+  }
 
   const wallet = summary.wallet;
 

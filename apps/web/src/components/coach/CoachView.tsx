@@ -294,7 +294,15 @@ export function CoachView({ token, userName, onLogout }: Props) {
 
         <nav className="finance-hub-tabs" aria-label="Seções do coach">
           {tabs.map((item) => (
-            <button key={item.id} type="button" className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)}>
+            <button
+              key={item.id}
+              type="button"
+              className={tab === item.id ? "active" : ""}
+              onClick={() => {
+                setTab(item.id);
+                setError(null);
+              }}
+            >
               <item.icon size={16} />
               {item.label}
             </button>
@@ -671,12 +679,7 @@ export function CoachView({ token, userName, onLogout }: Props) {
         )}
 
         {tab === "revenue" && (
-          <CoachRevenuePanel
-            token={token}
-            busy={busy}
-            onBusy={runAction}
-            onError={(message) => setError(message)}
-          />
+          <CoachRevenuePanel token={token} busy={busy} onBusy={runAction} />
         )}
       </main>
       </div>
