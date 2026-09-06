@@ -92,8 +92,8 @@ export function AdminDashboardOverview({
   favorites,
   ratings,
   systemSettings,
-  subscriptionGoals,
-  liveOutdoorActivities,
+  subscriptionGoals = [],
+  liveOutdoorActivities = 0,
   lastUpdatedAt,
   loading,
   onRefresh,
@@ -111,8 +111,8 @@ export function AdminDashboardOverview({
   favorites: FavoriteRow[];
   ratings: RatingRow[];
   systemSettings: Record<string, string>;
-  subscriptionGoals: SubscriptionPlanGoalProgress[];
-  liveOutdoorActivities: number;
+  subscriptionGoals?: SubscriptionPlanGoalProgress[];
+  liveOutdoorActivities?: number;
   lastUpdatedAt: Date | null;
   loading: boolean;
   onRefresh: () => void;
@@ -320,7 +320,8 @@ export function AdminDashboardOverview({
   }, [activeMembershipCount]);
 
   const displaySubscriptionGoals = useMemo(() => {
-    if (subscriptionGoals.length > 0) return subscriptionGoals;
+    const goals = subscriptionGoals ?? [];
+    if (goals.length > 0) return goals;
     return SUBSCRIPTION_PLAN_GOAL_DEFINITIONS.map((definition) =>
       buildSubscriptionPlanGoalProgress(definition, 0, systemSettings)
     );

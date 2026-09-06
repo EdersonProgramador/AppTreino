@@ -831,8 +831,18 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   async function fetchAdminResource(resource: AdminResource) {
     switch (resource) {
       case "summary": {
-        const response = await apiGet<typeof summary>("/admin/summary", token);
-        setSummary(response);
+        const response = await apiGet<Partial<typeof summary> & Pick<typeof summary, "users" | "activeMemberships" | "pendingPayments" | "todayAttendance">>(
+          "/admin/summary",
+          token
+        );
+        setSummary({
+          users: response.users ?? 0,
+          activeMemberships: response.activeMemberships ?? 0,
+          pendingPayments: response.pendingPayments ?? 0,
+          todayAttendance: response.todayAttendance ?? 0,
+          liveOutdoorActivities: response.liveOutdoorActivities ?? 0,
+          subscriptionGoals: Array.isArray(response.subscriptionGoals) ? response.subscriptionGoals : []
+        });
         break;
       }
       case "users": {
@@ -3336,8 +3346,8 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
             favorites={favorites}
             ratings={ratings}
             systemSettings={systemSettings}
-            subscriptionGoals={summary.subscriptionGoals}
-            liveOutdoorActivities={summary.liveOutdoorActivities}
+            subscriptionGoals={summary.subscriptionGoals ?? []}
+            liveOutdoorActivities={summary.liveOutdoorActivities ?? 0}
             lastUpdatedAt={lastUpdatedAt}
             loading={loading}
             onRefresh={() => void loadAdminData()}
