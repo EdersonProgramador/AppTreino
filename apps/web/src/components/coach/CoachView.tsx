@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   ClipboardList,
   Dumbbell,
+  Eye,
   Loader2,
   LogOut,
   RefreshCw,
+  ShieldCheck,
   UsersRound,
   Utensils
 } from "lucide-react";
@@ -86,6 +88,8 @@ type AthleteLink = {
 type Workspace = {
   isStaff: boolean;
   userId: string;
+  previewAsCoach?: boolean;
+  isCoachOnly?: boolean;
   memberships: Membership[];
   organizations: Organization[];
   assignedAthletes: OrgUser[];
@@ -105,6 +109,9 @@ type Props = {
 type Tab = "overview" | "athletes" | "classes" | "programs" | "nutrition";
 
 export function CoachView({ token, userName, onLogout }: Props) {
+  const [searchParams] = useSearchParams();
+  const previewCoach = searchParams.get("preview") === "coach";
+  const workspacePath = previewCoach ? "/org/me/workspace?preview=coach" : "/org/me/workspace";
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -129,7 +136,7 @@ export function CoachView({ token, userName, onLogout }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiGet<Workspace>("/org/me/workspace", token);
+      const data = await apiGet<Workspace>(workspacePath, token);
       setWorkspace(data);
       if (!selectedOrgId && data.organizations[0]) {
         setSelectedOrgId(data.organizations[0].id);
@@ -139,7 +146,7 @@ export function CoachView({ token, userName, onLogout }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [selectedOrgId, token]);
+  }, [selectedOrgId, token, workspacePath]);
 
   useEffect(() => {
     void load();
@@ -218,7 +225,26 @@ export function CoachView({ token, userName, onLogout }: Props) {
   }
 
   return (
-    <div className="ui-shell min-h-screen bg-[var(--app-bg)] text-sand">
+    <div className="admin-preview-shell-wrap min-h-screen bg-[var(--app-bg)] text-sand">
+      {previewCoach && (
+        <div className="admin-preview-banner" role="status">
+          <div className="admin-preview-banner-copy">
+            <Eye size={16} />
+            <span>
+              <strong>Modo preview</strong>
+              · visão de coach (escopo limitado à sua equipe e turmas)
+            </span>
+          </div>
+          <div className="admin-preview-banner-controls">
+            <Link className="admin-preview-banner-action no-underline" to={paths.admin}>
+              <ShieldCheck size={16} />
+              Voltar ao admin
+            </Link>
+          </div>
+        </div>
+      )}
+
+      <div className="ui-shell min-h-screen bg-[var(--app-bg)] text-sand">
       <header className="sticky top-0 z-20 border-b border-[color:var(--app-border)] bg-[var(--app-panel)]/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
@@ -641,6 +667,7 @@ export function CoachView({ token, userName, onLogout }: Props) {
           </section>
         )}
       </main>
+      </div>
     </div>
   );
 }

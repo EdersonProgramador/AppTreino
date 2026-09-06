@@ -3316,6 +3316,12 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           </h1>
         </div>
         <div className="dashboard-actions flex flex-wrap justify-end gap-2.5">
+          {adminProfile?.isPlatformOwner && (
+            <Link className="outline-button compact-button no-underline" to={paths.coachPreview}>
+              <Eye size={18} />
+              Ver como coach
+            </Link>
+          )}
           {adminSection !== "settings" && (
             <ThemeModeSwitch compact className="admin-desktop-theme-switch" />
           )}
@@ -7903,6 +7909,13 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 <strong>Ver como aluno</strong>
                 <span>Abre o app do aluno com a sua conta (modo preview seguro)</span>
               </button>
+              {adminProfile?.isPlatformOwner ? (
+                <Link className="admin-profile-function-card no-underline" to={paths.coachPreview}>
+                  <UsersRound size={20} />
+                  <strong>Ver como coach</strong>
+                  <span>Painel profissional com escopo de coach (Box Cross demo)</span>
+                </Link>
+              ) : null}
               <button type="button" className="admin-profile-function-card" onClick={() => goAdminSection("training")}>
                 <Dumbbell size={20} />
                 <strong>CMS de treinos</strong>

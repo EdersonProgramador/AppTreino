@@ -1259,6 +1259,111 @@ async function main() {
       deletedAt: null
     }
   });
+
+  if (platformOwner) {
+    await prisma.organizationMember.upsert({
+      where: {
+        organizationId_userId_role: {
+          organizationId: demoOrg.id,
+          userId: platformOwner.id,
+          role: "COACH"
+        }
+      },
+      create: {
+        organizationId: demoOrg.id,
+        unitId: "seed-unit-medicilandia",
+        userId: platformOwner.id,
+        role: "COACH",
+        status: "ACTIVE"
+      },
+      update: {
+        unitId: "seed-unit-medicilandia",
+        status: "ACTIVE"
+      }
+    });
+
+    const previewClass = await prisma.trainingClass.upsert({
+      where: { id: "seed-class-preview-coach" },
+      create: {
+        id: "seed-class-preview-coach",
+        organizationId: demoOrg.id,
+        unitId: "seed-unit-medicilandia",
+        coachId: platformOwner.id,
+        name: "Turma Preview Coach",
+        description: "Turma de demonstração para testar o painel como coach.",
+        status: "ACTIVE"
+      },
+      update: {
+        coachId: platformOwner.id,
+        name: "Turma Preview Coach",
+        status: "ACTIVE",
+        deletedAt: null
+      }
+    });
+
+    await prisma.athleteOrganizationLink.upsert({
+      where: {
+        athleteId_organizationId_unitId: {
+          athleteId: e2eUser.id,
+          organizationId: demoOrg.id,
+          unitId: "seed-unit-medicilandia"
+        }
+      },
+      create: {
+        athleteId: e2eUser.id,
+        organizationId: demoOrg.id,
+        unitId: "seed-unit-medicilandia",
+        status: "ACTIVE"
+      },
+      update: {
+        status: "ACTIVE",
+        deletedAt: null
+      }
+    });
+
+    const existingAssignment = await prisma.professionalAssignment.findFirst({
+      where: {
+        organizationId: demoOrg.id,
+        professionalId: platformOwner.id,
+        athleteId: e2eUser.id,
+        professionalType: "COACH",
+        deletedAt: null
+      }
+    });
+    if (!existingAssignment) {
+      await prisma.professionalAssignment.create({
+        data: {
+          organizationId: demoOrg.id,
+          unitId: "seed-unit-medicilandia",
+          professionalId: platformOwner.id,
+          athleteId: e2eUser.id,
+          professionalType: "COACH",
+          status: "ACTIVE",
+          isPrimary: true
+        }
+      });
+    }
+
+    await prisma.trainingClassMember.upsert({
+      where: {
+        classId_athleteId: {
+          classId: previewClass.id,
+          athleteId: e2eUser.id
+        }
+      },
+      create: {
+        classId: previewClass.id,
+        athleteId: e2eUser.id,
+        status: "ACTIVE"
+      },
+      update: {
+        status: "ACTIVE"
+      }
+    });
+
+    console.log("Coach preview demo: Box Cross / owner as COACH");
+  }
+
   console.log("Demo organization: Box Cross / Medicilândia-PA");
 }
 

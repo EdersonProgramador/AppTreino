@@ -92,16 +92,141 @@ export async function registerOrgRoutes(app: FastifyInstance) {
     "NUTRITIONIST"
   ]);
 
+  async function ensureCoachPreviewMembership(userId: string) {
+    const demoOrg = await prisma.organization.findFirst({
+      where: { slug: "box-cross", deletedAt: null },
+      include: {
+        units: { where: { deletedAt: null }, orderBy: { name: "asc" }, take: 1 }
+      }
+    });
+    if (!demoOrg?.units[0]) return;
+
+    const unit = demoOrg.units[0];
+    await prisma.organizationMember.upsert({
+      where: {
+        organizationId_userId_role: {
+          organizationId: demoOrg.id,
+          userId,
+          role: "COACH"
+        }
+      },
+      create: {
+        organizationId: demoOrg.id,
+        unitId: unit.id,
+        userId,
+        role: "COACH",
+        status: "ACTIVE"
+      },
+      update: {
+        unitId: unit.id,
+        status: "ACTIVE"
+      }
+    });
+
+    const existingClass = await prisma.trainingClass.findFirst({
+      where: { coachId: userId, organizationId: demoOrg.id, deletedAt: null }
+    });
+    if (existingClass) return;
+
+    const demoClass = await prisma.trainingClass.create({
+      data: {
+        organizationId: demoOrg.id,
+        unitId: unit.id,
+        coachId: userId,
+        name: "Turma Preview Coach",
+        description: "Turma de demonstração para testar o painel como coach.",
+        status: "ACTIVE"
+      }
+    });
+
+    const demoAthlete = await prisma.user.findFirst({
+      where: { role: "USER", status: "ACTIVE", deletedAt: null },
+      orderBy: { createdAt: "asc" }
+    });
+    if (!demoAthlete) return;
+
+    await prisma.athleteOrganizationLink.upsert({
+      where: {
+        athleteId_organizationId_unitId: {
+          athleteId: demoAthlete.id,
+          organizationId: demoOrg.id,
+          unitId: unit.id
+        }
+      },
+      create: {
+        athleteId: demoAthlete.id,
+        organizationId: demoOrg.id,
+        unitId: unit.id,
+        status: "ACTIVE"
+      },
+      update: {
+        status: "ACTIVE",
+        deletedAt: null
+      }
+    });
+
+    const existingAssignment = await prisma.professionalAssignment.findFirst({
+      where: {
+        organizationId: demoOrg.id,
+        professionalId: userId,
+        athleteId: demoAthlete.id,
+        professionalType: "COACH",
+        deletedAt: null
+      }
+    });
+    if (!existingAssignment) {
+      await prisma.professionalAssignment.create({
+        data: {
+          organizationId: demoOrg.id,
+          unitId: unit.id,
+          professionalId: userId,
+          athleteId: demoAthlete.id,
+          professionalType: "COACH",
+          status: "ACTIVE",
+          isPrimary: true
+        }
+      });
+    }
+
+    await prisma.trainingClassMember.upsert({
+      where: {
+        classId_athleteId: {
+          classId: demoClass.id,
+          athleteId: demoAthlete.id
+        }
+      },
+      create: {
+        classId: demoClass.id,
+        athleteId: demoAthlete.id,
+        status: "ACTIVE"
+      },
+      update: {
+        status: "ACTIVE"
+      }
+    });
+  }
+
   app.get("/org/me/workspace", async (request) => {
     const user = await requireAuth(app, request);
-    const ctx = await loadOrgAuthContext(user);
-    const staffMemberships = ctx.memberships.filter((member) => STAFF_ROLES.has(member.role));
-    const isStaff = ctx.isPlatformOperator || ctx.isPlatformAdmin || staffMemberships.length > 0;
+    let ctx = await loadOrgAuthContext(user);
+    const previewCoach =
+      (request.query as { preview?: string }).preview === "coach" &&
+      (ctx.isPlatformOperator || ctx.isPlatformAdmin);
+
+    if (previewCoach) {
+      await ensureCoachPreviewMembership(user.id);
+      ctx = await loadOrgAuthContext(user);
+    }
+
+    let staffMemberships = ctx.memberships.filter((member) => STAFF_ROLES.has(member.role));
+    const hasGodMode = (ctx.isPlatformOperator || ctx.isPlatformAdmin) && !previewCoach;
+    const isStaff = hasGodMode || previewCoach || staffMemberships.length > 0;
 
     if (!isStaff) {
       return {
         isStaff: false,
         userId: ctx.userId,
+        previewAsCoach: false,
         memberships: [],
         organizations: [],
         assignedAthletes: [],
@@ -112,10 +237,15 @@ export async function registerOrgRoutes(app: FastifyInstance) {
       };
     }
 
-    const orgIds =
-      ctx.isPlatformOperator || ctx.isPlatformAdmin
-        ? undefined
-        : [...new Set(staffMemberships.map((member) => member.organizationId))];
+    if (previewCoach) {
+      staffMemberships = staffMemberships.filter(
+        (member) => member.role === "COACH" || member.role === "NUTRITIONIST"
+      );
+    }
+
+    const orgIds = hasGodMode
+      ? undefined
+      : [...new Set(staffMemberships.map((member) => member.organizationId))];
 
     const orgWhere = {
       deletedAt: null,
@@ -123,9 +253,9 @@ export async function registerOrgRoutes(app: FastifyInstance) {
     };
 
     const isCoachOnly =
-      !ctx.isPlatformOperator &&
-      !ctx.isPlatformAdmin &&
-      staffMemberships.every((member) => member.role === "COACH" || member.role === "NUTRITIONIST");
+      previewCoach ||
+      (!hasGodMode &&
+        staffMemberships.every((member) => member.role === "COACH" || member.role === "NUTRITIONIST"));
 
     const [organizations, assignments, classes, programs, nutritionPlans, athleteLinks] = await Promise.all([
       prisma.organization.findMany({
@@ -258,8 +388,10 @@ export async function registerOrgRoutes(app: FastifyInstance) {
     return {
       isStaff: true,
       userId: ctx.userId,
-      isPlatformOperator: ctx.isPlatformOperator,
-      isPlatformAdmin: ctx.isPlatformAdmin,
+      previewAsCoach: previewCoach,
+      isCoachOnly,
+      isPlatformOperator: hasGodMode ? ctx.isPlatformOperator : false,
+      isPlatformAdmin: hasGodMode ? ctx.isPlatformAdmin : false,
       memberships: staffMemberships,
       organizations,
       assignedAthletes,

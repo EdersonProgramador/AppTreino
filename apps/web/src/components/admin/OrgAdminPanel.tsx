@@ -344,8 +344,8 @@ export function OrgAdminPanel({ token }: Props) {
           {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
           Atualizar
         </button>
-        <Link className="dash-link-button no-underline" to={paths.coach}>
-          Abrir painel coach
+        <Link className="dash-link-button no-underline" to={paths.coachPreview}>
+          Ver como coach
         </Link>
       </header>
 

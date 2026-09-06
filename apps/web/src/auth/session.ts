@@ -38,6 +38,7 @@ export const paths = {
   admin: "/admin",
   student: "/aluno",
   coach: "/coach",
+  coachPreview: "/coach?preview=coach",
   activate: "/ativar",
   app: "/app",
   sharedPost: "/p/:postId"
