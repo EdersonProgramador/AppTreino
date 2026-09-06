@@ -5,8 +5,11 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
+  GPS_SCALE_TIER_DEFINITIONS,
   SUBSCRIPTION_PLAN_GOAL_DEFINITIONS,
-  buildSubscriptionPlanGoalProgress
+  buildGpsScaleTierProgressList,
+  buildSubscriptionPlanGoalProgress,
+  resolveActiveGpsScalePhase
 } from "@app-treino/shared";
 import { hashPassword, requirePathRole, requireRole } from "../auth.js";
 import { env } from "../env.js";
@@ -1378,7 +1381,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     const tomorrow = new Date(today);
     tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
 
-    const goalSettingKeys = SUBSCRIPTION_PLAN_GOAL_DEFINITIONS.map((item) => item.settingKey);
+    const goalSettingKeys = [
+      ...GPS_SCALE_TIER_DEFINITIONS.map((item) => item.settingKey),
+      ...SUBSCRIPTION_PLAN_GOAL_DEFINITIONS.map((item) => item.settingKey)
+    ];
 
     const [users, activeMemberships, pendingPayments, todayAttendance, liveOutdoorActivities, plans, membershipCounts, goalSettings] =
       await Promise.all([
@@ -1413,12 +1419,12 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
     const settingsMap = Object.fromEntries(goalSettings.map((item) => [item.key, item.value]));
     const activeByPlanId = new Map(membershipCounts.map((item) => [item.planId, item._count._all]));
-
     const subscriptionGoals = SUBSCRIPTION_PLAN_GOAL_DEFINITIONS.map((definition) => {
       const plan = plans.find((item) => item.code === definition.code);
       const active = plan ? activeByPlanId.get(plan.id) ?? 0 : 0;
       return buildSubscriptionPlanGoalProgress(definition, active, settingsMap, plan?.name);
     });
+    const gpsScaleTiers = buildGpsScaleTierProgressList(liveOutdoorActivities, settingsMap);
 
     return {
       users,
@@ -1426,7 +1432,9 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       pendingPayments,
       todayAttendance,
       liveOutdoorActivities,
-      subscriptionGoals
+      subscriptionGoals,
+      gpsScaleTiers,
+      activeGpsScalePhase: resolveActiveGpsScalePhase(liveOutdoorActivities, settingsMap)
     };
   });
 

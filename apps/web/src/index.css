@@ -13855,6 +13855,39 @@ html.light .dash-b2b-goal.is-complete .dash-b2b-goal-count small {
   margin-top: 2px;
 }
 
+.dash-subscription-goals-header--single {
+  grid-template-columns: 1fr;
+}
+
+.dash-gps-scale-section {
+  margin-top: 2px;
+}
+
+.dash-gps-tier.is-warning {
+  border-color: rgba(255, 160, 80, 0.45);
+  background:
+    linear-gradient(135deg, rgba(255, 160, 80, 0.1), rgba(240, 180, 90, 0.04)),
+    var(--app-panel);
+}
+
+.dash-gps-tier.is-critical {
+  border-color: rgba(248, 113, 113, 0.55);
+  background:
+    linear-gradient(135deg, rgba(248, 113, 113, 0.12), rgba(240, 180, 90, 0.04)),
+    var(--app-panel);
+}
+
+.dash-gps-scale-footnote {
+  margin: 0;
+  color: var(--sand-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.dash-gps-scale-footnote code {
+  font-size: 0.74rem;
+}
+
 @media (max-width: 1100px) {
   .dash-subscription-goals-grid {
     grid-template-columns: 1fr;

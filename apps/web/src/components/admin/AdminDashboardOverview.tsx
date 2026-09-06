@@ -22,7 +22,15 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useMemo } from "react";
-import { formatPriceInBRL, SUBSCRIPTION_PLAN_GOAL_DEFINITIONS, buildSubscriptionPlanGoalProgress, type SubscriptionPlanGoalProgress } from "@app-treino/shared";
+import {
+  GPS_SCALE_TIER_DEFINITIONS,
+  SUBSCRIPTION_PLAN_GOAL_DEFINITIONS,
+  buildGpsScaleTierProgressList,
+  buildSubscriptionPlanGoalProgress,
+  formatPriceInBRL,
+  type GpsScaleTierProgress,
+  type SubscriptionPlanGoalProgress
+} from "@app-treino/shared";
 import { dataRowClass, panelTitleClass } from "../../lib/admin-cms-classes";
 import { trainingCopy } from "../../lib/training-copy";
 import type {
@@ -41,7 +49,46 @@ import type {
 /** Meta de assinaturas ativas para liberar o lançamento B2B. */
 const B2B_LAUNCH_GOAL = 1000;
 
-const GPS_PHASE1_LIVE_WARNING = 800;
+function gpsTierStatusLabel(status: GpsScaleTierProgress["status"]) {
+  if (status === "critical") return "Acima da capacidade";
+  if (status === "warning") return "Próximo do limite";
+  return "Dentro da capacidade";
+}
+
+function GpsScaleTierCard({ tier }: { tier: GpsScaleTierProgress }) {
+  return (
+    <article
+      className={`dash-subscription-goal dash-gps-tier${tier.status === "critical" ? " is-critical" : tier.status === "warning" ? " is-warning" : ""}`}
+      aria-label={`${tier.label}: ${tier.current} de ${tier.limit} corredores GPS simultâneos`}
+    >
+      <div className="dash-subscription-goal-head">
+        <strong>{tier.label}</strong>
+        <small className="finance-mono">{tier.limit.toLocaleString("pt-BR")} simultâneos</small>
+      </div>
+      <div className="dash-subscription-goal-count">
+        <strong>
+          {tier.current.toLocaleString("pt-BR")}
+          <span> / {tier.limit.toLocaleString("pt-BR")}</span>
+        </strong>
+        <small>{gpsTierStatusLabel(tier.status)} · folga {tier.headroom.toLocaleString("pt-BR")}</small>
+      </div>
+      <div
+        className="dash-b2b-goal-track"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={tier.limit}
+        aria-valuenow={tier.current}
+        aria-valuetext={`${tier.percent}% da capacidade ${tier.label}`}
+      >
+        <span style={{ width: `${tier.percent}%` }} />
+      </div>
+      <div className="dash-subscription-goal-meta">
+        <span>{tier.percent.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% da capacidade</span>
+        <span>{tier.infraSummary}</span>
+      </div>
+    </article>
+  );
+}
 
 function SubscriptionPlanGoalCard({ goal }: { goal: SubscriptionPlanGoalProgress }) {
   const remaining = Math.max(0, goal.goal - goal.active);
@@ -72,7 +119,7 @@ function SubscriptionPlanGoalCard({ goal }: { goal: SubscriptionPlanGoalProgress
         <span style={{ width: `${goal.percent}%` }} />
       </div>
       <div className="dash-subscription-goal-meta">
-        <span>{goal.percent.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</span>
+        <span>{goal.percent.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% da meta</span>
         <span>matrículas ACTIVE</span>
       </div>
     </article>
@@ -93,6 +140,8 @@ export function AdminDashboardOverview({
   ratings,
   systemSettings,
   subscriptionGoals = [],
+  gpsScaleTiers = [],
+  activeGpsScalePhase = "phase1",
   liveOutdoorActivities = 0,
   lastUpdatedAt,
   loading,
@@ -112,6 +161,8 @@ export function AdminDashboardOverview({
   ratings: RatingRow[];
   systemSettings: Record<string, string>;
   subscriptionGoals?: SubscriptionPlanGoalProgress[];
+  gpsScaleTiers?: GpsScaleTierProgress[];
+  activeGpsScalePhase?: "phase1" | "phase2" | "phase3";
   liveOutdoorActivities?: number;
   lastUpdatedAt: Date | null;
   loading: boolean;
@@ -320,12 +371,19 @@ export function AdminDashboardOverview({
   }, [activeMembershipCount]);
 
   const displaySubscriptionGoals = useMemo(() => {
-    const goals = subscriptionGoals ?? [];
-    if (goals.length > 0) return goals;
+    if (subscriptionGoals.length > 0) return subscriptionGoals;
     return SUBSCRIPTION_PLAN_GOAL_DEFINITIONS.map((definition) =>
       buildSubscriptionPlanGoalProgress(definition, 0, systemSettings)
     );
   }, [subscriptionGoals, systemSettings]);
+
+  const displayGpsScaleTiers = useMemo(() => {
+    if (gpsScaleTiers.length > 0) return gpsScaleTiers;
+    return buildGpsScaleTierProgressList(liveOutdoorActivities, systemSettings);
+  }, [gpsScaleTiers, liveOutdoorActivities, systemSettings]);
+
+  const activePhaseLabel =
+    activeGpsScalePhase === "phase3" ? "Fase 3" : activeGpsScalePhase === "phase2" ? "Fase 2" : "Fase 1";
 
   return (
     <section className="finance-hub dash-hub" id="admin-dashboard">
@@ -391,19 +449,37 @@ export function AdminDashboardOverview({
         </div>
       </article>
 
-      <section className="dash-subscription-goals" aria-labelledby="dash-subscription-goals-title">
-        <div className="dash-subscription-goals-header">
+      <section className="dash-subscription-goals" aria-labelledby="dash-plan-goals-title">
+        <div className="dash-subscription-goals-header dash-subscription-goals-header--single">
           <div>
-            <span className="dash-b2b-goal-eyebrow" id="dash-subscription-goals-title">
+            <span className="dash-b2b-goal-eyebrow" id="dash-plan-goals-title">
               Metas B2C por plano
             </span>
             <strong>Assinaturas ativas por tier</strong>
-            <p>Acompanhe o crescimento de Start, Pro e Atlly Coach IA em relação às metas configuradas.</p>
+            <p>Start, Pro e Atlly Coach IA — metas comerciais de matrículas ACTIVE (ajustáveis em system_settings).</p>
           </div>
-          <article
-            className={`dash-gps-live-kpi${liveOutdoorActivities >= GPS_PHASE1_LIVE_WARNING ? " is-warning" : ""}`}
-            aria-label={`${liveOutdoorActivities} atividades outdoor ao vivo`}
-          >
+        </div>
+        <div className="dash-subscription-goals-grid">
+          {displaySubscriptionGoals.map((goal) => (
+            <SubscriptionPlanGoalCard key={goal.planCode} goal={goal} />
+          ))}
+        </div>
+      </section>
+
+      <section className="dash-subscription-goals dash-gps-scale-section" aria-labelledby="dash-gps-scale-title">
+        <div className="dash-subscription-goals-header">
+          <div>
+            <span className="dash-b2b-goal-eyebrow" id="dash-gps-scale-title">
+              Capacidade GPS + API
+            </span>
+            <strong>Metas de escala por fase de infraestrutura</strong>
+            <p>
+              Carga atual ({liveOutdoorActivities.toLocaleString("pt-BR")} corredores LIVE) comparada aos limites
+              recomendados: 1k, 5k e 10k usuários simultâneos com GPS. Fase operacional sugerida:{" "}
+              <strong>{activePhaseLabel}</strong>.
+            </p>
+          </div>
+          <article className="dash-gps-live-kpi" aria-label={`${liveOutdoorActivities} atividades outdoor ao vivo`}>
             <Activity size={18} />
             <div>
               <strong>{liveOutdoorActivities.toLocaleString("pt-BR")}</strong>
@@ -412,10 +488,14 @@ export function AdminDashboardOverview({
           </article>
         </div>
         <div className="dash-subscription-goals-grid">
-          {displaySubscriptionGoals.map((goal) => (
-            <SubscriptionPlanGoalCard key={goal.planCode} goal={goal} />
+          {displayGpsScaleTiers.map((tier) => (
+            <GpsScaleTierCard key={tier.id} tier={tier} />
           ))}
         </div>
+        <p className="dash-gps-scale-footnote">
+          Roadmap técnico: <code>docs/gps-scale-phase-1.md</code> · limites ajustáveis via{" "}
+          {GPS_SCALE_TIER_DEFINITIONS.map((item) => item.settingKey).join(", ")}.
+        </p>
       </section>
 
       <div className="admin-sync-bar">

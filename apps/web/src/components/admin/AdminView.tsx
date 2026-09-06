@@ -58,7 +58,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { formatPriceInBRL, parseBRLMoneyToCents, type SubscriptionPlanGoalProgress } from "@app-treino/shared";
+import { formatPriceInBRL, parseBRLMoneyToCents, type GpsScaleTierProgress, type SubscriptionPlanGoalProgress } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { BRAZILIAN_STATES, CITIES_BY_STATE } from "../../brazil-data";
 import {
@@ -371,7 +371,9 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     pendingPayments: 0,
     todayAttendance: 0,
     liveOutdoorActivities: 0,
-    subscriptionGoals: [] as SubscriptionPlanGoalProgress[]
+    subscriptionGoals: [] as SubscriptionPlanGoalProgress[],
+    gpsScaleTiers: [] as GpsScaleTierProgress[],
+    activeGpsScalePhase: "phase1" as "phase1" | "phase2" | "phase3"
   });
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [cmsModalities, setCmsModalities] = useState<CmsModalityRow[]>([]);
@@ -841,7 +843,12 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
           pendingPayments: response.pendingPayments ?? 0,
           todayAttendance: response.todayAttendance ?? 0,
           liveOutdoorActivities: response.liveOutdoorActivities ?? 0,
-          subscriptionGoals: Array.isArray(response.subscriptionGoals) ? response.subscriptionGoals : []
+          subscriptionGoals: Array.isArray(response.subscriptionGoals) ? response.subscriptionGoals : [],
+          gpsScaleTiers: Array.isArray(response.gpsScaleTiers) ? response.gpsScaleTiers : [],
+          activeGpsScalePhase:
+            response.activeGpsScalePhase === "phase2" || response.activeGpsScalePhase === "phase3"
+              ? response.activeGpsScalePhase
+              : "phase1"
         });
         break;
       }
@@ -3347,6 +3354,8 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
             ratings={ratings}
             systemSettings={systemSettings}
             subscriptionGoals={summary.subscriptionGoals ?? []}
+            gpsScaleTiers={summary.gpsScaleTiers ?? []}
+            activeGpsScalePhase={summary.activeGpsScalePhase ?? "phase1"}
             liveOutdoorActivities={summary.liveOutdoorActivities ?? 0}
             lastUpdatedAt={lastUpdatedAt}
             loading={loading}

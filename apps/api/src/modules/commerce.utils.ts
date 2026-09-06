@@ -33,7 +33,10 @@ export const DEFAULT_SYSTEM_SETTINGS: Record<string, string> = {
   legal_dpo_email: "privacidade@atlly.com.br",
   subscription_goal_start: "500",
   subscription_goal_pro: "300",
-  subscription_goal_atlly_coach: "200"
+  subscription_goal_atlly_coach: "200",
+  gps_scale_limit_phase1: "1000",
+  gps_scale_limit_phase2: "5000",
+  gps_scale_limit_phase3: "10000"
 };
 
 const PLACEHOLDER_LEGAL_CNPJ_DIGITS = "00000000000100";

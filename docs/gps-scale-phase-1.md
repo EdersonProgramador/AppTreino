@@ -14,7 +14,7 @@ Roadmap técnico para escalar o módulo outdoor (RUN / WALK / RIDE) de ~500 para
 
 **Prioridade:** Alta · **Esforço:** S · **Depende de:** —
 
-**Objetivo:** Expor `liveOutdoorActivities` (status `LIVE` ou `PAUSED`) em `GET /admin/summary` e KPI no dashboard.
+**Objetivo:** Expor `liveOutdoorActivities` e `gpsScaleTiers` (1k / 5k / 10k) em `GET /admin/summary` e KPIs no dashboard.
 
 **Arquivos:**
 - `apps/api/src/modules/admin.routes.ts`

@@ -184,6 +184,16 @@ export {
   type CpfValidationState
 } from "./cpf.js";
 export {
+  GPS_SCALE_TIER_DEFINITIONS,
+  buildGpsScaleTierProgress,
+  buildGpsScaleTierProgressList,
+  resolveActiveGpsScalePhase,
+  resolveGpsScaleTierLimit,
+  type GpsScaleTierDefinition,
+  type GpsScaleTierProgress,
+  type GpsScaleTierStatus
+} from "./gps-scale-tiers.js";
+export {
   SUBSCRIPTION_PLAN_GOAL_DEFINITIONS,
   buildSubscriptionPlanGoalProgress,
   resolveSubscriptionPlanGoal,

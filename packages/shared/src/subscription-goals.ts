@@ -5,7 +5,7 @@ export type SubscriptionPlanGoalDefinition = {
   defaultGoal: number;
 };
 
-/** Metas B2C por plano de assinatura (configuráveis via system_settings). */
+/** Metas de assinaturas ACTIVE por plano (comercial B2C). */
 export const SUBSCRIPTION_PLAN_GOAL_DEFINITIONS: SubscriptionPlanGoalDefinition[] = [
   { code: "start", label: "Start", settingKey: "subscription_goal_start", defaultGoal: 500 },
   { code: "Pro", label: "Pro", settingKey: "subscription_goal_pro", defaultGoal: 300 },
