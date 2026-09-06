@@ -4,6 +4,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import {
+  SUBSCRIPTION_PLAN_GOAL_DEFINITIONS,
+  buildSubscriptionPlanGoalProgress
+} from "@app-treino/shared";
 import { hashPassword, requirePathRole, requireRole } from "../auth.js";
 import { env } from "../env.js";
 import {
@@ -1374,7 +1378,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     const tomorrow = new Date(today);
     tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
 
-    const [users, activeMemberships, pendingPayments, todayAttendance] = await Promise.all([
+    const goalSettingKeys = SUBSCRIPTION_PLAN_GOAL_DEFINITIONS.map((item) => item.settingKey);
+
+    const [users, activeMemberships, pendingPayments, todayAttendance, liveOutdoorActivities, plans, membershipCounts, goalSettings] =
+      await Promise.all([
       prisma.user.count({ where: { deletedAt: null } }),
       prisma.membership.count({ where: validActiveMembershipWhere() }),
       prisma.payment.count({ where: { status: "PENDING", deletedAt: null } }),
@@ -1385,10 +1392,42 @@ export async function registerAdminRoutes(app: FastifyInstance) {
             lt: tomorrow
           }
         }
+      }),
+      prisma.outdoorActivity.count({
+        where: { status: { in: ["LIVE", "PAUSED"] } }
+      }),
+      prisma.plan.findMany({
+        where: { deletedAt: null },
+        select: { id: true, code: true, name: true }
+      }),
+      prisma.membership.groupBy({
+        by: ["planId"],
+        where: validActiveMembershipWhere(),
+        _count: { _all: true }
+      }),
+      prisma.systemSetting.findMany({
+        where: { key: { in: goalSettingKeys } },
+        select: { key: true, value: true }
       })
     ]);
 
-    return { users, activeMemberships, pendingPayments, todayAttendance };
+    const settingsMap = Object.fromEntries(goalSettings.map((item) => [item.key, item.value]));
+    const activeByPlanId = new Map(membershipCounts.map((item) => [item.planId, item._count._all]));
+
+    const subscriptionGoals = SUBSCRIPTION_PLAN_GOAL_DEFINITIONS.map((definition) => {
+      const plan = plans.find((item) => item.code === definition.code);
+      const active = plan ? activeByPlanId.get(plan.id) ?? 0 : 0;
+      return buildSubscriptionPlanGoalProgress(definition, active, settingsMap, plan?.name);
+    });
+
+    return {
+      users,
+      activeMemberships,
+      pendingPayments,
+      todayAttendance,
+      liveOutdoorActivities,
+      subscriptionGoals
+    };
   });
 
   app.get("/admin/users", async (request) => {

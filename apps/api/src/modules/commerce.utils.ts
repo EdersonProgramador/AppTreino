@@ -30,7 +30,10 @@ export const DEFAULT_SYSTEM_SETTINGS: Record<string, string> = {
   legal_company_name: "ATLLY",
   legal_cnpj: "",
   legal_contact_email: "contato@atlly.com.br",
-  legal_dpo_email: "privacidade@atlly.com.br"
+  legal_dpo_email: "privacidade@atlly.com.br",
+  subscription_goal_start: "500",
+  subscription_goal_pro: "300",
+  subscription_goal_atlly_coach: "200"
 };
 
 const PLACEHOLDER_LEGAL_CNPJ_DIGITS = "00000000000100";

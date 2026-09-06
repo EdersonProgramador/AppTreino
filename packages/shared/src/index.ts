@@ -183,3 +183,10 @@ export {
   resolveCpfValidationState,
   type CpfValidationState
 } from "./cpf.js";
+export {
+  SUBSCRIPTION_PLAN_GOAL_DEFINITIONS,
+  buildSubscriptionPlanGoalProgress,
+  resolveSubscriptionPlanGoal,
+  type SubscriptionPlanGoalDefinition,
+  type SubscriptionPlanGoalProgress
+} from "./subscription-goals.js";

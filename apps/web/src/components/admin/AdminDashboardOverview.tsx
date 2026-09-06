@@ -1,4 +1,5 @@
 import {
+  Activity,
   ArrowRight,
   ArrowUpRight,
   CalendarDays,
@@ -21,7 +22,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useMemo } from "react";
-import { formatPriceInBRL } from "@app-treino/shared";
+import { formatPriceInBRL, SUBSCRIPTION_PLAN_GOAL_DEFINITIONS, buildSubscriptionPlanGoalProgress, type SubscriptionPlanGoalProgress } from "@app-treino/shared";
 import { dataRowClass, panelTitleClass } from "../../lib/admin-cms-classes";
 import { trainingCopy } from "../../lib/training-copy";
 import type {
@@ -40,6 +41,44 @@ import type {
 /** Meta de assinaturas ativas para liberar o lançamento B2B. */
 const B2B_LAUNCH_GOAL = 1000;
 
+const GPS_PHASE1_LIVE_WARNING = 800;
+
+function SubscriptionPlanGoalCard({ goal }: { goal: SubscriptionPlanGoalProgress }) {
+  const remaining = Math.max(0, goal.goal - goal.active);
+  return (
+    <article
+      className={`dash-subscription-goal${goal.reached ? " is-complete" : ""}`}
+      aria-label={`Meta ${goal.planName}: ${goal.active} de ${goal.goal} assinaturas ativas`}
+    >
+      <div className="dash-subscription-goal-head">
+        <strong>{goal.planName}</strong>
+        <small className="finance-mono">{goal.planCode}</small>
+      </div>
+      <div className="dash-subscription-goal-count">
+        <strong>
+          {goal.active.toLocaleString("pt-BR")}
+          <span> / {goal.goal.toLocaleString("pt-BR")}</span>
+        </strong>
+        <small>{goal.reached ? "Meta atingida" : `${remaining.toLocaleString("pt-BR")} restantes`}</small>
+      </div>
+      <div
+        className="dash-b2b-goal-track"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={goal.goal}
+        aria-valuenow={goal.active}
+        aria-valuetext={`${goal.percent}% da meta ${goal.planName}`}
+      >
+        <span style={{ width: `${goal.percent}%` }} />
+      </div>
+      <div className="dash-subscription-goal-meta">
+        <span>{goal.percent.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</span>
+        <span>matrículas ACTIVE</span>
+      </div>
+    </article>
+  );
+}
+
 export function AdminDashboardOverview({
   stats,
   payments,
@@ -53,6 +92,8 @@ export function AdminDashboardOverview({
   favorites,
   ratings,
   systemSettings,
+  subscriptionGoals,
+  liveOutdoorActivities,
   lastUpdatedAt,
   loading,
   onRefresh,
@@ -70,6 +111,8 @@ export function AdminDashboardOverview({
   favorites: FavoriteRow[];
   ratings: RatingRow[];
   systemSettings: Record<string, string>;
+  subscriptionGoals: SubscriptionPlanGoalProgress[];
+  liveOutdoorActivities: number;
   lastUpdatedAt: Date | null;
   loading: boolean;
   onRefresh: () => void;
@@ -276,6 +319,13 @@ export function AdminDashboardOverview({
     return { current, remaining, percent, reached };
   }, [activeMembershipCount]);
 
+  const displaySubscriptionGoals = useMemo(() => {
+    if (subscriptionGoals.length > 0) return subscriptionGoals;
+    return SUBSCRIPTION_PLAN_GOAL_DEFINITIONS.map((definition) =>
+      buildSubscriptionPlanGoalProgress(definition, 0, systemSettings)
+    );
+  }, [subscriptionGoals, systemSettings]);
+
   return (
     <section className="finance-hub dash-hub" id="admin-dashboard">
       <header className="finance-hub-header">
@@ -339,6 +389,33 @@ export function AdminDashboardOverview({
           <span>Assinaturas ativas (matrículas ACTIVE)</span>
         </div>
       </article>
+
+      <section className="dash-subscription-goals" aria-labelledby="dash-subscription-goals-title">
+        <div className="dash-subscription-goals-header">
+          <div>
+            <span className="dash-b2b-goal-eyebrow" id="dash-subscription-goals-title">
+              Metas B2C por plano
+            </span>
+            <strong>Assinaturas ativas por tier</strong>
+            <p>Acompanhe o crescimento de Start, Pro e Atlly Coach IA em relação às metas configuradas.</p>
+          </div>
+          <article
+            className={`dash-gps-live-kpi${liveOutdoorActivities >= GPS_PHASE1_LIVE_WARNING ? " is-warning" : ""}`}
+            aria-label={`${liveOutdoorActivities} atividades outdoor ao vivo`}
+          >
+            <Activity size={18} />
+            <div>
+              <strong>{liveOutdoorActivities.toLocaleString("pt-BR")}</strong>
+              <span>correndo agora (GPS LIVE)</span>
+            </div>
+          </article>
+        </div>
+        <div className="dash-subscription-goals-grid">
+          {displaySubscriptionGoals.map((goal) => (
+            <SubscriptionPlanGoalCard key={goal.planCode} goal={goal} />
+          ))}
+        </div>
+      </section>
 
       <div className="admin-sync-bar">
         <span className={loading ? "admin-sync-indicator syncing" : "admin-sync-indicator"} aria-hidden="true">

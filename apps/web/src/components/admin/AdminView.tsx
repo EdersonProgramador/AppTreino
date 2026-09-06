@@ -58,7 +58,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { formatPriceInBRL, parseBRLMoneyToCents } from "@app-treino/shared";
+import { formatPriceInBRL, parseBRLMoneyToCents, type SubscriptionPlanGoalProgress } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { BRAZILIAN_STATES, CITIES_BY_STATE } from "../../brazil-data";
 import {
@@ -369,7 +369,9 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     users: 0,
     activeMemberships: 0,
     pendingPayments: 0,
-    todayAttendance: 0
+    todayAttendance: 0,
+    liveOutdoorActivities: 0,
+    subscriptionGoals: [] as SubscriptionPlanGoalProgress[]
   });
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [cmsModalities, setCmsModalities] = useState<CmsModalityRow[]>([]);
@@ -3334,6 +3336,8 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
             favorites={favorites}
             ratings={ratings}
             systemSettings={systemSettings}
+            subscriptionGoals={summary.subscriptionGoals}
+            liveOutdoorActivities={summary.liveOutdoorActivities}
             lastUpdatedAt={lastUpdatedAt}
             loading={loading}
             onRefresh={() => void loadAdminData()}

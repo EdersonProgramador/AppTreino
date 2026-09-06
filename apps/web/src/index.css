@@ -13733,6 +13733,138 @@ html.light .dash-b2b-goal.is-complete .dash-b2b-goal-count small {
   color: #16a34a;
 }
 
+.dash-subscription-goals {
+  display: grid;
+  gap: 14px;
+  margin-top: 4px;
+}
+
+.dash-subscription-goals-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+}
+
+.dash-subscription-goals-header strong {
+  display: block;
+  font-size: 1.05rem;
+  margin-top: 4px;
+}
+
+.dash-subscription-goals-header p {
+  margin: 6px 0 0;
+  color: var(--sand-muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.dash-subscription-goals-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.dash-subscription-goal {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(240, 180, 90, 0.22);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: var(--app-panel);
+}
+
+.dash-subscription-goal.is-complete {
+  border-color: rgba(212, 175, 55, 0.38);
+  background:
+    linear-gradient(135deg, rgba(212, 175, 55, 0.1), rgba(240, 180, 90, 0.04)),
+    var(--app-panel);
+}
+
+.dash-subscription-goal-head strong {
+  display: block;
+  font-size: 0.98rem;
+}
+
+.dash-subscription-goal-head small {
+  color: var(--sand-muted);
+  font-size: 0.75rem;
+}
+
+.dash-subscription-goal-count strong {
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.dash-subscription-goal-count strong span {
+  font-size: 0.92rem;
+  color: var(--sand-muted);
+  font-weight: 700;
+}
+
+.dash-subscription-goal-count small {
+  display: block;
+  margin-top: 2px;
+  color: var(--sand-muted);
+  font-size: 0.78rem;
+}
+
+.dash-subscription-goal-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.76rem;
+  color: var(--sand-muted);
+}
+
+.dash-gps-live-kpi {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(120, 200, 255, 0.25);
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: rgba(120, 200, 255, 0.08);
+  min-width: 170px;
+}
+
+.dash-gps-live-kpi.is-warning {
+  border-color: rgba(255, 160, 80, 0.45);
+  background: rgba(255, 160, 80, 0.12);
+}
+
+.dash-gps-live-kpi svg {
+  color: rgba(120, 200, 255, 0.95);
+  flex-shrink: 0;
+}
+
+.dash-gps-live-kpi.is-warning svg {
+  color: rgba(255, 160, 80, 0.95);
+}
+
+.dash-gps-live-kpi strong {
+  display: block;
+  font-size: 1.15rem;
+  line-height: 1.1;
+}
+
+.dash-gps-live-kpi span {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--sand-muted);
+  margin-top: 2px;
+}
+
+@media (max-width: 1100px) {
+  .dash-subscription-goals-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dash-subscription-goals-header {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 760px) {
   .dash-b2b-goal-heading {
     grid-template-columns: auto minmax(0, 1fr);
