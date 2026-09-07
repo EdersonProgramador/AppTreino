@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Building2, Dumbbell, Loader2, Plus, RefreshCw, Search, Trash2, UserCog, UsersRound } from "lucide-react";
-import { apiDelete, apiGet, apiPatch, apiPost } from "../../api";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "../../api";
 import { dataRowClass, panelTitleClass } from "../../lib/admin-cms-classes";
 import { paths } from "../../auth/paths";
 import { OrgProgramsPanel } from "./OrgProgramsPanel";
+import { StateCityFields } from "./StateCityFields";
 
 type OrgType = "ACADEMY" | "BOX" | "STUDIO" | "RUNNING_TEAM" | "OTHER";
 type OrgTab = "estrutura" | "equipe" | "alunos" | "turmas" | "nutricao" | "modalidades" | "programas";
@@ -119,6 +120,87 @@ function slugify(value: string) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function UnitLocationRow({
+  unit,
+  token,
+  busy,
+  onRefresh,
+  onDelete
+}: {
+  unit: Unit;
+  token: string;
+  busy: boolean;
+  onRefresh: () => Promise<void>;
+  onDelete: () => Promise<void>;
+}) {
+  const [city, setCity] = useState(unit.city ?? "");
+  const [state, setState] = useState(unit.state ?? "");
+  const [saving, setSaving] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const dirty = city !== (unit.city ?? "") || state !== (unit.state ?? "");
+
+  useEffect(() => {
+    setCity(unit.city ?? "");
+    setState(unit.state ?? "");
+  }, [unit.city, unit.id, unit.state]);
+
+  return (
+    <li className={`${dataRowClass} grid gap-3`}>
+      <div className="flex items-start justify-between gap-2">
+        <strong className="text-sand">{unit.name}</strong>
+        <button
+          type="button"
+          className="text-red-400"
+          disabled={busy || saving}
+          title="Remover unidade"
+          onClick={() => void onDelete()}
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+      <StateCityFields
+        withLabels
+        selectClassName="admin-input"
+        stateValue={state}
+        cityValue={city}
+        onStateChange={setState}
+        onCityChange={setCity}
+        disabled={busy || saving}
+      />
+      {localError && <p className="text-xs text-red-400">{localError}</p>}
+      {dirty ? (
+        <button
+          type="button"
+          className="admin-secondary-button"
+          disabled={busy || saving || !state || !city}
+          onClick={() =>
+            void (async () => {
+              setSaving(true);
+              setLocalError(null);
+              try {
+                await apiPut(`/org/units/${unit.id}`, { city, state }, token);
+                await onRefresh();
+              } catch (err) {
+                setLocalError(err instanceof Error ? err.message : "Falha ao salvar localização.");
+              } finally {
+                setSaving(false);
+              }
+            })()
+          }
+        >
+          {saving ? "Salvando…" : "Salvar cidade/UF"}
+        </button>
+      ) : unit.city && unit.state ? (
+        <p className="text-xs text-emerald-400">
+          {unit.city}/{unit.state}
+        </p>
+      ) : (
+        <p className="text-xs text-sand-muted">Selecione estado e cidade para esta unidade.</p>
+      )}
+    </li>
+  );
 }
 
 function UserPicker({
@@ -501,39 +583,49 @@ export function OrgAdminPanel({ token }: Props) {
             <div className="grid gap-6 lg:grid-cols-2">
               <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5">
                 <h2 className="mb-4 text-lg font-bold text-sand">Unidades — {selectedOrg.name}</h2>
-                <div className="grid gap-3">
-                  <input className="admin-input" placeholder="Nome da unidade" value={unitName} onChange={(e) => setUnitName(e.target.value)} />
-                  <div className="grid grid-cols-2 gap-3">
-                    <input className="admin-input" placeholder="Cidade" value={unitCity} onChange={(e) => setUnitCity(e.target.value)} />
-                    <input className="admin-input" placeholder="UF" maxLength={2} value={unitState} onChange={(e) => setUnitState(e.target.value)} />
-                  </div>
-                  <button type="button" className="admin-primary-button" disabled={busy || unitName.trim().length < 2} onClick={() => void runAction(async () => {
-                    await apiPost(`/org/organizations/${selectedOrgId}/units`, { name: unitName.trim(), city: unitCity.trim() || undefined, state: unitState.trim().toUpperCase() || undefined }, token);
-                    setUnitName(""); setUnitCity(""); setUnitState("");
-                  }, "Unidade criada.")}>Adicionar unidade</button>
-                  <ul className="grid gap-1 text-sm text-sand-muted">
-                    {selectedOrg.units.map((unit) => (
-                      <li key={unit.id} className="flex items-center justify-between gap-2">
-                        <span>
-                          {unit.name}
-                          {unit.city ? ` — ${unit.city}/${unit.state ?? ""}` : ""}
-                        </span>
-                        <button
-                          type="button"
-                          className="text-red-400"
-                          disabled={busy}
-                          title="Remover unidade"
-                          onClick={() =>
-                            void runAction(async () => {
+                {selectedOrg.units.length > 0 && (
+                  <div className="mb-6 grid gap-3">
+                    <h3 className="text-sm font-bold text-sand">Unidades cadastradas</h3>
+                    <ul className="grid gap-3">
+                      {selectedOrg.units.map((unit) => (
+                        <UnitLocationRow
+                          key={unit.id}
+                          unit={unit}
+                          token={token}
+                          busy={busy}
+                          onRefresh={async () => {
+                            await loadOrganizations();
+                            await loadOrgDetails();
+                          }}
+                          onDelete={() =>
+                            runAction(async () => {
                               await apiDelete(`/org/units/${unit.id}`, token);
                             }, "Unidade removida.")
                           }
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                        />
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <div className="grid gap-3 border-t border-[color:var(--app-border)] pt-5">
+                  <h3 className="text-sm font-bold text-sand">Nova unidade</h3>
+                  <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-sand-muted">
+                    Nome da unidade
+                    <input className="admin-input" placeholder="Ex.: POWER BRAIN Medicilândia" value={unitName} onChange={(e) => setUnitName(e.target.value)} />
+                  </label>
+                  <StateCityFields
+                    withLabels
+                    selectClassName="admin-input"
+                    stateValue={unitState}
+                    cityValue={unitCity}
+                    onStateChange={setUnitState}
+                    onCityChange={setUnitCity}
+                    disabled={busy}
+                  />
+                  <button type="button" className="admin-primary-button" disabled={busy || unitName.trim().length < 2 || !unitState || !unitCity} onClick={() => void runAction(async () => {
+                    await apiPost(`/org/organizations/${selectedOrgId}/units`, { name: unitName.trim(), city: unitCity, state: unitState }, token);
+                    setUnitName(""); setUnitCity(""); setUnitState("");
+                  }, "Unidade criada.")}>Adicionar unidade</button>
                 </div>
               </article>
               <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5 lg:col-span-1">
