@@ -281,7 +281,15 @@ model Exercise {
   sortOrder        Int?                   @map("sort_order")
   deletedAt        DateTime?              @map("deleted_at")
   createdAt        DateTime               @default(now()) @map("created_at")
+  sourceType       ProgramSourceType      @default(PLATFORM) @map("source_type")
+  organizationId   String?                @map("organization_id")
+  organization     Organization?          @relation("OrgExercises", fields: [organizationId], references: [id], onDelete: SetNull)
+  unitId           String?                @map("unit_id")
+  unit             Unit?                  @relation("UnitExercises", fields: [unitId], references: [id], onDelete: SetNull)
+  coachUserId      String?                @map("coach_user_id")
+  createdByUserId  String?                @map("created_by_user_id")
 
+  @@index([sourceType, organizationId, coachUserId])
   @@map("exercises")
 }
 
@@ -337,10 +345,18 @@ model WorkoutBlock {
   modality        Modality?              @relation(fields: [modalityId], references: [id], onDelete: SetNull)
   deletedAt       DateTime?              @map("deleted_at")
   createdAt       DateTime               @default(now()) @map("created_at")
+  sourceType      ProgramSourceType      @default(PLATFORM) @map("source_type")
+  organizationId  String?                @map("organization_id")
+  organization    Organization?          @relation("OrgWorkoutBlocks", fields: [organizationId], references: [id], onDelete: SetNull)
+  unitId          String?                @map("unit_id")
+  unit            Unit?                  @relation("UnitWorkoutBlocks", fields: [unitId], references: [id], onDelete: SetNull)
+  coachUserId     String?                @map("coach_user_id")
+  createdByUserId String?                @map("created_by_user_id")
   exercises       WorkoutBlockExercise[]
   programDays     ProgramDayWorkout[]
   workoutSessions WorkoutSession[]
 
+  @@index([sourceType, organizationId, coachUserId])
   @@map("workout_blocks")
 }
 
@@ -1961,6 +1977,8 @@ model Organization {
   auditLogs               AuditLog[]
   coachReferralLinks      CoachReferralLink[]
   referralAttributions    UserReferralAttribution[]
+  orgExercises            Exercise[]                @relation("OrgExercises")
+  orgWorkoutBlocks        WorkoutBlock[]            @relation("OrgWorkoutBlocks")
 
   @@index([status, deletedAt])
   @@map("organizations")
@@ -1990,6 +2008,8 @@ model Unit {
   userPrograms            UserProgram[]
   nutritionPlans          NutritionPlan[]
   auditLogs               AuditLog[]
+  orgExercises            Exercise[]                @relation("UnitExercises")
+  orgWorkoutBlocks        WorkoutBlock[]            @relation("UnitWorkoutBlocks")
 
   @@index([organizationId, status, deletedAt])
   @@map("units")

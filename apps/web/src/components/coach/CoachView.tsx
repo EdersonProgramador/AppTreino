@@ -17,7 +17,7 @@ import { apiGet, apiPost } from "../../api";
 import { brand } from "../../lib/brand";
 import { assetUrl } from "../../lib/urls";
 import { paths } from "../../auth/paths";
-import { OrgProgramsPanel } from "../admin/OrgProgramsPanel";
+import { CoachTrainingStudio } from "./CoachTrainingStudio";
 import { CoachRevenuePanel } from "./CoachRevenuePanel";
 
 type OrgUser = { id: string; name: string; email: string | null };
@@ -126,8 +126,6 @@ export function CoachView({ token, userName, onLogout }: Props) {
   const [classUnitId, setClassUnitId] = useState("");
   const [memberClassId, setMemberClassId] = useState("");
   const [memberAthleteId, setMemberAthleteId] = useState("");
-  const [assignProgramId, setAssignProgramId] = useState("");
-  const [assignAthleteId, setAssignAthleteId] = useState("");
   const [planTitle, setPlanTitle] = useState("");
   const [planDescription, setPlanDescription] = useState("");
   const [planUnitId, setPlanUnitId] = useState("");
@@ -192,7 +190,7 @@ export function CoachView({ token, userName, onLogout }: Props) {
     { id: "overview", label: "Visão geral", icon: ClipboardList },
     { id: "athletes", label: "Alunos", icon: UsersRound },
     { id: "classes", label: "Turmas", icon: UsersRound },
-    { id: "programs", label: "Programas", icon: Dumbbell },
+    { id: "programs", label: "Estúdio", icon: Dumbbell },
     { id: "nutrition", label: "Nutrição", icon: Utensils },
     { id: "revenue", label: "Receitas", icon: Wallet }
   ];
@@ -496,55 +494,16 @@ export function CoachView({ token, userName, onLogout }: Props) {
           </section>
         )}
 
-        {tab === "programs" && selectedOrg && (
-          <section className="grid gap-6">
-            <OrgProgramsPanel
-              token={token}
-              organizationId={selectedOrg.id}
-              units={selectedOrg.units}
-              busy={busy}
-              onBusy={runAction}
-              onError={(message) => setError(message)}
-            />
-            {workspace && workspace.assignedAthletes.length > 0 && (
-              <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5">
-                <h2 className="mb-3 text-lg font-bold">Atribuição rápida</h2>
-                <div className="grid gap-3 md:grid-cols-3">
-                  <select className="admin-input" value={assignProgramId} onChange={(e) => setAssignProgramId(e.target.value)}>
-                    <option value="">Programa publicado</option>
-                    {workspace.programs
-                      .filter((item) => item.status === "PUBLISHED" && item.organization?.id === selectedOrg.id)
-                      .map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.title}
-                        </option>
-                      ))}
-                  </select>
-                  <select className="admin-input" value={assignAthleteId} onChange={(e) => setAssignAthleteId(e.target.value)}>
-                    <option value="">Aluno</option>
-                    {workspace.assignedAthletes.map((athlete) => (
-                      <option key={athlete.id} value={athlete.id}>
-                        {athlete.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="admin-primary-button"
-                    disabled={busy || !assignProgramId || !assignAthleteId}
-                    onClick={() =>
-                      void runAction(async () => {
-                        await apiPost(`/org/programs/${assignProgramId}/assign`, { athleteIds: [assignAthleteId] }, token);
-                        setAssignAthleteId("");
-                      }, "Programa atribuído.")
-                    }
-                  >
-                    Atribuir
-                  </button>
-                </div>
-              </article>
-            )}
-          </section>
+        {tab === "programs" && selectedOrg && workspace && (
+          <CoachTrainingStudio
+            token={token}
+            organizationId={selectedOrg.id}
+            units={selectedOrg.units}
+            assignedAthletes={workspace.assignedAthletes}
+            busy={busy}
+            onBusy={runAction}
+            onError={(message) => setError(message)}
+          />
         )}
 
         {tab === "nutrition" && workspace && selectedOrg && (

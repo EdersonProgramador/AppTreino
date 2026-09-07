@@ -1623,15 +1623,36 @@ export async function registerOrgRoutes(app: FastifyInstance) {
     const ctx = await loadOrgAuthContext(user);
     denyUnlessAllowed(authorize({ ctx, permission: "training.view" }));
 
+    const { organizationId } = z
+      .object({ organizationId: z.string().min(1).optional() })
+      .parse(request.query);
+
+    const orgId =
+      organizationId ??
+      ctx.memberships.find((member) => member.status === "ACTIVE")?.organizationId ??
+      null;
+
+    const where = orgId
+      ? {
+          deletedAt: null,
+          OR: [
+            { sourceType: "PLATFORM" as const, organizationId: null },
+            { sourceType: "ORGANIZATION" as const, organizationId: orgId },
+            { sourceType: "COACH" as const, organizationId: orgId, coachUserId: user.id }
+          ]
+        }
+      : { deletedAt: null, sourceType: "PLATFORM" as const, organizationId: null };
+
     const blocks = await prisma.workoutBlock.findMany({
-      where: { deletedAt: null },
+      where,
       select: {
         id: true,
         title: true,
         modalityId: true,
+        sourceType: true,
         modality: { select: { id: true, name: true } }
       },
-      orderBy: { title: "asc" },
+      orderBy: [{ sourceType: "asc" }, { title: "asc" }],
       take: 300
     });
 
@@ -1709,7 +1730,15 @@ export async function registerOrgRoutes(app: FastifyInstance) {
 
     const blockIds = [...new Set(body.days.map((day) => day.workoutBlockId))];
     const blocks = await prisma.workoutBlock.findMany({
-      where: { id: { in: blockIds }, deletedAt: null },
+      where: {
+        id: { in: blockIds },
+        deletedAt: null,
+        OR: [
+          { sourceType: "PLATFORM", organizationId: null },
+          { sourceType: "ORGANIZATION", organizationId: body.organizationId },
+          { sourceType: "COACH", organizationId: body.organizationId, coachUserId: user.id }
+        ]
+      },
       select: { id: true }
     });
     if (blocks.length !== blockIds.length) {

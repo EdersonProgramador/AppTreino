@@ -147,4 +147,35 @@ export async function ensureSchemaCompatibility() {
     CREATE INDEX IF NOT EXISTS "coach_withdrawal_requests_coach_user_id_status_idx"
       ON "coach_withdrawal_requests"("coach_user_id", "status");
   `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "exercises" ADD COLUMN IF NOT EXISTS "source_type" "ProgramSourceType" NOT NULL DEFAULT 'PLATFORM';
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "exercises" ADD COLUMN IF NOT EXISTS "organization_id" TEXT;
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "exercises" ADD COLUMN IF NOT EXISTS "unit_id" TEXT;
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "exercises" ADD COLUMN IF NOT EXISTS "coach_user_id" TEXT;
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "exercises" ADD COLUMN IF NOT EXISTS "created_by_user_id" TEXT;
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "workout_blocks" ADD COLUMN IF NOT EXISTS "source_type" "ProgramSourceType" NOT NULL DEFAULT 'PLATFORM';
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "workout_blocks" ADD COLUMN IF NOT EXISTS "organization_id" TEXT;
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "workout_blocks" ADD COLUMN IF NOT EXISTS "unit_id" TEXT;
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "workout_blocks" ADD COLUMN IF NOT EXISTS "coach_user_id" TEXT;
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "workout_blocks" ADD COLUMN IF NOT EXISTS "created_by_user_id" TEXT;
+  `);
 }
