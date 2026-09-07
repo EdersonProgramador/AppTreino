@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { hashPassword, requireAuth } from "../auth.js";
@@ -49,6 +49,14 @@ function archiveOrganizationSlug(slug: string, organizationId: string) {
   return `${base}${suffix}`;
 }
 
+function buildOrganizationSlugCandidate(baseSlug: string, index: number) {
+  if (index <= 1) return baseSlug;
+  const suffix = `-${index}`;
+  const maxBase = Math.max(2, 80 - suffix.length);
+  const base = baseSlug.slice(0, maxBase).replace(/-+$/g, "") || "org";
+  return `${base}${suffix}`;
+}
+
 async function isOrganizationSlugAvailable(slug: string) {
   const existing = await prisma.organization.findUnique({
     where: { slug },
@@ -64,13 +72,16 @@ async function isOrganizationSlugAvailable(slug: string) {
   return true;
 }
 
-async function allocateUniqueOrganizationSlug(desiredSlug: string) {
-  if (await isOrganizationSlugAvailable(desiredSlug)) {
-    return { slug: desiredSlug, adjusted: false };
+async function findNextAvailableOrganizationSlug(desiredSlug: string, startIndex = 2) {
+  for (let index = startIndex; index <= 999; index += 1) {
+    const candidate = buildOrganizationSlugCandidate(desiredSlug, index);
+    if (await isOrganizationSlugAvailable(candidate)) {
+      return { slug: candidate, adjusted: index > 1 };
+    }
   }
 
-  for (let index = 2; index <= 99; index += 1) {
-    const suffix = `-${index}`;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const suffix = `-${randomBytes(3).toString("hex")}`;
     const maxBase = Math.max(2, 80 - suffix.length);
     const base = desiredSlug.slice(0, maxBase).replace(/-+$/g, "") || "org";
     const candidate = `${base}${suffix}`;
@@ -80,6 +91,49 @@ async function allocateUniqueOrganizationSlug(desiredSlug: string) {
   }
 
   const error = new Error("Não foi possível gerar um slug único. Edite o slug manualmente.") as Error & {
+    statusCode: number;
+  };
+  error.statusCode = 409;
+  throw error;
+}
+
+async function allocateUniqueOrganizationSlug(desiredSlug: string) {
+  if (await isOrganizationSlugAvailable(desiredSlug)) {
+    return { slug: desiredSlug, adjusted: false };
+  }
+
+  return findNextAvailableOrganizationSlug(desiredSlug);
+}
+
+async function createOrganizationWithUniqueSlug(input: {
+  name: string;
+  type: "ACADEMY" | "BOX" | "STUDIO" | "RUNNING_TEAM" | "OTHER";
+  desiredSlug: string;
+}) {
+  let { slug, adjusted } = await allocateUniqueOrganizationSlug(input.desiredSlug);
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      const organization = await prisma.organization.create({
+        data: {
+          name: input.name,
+          slug,
+          type: input.type
+        }
+      });
+      return { organization, slugAdjusted: adjusted || attempt > 0 };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        const next = await findNextAvailableOrganizationSlug(input.desiredSlug, 2 + attempt + 1);
+        slug = next.slug;
+        adjusted = true;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  const error = new Error("Não foi possível criar a organização por conflito de slug. Tente outro slug.") as Error & {
     statusCode: number;
   };
   error.statusCode = 409;
@@ -548,14 +602,10 @@ export async function registerOrgRoutes(app: FastifyInstance) {
     const ctx = await loadOrgAuthContext(user);
     denyUnlessAllowed(authorize({ ctx, permission: "organizations.create" }));
     const body = organizationBodySchema.parse(request.body);
-    const { slug, adjusted } = await allocateUniqueOrganizationSlug(body.slug);
-
-    const organization = await prisma.organization.create({
-      data: {
-        name: body.name,
-        slug,
-        type: body.type
-      }
+    const { organization, slugAdjusted } = await createOrganizationWithUniqueSlug({
+      name: body.name,
+      type: body.type,
+      desiredSlug: body.slug
     });
 
     await writeAuditLog({
@@ -569,7 +619,7 @@ export async function registerOrgRoutes(app: FastifyInstance) {
       userAgent: request.headers["user-agent"]
     });
 
-    return reply.code(201).send({ organization, slugAdjusted: adjusted });
+    return reply.code(201).send({ organization, slugAdjusted });
   });
 
   app.post("/org/organizations/:organizationId/units", async (request, reply) => {

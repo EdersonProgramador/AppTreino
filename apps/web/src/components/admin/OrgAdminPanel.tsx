@@ -420,7 +420,7 @@ export function OrgAdminPanel({ token }: Props) {
             {orgSlugPreview.length >= 2 && (
               <p className="text-xs text-sand-muted">
                 Slug final: <strong className="text-sand">{orgSlugPreview}</strong>
-                {" · "}deve ser único (ex.: <strong className="text-sand">{orgSlugPreview}-2</strong> se já existir)
+                {" · "}se já existir, a API usa <strong className="text-sand">{orgSlugPreview}-2</strong> automaticamente
               </p>
             )}
             <select className="admin-input" value={orgType} onChange={(e) => setOrgType(e.target.value as OrgType)}>
