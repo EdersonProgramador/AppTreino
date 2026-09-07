@@ -34,6 +34,23 @@ type OrgMember = {
   status: string;
   user: OrgUser;
   unit: { id: string; name: string } | null;
+  coachStatus?: {
+    hasActiveSubscription: boolean;
+    isActiveCoach: boolean;
+  } | null;
+};
+
+type CoachEligibilityPreview = {
+  student: { id: string; name: string; email: string | null; role: string; status: string };
+  coachEligibility: {
+    hasCoachRole: boolean;
+    hasActiveSubscription: boolean;
+    isActiveCoach: boolean;
+    coachMembership: {
+      organization: { id: string; name: string };
+      unit: { id: string; name: string } | null;
+    } | null;
+  };
 };
 
 type AthleteLink = {
@@ -168,6 +185,7 @@ export function OrgAdminPanel({ token }: Props) {
 
   const [orgName, setOrgName] = useState("");
   const [orgSlug, setOrgSlug] = useState("");
+  const [orgSlugManual, setOrgSlugManual] = useState(false);
   const [orgType, setOrgType] = useState<OrgType>("BOX");
   const [unitName, setUnitName] = useState("");
   const [unitCity, setUnitCity] = useState("");
@@ -178,6 +196,8 @@ export function OrgAdminPanel({ token }: Props) {
   const [memberUserQuery, setMemberUserQuery] = useState("");
   const [memberUserResults, setMemberUserResults] = useState<OrgUser[]>([]);
   const [memberUserId, setMemberUserId] = useState("");
+  const [memberCoachEligibility, setMemberCoachEligibility] = useState<CoachEligibilityPreview | null>(null);
+  const [memberEligibilityLoading, setMemberEligibilityLoading] = useState(false);
 
   const [athleteQuery, setAthleteQuery] = useState("");
   const [athleteResults, setAthleteResults] = useState<OrgUser[]>([]);
@@ -306,6 +326,36 @@ export function OrgAdminPanel({ token }: Props) {
     setModalityUnitId(first);
   }, [selectedOrg]);
 
+  useEffect(() => {
+    if (memberRole !== "COACH" || !memberUserId) {
+      setMemberCoachEligibility(null);
+      return;
+    }
+
+    let cancelled = false;
+    setMemberEligibilityLoading(true);
+    void apiGet<CoachEligibilityPreview>(`/admin/users/${memberUserId}/coach-eligibility`, token)
+      .then((data) => {
+        if (!cancelled) setMemberCoachEligibility(data);
+      })
+      .catch(() => {
+        if (!cancelled) setMemberCoachEligibility(null);
+      })
+      .finally(() => {
+        if (!cancelled) setMemberEligibilityLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [memberRole, memberUserId, token]);
+
+  const canAddCoachMember =
+    memberRole !== "COACH" ||
+    (memberCoachEligibility?.student.role === "USER" &&
+      memberCoachEligibility.student.status === "ACTIVE" &&
+      memberCoachEligibility.coachEligibility.hasActiveSubscription);
+
   const runAction = async (action: () => Promise<void>, successMessage: string) => {
     setBusy(true);
     setError(null);
@@ -358,8 +408,14 @@ export function OrgAdminPanel({ token }: Props) {
             <Plus size={18} /> Nova organização
           </h2>
           <div className="grid gap-3">
-            <input className="admin-input" placeholder="Nome" value={orgName} onChange={(e) => { setOrgName(e.target.value); if (!orgSlug) setOrgSlug(slugify(e.target.value)); }} />
-            <input className="admin-input" placeholder="Slug" value={orgSlug} onChange={(e) => setOrgSlug(e.target.value)} />
+            <input className="admin-input" placeholder="Nome" value={orgName} onChange={(e) => {
+              setOrgName(e.target.value);
+              if (!orgSlugManual) setOrgSlug(slugify(e.target.value));
+            }} />
+            <input className="admin-input" placeholder="Slug" value={orgSlug} onChange={(e) => {
+              setOrgSlugManual(true);
+              setOrgSlug(e.target.value);
+            }} />
             <select className="admin-input" value={orgType} onChange={(e) => setOrgType(e.target.value as OrgType)}>
               <option value="BOX">Box</option>
               <option value="ACADEMY">Academia</option>
@@ -367,9 +423,10 @@ export function OrgAdminPanel({ token }: Props) {
               <option value="RUNNING_TEAM">Equipe de corrida</option>
               <option value="OTHER">Outro</option>
             </select>
-            <button type="button" className="admin-primary-button" disabled={busy || orgName.trim().length < 2} onClick={() => void runAction(async () => {
-              await apiPost("/org/organizations", { name: orgName.trim(), slug: orgSlug.trim() || slugify(orgName), type: orgType }, token);
-              setOrgName(""); setOrgSlug("");
+            <button type="button" className="admin-primary-button" disabled={busy || orgName.trim().length < 2 || slugify(orgSlug.trim() || orgName).length < 2} onClick={() => void runAction(async () => {
+              const slug = slugify(orgSlug.trim() || orgName);
+              await apiPost("/org/organizations", { name: orgName.trim(), slug, type: orgType }, token);
+              setOrgName(""); setOrgSlug(""); setOrgSlugManual(false);
             }, "Organização criada.")}>
               Criar organização
             </button>
@@ -483,11 +540,25 @@ export function OrgAdminPanel({ token }: Props) {
           )}
 
           {tab === "equipe" && (
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid gap-6">
+              <div className="admin-coach-promote-hint" role="note">
+                <UserCog size={18} />
+                <div>
+                  <strong>Coach ATLLY — mesma regra de Alunos &amp; coaches</strong>
+                  <p>
+                    Para adicionar um coach existente, o aluno precisa de assinatura ATLLY ativa. Convites por e-mail
+                    podem ser enviados antes da assinatura; comissão e selo coach só liberam após matrícula ativa.
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-6 lg:grid-cols-2">
               <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5">
                 <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-sand"><UserCog size={18} /> Adicionar membro</h2>
                 <div className="grid gap-3">
-                  <select className="admin-input" value={memberRole} onChange={(e) => setMemberRole(e.target.value as MemberRole)}>
+                  <select className="admin-input" value={memberRole} onChange={(e) => {
+                    setMemberRole(e.target.value as MemberRole);
+                    setMemberCoachEligibility(null);
+                  }}>
                     <option value="ORGANIZATION_ADMIN">Admin da organização</option>
                     <option value="UNIT_MANAGER">Gerente de unidade</option>
                     <option value="COACH">Coach</option>
@@ -499,9 +570,54 @@ export function OrgAdminPanel({ token }: Props) {
                     {selectedOrg.units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
                   </select>
                   <UserPicker label="Usuário" query={memberUserQuery} onQueryChange={setMemberUserQuery} value={memberUserId} onChange={setMemberUserId} results={memberUserResults} onSearch={() => void searchUsers(memberUserQuery).then(setMemberUserResults).catch(() => setError("Busca falhou."))} />
-                  <button type="button" className="admin-primary-button" disabled={busy || !memberUserId} onClick={() => void runAction(async () => {
+                  {memberRole === "COACH" && memberUserId && (
+                    <div className="rounded-2xl border border-[color:var(--app-border)] bg-black/20 p-3 text-sm">
+                      {memberEligibilityLoading ? (
+                        <p className="flex items-center gap-2 text-sand-muted"><Loader2 size={14} className="animate-spin" /> Verificando elegibilidade…</p>
+                      ) : memberCoachEligibility ? (
+                        <>
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <strong className="text-sand">{memberCoachEligibility.student.name}</strong>
+                            {memberCoachEligibility.coachEligibility.isActiveCoach ? (
+                              <em className="assessment-source-badge admin">Coach ativo</em>
+                            ) : memberCoachEligibility.coachEligibility.hasCoachRole ? (
+                              <em className="assessment-source-badge">Coach inativo</em>
+                            ) : memberCoachEligibility.coachEligibility.hasActiveSubscription ? (
+                              <em className="assessment-source-badge admin">Elegível</em>
+                            ) : (
+                              <em className="assessment-source-badge">Sem assinatura</em>
+                            )}
+                          </div>
+                          {memberCoachEligibility.student.role !== "USER" ? (
+                            <p className="admin-coach-promote-panel__warning">Somente alunos (USER) podem ser promovidos a coach.</p>
+                          ) : memberCoachEligibility.student.status !== "ACTIVE" ? (
+                            <p className="admin-coach-promote-panel__warning">Aluno inativo não pode ser promovido a coach.</p>
+                          ) : !memberCoachEligibility.coachEligibility.hasActiveSubscription ? (
+                            <p className="admin-coach-promote-panel__warning">
+                              Este aluno não possui assinatura ATLLY ativa. Ative ou renove a matrícula em Alunos &amp; coaches antes de adicionar como coach.
+                            </p>
+                          ) : memberCoachEligibility.coachEligibility.isActiveCoach ? (
+                            <p className="admin-coach-promote-panel__note">
+                              Coach ativo
+                              {memberCoachEligibility.coachEligibility.coachMembership
+                                ? ` em ${memberCoachEligibility.coachEligibility.coachMembership.organization.name}`
+                                : ""}
+                              . Será vinculado também a esta organização.
+                            </p>
+                          ) : (
+                            <p className="admin-coach-promote-panel__note">
+                              Assinatura ativa confirmada. Ao salvar, o aluno ganha painel /coach e comissão de indicação.
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-sand-muted">Não foi possível verificar elegibilidade.</p>
+                      )}
+                    </div>
+                  )}
+                  <button type="button" className="admin-primary-button" disabled={busy || !memberUserId || !canAddCoachMember} onClick={() => void runAction(async () => {
                     await apiPost("/org/members", { organizationId: selectedOrgId, userId: memberUserId, role: memberRole, unitId: selectedUnitId || undefined, status: "ACTIVE" }, token);
-                    setMemberUserId(""); setMemberUserQuery(""); setMemberUserResults([]);
+                    setMemberUserId(""); setMemberUserQuery(""); setMemberUserResults([]); setMemberCoachEligibility(null);
                   }, "Membro adicionado.")}>Salvar membro</button>
                 </div>
                 <h3 className="mb-2 mt-6 text-sm font-bold text-sand">Convidar por e-mail (link)</h3>
@@ -514,6 +630,11 @@ export function OrgAdminPanel({ token }: Props) {
                     <option value="UNIT_MANAGER">Gerente de unidade</option>
                     <option value="ORGANIZATION_ADMIN">Admin da organização</option>
                   </select>
+                  {inviteRole === "COACH" && (
+                    <p className="admin-coach-promote-panel__note">
+                      Convite de coach não exige assinatura no cadastro. Após criar a conta, o coach precisa assinar a ATLLY para selo, link de indicação e comissão.
+                    </p>
+                  )}
                   <select className="admin-input" value={inviteUnitId} onChange={(e) => setInviteUnitId(e.target.value)}>
                     <option value="">Toda a organização</option>
                     {selectedOrg.units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
@@ -570,6 +691,15 @@ export function OrgAdminPanel({ token }: Props) {
                         <span>
                           <strong>{m.user.name}</strong>
                           <span className="block text-xs text-sand-muted">{m.role} · {m.status}{m.unit ? ` · ${m.unit.name}` : ""}</span>
+                          {m.role === "COACH" && m.coachStatus && (
+                            <span className="mt-1 block">
+                              {m.coachStatus.isActiveCoach ? (
+                                <em className="assessment-source-badge admin">Coach ativo · comissão</em>
+                              ) : (
+                                <em className="assessment-source-badge">Coach inativo · sem assinatura</em>
+                              )}
+                            </span>
+                          )}
                         </span>
                         {m.status === "ACTIVE" && (
                           <button
@@ -591,6 +721,7 @@ export function OrgAdminPanel({ token }: Props) {
                   </ul>
                 )}
               </article>
+              </div>
             </div>
           )}
 

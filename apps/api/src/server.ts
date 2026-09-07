@@ -103,7 +103,9 @@ app.setErrorHandler((error, _request, reply) => {
       const fields = Array.isArray(target) ? target.map(String) : [];
       const message = fields.includes("code")
         ? "Já existe um cupom com este código."
-        : "Registro já cadastrado.";
+        : fields.includes("slug")
+          ? "Já existe uma organização com este slug."
+          : "Registro já cadastrado.";
       return reply.code(409).send({ message });
     }
   }

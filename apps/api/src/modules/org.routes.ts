@@ -8,7 +8,12 @@ import { prisma } from "../prisma.js";
 import { authorize } from "./org-auth/authorize.js";
 import { loadOrgAuthContext, writeAuditLog } from "./org-auth/context.js";
 import { authorizeOrg, httpOrgError } from "./org-auth/scope.js";
-import { hasActiveStudentSubscription } from "./coach-eligibility.js";
+import { ensureCoachReferralLink } from "./coach-affiliate.service.js";
+import {
+  enrichOrgMembersWithCoachStatus,
+  hasActiveStudentSubscription,
+  promoteUserToCoachInOrganization
+} from "./coach-eligibility.js";
 
 function webAppOrigin() {
   const origins = env.WEB_ORIGIN.split(",")
@@ -27,9 +32,19 @@ const slugSchema = z
   .max(80)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug inválido.");
 
+function normalizeSlug(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 const organizationBodySchema = z.object({
   name: z.string().trim().min(2).max(120),
-  slug: slugSchema,
+  slug: z.preprocess((value) => (typeof value === "string" ? normalizeSlug(value) : value), slugSchema),
   type: z.enum(["ACADEMY", "BOX", "STUDIO", "RUNNING_TEAM", "OTHER"]).default("OTHER")
 });
 
@@ -782,26 +797,50 @@ export async function registerOrgRoutes(app: FastifyInstance) {
       })
     );
 
-    const member = await prisma.organizationMember.upsert({
-      where: {
-        organizationId_userId_role: {
+    let member;
+    let coachEligibility: {
+      hasCoachRole: boolean;
+      hasActiveSubscription: boolean;
+      isActiveCoach: boolean;
+    } | null = null;
+
+    if (body.role === "COACH") {
+      try {
+        const result = await promoteUserToCoachInOrganization({
+          userId: body.userId,
+          organizationId: body.organizationId,
+          unitId: body.unitId ?? null
+        });
+        member = result.member;
+        coachEligibility = result.coachEligibility;
+        await ensureCoachReferralLink(body.userId);
+      } catch (err) {
+        const error = err as Error & { statusCode?: number };
+        if (error.statusCode) throw error;
+        throw err;
+      }
+    } else {
+      member = await prisma.organizationMember.upsert({
+        where: {
+          organizationId_userId_role: {
+            organizationId: body.organizationId,
+            userId: body.userId,
+            role: body.role
+          }
+        },
+        create: {
           organizationId: body.organizationId,
           userId: body.userId,
-          role: body.role
+          role: body.role,
+          unitId: body.unitId ?? null,
+          status: body.status
+        },
+        update: {
+          unitId: body.unitId ?? null,
+          status: body.status
         }
-      },
-      create: {
-        organizationId: body.organizationId,
-        userId: body.userId,
-        role: body.role,
-        unitId: body.unitId ?? null,
-        status: body.status
-      },
-      update: {
-        unitId: body.unitId ?? null,
-        status: body.status
-      }
-    });
+      });
+    }
 
     await writeAuditLog({
       userId: user.id,
@@ -815,7 +854,7 @@ export async function registerOrgRoutes(app: FastifyInstance) {
       userAgent: request.headers["user-agent"]
     });
 
-    return reply.code(201).send({ member });
+    return reply.code(201).send({ member, coachEligibility });
   });
 
   app.get("/org/organizations/:organizationId/members", async (request) => {
@@ -833,7 +872,9 @@ export async function registerOrgRoutes(app: FastifyInstance) {
       orderBy: [{ role: "asc" }, { createdAt: "asc" }]
     });
 
-    return { members };
+    const enrichedMembers = await enrichOrgMembersWithCoachStatus(members);
+
+    return { members: enrichedMembers };
   });
 
   app.get("/org/organizations/:organizationId/athlete-links", async (request) => {
