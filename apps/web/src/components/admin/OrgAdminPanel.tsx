@@ -246,6 +246,7 @@ export function OrgAdminPanel({ token }: Props) {
     () => organizations.find((item) => item.id === selectedOrgId) ?? null,
     [organizations, selectedOrgId]
   );
+  const orgSlugPreview = useMemo(() => slugify(orgSlug.trim() || orgName), [orgName, orgSlug]);
 
   const searchUsers = async (query: string) => {
     if (query.trim().length < 2) return [] as OrgUser[];
@@ -356,13 +357,13 @@ export function OrgAdminPanel({ token }: Props) {
       memberCoachEligibility.student.status === "ACTIVE" &&
       memberCoachEligibility.coachEligibility.hasActiveSubscription);
 
-  const runAction = async (action: () => Promise<void>, successMessage: string) => {
+  const runAction = async (action: () => Promise<string | void>, successMessage: string) => {
     setBusy(true);
     setError(null);
     setFeedback(null);
     try {
-      await action();
-      setFeedback(successMessage);
+      const customMessage = await action();
+      setFeedback(typeof customMessage === "string" ? customMessage : successMessage);
       await loadOrganizations();
       await loadOrgDetails();
     } catch (err) {
@@ -416,6 +417,12 @@ export function OrgAdminPanel({ token }: Props) {
               setOrgSlugManual(true);
               setOrgSlug(e.target.value);
             }} />
+            {orgSlugPreview.length >= 2 && (
+              <p className="text-xs text-sand-muted">
+                Slug final: <strong className="text-sand">{orgSlugPreview}</strong>
+                {" · "}deve ser único (ex.: <strong className="text-sand">{orgSlugPreview}-2</strong> se já existir)
+              </p>
+            )}
             <select className="admin-input" value={orgType} onChange={(e) => setOrgType(e.target.value as OrgType)}>
               <option value="BOX">Box</option>
               <option value="ACADEMY">Academia</option>
@@ -423,10 +430,16 @@ export function OrgAdminPanel({ token }: Props) {
               <option value="RUNNING_TEAM">Equipe de corrida</option>
               <option value="OTHER">Outro</option>
             </select>
-            <button type="button" className="admin-primary-button" disabled={busy || orgName.trim().length < 2 || slugify(orgSlug.trim() || orgName).length < 2} onClick={() => void runAction(async () => {
-              const slug = slugify(orgSlug.trim() || orgName);
-              await apiPost("/org/organizations", { name: orgName.trim(), slug, type: orgType }, token);
+            <button type="button" className="admin-primary-button" disabled={busy || orgName.trim().length < 2 || orgSlugPreview.length < 2} onClick={() => void runAction(async () => {
+              const response = await apiPost<{ organization: Organization; slugAdjusted?: boolean }>(
+                "/org/organizations",
+                { name: orgName.trim(), slug: orgSlugPreview, type: orgType },
+                token
+              );
               setOrgName(""); setOrgSlug(""); setOrgSlugManual(false);
+              if (response.slugAdjusted) {
+                return `Organização criada com slug "${response.organization.slug}" (ajustado para ser único).`;
+              }
             }, "Organização criada.")}>
               Criar organização
             </button>

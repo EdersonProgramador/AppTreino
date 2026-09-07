@@ -42,6 +42,50 @@ function normalizeSlug(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+function archiveOrganizationSlug(slug: string, organizationId: string) {
+  const suffix = `-del-${organizationId.slice(-8)}`;
+  const maxBase = Math.max(2, 80 - suffix.length);
+  const base = slug.slice(0, maxBase).replace(/-+$/g, "") || "org";
+  return `${base}${suffix}`;
+}
+
+async function isOrganizationSlugAvailable(slug: string) {
+  const existing = await prisma.organization.findUnique({
+    where: { slug },
+    select: { id: true, deletedAt: true }
+  });
+  if (!existing) return true;
+  if (!existing.deletedAt) return false;
+
+  await prisma.organization.update({
+    where: { id: existing.id },
+    data: { slug: archiveOrganizationSlug(slug, existing.id) }
+  });
+  return true;
+}
+
+async function allocateUniqueOrganizationSlug(desiredSlug: string) {
+  if (await isOrganizationSlugAvailable(desiredSlug)) {
+    return { slug: desiredSlug, adjusted: false };
+  }
+
+  for (let index = 2; index <= 99; index += 1) {
+    const suffix = `-${index}`;
+    const maxBase = Math.max(2, 80 - suffix.length);
+    const base = desiredSlug.slice(0, maxBase).replace(/-+$/g, "") || "org";
+    const candidate = `${base}${suffix}`;
+    if (await isOrganizationSlugAvailable(candidate)) {
+      return { slug: candidate, adjusted: true };
+    }
+  }
+
+  const error = new Error("Não foi possível gerar um slug único. Edite o slug manualmente.") as Error & {
+    statusCode: number;
+  };
+  error.statusCode = 409;
+  throw error;
+}
+
 const organizationBodySchema = z.object({
   name: z.string().trim().min(2).max(120),
   slug: z.preprocess((value) => (typeof value === "string" ? normalizeSlug(value) : value), slugSchema),
@@ -504,11 +548,12 @@ export async function registerOrgRoutes(app: FastifyInstance) {
     const ctx = await loadOrgAuthContext(user);
     denyUnlessAllowed(authorize({ ctx, permission: "organizations.create" }));
     const body = organizationBodySchema.parse(request.body);
+    const { slug, adjusted } = await allocateUniqueOrganizationSlug(body.slug);
 
     const organization = await prisma.organization.create({
       data: {
         name: body.name,
-        slug: body.slug,
+        slug,
         type: body.type
       }
     });
@@ -524,7 +569,7 @@ export async function registerOrgRoutes(app: FastifyInstance) {
       userAgent: request.headers["user-agent"]
     });
 
-    return reply.code(201).send({ organization });
+    return reply.code(201).send({ organization, slugAdjusted: adjusted });
   });
 
   app.post("/org/organizations/:organizationId/units", async (request, reply) => {
@@ -1274,9 +1319,19 @@ export async function registerOrgRoutes(app: FastifyInstance) {
     const { organizationId } = z.object({ organizationId: z.string().min(1) }).parse(request.params);
     denyUnlessAllowed(authorize({ ctx, permission: "organizations.delete", organizationId }));
 
+    const existing = await prisma.organization.findFirst({
+      where: { id: organizationId, deletedAt: null },
+      select: { id: true, slug: true }
+    });
+    if (!existing) throw httpOrgError(404, "Organização não encontrada.");
+
     await prisma.organization.update({
       where: { id: organizationId },
-      data: { deletedAt: new Date(), status: "INACTIVE" }
+      data: {
+        deletedAt: new Date(),
+        status: "INACTIVE",
+        slug: archiveOrganizationSlug(existing.slug, organizationId)
+      }
     });
 
     await writeAuditLog({
