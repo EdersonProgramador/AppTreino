@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Building2, Dumbbell, Loader2, Plus, RefreshCw, Search, Trash2, UserCog, UsersRound } from "lucide-react";
-import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "../../api";
+import { apiDelete, apiGet, apiPatch, apiPost } from "../../api";
 import { dataRowClass, panelTitleClass } from "../../lib/admin-cms-classes";
 import { paths } from "../../auth/paths";
 import { OrgProgramsPanel } from "./OrgProgramsPanel";
-import { StateCityFields } from "./StateCityFields";
+import { OrgUnitsPanel, type UnitUsageStats } from "./OrgUnitsPanel";
+import { OrgAuditPanel } from "./OrgAuditPanel";
 
 type OrgType = "ACADEMY" | "BOX" | "STUDIO" | "RUNNING_TEAM" | "OTHER";
 type OrgTab = "estrutura" | "equipe" | "alunos" | "turmas" | "nutricao" | "modalidades" | "programas";
@@ -122,87 +123,6 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-function UnitLocationRow({
-  unit,
-  token,
-  busy,
-  onRefresh,
-  onDelete
-}: {
-  unit: Unit;
-  token: string;
-  busy: boolean;
-  onRefresh: () => Promise<void>;
-  onDelete: () => Promise<void>;
-}) {
-  const [city, setCity] = useState(unit.city ?? "");
-  const [state, setState] = useState(unit.state ?? "");
-  const [saving, setSaving] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
-  const dirty = city !== (unit.city ?? "") || state !== (unit.state ?? "");
-
-  useEffect(() => {
-    setCity(unit.city ?? "");
-    setState(unit.state ?? "");
-  }, [unit.city, unit.id, unit.state]);
-
-  return (
-    <li className={`${dataRowClass} grid gap-3`}>
-      <div className="flex items-start justify-between gap-2">
-        <strong className="text-sand">{unit.name}</strong>
-        <button
-          type="button"
-          className="text-red-400"
-          disabled={busy || saving}
-          title="Remover unidade"
-          onClick={() => void onDelete()}
-        >
-          <Trash2 size={14} />
-        </button>
-      </div>
-      <StateCityFields
-        withLabels
-        selectClassName="admin-input"
-        stateValue={state}
-        cityValue={city}
-        onStateChange={setState}
-        onCityChange={setCity}
-        disabled={busy || saving}
-      />
-      {localError && <p className="text-xs text-red-400">{localError}</p>}
-      {dirty ? (
-        <button
-          type="button"
-          className="admin-secondary-button"
-          disabled={busy || saving || !state || !city}
-          onClick={() =>
-            void (async () => {
-              setSaving(true);
-              setLocalError(null);
-              try {
-                await apiPut(`/org/units/${unit.id}`, { city, state }, token);
-                await onRefresh();
-              } catch (err) {
-                setLocalError(err instanceof Error ? err.message : "Falha ao salvar localização.");
-              } finally {
-                setSaving(false);
-              }
-            })()
-          }
-        >
-          {saving ? "Salvando…" : "Salvar cidade/UF"}
-        </button>
-      ) : unit.city && unit.state ? (
-        <p className="text-xs text-emerald-400">
-          {unit.city}/{unit.state}
-        </p>
-      ) : (
-        <p className="text-xs text-sand-muted">Selecione estado e cidade para esta unidade.</p>
-      )}
-    </li>
-  );
-}
-
 function UserPicker({
   label,
   query,
@@ -269,9 +189,6 @@ export function OrgAdminPanel({ token }: Props) {
   const [orgSlug, setOrgSlug] = useState("");
   const [orgSlugManual, setOrgSlugManual] = useState(false);
   const [orgType, setOrgType] = useState<OrgType>("BOX");
-  const [unitName, setUnitName] = useState("");
-  const [unitCity, setUnitCity] = useState("");
-  const [unitState, setUnitState] = useState("");
   const [selectedUnitId, setSelectedUnitId] = useState("");
 
   const [memberRole, setMemberRole] = useState<MemberRole>("COACH");
@@ -388,6 +305,40 @@ export function OrgAdminPanel({ token }: Props) {
     }
   }, [modalityUnitId, selectedOrg?.units, selectedOrgId, token]);
 
+  const unitStats = useMemo(() => {
+    const stats: Record<string, UnitUsageStats> = {};
+    for (const unit of selectedOrg?.units ?? []) {
+      stats[unit.id] = { athletes: 0, members: 0, classes: 0 };
+    }
+    for (const link of athleteLinks) {
+      const entry = stats[link.unit.id];
+      if (entry) entry.athletes += 1;
+    }
+    for (const member of members) {
+      if (!member.unit?.id) continue;
+      const entry = stats[member.unit.id];
+      if (entry) entry.members += 1;
+    }
+    for (const trainingClass of classes) {
+      const entry = stats[trainingClass.unit.id];
+      if (entry) entry.classes += 1;
+    }
+    return stats;
+  }, [athleteLinks, classes, members, selectedOrg?.units]);
+
+  const refreshOrgData = useCallback(async () => {
+    await loadOrganizations();
+    await loadOrgDetails();
+  }, [loadOrgDetails, loadOrganizations]);
+
+  const estruturaSummary = useMemo(() => {
+    const units = selectedOrg?.units ?? [];
+    const completeUnits = units.filter((unit) => unit.city && unit.state).length;
+    const totalAthletes = athleteLinks.length;
+    const totalMembers = members.filter((member) => member.status === "ACTIVE").length;
+    return { units: units.length, completeUnits, totalAthletes, totalMembers };
+  }, [athleteLinks.length, members, selectedOrg?.units]);
+
   useEffect(() => {
     void loadOrganizations();
     void apiGet<{ modalities: PlatformModality[] }>("/admin/cms/modalities", token)
@@ -485,9 +436,9 @@ export function OrgAdminPanel({ token }: Props) {
       {error && <p className="text-sm text-red-400">{error}</p>}
       {feedback && <p className="text-sm text-emerald-400">{feedback}</p>}
 
-      <div className="mb-6 grid gap-6 lg:grid-cols-2">
-        <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5">
-          <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-sand">
+      <div className="org-setup-grid mb-6">
+        <article className="org-setup-card">
+          <h2 className="org-setup-card__title">
             <Plus size={18} /> Nova organização
           </h2>
           <div className="grid gap-3">
@@ -528,8 +479,8 @@ export function OrgAdminPanel({ token }: Props) {
           </div>
         </article>
 
-        <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5">
-          <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-sand">
+        <article className="org-setup-card">
+          <h2 className="org-setup-card__title">
             <Building2 size={18} /> Selecionar organização
           </h2>
           {organizations.length === 0 ? (
@@ -541,7 +492,12 @@ export function OrgAdminPanel({ token }: Props) {
                   <div className="flex items-start justify-between gap-2">
                     <span>
                       <strong>{org.name}</strong>
-                      <span className="block text-xs text-sand-muted">{org.type} · {org.units.length} unidade(s)</span>
+                      <span className="block text-xs text-sand-muted">
+                        {org.type} · {org.units.length} unidade(s)
+                        {org.units.length > 0
+                          ? ` · ${org.units.filter((unit) => unit.city && unit.state).length} com localização`
+                          : ""}
+                      </span>
                     </span>
                     <span
                       role="button"
@@ -580,67 +536,40 @@ export function OrgAdminPanel({ token }: Props) {
           </nav>
 
           {tab === "estrutura" && (
-            <div className="grid gap-6 lg:grid-cols-2">
-              <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5">
-                <h2 className="mb-4 text-lg font-bold text-sand">Unidades — {selectedOrg.name}</h2>
-                {selectedOrg.units.length > 0 && (
-                  <div className="mb-6 grid gap-3">
-                    <h3 className="text-sm font-bold text-sand">Unidades cadastradas</h3>
-                    <ul className="grid gap-3">
-                      {selectedOrg.units.map((unit) => (
-                        <UnitLocationRow
-                          key={unit.id}
-                          unit={unit}
-                          token={token}
-                          busy={busy}
-                          onRefresh={async () => {
-                            await loadOrganizations();
-                            await loadOrgDetails();
-                          }}
-                          onDelete={() =>
-                            runAction(async () => {
-                              await apiDelete(`/org/units/${unit.id}`, token);
-                            }, "Unidade removida.")
-                          }
-                        />
-                      ))}
-                    </ul>
+            <div className="org-estrutura-layout">
+              <div className="org-estrutura-main">
+                <div className="org-estrutura-kpis">
+                  <div className="org-estrutura-kpi">
+                    <span>Unidades</span>
+                    <strong>{estruturaSummary.units}</strong>
                   </div>
-                )}
-                <div className="grid gap-3 border-t border-[color:var(--app-border)] pt-5">
-                  <h3 className="text-sm font-bold text-sand">Nova unidade</h3>
-                  <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-sand-muted">
-                    Nome da unidade
-                    <input className="admin-input" placeholder="Ex.: POWER BRAIN Medicilândia" value={unitName} onChange={(e) => setUnitName(e.target.value)} />
-                  </label>
-                  <StateCityFields
-                    withLabels
-                    selectClassName="admin-input"
-                    stateValue={unitState}
-                    cityValue={unitCity}
-                    onStateChange={setUnitState}
-                    onCityChange={setUnitCity}
-                    disabled={busy}
-                  />
-                  <button type="button" className="admin-primary-button" disabled={busy || unitName.trim().length < 2 || !unitState || !unitCity} onClick={() => void runAction(async () => {
-                    await apiPost(`/org/organizations/${selectedOrgId}/units`, { name: unitName.trim(), city: unitCity, state: unitState }, token);
-                    setUnitName(""); setUnitCity(""); setUnitState("");
-                  }, "Unidade criada.")}>Adicionar unidade</button>
+                  <div className="org-estrutura-kpi">
+                    <span>Com localização</span>
+                    <strong>{estruturaSummary.completeUnits}</strong>
+                  </div>
+                  <div className="org-estrutura-kpi">
+                    <span>Alunos vinculados</span>
+                    <strong>{estruturaSummary.totalAthletes}</strong>
+                  </div>
+                  <div className="org-estrutura-kpi">
+                    <span>Equipe ativa</span>
+                    <strong>{estruturaSummary.totalMembers}</strong>
+                  </div>
                 </div>
-              </article>
-              <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5 lg:col-span-1">
-                <h2 className="mb-4 text-lg font-bold text-sand">Auditoria recente</h2>
-                {auditLogs.length === 0 ? <p className="text-sm text-sand-muted">Sem registros.</p> : (
-                  <ul className="grid gap-2 text-sm max-h-80 overflow-y-auto">
-                    {auditLogs.map((log) => (
-                      <li key={log.id} className={dataRowClass}>
-                        <strong>{log.action}</strong>
-                        <span className="block text-xs text-sand-muted">{new Date(log.createdAt).toLocaleString("pt-BR")} · {log.user?.name ?? "Sistema"}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </article>
+                <OrgUnitsPanel
+                  token={token}
+                  organizationId={selectedOrgId}
+                  organizationName={selectedOrg.name}
+                  units={selectedOrg.units}
+                  unitStats={unitStats}
+                  selectedUnitId={selectedUnitId}
+                  busy={busy}
+                  onSelectUnit={setSelectedUnitId}
+                  onRefresh={refreshOrgData}
+                  onRunAction={runAction}
+                />
+              </div>
+              <OrgAuditPanel logs={auditLogs} />
             </div>
           )}
 

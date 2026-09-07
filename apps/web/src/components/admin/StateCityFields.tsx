@@ -11,6 +11,7 @@ type StateCityFieldsProps = {
   disabled?: boolean;
   withLabels?: boolean;
   selectClassName?: string;
+  layout?: "stack" | "inline";
 };
 
 export function StateCityFields({
@@ -22,7 +23,8 @@ export function StateCityFields({
   onCityChange,
   disabled = false,
   withLabels = false,
-  selectClassName = ""
+  selectClassName = "",
+  layout = "stack"
 }: StateCityFieldsProps) {
   const controlled = onStateChange !== undefined || onCityChange !== undefined;
   const [uf, setUf] = useState(stateValue ?? stateDefault ?? "");
@@ -99,7 +101,7 @@ export function StateCityFields({
 
   if (withLabels) {
     return (
-      <div className="grid gap-3">
+      <div className={layout === "inline" ? "org-state-city-inline" : "grid gap-3"}>
         <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-sand-muted">
           Estado (UF)
           {stateSelect}
