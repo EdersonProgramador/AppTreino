@@ -152,10 +152,18 @@ export function CoachView({ token, userName, onLogout }: Props) {
     void load();
   }, [load]);
 
-  const selectedOrg = useMemo(
-    () => workspace?.organizations.find((item) => item.id === selectedOrgId) ?? null,
-    [selectedOrgId, workspace]
-  );
+  useEffect(() => {
+    if (!workspace?.organizations.length) return;
+    const hasSelected = workspace.organizations.some((org) => org.id === selectedOrgId);
+    if (!hasSelected) {
+      setSelectedOrgId(workspace.organizations[0].id);
+    }
+  }, [selectedOrgId, workspace]);
+
+  const selectedOrg = useMemo(() => {
+    if (!workspace?.organizations.length) return null;
+    return workspace.organizations.find((item) => item.id === selectedOrgId) ?? workspace.organizations[0];
+  }, [selectedOrgId, workspace]);
 
   useEffect(() => {
     if (selectedOrg?.units[0] && !classUnitId) {
@@ -494,16 +502,22 @@ export function CoachView({ token, userName, onLogout }: Props) {
           </section>
         )}
 
-        {tab === "programs" && selectedOrg && workspace && (
-          <CoachTrainingStudio
-            token={token}
-            organizationId={selectedOrg.id}
-            units={selectedOrg.units}
-            assignedAthletes={workspace.assignedAthletes}
-            busy={busy}
-            onBusy={runAction}
-            onError={(message) => setError(message)}
-          />
+        {tab === "programs" && workspace && (
+          selectedOrg ? (
+            <CoachTrainingStudio
+              token={token}
+              organizationId={selectedOrg.id}
+              units={selectedOrg.units}
+              assignedAthletes={workspace.assignedAthletes}
+              busy={busy}
+              onBusy={runAction}
+              onError={(message) => setError(message)}
+            />
+          ) : (
+            <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5 text-sm text-sand-muted">
+              Nenhuma organização vinculada ao seu perfil de coach. Peça ao administrador para adicioná-lo à equipe.
+            </article>
+          )
         )}
 
         {tab === "nutrition" && workspace && selectedOrg && (

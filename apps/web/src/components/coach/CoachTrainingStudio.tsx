@@ -74,6 +74,7 @@ export function CoachTrainingStudio({
 }: Props) {
   const [step, setStep] = useState<StudioStep>("exercises");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [modalities, setModalities] = useState<Modality[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [blocks, setBlocks] = useState<WorkoutBlock[]>([]);
@@ -121,6 +122,7 @@ export function CoachTrainingStudio({
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [modalitiesData, exercisesData, blocksData, programsData] = await Promise.all([
         apiGet<{ modalities: Modality[] }>("/org/modalities", token),
@@ -135,18 +137,18 @@ export function CoachTrainingStudio({
       setExercises(exercisesData.exercises);
       setBlocks(blocksData.blocks);
       setPrograms(programsData.programs);
-      if (!exerciseModalityId && modalitiesData.modalities[0]) {
-        setExerciseModalityId(modalitiesData.modalities[0].id);
-        setBlockModalityId(modalitiesData.modalities[0].id);
-        setProgramModalityId(modalitiesData.modalities[0].id);
-      }
-      if (!programUnitId && units[0]) setProgramUnitId(units[0].id);
+      setExerciseModalityId((current) => current || modalitiesData.modalities[0]?.id || "");
+      setBlockModalityId((current) => current || modalitiesData.modalities[0]?.id || "");
+      setProgramModalityId((current) => current || modalitiesData.modalities[0]?.id || "");
+      setProgramUnitId((current) => current || units[0]?.id || "");
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Falha ao carregar estúdio.");
+      const message = err instanceof Error ? err.message : "Falha ao carregar estúdio.";
+      setLoadError(message);
+      onError(message);
     } finally {
       setLoading(false);
     }
-  }, [exerciseModalityId, onError, organizationId, programUnitId, token, units]);
+  }, [onError, organizationId, token, units]);
 
   useEffect(() => {
     void load();
@@ -158,7 +160,7 @@ export function CoachTrainingStudio({
 
   const addBlockExercise = () => {
     const exercise = exercises.find((item) => item.id === blockExerciseId);
-    if (!exercise?.title) return;
+    if (!exercise) return;
     setBlockLineup((current) => [
       ...current,
       {
@@ -192,6 +194,14 @@ export function CoachTrainingStudio({
       <p className="flex items-center gap-2 text-sm text-sand-muted">
         <Loader2 size={16} className="animate-spin" /> Carregando estúdio...
       </p>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5 text-sm text-red-400">
+        {loadError}
+      </article>
     );
   }
 

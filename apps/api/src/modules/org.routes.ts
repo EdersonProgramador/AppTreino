@@ -67,6 +67,24 @@ function denyUnlessAllowed(result: ReturnType<typeof authorize>) {
   }
 }
 
+/** God mode: undefined = all orgs. Scoped: empty array = none (never use `{ in: [] }` on a truthy empty array). */
+function organizationScopeWhere(orgIds: string[] | undefined): Prisma.OrganizationWhereInput {
+  if (orgIds === undefined) return {};
+  if (orgIds.length === 0) return { id: { in: [] } };
+  return { id: { in: orgIds } };
+}
+
+function organizationIdScopeWhere(orgIds: string[] | undefined): { organizationId?: { in: string[] } } {
+  if (orgIds === undefined) return {};
+  if (orgIds.length === 0) return { organizationId: { in: [] } };
+  return { organizationId: { in: orgIds } };
+}
+
+function organizationIdScopeOrBranches(orgIds: string[] | undefined) {
+  if (orgIds === undefined || orgIds.length === 0) return [];
+  return [{ organizationId: { in: orgIds } }];
+}
+
 export async function registerOrgRoutes(app: FastifyInstance) {
   app.addHook("preHandler", async (request) => {
     if (!request.url.startsWith("/org")) return;
@@ -93,12 +111,20 @@ export async function registerOrgRoutes(app: FastifyInstance) {
   ]);
 
   async function ensureCoachPreviewMembership(userId: string) {
-    const demoOrg = await prisma.organization.findFirst({
-      where: { slug: "box-cross", deletedAt: null },
-      include: {
-        units: { where: { deletedAt: null }, orderBy: { name: "asc" }, take: 1 }
-      }
-    });
+    const demoOrg =
+      (await prisma.organization.findFirst({
+        where: { slug: "box-cross", deletedAt: null },
+        include: {
+          units: { where: { deletedAt: null }, orderBy: { name: "asc" }, take: 1 }
+        }
+      })) ??
+      (await prisma.organization.findFirst({
+        where: { deletedAt: null, units: { some: { deletedAt: null } } },
+        include: {
+          units: { where: { deletedAt: null }, orderBy: { name: "asc" }, take: 1 }
+        },
+        orderBy: { createdAt: "asc" }
+      }));
     if (!demoOrg?.units[0]) return;
 
     const unit = demoOrg.units[0];
@@ -241,15 +267,23 @@ export async function registerOrgRoutes(app: FastifyInstance) {
       staffMemberships = staffMemberships.filter(
         (member) => member.role === "COACH" || member.role === "NUTRITIONIST"
       );
+      if (staffMemberships.length === 0) {
+        await ensureCoachPreviewMembership(user.id);
+        ctx = await loadOrgAuthContext(user);
+        staffMemberships = ctx.memberships.filter(
+          (member) =>
+            STAFF_ROLES.has(member.role) && (member.role === "COACH" || member.role === "NUTRITIONIST")
+        );
+      }
     }
 
     const orgIds = hasGodMode
       ? undefined
       : [...new Set(staffMemberships.map((member) => member.organizationId))];
 
-    const orgWhere = {
+    const orgWhere: Prisma.OrganizationWhereInput = {
       deletedAt: null,
-      ...(orgIds ? { id: { in: orgIds } } : {})
+      ...organizationScopeWhere(orgIds)
     };
 
     const isCoachOnly =
@@ -271,9 +305,7 @@ export async function registerOrgRoutes(app: FastifyInstance) {
           status: "ACTIVE",
           ...(isCoachOnly
             ? { professionalId: user.id }
-            : orgIds
-              ? { organizationId: { in: orgIds } }
-              : {})
+            : organizationIdScopeWhere(orgIds))
         },
         include: {
           athlete: { select: { id: true, name: true, email: true } },
@@ -290,9 +322,7 @@ export async function registerOrgRoutes(app: FastifyInstance) {
           deletedAt: null,
           ...(isCoachOnly
             ? { coachId: user.id }
-            : orgIds
-              ? { organizationId: { in: orgIds } }
-              : {})
+            : organizationIdScopeWhere(orgIds))
         },
         include: {
           coach: { select: { id: true, name: true, email: true } },
@@ -313,14 +343,9 @@ export async function registerOrgRoutes(app: FastifyInstance) {
           sourceType: { in: ["ORGANIZATION", "COACH"] },
           ...(isCoachOnly
             ? {
-                OR: [
-                  { coachUserId: user.id },
-                  ...(orgIds ? [{ organizationId: { in: orgIds } }] : [])
-                ]
+                OR: [{ coachUserId: user.id }, ...organizationIdScopeOrBranches(orgIds)]
               }
-            : orgIds
-              ? { organizationId: { in: orgIds } }
-              : {})
+            : organizationIdScopeWhere(orgIds))
         },
         include: {
           modality: { select: { id: true, name: true } },
@@ -337,14 +362,9 @@ export async function registerOrgRoutes(app: FastifyInstance) {
           deletedAt: null,
           ...(isCoachOnly
             ? {
-                OR: [
-                  { nutritionistId: user.id },
-                  ...(orgIds ? [{ organizationId: { in: orgIds } }] : [])
-                ]
+                OR: [{ nutritionistId: user.id }, ...organizationIdScopeOrBranches(orgIds)]
               }
-            : orgIds
-              ? { organizationId: { in: orgIds } }
-              : {})
+            : organizationIdScopeWhere(orgIds))
         },
         include: {
           nutritionist: { select: { id: true, name: true, email: true } },
@@ -362,7 +382,7 @@ export async function registerOrgRoutes(app: FastifyInstance) {
         where: {
           deletedAt: null,
           status: { in: ["PENDING", "ACTIVE"] },
-          ...(orgIds ? { organizationId: { in: orgIds } } : {})
+          ...organizationIdScopeWhere(orgIds)
         },
         include: {
           athlete: { select: { id: true, name: true, email: true } },
