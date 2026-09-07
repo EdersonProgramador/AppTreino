@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Loader2, Save, Wallet } from "lucide-react";
+import { Copy, Loader2, Wallet } from "lucide-react";
 import {
   formatPriceInBRL,
   COACH_MIN_WITHDRAWAL_CENTS,
-  prepareCoachReferralSlugInput
+  formatReferralCodeForDisplay
 } from "@app-treino/shared";
 import { apiGet, apiPost, apiPut } from "../../api";
 
@@ -55,8 +55,6 @@ export function CoachRevenuePanel({ token, busy, onBusy }: Props) {
   const [pixKey, setPixKey] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
-  const [slugDraft, setSlugDraft] = useState("");
-  const [slugFeedback, setSlugFeedback] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -65,7 +63,6 @@ export function CoachRevenuePanel({ token, busy, onBusy }: Props) {
       const data = await apiGet<AffiliateSummary>("/coach/affiliate/summary", token);
       setSummary(data);
       setPixKey(data.wallet.pixKey ?? "");
-      setSlugDraft(data.referralLink?.slug ?? "");
     } catch (err) {
       setPanelError(err instanceof Error ? err.message : "Falha ao carregar receitas.");
     } finally {
@@ -77,25 +74,27 @@ export function CoachRevenuePanel({ token, busy, onBusy }: Props) {
     void load();
   }, [load]);
 
-  const normalizedSlugDraft = prepareCoachReferralSlugInput(slugDraft);
-  const previewReferralUrl = (() => {
-    if (!summary?.referralUrl || !normalizedSlugDraft) return summary?.referralUrl ?? null;
-    try {
-      const url = new URL(summary.referralUrl);
-      url.searchParams.set("ref", normalizedSlugDraft);
-      return url.toString();
-    } catch {
-      return summary.referralUrl;
-    }
-  })();
-  const slugChanged = normalizedSlugDraft !== summary?.referralLink?.slug;
+  const referralCode = summary?.referralLink?.slug
+    ? formatReferralCodeForDisplay(summary.referralLink.slug)
+    : null;
 
   const copyLink = async () => {
-    const target = previewReferralUrl ?? summary?.referralUrl;
+    const target = summary?.referralUrl;
     if (!target) return;
     try {
       await navigator.clipboard.writeText(target);
       setCopyFeedback("Link copiado.");
+      setTimeout(() => setCopyFeedback(null), 2500);
+    } catch {
+      setCopyFeedback("Não foi possível copiar.");
+    }
+  };
+
+  const copyCode = async () => {
+    if (!referralCode) return;
+    try {
+      await navigator.clipboard.writeText(referralCode);
+      setCopyFeedback("Código copiado.");
       setTimeout(() => setCopyFeedback(null), 2500);
     } catch {
       setCopyFeedback("Não foi possível copiar.");
@@ -154,80 +153,48 @@ export function CoachRevenuePanel({ token, busy, onBusy }: Props) {
       </article>
 
       <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5">
-        <h2 className="mb-4 text-lg font-bold text-sand">Link de indicação</h2>
-        {summary.referralUrl ? (
+        <h2 className="mb-4 text-lg font-bold text-sand">Indicação</h2>
+        {summary.referralUrl && referralCode ? (
           <div className="grid gap-4">
-            <label className="grid max-w-xl gap-1 text-sm">
-              Apelido do link
-              <input
-                className="admin-input"
-                value={slugDraft}
-                onChange={(e) => {
-                  setSlugDraft(e.target.value);
-                  setSlugFeedback(null);
-                }}
-                placeholder="joao-cross"
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <span className="text-xs text-sand-muted">
-                Letras, números e hífen · 3–40 caracteres · ex.: box-cross, maria-coach
-              </span>
-            </label>
+            <p className="text-sm text-sand-muted">
+              Seu código exclusivo não revela nome ou box. Compartilhe o link ou o código com quem quiser indicar.
+            </p>
 
-            {slugDraft.trim() && !normalizedSlugDraft && (
-              <p className="text-sm text-amber-400">Apelido inválido ou reservado pela plataforma.</p>
-            )}
+            <div className="grid max-w-xl gap-2">
+              <span className="text-xs uppercase tracking-wide text-sand-muted">Código de indicação</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="rounded-xl border border-[color:var(--app-border)] bg-black/20 px-4 py-2 text-lg font-semibold tracking-widest">
+                  {referralCode}
+                </code>
+                <button type="button" className="admin-secondary-button" onClick={() => void copyCode()}>
+                  <Copy size={16} />
+                  Copiar código
+                </button>
+              </div>
+            </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <code className="flex-1 rounded-xl border border-[color:var(--app-border)] bg-black/20 px-3 py-2 text-sm break-all">
-                {previewReferralUrl}
-              </code>
-              <button
-                type="button"
-                className="admin-secondary-button"
-                disabled={!previewReferralUrl}
-                onClick={() => void copyLink()}
-              >
-                <Copy size={16} />
-                Copiar
-              </button>
-              <button
-                type="button"
-                className="admin-primary-button"
-                disabled={busy || !normalizedSlugDraft || !slugChanged}
-                onClick={() =>
-                  void onBusy(async () => {
-                    const response = await apiPut<{ referralUrl: string; link: { slug: string } }>(
-                      "/coach/affiliate/link",
-                      { slug: slugDraft.trim() },
-                      token
-                    );
-                    setSlugDraft(response.link.slug);
-                    setSlugFeedback("Apelido atualizado.");
-                    await load();
-                  }, "Link de indicação atualizado.")
-                }
-              >
-                <Save size={16} />
-                Salvar apelido
-              </button>
+            <div className="grid gap-2">
+              <span className="text-xs uppercase tracking-wide text-sand-muted">Link de cadastro</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="flex-1 rounded-xl border border-[color:var(--app-border)] bg-black/20 px-3 py-2 text-sm break-all">
+                  {summary.referralUrl}
+                </code>
+                <button type="button" className="admin-secondary-button" onClick={() => void copyLink()}>
+                  <Copy size={16} />
+                  Copiar link
+                </button>
+              </div>
             </div>
 
             {copyFeedback && <p className="text-sm text-emerald-400">{copyFeedback}</p>}
-            {slugFeedback && <p className="text-sm text-emerald-400">{slugFeedback}</p>}
-            {slugChanged && normalizedSlugDraft && (
-              <p className="text-sm text-amber-400">
-                Ao salvar, links antigos com outro apelido deixam de contabilizar novos cadastros.
-              </p>
-            )}
+
             <p className="text-sm text-sand-muted">
               {summary.referralLink?.clickCount ?? 0} cliques · {summary.referralLink?.signupCount ?? 0} cadastros ·{" "}
               {summary.activeReferrals} alunos ativos na sua base
             </p>
           </div>
         ) : (
-          <p className="text-sm text-sand-muted">Seu link de afiliado será gerado automaticamente.</p>
+          <p className="text-sm text-sand-muted">Seu código de indicação será gerado automaticamente.</p>
         )}
       </article>
 

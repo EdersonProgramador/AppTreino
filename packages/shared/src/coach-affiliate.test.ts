@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   COACH_COMMISSION_RATE,
+  COACH_REFERRAL_CODE_LENGTH,
   calculateCoachCommission,
   formatCoachCommissionRate,
-  prepareCoachReferralSlugInput
+  formatReferralCodeForDisplay,
+  isCoachReferralCode,
+  normalizeReferralCode
 } from "./coach-affiliate.js";
 
 describe("coach-affiliate", () => {
@@ -19,9 +22,13 @@ describe("coach-affiliate", () => {
     assert.equal(calculateCoachCommission(-100), 0);
   });
 
-  it("normalizes referral slug input", () => {
-    assert.equal(prepareCoachReferralSlugInput("João Cross"), "joao-cross");
-    assert.equal(prepareCoachReferralSlugInput("ab"), null);
-    assert.equal(prepareCoachReferralSlugInput("admin"), null);
+  it("validates short referral codes", () => {
+    assert.equal(COACH_REFERRAL_CODE_LENGTH, 8);
+    assert.equal(normalizeReferralCode("k7m2p9xq"), "k7m2p9xq");
+    assert.equal(normalizeReferralCode("K7M2-P9XQ"), "k7m2p9xq");
+    assert.equal(normalizeReferralCode("joao-cross"), null);
+    assert.equal(normalizeReferralCode("admin"), null);
+    assert.equal(isCoachReferralCode("k7m2p9xq"), true);
+    assert.equal(formatReferralCodeForDisplay("k7m2p9xq"), "K7M2P9XQ");
   });
 });

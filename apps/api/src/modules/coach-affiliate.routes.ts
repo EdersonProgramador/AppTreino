@@ -12,7 +12,6 @@ import {
   recordReferralLinkClick,
   rejectCoachWithdrawal,
   requestCoachWithdrawal,
-  updateCoachReferralSlug,
   updateCoachWalletPix
 } from "./coach-affiliate.service.js";
 import { prisma } from "../prisma.js";
@@ -67,13 +66,7 @@ export async function registerCoachAffiliateRoutes(app: FastifyInstance) {
 
     return {
       ok: true,
-      slug: link.slug,
-      coachName: (
-        await prisma.user.findUnique({
-          where: { id: link.coachUserId },
-          select: { name: true }
-        })
-      )?.name
+      slug: link.slug
     };
   });
 
@@ -103,30 +96,6 @@ export async function registerCoachAffiliateRoutes(app: FastifyInstance) {
             : error instanceof Error
               ? error.message
               : "Falha ao carregar receitas."
-      });
-    }
-  });
-
-  app.put("/coach/affiliate/link", async (request, reply) => {
-    try {
-      const user = await requireAuth(app, request);
-      await requireCoachStaff(user);
-      const body = z
-        .object({
-          slug: z.string().trim().min(3).max(80)
-        })
-        .parse(request.body);
-
-      const link = await updateCoachReferralSlug(user.id, body.slug);
-      const origin = webAppOrigin();
-
-      return {
-        link,
-        referralUrl: `${origin}/ativar?ref=${encodeURIComponent(link.slug)}`
-      };
-    } catch (error) {
-      return reply.code(400).send({
-        message: error instanceof Error ? error.message : "Não foi possível atualizar o apelido do link."
       });
     }
   });

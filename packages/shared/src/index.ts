@@ -34,10 +34,13 @@ export {
   COACH_COMMISSION_RATE,
   COACH_COMMISSION_HOLDING_DAYS,
   COACH_MIN_WITHDRAWAL_CENTS,
+  COACH_REFERRAL_CODE_LENGTH,
   COACH_REFERRAL_RESERVED_SLUGS,
   calculateCoachCommission,
   formatCoachCommissionRate,
-  prepareCoachReferralSlugInput
+  formatReferralCodeForDisplay,
+  isCoachReferralCode,
+  normalizeReferralCode
 } from "./coach-affiliate.js";
 
 export type MembershipStatus = "ACTIVE" | "PENDING" | "OVERDUE" | "CANCELED";

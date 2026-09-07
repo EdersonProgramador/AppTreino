@@ -1,22 +1,16 @@
+import { randomInt } from "node:crypto";
 import {
   COACH_COMMISSION_HOLDING_DAYS,
   COACH_COMMISSION_RATE,
   COACH_MIN_WITHDRAWAL_CENTS,
+  COACH_REFERRAL_CODE_LENGTH,
   calculateCoachCommission,
-  prepareCoachReferralSlugInput
+  normalizeReferralCode
 } from "@app-treino/shared";
-import type { Payment, Prisma } from "@prisma/client";
+import type { CoachReferralLink, Payment, Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
 
-function slugify(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-}
+const REFERRAL_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function addDays(date: Date, days: number) {
   const next = new Date(date);
@@ -24,65 +18,38 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
-export function normalizeReferralSlug(raw?: string | null) {
-  if (!raw?.trim()) return null;
-  return prepareCoachReferralSlugInput(raw);
+function isShortReferralCode(slug: string) {
+  return normalizeReferralCode(slug) !== null;
 }
 
-async function defaultReferralSlugForCoach(coach: { id: string; name: string }, organizationSlug?: string | null) {
-  if (organizationSlug) {
-    const orgPart = slugify(organizationSlug);
-    if (orgPart) {
-      let slug = `${orgPart}-${coach.id.slice(-4)}`;
-      let attempt = 0;
-      while (await prisma.coachReferralLink.findUnique({ where: { slug } })) {
-        attempt += 1;
-        slug = `${orgPart}-${coach.id.slice(-4)}-${attempt}`;
-      }
-      return slug;
-    }
+function generateReferralCode() {
+  let code = "";
+  for (let index = 0; index < COACH_REFERRAL_CODE_LENGTH; index += 1) {
+    code += REFERRAL_CODE_ALPHABET[randomInt(REFERRAL_CODE_ALPHABET.length)];
   }
-
-  const firstName = coach.name.trim().split(/\s+/)[0] ?? "";
-  const baseSlug = slugify(firstName) || "coach";
-  let slug = `${baseSlug}-${coach.id.slice(-6)}`;
-  let attempt = 0;
-  while (await prisma.coachReferralLink.findUnique({ where: { slug } })) {
-    attempt += 1;
-    slug = `${baseSlug}-${coach.id.slice(-4)}-${attempt}`;
-  }
-  return slug;
+  return code.toLowerCase();
 }
 
-export async function updateCoachReferralSlug(coachUserId: string, rawSlug: string) {
-  const slug = prepareCoachReferralSlugInput(rawSlug);
-  if (!slug) {
-    throw new Error("Apelido inválido. Use 3–40 caracteres (letras, números e hífen), sem palavras reservadas.");
+async function generateUniqueReferralCode() {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const slug = generateReferralCode();
+    const taken = await prisma.coachReferralLink.findUnique({ where: { slug } });
+    if (!taken) return slug;
   }
+  throw new Error("Não foi possível gerar código de indicação.");
+}
 
-  const link = await ensureCoachReferralLink(coachUserId);
-  if (!link) {
-    throw new Error("Link de afiliado indisponível.");
-  }
-
-  if (link.slug === slug) {
-    return link;
-  }
-
-  const taken = await prisma.coachReferralLink.findFirst({
-    where: {
-      slug,
-      id: { not: link.id }
-    }
-  });
-  if (taken) {
-    throw new Error("Este apelido já está em uso. Escolha outro.");
-  }
-
+async function migrateLegacyReferralSlugIfNeeded(link: CoachReferralLink) {
+  if (isShortReferralCode(link.slug)) return link;
+  const slug = await generateUniqueReferralCode();
   return prisma.coachReferralLink.update({
     where: { id: link.id },
     data: { slug }
   });
+}
+
+export function normalizeReferralSlug(raw?: string | null) {
+  return normalizeReferralCode(raw);
 }
 
 async function ensureCoachWallet(tx: Prisma.TransactionClient, coachUserId: string) {
@@ -98,13 +65,9 @@ export async function ensureCoachReferralLink(coachUserId: string) {
     where: { coachUserId, isActive: true },
     orderBy: { createdAt: "asc" }
   });
-  if (existing) return existing;
-
-  const coach = await prisma.user.findUnique({
-    where: { id: coachUserId },
-    select: { id: true, name: true }
-  });
-  if (!coach) return null;
+  if (existing) {
+    return migrateLegacyReferralSlugIfNeeded(existing);
+  }
 
   const membership = await prisma.organizationMember.findFirst({
     where: {
@@ -112,13 +75,10 @@ export async function ensureCoachReferralLink(coachUserId: string) {
       role: "COACH",
       status: "ACTIVE"
     },
-    include: {
-      organization: { select: { slug: true } }
-    },
     orderBy: { createdAt: "asc" }
   });
 
-  const slug = await defaultReferralSlugForCoach(coach, membership?.organization?.slug ?? null);
+  const slug = await generateUniqueReferralCode();
 
   return prisma.coachReferralLink.create({
     data: {
