@@ -10,9 +10,11 @@ import { getAsaasPayment, findAsaasPaymentByExternalReference } from "./asaas.cl
 import { addCycleDate, asaasStatusToPaymentStatus, shouldActivateMembership } from "./asaas.routes.js";
 import {
   accrueCoachCommissionForPayment,
+  ensureCoachReferralLink,
   reverseCoachCommissionForPayment,
   syncReferralAttributionMembershipStatus
 } from "./coach-affiliate.service.js";
+import { syncCoachReferralEligibility } from "./coach-eligibility.js";
 
 type PaymentWithMembership = Payment & {
   membership: Membership & {
@@ -109,6 +111,8 @@ export async function applySubscriptionPaymentConfirmation(
         plan: true
       }
     });
+    await syncCoachReferralEligibility(membership.userId);
+    await ensureCoachReferralLink(membership.userId);
   }
 
   if (shouldExtendMembership) {

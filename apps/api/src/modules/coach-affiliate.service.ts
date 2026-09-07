@@ -9,6 +9,7 @@ import {
 } from "@app-treino/shared";
 import type { CoachReferralLink, Payment, Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
+import { getCoachEligibility, syncCoachReferralEligibility } from "./coach-eligibility.js";
 
 const REFERRAL_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -61,6 +62,12 @@ async function ensureCoachWallet(tx: Prisma.TransactionClient, coachUserId: stri
 }
 
 export async function ensureCoachReferralLink(coachUserId: string) {
+  const eligible = await getCoachEligibility(coachUserId);
+  if (!eligible.isActiveCoach) {
+    await syncCoachReferralEligibility(coachUserId);
+    return null;
+  }
+
   const existing = await prisma.coachReferralLink.findFirst({
     where: { coachUserId, isActive: true },
     orderBy: { createdAt: "asc" }
@@ -121,19 +128,10 @@ export async function applyReferralAttributionForUser(userId: string, referralSl
   });
   if (!link || link.coach.deletedAt || link.coach.status !== "ACTIVE") return null;
 
-  const coachMembership = await prisma.organizationMember.findFirst({
-    where: {
-      userId: link.coachUserId,
-      role: "COACH",
-      status: "ACTIVE",
-      ...(link.organizationId ? { organizationId: link.organizationId } : {})
-    },
-    include: {
-      organization: { select: { id: true, deletedAt: true, status: true } },
-      unit: { select: { id: true, deletedAt: true, status: true } }
-    },
-    orderBy: { createdAt: "asc" }
-  });
+  const coachEligible = await getCoachEligibility(link.coachUserId);
+  if (!coachEligible.isActiveCoach) return null;
+
+  const coachMembership = coachEligible.coachMembership;
 
   const organizationId = coachMembership?.organizationId ?? link.organizationId ?? null;
   const unitId = coachMembership?.unitId ?? null;
@@ -153,7 +151,7 @@ export async function applyReferralAttributionForUser(userId: string, referralSl
       data: { signupCount: { increment: 1 } }
     });
 
-    if (organizationId && unitId && coachMembership?.organization?.deletedAt == null) {
+    if (organizationId && unitId && coachMembership?.organizationId) {
       await tx.athleteOrganizationLink.upsert({
         where: {
           athleteId_organizationId_unitId: {
@@ -258,6 +256,9 @@ export async function accrueCoachCommissionForPayment(
   });
   if (!membership || membership.status !== "ACTIVE") return null;
 
+  const coachEligible = await getCoachEligibility(attribution.coachUserId);
+  if (!coachEligible.isActiveCoach) return null;
+
   const amountInCents = calculateCoachCommission(payment.amountInCents);
   if (amountInCents <= 0) return null;
 
@@ -346,9 +347,10 @@ export async function syncReferralAttributionMembershipStatus(userId: string, me
 
 export async function getCoachAffiliateSummary(coachUserId: string) {
   await releaseMaturedCoachCommissions(coachUserId);
+  const eligibility = await getCoachEligibility(coachUserId);
 
   const [link, wallet, commissions, withdrawals, referredAthletes] = await Promise.all([
-    ensureCoachReferralLink(coachUserId),
+    eligibility.isActiveCoach ? ensureCoachReferralLink(coachUserId) : Promise.resolve(null),
     prisma.coachWallet.findUnique({ where: { coachUserId } }),
     prisma.coachCommissionEntry.findMany({
       where: { coachUserId },
@@ -384,6 +386,14 @@ export async function getCoachAffiliateSummary(coachUserId: string) {
     commissionRateLabel: "8%",
     minWithdrawalInCents: COACH_MIN_WITHDRAWAL_CENTS,
     holdingDays: COACH_COMMISSION_HOLDING_DAYS,
+    hasCoachRole: eligibility.hasCoachRole,
+    hasActiveSubscription: eligibility.hasActiveSubscription,
+    isActiveCoach: eligibility.isActiveCoach,
+    eligibilityMessage: eligibility.isActiveCoach
+      ? null
+      : eligibility.hasCoachRole
+        ? "Mantenha sua assinatura ATLLY ativa para receber comissões e usar o link de indicação."
+        : "Você precisa ser vinculado como coach por um administrador.",
     referralLink: link,
     wallet: wallet ?? {
       coachUserId,
@@ -408,6 +418,11 @@ export async function getCoachAffiliateSummary(coachUserId: string) {
 }
 
 export async function updateCoachWalletPix(coachUserId: string, pixKey: string, pixKeyType?: string | null) {
+  const eligibility = await getCoachEligibility(coachUserId);
+  if (!eligibility.isActiveCoach) {
+    throw new Error("Coach inativo: assinatura ATLLY ativa obrigatória para cadastrar PIX.");
+  }
+
   const trimmed = pixKey.trim();
   if (trimmed.length < 5) {
     throw new Error("Informe uma chave PIX válida.");
@@ -428,6 +443,11 @@ export async function updateCoachWalletPix(coachUserId: string, pixKey: string, 
 }
 
 export async function requestCoachWithdrawal(coachUserId: string, amountInCents: number) {
+  const eligibility = await getCoachEligibility(coachUserId);
+  if (!eligibility.isActiveCoach) {
+    throw new Error("Coach inativo: assinatura ATLLY ativa obrigatória para solicitar saque.");
+  }
+
   if (amountInCents < COACH_MIN_WITHDRAWAL_CENTS) {
     throw new Error(`Saque mínimo: R$ ${(COACH_MIN_WITHDRAWAL_CENTS / 100).toFixed(2).replace(".", ",")}.`);
   }

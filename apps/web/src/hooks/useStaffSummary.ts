@@ -4,6 +4,8 @@ import { fetchStaffSummary, type StaffSummary } from "../lib/staff-summary";
 const EMPTY: StaffSummary = {
   isStaff: false,
   isCoach: false,
+  isActiveCoach: false,
+  hasActiveSubscription: false,
   isNutritionist: false,
   roles: [],
   organizations: []

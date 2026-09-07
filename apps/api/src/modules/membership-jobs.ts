@@ -1,6 +1,7 @@
 import type { AppPrismaClient } from "../prisma.js";
 import { prisma } from "../prisma.js";
 import { syncUserEnrollmentFromMemberships } from "./membership.utils.js";
+import { syncCoachReferralEligibility } from "./coach-eligibility.js";
 
 /** Marca matrículas ACTIVE com endsAt vencido como OVERDUE e sincroniza enrollmentStatus. */
 export async function expireOverdueMemberships(db: AppPrismaClient = prisma) {
@@ -30,6 +31,7 @@ export async function expireOverdueMemberships(db: AppPrismaClient = prisma) {
 
   for (const userId of userIds) {
     await syncUserEnrollmentFromMemberships(db, userId);
+    await syncCoachReferralEligibility(userId);
   }
 
   return expired.length;

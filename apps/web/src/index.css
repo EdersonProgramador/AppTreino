@@ -17199,6 +17199,17 @@ html.light .student-profile-identity-copy strong {
   margin: 0;
 }
 
+.coach-landing-hero {
+  background:
+    radial-gradient(circle at 15% 20%, rgba(240, 180, 90, 0.12), transparent 45%),
+    radial-gradient(circle at 85% 10%, rgba(224, 106, 60, 0.1), transparent 40%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.2), transparent 55%);
+}
+
+.coach-landing-hero__glow {
+  background: radial-gradient(circle at 70% 40%, rgba(212, 175, 55, 0.08), transparent 50%);
+}
+
 .cms-filter-bar .cms-filter-select {
   min-width: 180px;
   flex: 0 0 auto;

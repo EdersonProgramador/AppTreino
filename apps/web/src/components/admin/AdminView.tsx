@@ -519,6 +519,12 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   const [selectedAdminStudent, setSelectedAdminStudent] = useState<AdminStudentOverview | null>(null);
   const [studentOverviewLoading, setStudentOverviewLoading] = useState(false);
   const [savingStudentProfile, setSavingStudentProfile] = useState(false);
+  const [adminOrganizations, setAdminOrganizations] = useState<
+    Array<{ id: string; name: string; units: Array<{ id: string; name: string }> }>
+  >([]);
+  const [coachPromoteOrgId, setCoachPromoteOrgId] = useState("");
+  const [coachPromoteUnitId, setCoachPromoteUnitId] = useState("");
+  const [promotingCoach, setPromotingCoach] = useState(false);
   const [adminStudentProfileFormKey, setAdminStudentProfileFormKey] = useState(0);
   const [managedUserSearch, setManagedUserSearch] = useState("");
   const [userSearch, setUserSearch] = useState("");
@@ -1112,6 +1118,29 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   }, [selectedAdminStudentId, token]);
 
   useEffect(() => {
+    if (!token || !selectedAdminStudentId) {
+      setAdminOrganizations([]);
+      setCoachPromoteOrgId("");
+      setCoachPromoteUnitId("");
+      return;
+    }
+
+    void apiGet<{ organizations: Array<{ id: string; name: string; units: Array<{ id: string; name: string }> }> }>(
+      "/org/organizations",
+      token
+    )
+      .then((response) => {
+        setAdminOrganizations(response.organizations);
+        const first = response.organizations[0];
+        if (first) {
+          setCoachPromoteOrgId(first.id);
+          setCoachPromoteUnitId(first.units[0]?.id ?? "");
+        }
+      })
+      .catch(() => setAdminOrganizations([]));
+  }, [selectedAdminStudentId, token]);
+
+  useEffect(() => {
     setUsersPage(1);
   }, [userRoleFilter, userSearch, userStatusFilter]);
 
@@ -1127,6 +1156,28 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
 
   async function refreshAdminStudentOverview(resources: AdminResource[] = ["users", "summary"]) {
     await Promise.all([loadAdminData(resources), loadAdminStudentOverview()]);
+  }
+
+  async function handlePromoteStudentToCoach() {
+    if (!token || !selectedAdminStudentId || !coachPromoteOrgId) return;
+
+    setPromotingCoach(true);
+    try {
+      await apiPost(
+        `/admin/users/${selectedAdminStudentId}/promote-coach`,
+        {
+          organizationId: coachPromoteOrgId,
+          unitId: coachPromoteUnitId || undefined
+        },
+        token
+      );
+      setFeedback("Aluno promovido a coach ATLLY com sucesso.");
+      await refreshAdminStudentOverview();
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error, "Não foi possível promover o aluno a coach."));
+    } finally {
+      setPromotingCoach(false);
+    }
   }
 
   async function handleCreateUser(event: FormEvent<HTMLFormElement>) {
@@ -3742,6 +3793,91 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                     </select>
                   </div>
                 )) ?? <p>Nenhuma matrícula.</p>}
+              </article>
+
+              <article className="admin-student-module">
+                <div className="admin-student-module-title">
+                  <ShieldCheck size={18} />
+                  <strong>Coach ATLLY</strong>
+                </div>
+                {selectedAdminStudent.coachEligibility.isActiveCoach ? (
+                  <div className={dataRowClass}>
+                    <span>
+                      <strong>Coach ativo</strong>
+                      <small>
+                        {selectedAdminStudent.coachEligibility.coachMembership?.organization.name ?? "Organização"}
+                        {selectedAdminStudent.coachEligibility.coachMembership?.unit
+                          ? ` · ${selectedAdminStudent.coachEligibility.coachMembership.unit.name}`
+                          : ""}
+                      </small>
+                    </span>
+                    <em className="assessment-source-badge admin">Comissão liberada</em>
+                  </div>
+                ) : selectedAdminStudent.coachEligibility.hasCoachRole ? (
+                  <p className="text-sm text-sand-muted">
+                    Coach vinculado, porém inativo. Assinatura ATLLY ativa é obrigatória para selo, link de indicação e comissão de 8%.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-sm text-sand-muted">
+                      Promova um aluno com assinatura ativa para coach. Ele continua como aluno e ganha painel profissional + comissão.
+                    </p>
+                    {!selectedAdminStudent.activeMembership ? (
+                      <p className="text-sm text-red-400">Este aluno não possui assinatura ATLLY ativa no momento.</p>
+                    ) : adminOrganizations.length === 0 ? (
+                      <p className="text-sm text-sand-muted">Cadastre uma organização em Organizações antes de promover coaches.</p>
+                    ) : (
+                      <div className="grid gap-3">
+                        <label className="grid gap-1 text-sm">
+                          Organização
+                          <select
+                            className="admin-input"
+                            value={coachPromoteOrgId}
+                            onChange={(event) => {
+                              const nextOrgId = event.target.value;
+                              setCoachPromoteOrgId(nextOrgId);
+                              const org = adminOrganizations.find((item) => item.id === nextOrgId);
+                              setCoachPromoteUnitId(org?.units[0]?.id ?? "");
+                            }}
+                          >
+                            {adminOrganizations.map((org) => (
+                              <option key={org.id} value={org.id}>
+                                {org.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {adminOrganizations.find((org) => org.id === coachPromoteOrgId)?.units.length ? (
+                          <label className="grid gap-1 text-sm">
+                            Unidade
+                            <select
+                              className="admin-input"
+                              value={coachPromoteUnitId}
+                              onChange={(event) => setCoachPromoteUnitId(event.target.value)}
+                            >
+                              {adminOrganizations
+                                .find((org) => org.id === coachPromoteOrgId)
+                                ?.units.map((unit) => (
+                                  <option key={unit.id} value={unit.id}>
+                                    {unit.name}
+                                  </option>
+                                ))}
+                            </select>
+                          </label>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="primary-button"
+                          disabled={promotingCoach || !coachPromoteOrgId}
+                          onClick={() => void handlePromoteStudentToCoach()}
+                        >
+                          {promotingCoach ? <Loader2 className="spin" size={18} /> : <ShieldCheck size={18} />}
+                          {promotingCoach ? "Promovendo…" : "Tornar coach"}
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
               </article>
 
               <article className="admin-student-module">

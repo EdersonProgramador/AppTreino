@@ -6,6 +6,7 @@ import { LoginView } from "../components/auth/LoginView";
 import { SubscriptionCheckoutShell } from "../components/checkout/SubscriptionCheckoutShell";
 import { AppDownloadSoonView } from "../components/home/AppDownloadSoonView";
 import { HomeView } from "../components/home/HomeView";
+import { CoachLandingView } from "../components/home/CoachLandingView";
 import { SharedPostPage } from "../components/shared/SharedPostPage";
 import { PrivacyPage, RefundPolicyPage, TermsPage } from "../components/legal/LegalPages";
 import { assetUrl } from "../lib/urls";
@@ -59,6 +60,29 @@ export function HomePage() {
     <HomeView
       onStart={(planCode, couponCode) => navigate(activatePath(planCode, couponCode))}
       onLogin={() => navigate(paths.login)}
+    />
+  );
+}
+
+export function CoachLandingPage() {
+  const { user, token, isTransitioning, transitionMessage } = useAuth();
+  const navigate = useNavigate();
+
+  if (isTransitioning) {
+    return <TransitionScreen message={transitionMessage} />;
+  }
+
+  if (user && token) {
+    return <Navigate to={homePathForRole(user.role)} replace />;
+  }
+
+  return (
+    <CoachLandingView
+      onSubscribe={() => navigate(paths.activate)}
+      onLogin={() => {
+        setPostLoginDestination(paths.coach);
+        navigate(paths.login);
+      }}
     />
   );
 }

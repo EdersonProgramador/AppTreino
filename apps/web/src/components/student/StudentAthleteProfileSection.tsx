@@ -493,7 +493,7 @@ export function StudentAthleteProfileSection({
             <div className="student-athlete-identity">
               <div className="student-athlete-name-row">
                 <h1>{profile?.name ?? brand.athlete}</h1>
-                {staffSummary.isCoach ? <CoachStaffBadge compact /> : null}
+                {staffSummary.isActiveCoach ? <CoachStaffBadge compact /> : null}
                 {staffSummary.isNutritionist && !staffSummary.isCoach ? (
                   <CoachStaffBadge variant="nutritionist" compact />
                 ) : null}

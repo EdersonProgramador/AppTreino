@@ -262,6 +262,18 @@ export const assessmentPhotoFields = [
 export interface AdminStudentOverview {
   student: AdminUser;
   activeMembership: MembershipRow | null;
+  coachEligibility: {
+    hasCoachRole: boolean;
+    hasActiveSubscription: boolean;
+    isActiveCoach: boolean;
+    coachMembership: {
+      id: string;
+      organizationId: string;
+      unitId: string | null;
+      organization: { id: string; name: string };
+      unit: { id: string; name: string } | null;
+    } | null;
+  };
   payments: PaymentRow[];
   assessments: PhysicalAssessmentRow[];
   attendance: Array<{ id: string; date: string }>;

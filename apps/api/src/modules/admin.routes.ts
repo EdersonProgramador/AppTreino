@@ -24,10 +24,11 @@ import { isVideoUploadExtension, saveValidatedUpload, uploadsDir } from "../uplo
 import type { UploadGroup } from "../upload-security.js";
 import { persistUploadedFile } from "../upload-persist.js";
 import { ensureUploadedVideoIsMp4 } from "../video-transcode.js";
-import {
-  assertPlatformOwnerMutableByAdmin,
+import { assertPlatformOwnerMutableByAdmin,
   assertPlatformOwnerNotDeletable
 } from "../platform-owner.js";
+import { ensureCoachReferralLink } from "./coach-affiliate.service.js";
+import { getCoachEligibility, hasActiveStudentSubscription } from "./coach-eligibility.js";
 import { serializePlanRecord, hydratePlanCouponRelations } from "../plan-serializer.js";
 import { clearPlanPromoCoupon, syncPlanPromoCoupon } from "./plan-promo.service.js";
 import { autoCloseStaleTickets, FINALIZE_PROMPT, ticketInclude } from "./ticket.utils.js";
@@ -1602,9 +1603,25 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         return true;
       }) ?? null;
 
+    const coachEligibility = await getCoachEligibility(id);
+
     return {
       student,
       activeMembership,
+      coachEligibility: {
+        hasCoachRole: coachEligibility.hasCoachRole,
+        hasActiveSubscription: coachEligibility.hasActiveSubscription,
+        isActiveCoach: coachEligibility.isActiveCoach,
+        coachMembership: coachEligibility.coachMembership
+          ? {
+              id: coachEligibility.coachMembership.id,
+              organizationId: coachEligibility.coachMembership.organizationId,
+              unitId: coachEligibility.coachMembership.unitId,
+              organization: coachEligibility.coachMembership.organization,
+              unit: coachEligibility.coachMembership.unit
+            }
+          : null
+      },
       payments,
       assessments,
       attendance,
@@ -1620,6 +1637,94 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         openTickets: tickets.filter((ticket) => ticket.status === "OPEN" || ticket.status === "IN_PROGRESS").length
       }
     };
+  });
+
+  app.post("/admin/users/:id/promote-coach", async (request, reply) => {
+    requireDatabase();
+    const { id } = idParamSchema.parse(request.params);
+    const body = z
+      .object({
+        organizationId: z.string().min(1),
+        unitId: z.string().optional()
+      })
+      .parse(request.body);
+
+    const student = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, role: true, status: true, deletedAt: true, name: true, email: true }
+    });
+    if (!student || student.deletedAt) {
+      return reply.code(404).send({ message: "Aluno não encontrado." });
+    }
+    if (student.role !== "USER") {
+      return reply.code(400).send({ message: "Somente alunos (USER) podem ser promovidos a coach." });
+    }
+    if (student.status !== "ACTIVE") {
+      return reply.code(400).send({ message: "Aluno inativo não pode ser promovido a coach." });
+    }
+
+    const hasSubscription = await hasActiveStudentSubscription(id);
+    if (!hasSubscription) {
+      return reply.code(400).send({
+        message: "O aluno precisa de assinatura ATLLY ativa para ser coach e receber comissão."
+      });
+    }
+
+    const organization = await prisma.organization.findFirst({
+      where: { id: body.organizationId, deletedAt: null },
+      include: {
+        units: { where: { deletedAt: null }, orderBy: { name: "asc" }, take: 1 }
+      }
+    });
+    if (!organization) {
+      return reply.code(404).send({ message: "Organização não encontrada." });
+    }
+
+    const unitId = body.unitId ?? organization.units[0]?.id ?? null;
+    if (body.unitId) {
+      const unit = organization.units.find((item) => item.id === body.unitId);
+      if (!unit) {
+        return reply.code(400).send({ message: "Unidade inválida para a organização selecionada." });
+      }
+    }
+
+    const member = await prisma.organizationMember.upsert({
+      where: {
+        organizationId_userId_role: {
+          organizationId: body.organizationId,
+          userId: id,
+          role: "COACH"
+        }
+      },
+      create: {
+        organizationId: body.organizationId,
+        userId: id,
+        role: "COACH",
+        unitId,
+        status: "ACTIVE"
+      },
+      update: {
+        unitId,
+        status: "ACTIVE"
+      },
+      include: {
+        organization: { select: { id: true, name: true } },
+        unit: { select: { id: true, name: true } }
+      }
+    });
+
+    await ensureCoachReferralLink(id);
+    const coachEligibility = await getCoachEligibility(id);
+
+    return reply.code(201).send({
+      member,
+      coachEligibility: {
+        hasCoachRole: coachEligibility.hasCoachRole,
+        hasActiveSubscription: coachEligibility.hasActiveSubscription,
+        isActiveCoach: coachEligibility.isActiveCoach
+      },
+      student: { id: student.id, name: student.name, email: student.email }
+    });
   });
 
   app.post("/admin/users", async (request, reply) => {

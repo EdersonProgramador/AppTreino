@@ -18,6 +18,7 @@ import { brand } from "../../lib/brand";
 import { assetUrl } from "../../lib/urls";
 import { paths } from "../../auth/paths";
 import { CoachStaffBadge } from "../shared/CoachStaffBadge";
+import { useStaffSummary } from "../../hooks/useStaffSummary";
 import { CoachTrainingStudio } from "./CoachTrainingStudio";
 import { CoachRevenuePanel } from "./CoachRevenuePanel";
 
@@ -112,6 +113,7 @@ type Props = {
 type Tab = "overview" | "athletes" | "classes" | "programs" | "nutrition" | "revenue";
 
 export function CoachView({ token, userName, onLogout }: Props) {
+  const { summary: staffSummary } = useStaffSummary(token);
   const [searchParams] = useSearchParams();
   const previewCoach = searchParams.get("preview") === "coach";
   const workspacePath = previewCoach ? "/org/me/workspace?preview=coach" : "/org/me/workspace";
@@ -264,7 +266,12 @@ export function CoachView({ token, userName, onLogout }: Props) {
               <p className="m-0 text-xs uppercase tracking-wide text-sand-muted">Painel profissional</p>
               <div className="flex flex-wrap items-center gap-2">
                 <strong className="block truncate">{userName}</strong>
-                {isCoachMember ? <CoachStaffBadge compact /> : null}
+                {staffSummary.isActiveCoach ? <CoachStaffBadge compact /> : null}
+                {isCoachMember && !staffSummary.isActiveCoach ? (
+                  <span className="coach-staff-badge coach-staff-badge--staff coach-staff-badge--compact">
+                    Coach inativo
+                  </span>
+                ) : null}
               </div>
               {rolesLabel && <span className="block text-xs text-sand-muted">{rolesLabel}</span>}
             </div>

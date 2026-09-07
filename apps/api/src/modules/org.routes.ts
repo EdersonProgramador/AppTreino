@@ -8,6 +8,7 @@ import { prisma } from "../prisma.js";
 import { authorize } from "./org-auth/authorize.js";
 import { loadOrgAuthContext, writeAuditLog } from "./org-auth/context.js";
 import { authorizeOrg, httpOrgError } from "./org-auth/scope.js";
+import { hasActiveStudentSubscription } from "./coach-eligibility.js";
 
 function webAppOrigin() {
   const origins = env.WEB_ORIGIN.split(",")
@@ -120,6 +121,8 @@ export async function registerOrgRoutes(app: FastifyInstance) {
       staffMemberships.length > 0 || ctx.isPlatformAdmin || ctx.isPlatformOperator;
     const isCoach = staffMemberships.some((member) => member.role === "COACH");
     const isNutritionist = staffMemberships.some((member) => member.role === "NUTRITIONIST");
+    const hasActiveSubscription = await hasActiveStudentSubscription(user.id);
+    const isActiveCoach = isCoach && hasActiveSubscription;
     const orgIds = [...new Set(staffMemberships.map((member) => member.organizationId))];
     const organizations =
       orgIds.length > 0
@@ -133,6 +136,8 @@ export async function registerOrgRoutes(app: FastifyInstance) {
     return {
       isStaff,
       isCoach,
+      isActiveCoach,
+      hasActiveSubscription,
       isNutritionist,
       roles: [...new Set(staffMemberships.map((member) => member.role))],
       organizations

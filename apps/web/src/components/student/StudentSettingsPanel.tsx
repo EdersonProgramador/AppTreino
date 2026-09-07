@@ -115,7 +115,7 @@ export const StudentSettingsPanel = ({ token, onBack }: StudentSettingsPanelProp
               <span className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand-gold">preferências</span>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="font-display m-0 text-3xl font-bold tracking-tight text-sand sm:text-4xl">Configurações</h2>
-                {staffSummary.isCoach ? <CoachStaffBadge compact /> : null}
+                {staffSummary.isActiveCoach ? <CoachStaffBadge compact /> : null}
               </div>
               <p className="m-0 max-w-md text-sm text-sand-muted">
                 Modo Claro/Escuro e efeitos sonoros do portal do aluno.
@@ -134,9 +134,11 @@ export const StudentSettingsPanel = ({ token, onBack }: StudentSettingsPanelProp
           <div className="grid gap-1 px-1">
             <h3 className="m-0 text-lg font-extrabold text-sand">Painel profissional</h3>
             <p className="m-0 text-sm text-sand-faint">
-              {staffSummary.isCoach
+              {staffSummary.isActiveCoach
                 ? "Acesse o Estúdio de Treinos, receitas de afiliado e o workspace da sua organização."
-                : "Abra o workspace da organização para gerenciar alunos e conteúdo."}
+                : staffSummary.isCoach
+                  ? "Renove ou mantenha sua assinatura ATLLY ativa para liberar comissões e o selo de coach."
+                  : "Abra o workspace da organização para gerenciar alunos e conteúdo."}
             </p>
             {staffSummary.organizations.length > 0 ? (
               <p className="m-0 text-xs text-sand-muted">

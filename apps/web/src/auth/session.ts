@@ -46,6 +46,7 @@ export const paths = {
   admin: "/admin",
   student: "/aluno",
   coach: "/coach",
+  coachLanding: "/para-coaches",
   coachPreview: "/coach?preview=coach",
   activate: "/ativar",
   app: "/app",
@@ -77,6 +78,7 @@ export function isGuestPath(pathname: string) {
     pathname === paths.login ||
     pathname === paths.activate ||
     pathname === paths.download ||
+    pathname === paths.coachLanding ||
     pathname === paths.terms ||
     pathname === paths.privacy ||
     pathname === paths.refundPolicy ||

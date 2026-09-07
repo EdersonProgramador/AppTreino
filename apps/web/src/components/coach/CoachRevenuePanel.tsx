@@ -11,6 +11,10 @@ type AffiliateSummary = {
   commissionRateLabel: string;
   minWithdrawalInCents: number;
   holdingDays: number;
+  hasCoachRole?: boolean;
+  hasActiveSubscription?: boolean;
+  isActiveCoach?: boolean;
+  eligibilityMessage?: string | null;
   referralUrl: string | null;
   activeReferrals: number;
   referralLink: {
@@ -119,9 +123,15 @@ export function CoachRevenuePanel({ token, busy, onBusy }: Props) {
   }
 
   const wallet = summary.wallet;
+  const commissionActive = summary.isActiveCoach !== false;
 
   return (
     <section className="grid gap-6">
+      {summary.eligibilityMessage ? (
+        <article className="rounded-3xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+          {summary.eligibilityMessage}
+        </article>
+      ) : null}
       <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-sand">
           <Wallet size={18} />
@@ -213,7 +223,7 @@ export function CoachRevenuePanel({ token, busy, onBusy }: Props) {
           <button
             type="button"
             className="admin-secondary-button w-fit"
-            disabled={busy || pixKey.trim().length < 5}
+            disabled={busy || !commissionActive || pixKey.trim().length < 5}
             onClick={() =>
               void onBusy(async () => {
                 await apiPut("/coach/affiliate/pix", { pixKey: pixKey.trim() }, token);
@@ -236,7 +246,7 @@ export function CoachRevenuePanel({ token, busy, onBusy }: Props) {
           <button
             type="button"
             className="admin-primary-button w-fit"
-            disabled={busy}
+            disabled={busy || !commissionActive}
             onClick={() =>
               void onBusy(async () => {
                 const normalized = withdrawAmount.replace(",", ".").trim();
