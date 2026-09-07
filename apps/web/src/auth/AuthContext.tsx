@@ -24,6 +24,7 @@ import {
   isRoleHomePath,
   mustRedirectForRole,
   normalizeAuthUser,
+  peekPostLoginDestination,
   persistStoredUser,
   readStoredUser
 } from "./session";
@@ -441,8 +442,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const couponForRedirect =
           resolveCheckoutCouponSelection({ checkoutIntent: checkoutIntentAfter }) || undefined;
         let destination = store.establishSession(response);
+        const coachInviteDestination =
+          destination === paths.coach || destination.startsWith(`${paths.coach}?`);
 
-        if (response.user.role === "USER" && !response.user.previewMode) {
+        if (response.user.role === "USER" && !response.user.previewMode && !coachInviteDestination) {
           try {
             const access = await fetchStudentPortalAccess(response.token);
             if (access.hasAccess) {
@@ -549,7 +552,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         resetToken: null,
         loginError: null,
         loginSuccess:
-          response.message ?? "Senha redefinida. Entre e conclua o pagamento para liberar o portal do aluno."
+          response.message ??
+          (peekPostLoginDestination() === paths.coach
+            ? "Senha redefinida. Entre com sua conta para acessar o painel profissional."
+            : "Senha redefinida. Entre e conclua o pagamento para liberar o portal do aluno.")
       });
     } catch (error) {
       const message = error instanceof ApiError ? error.message : null;

@@ -86,6 +86,14 @@ function organizationIdScopeOrBranches(orgIds: string[] | undefined) {
 }
 
 export async function registerOrgRoutes(app: FastifyInstance) {
+  const STAFF_ROLES = new Set([
+    "PLATFORM_OWNER",
+    "ORGANIZATION_ADMIN",
+    "UNIT_MANAGER",
+    "COACH",
+    "NUTRITIONIST"
+  ]);
+
   app.addHook("preHandler", async (request) => {
     if (!request.url.startsWith("/org")) return;
     await requireAuth(app, request);
@@ -102,13 +110,34 @@ export async function registerOrgRoutes(app: FastifyInstance) {
     };
   });
 
-  const STAFF_ROLES = new Set([
-    "PLATFORM_OWNER",
-    "ORGANIZATION_ADMIN",
-    "UNIT_MANAGER",
-    "COACH",
-    "NUTRITIONIST"
-  ]);
+  app.get("/org/me/staff-summary", async (request) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const staffMemberships = ctx.memberships.filter(
+      (member) => member.status === "ACTIVE" && STAFF_ROLES.has(member.role)
+    );
+    const isStaff =
+      staffMemberships.length > 0 || ctx.isPlatformAdmin || ctx.isPlatformOperator;
+    const isCoach = staffMemberships.some((member) => member.role === "COACH");
+    const isNutritionist = staffMemberships.some((member) => member.role === "NUTRITIONIST");
+    const orgIds = [...new Set(staffMemberships.map((member) => member.organizationId))];
+    const organizations =
+      orgIds.length > 0
+        ? await prisma.organization.findMany({
+            where: { id: { in: orgIds }, deletedAt: null },
+            select: { id: true, name: true },
+            orderBy: { name: "asc" }
+          })
+        : [];
+
+    return {
+      isStaff,
+      isCoach,
+      isNutritionist,
+      roles: [...new Set(staffMemberships.map((member) => member.role))],
+      organizations
+    };
+  });
 
   async function ensureCoachPreviewMembership(userId: string) {
     const demoOrg =

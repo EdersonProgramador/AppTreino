@@ -8,9 +8,12 @@ import { Link } from "react-router-dom";
 import { useUiPrefsStore } from "../../stores/uiPrefsStore";
 import { uiSounds } from "../../lib/ui-sounds";
 import { ThemeModeSwitch } from "../shared/ThemeModeSwitch";
+import { CoachStaffBadge } from "../shared/CoachStaffBadge";
 import { paths } from "../../auth/paths";
+import { useStaffSummary } from "../../hooks/useStaffSummary";
 
 type StudentSettingsPanelProps = {
+  token: string | null;
   onBack: () => void;
 };
 
@@ -63,9 +66,10 @@ const SoundToggle = ({
   </button>
 );
 
-export const StudentSettingsPanel = ({ onBack }: StudentSettingsPanelProps) => {
+export const StudentSettingsPanel = ({ token, onBack }: StudentSettingsPanelProps) => {
   const soundEnabled = useUiPrefsStore((state) => state.soundEnabled);
   const setSoundEnabled = useUiPrefsStore((state) => state.setSoundEnabled);
+  const { summary: staffSummary } = useStaffSummary(token);
 
   const handleSoundToggle = () => {
     const next = !soundEnabled;
@@ -109,7 +113,10 @@ export const StudentSettingsPanel = ({ onBack }: StudentSettingsPanelProps) => {
             </span>
             <div className="grid gap-1">
               <span className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand-gold">preferências</span>
-              <h2 className="font-display m-0 text-3xl font-bold tracking-tight text-sand sm:text-4xl">Configurações</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-display m-0 text-3xl font-bold tracking-tight text-sand sm:text-4xl">Configurações</h2>
+                {staffSummary.isCoach ? <CoachStaffBadge compact /> : null}
+              </div>
               <p className="m-0 max-w-md text-sm text-sand-muted">
                 Modo Claro/Escuro e efeitos sonoros do portal do aluno.
               </p>
@@ -122,20 +129,29 @@ export const StudentSettingsPanel = ({ onBack }: StudentSettingsPanelProps) => {
         <ThemeModeSwitch />
       </div>
 
-      <div className="grid gap-3 rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-panel)] p-4 sm:p-6">
-        <div className="grid gap-1 px-1">
-          <h3 className="m-0 text-lg font-extrabold text-sand">Painel profissional</h3>
-          <p className="m-0 text-sm text-sand-faint">
-            Se você é coach, nutricionista ou admin de uma academia/box, abra o workspace da organização.
-          </p>
+      {staffSummary.isStaff ? (
+        <div className="grid gap-3 rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-panel)] p-4 sm:p-6">
+          <div className="grid gap-1 px-1">
+            <h3 className="m-0 text-lg font-extrabold text-sand">Painel profissional</h3>
+            <p className="m-0 text-sm text-sand-faint">
+              {staffSummary.isCoach
+                ? "Acesse o Estúdio de Treinos, receitas de afiliado e o workspace da sua organização."
+                : "Abra o workspace da organização para gerenciar alunos e conteúdo."}
+            </p>
+            {staffSummary.organizations.length > 0 ? (
+              <p className="m-0 text-xs text-sand-muted">
+                {staffSummary.organizations.map((org) => org.name).join(" · ")}
+              </p>
+            ) : null}
+          </div>
+          <Link
+            to={paths.coach}
+            className="inline-flex items-center justify-center rounded-2xl border border-brand-gold/40 bg-brand-gold/15 px-4 py-3 text-sm font-extrabold text-sand no-underline transition hover:bg-brand-gold/25"
+          >
+            Abrir painel profissional
+          </Link>
         </div>
-        <Link
-          to={paths.coach}
-          className="inline-flex items-center justify-center rounded-2xl border border-brand-gold/40 bg-brand-gold/15 px-4 py-3 text-sm font-extrabold text-sand no-underline transition hover:bg-brand-gold/25"
-        >
-          Abrir painel do coach
-        </Link>
-      </div>
+      ) : null}
 
       <div className="grid gap-4 rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-panel)] p-4 sm:p-6">
         <div className="grid gap-1 px-1">

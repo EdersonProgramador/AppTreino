@@ -17,6 +17,7 @@ import { apiGet, apiPost } from "../../api";
 import { brand } from "../../lib/brand";
 import { assetUrl } from "../../lib/urls";
 import { paths } from "../../auth/paths";
+import { CoachStaffBadge } from "../shared/CoachStaffBadge";
 import { CoachTrainingStudio } from "./CoachTrainingStudio";
 import { CoachRevenuePanel } from "./CoachRevenuePanel";
 
@@ -193,6 +194,7 @@ export function CoachView({ token, userName, onLogout }: Props) {
     .map((item) => item.role.replaceAll("_", " "))
     .filter((value, index, list) => list.indexOf(value) === index)
     .join(" · ");
+  const isCoachMember = (workspace?.memberships ?? []).some((item) => item.role === "COACH");
 
   const tabs: Array<{ id: Tab; label: string; icon: typeof UsersRound }> = [
     { id: "overview", label: "Visão geral", icon: ClipboardList },
@@ -260,7 +262,10 @@ export function CoachView({ token, userName, onLogout }: Props) {
             <img src={assetUrl("assets/atlly-logo.png")} alt={brand.name} className="h-8 w-auto" />
             <div className="min-w-0">
               <p className="m-0 text-xs uppercase tracking-wide text-sand-muted">Painel profissional</p>
-              <strong className="block truncate">{userName}</strong>
+              <div className="flex flex-wrap items-center gap-2">
+                <strong className="block truncate">{userName}</strong>
+                {isCoachMember ? <CoachStaffBadge compact /> : null}
+              </div>
               {rolesLabel && <span className="block text-xs text-sand-muted">{rolesLabel}</span>}
             </div>
           </div>

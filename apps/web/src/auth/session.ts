@@ -28,6 +28,14 @@ export function consumePostLoginDestination(): string | null {
   }
 }
 
+export function peekPostLoginDestination(): string | null {
+  try {
+    return window.sessionStorage.getItem(POST_LOGIN_DEST_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export const paths = {
   home: "/",
   login: "/login",

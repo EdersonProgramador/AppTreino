@@ -8,6 +8,8 @@ import { mediaUrl, retryVideoAsCompatible } from "../../lib/urls";
 import { uiSounds } from "../../lib/ui-sounds";
 import type { SocialPostRow, StudentProfile, UploadResponse } from "../../types";
 import { SocialPostFeedPreview } from "./SocialPostFeedPreview";
+import { CoachStaffBadge } from "../shared/CoachStaffBadge";
+import { useStaffSummary } from "../../hooks/useStaffSummary";
 import { ActivityShareCard, activitySharePhotoUrl, activityShareStatsFromRow, activityShareTitle } from "./ActivityShareCard";
 import { FeedWorkoutShareCard } from "./WorkoutSharePreview";
 
@@ -149,6 +151,7 @@ export function StudentAthleteProfileSection({
   onPostsCountUpdated,
   children
 }: Props) {
+  const { summary: staffSummary } = useStaffSummary(token);
   const [posts, setPosts] = useState<SocialPostRow[]>([]);
   const [postsLoading, setPostsLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -488,7 +491,13 @@ export function StudentAthleteProfileSection({
             </div>
 
             <div className="student-athlete-identity">
-              <h1>{profile?.name ?? brand.athlete}</h1>
+              <div className="student-athlete-name-row">
+                <h1>{profile?.name ?? brand.athlete}</h1>
+                {staffSummary.isCoach ? <CoachStaffBadge compact /> : null}
+                {staffSummary.isNutritionist && !staffSummary.isCoach ? (
+                  <CoachStaffBadge variant="nutritionist" compact />
+                ) : null}
+              </div>
               {metaLine ? <p className="student-athlete-meta">{metaLine}</p> : null}
               <div className="student-athlete-follow-row">
                 <span>

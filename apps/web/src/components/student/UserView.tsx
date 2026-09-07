@@ -2789,7 +2789,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           ) : null}
 
           {studentSection === "settings" ? (
-            <StudentSettingsPanel onBack={() => goToSection("subscription")} />
+            <StudentSettingsPanel token={token} onBack={() => goToSection("subscription")} />
           ) : null}
         </SubscriptionCheckoutShell>
       </div>
@@ -5030,7 +5030,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         )}
 
         {studentSection === "settings" && (
-          <StudentSettingsPanel onBack={() => goToSection("menu")} />
+          <StudentSettingsPanel token={token} onBack={() => goToSection("menu")} />
         )}
 
         {studentSection === "play" && token && <StudentPlaySection token={token} />}
