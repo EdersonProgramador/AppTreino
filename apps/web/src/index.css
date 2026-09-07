@@ -4669,6 +4669,130 @@ html.light .finance-hub-tabs button {
   order: 2;
 }
 
+.admin-coach-promote-hint {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.12), rgba(212, 175, 55, 0.04));
+}
+
+.admin-coach-promote-hint svg {
+  margin-top: 2px;
+  flex-shrink: 0;
+  color: var(--brand-gold);
+}
+
+.admin-coach-promote-hint strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--app-text);
+  font-size: 14px;
+}
+
+.admin-coach-promote-hint p {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.admin-coach-promote-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  border-radius: 10px;
+  background: rgba(212, 175, 55, 0.12);
+  color: var(--brand-gold);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.admin-coach-promote-action:hover {
+  background: rgba(212, 175, 55, 0.2);
+  border-color: rgba(212, 175, 55, 0.55);
+}
+
+.admin-coach-promote-panel {
+  display: grid;
+  gap: 16px;
+  padding: 18px 20px;
+  border: 1px solid rgba(212, 175, 55, 0.32);
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(212, 175, 55, 0.14), rgba(212, 175, 55, 0.04));
+}
+
+.admin-coach-promote-panel.is-highlight {
+  box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.45);
+}
+
+.admin-coach-promote-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-coach-promote-panel__eyebrow {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--brand-gold);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.admin-coach-promote-panel__head h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--app-text);
+}
+
+.admin-coach-promote-panel__head p {
+  margin: 8px 0 0;
+  max-width: 56rem;
+  color: var(--app-text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.admin-coach-promote-panel__form {
+  display: grid;
+  gap: 12px;
+  max-width: 520px;
+}
+
+.admin-coach-promote-panel__submit {
+  justify-self: start;
+}
+
+.admin-coach-promote-panel__note,
+.admin-coach-promote-panel__warning {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.admin-coach-promote-panel__note {
+  color: var(--app-text-muted);
+}
+
+.admin-coach-promote-panel__warning {
+  color: #f87171;
+  font-weight: 700;
+}
+
 .admin-student-toolbar {
   display: flex;
   flex-wrap: wrap;
