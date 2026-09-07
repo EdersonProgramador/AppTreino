@@ -3,7 +3,8 @@ import { describe, it } from "node:test";
 import {
   COACH_COMMISSION_RATE,
   calculateCoachCommission,
-  formatCoachCommissionRate
+  formatCoachCommissionRate,
+  prepareCoachReferralSlugInput
 } from "./coach-affiliate.js";
 
 describe("coach-affiliate", () => {
@@ -16,5 +17,11 @@ describe("coach-affiliate", () => {
     assert.equal(calculateCoachCommission(9700), 776);
     assert.equal(calculateCoachCommission(0), 0);
     assert.equal(calculateCoachCommission(-100), 0);
+  });
+
+  it("normalizes referral slug input", () => {
+    assert.equal(prepareCoachReferralSlugInput("João Cross"), "joao-cross");
+    assert.equal(prepareCoachReferralSlugInput("ab"), null);
+    assert.equal(prepareCoachReferralSlugInput("admin"), null);
   });
 });
