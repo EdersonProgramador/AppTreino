@@ -125,7 +125,7 @@ export function CoachTrainingStudio({
     setLoadError(null);
     try {
       const [modalitiesData, exercisesData, blocksData, programsData] = await Promise.all([
-        apiGet<{ modalities: Modality[] }>("/org/modalities", token),
+        apiGet<{ modalities: Modality[] }>(`/org/modalities?organizationId=${organizationId}`, token),
         apiGet<{ exercises: Exercise[] }>(`/org/organizations/${organizationId}/training/exercises`, token),
         apiGet<{ blocks: WorkoutBlock[] }>(
           `/org/organizations/${organizationId}/training/workout-blocks`,

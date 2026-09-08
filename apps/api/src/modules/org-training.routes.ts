@@ -32,10 +32,22 @@ function denyUnlessAllowed(result: ReturnType<typeof authorize>) {
 }
 
 export async function registerOrgTrainingRoutes(app: FastifyInstance) {
-  app.get("/org/modalities", async (request) => {
+  app.get("/org/modalities", async (request, reply) => {
     const user = await requireAuth(app, request);
     const ctx = await loadOrgAuthContext(user);
-    denyUnlessAllowed(authorize({ ctx, permission: "training.view" }));
+    const query = z.object({ organizationId: z.string().min(1).optional() }).parse(request.query);
+
+    if (ctx.isPlatformOperator || ctx.isPlatformAdmin) {
+      denyUnlessAllowed(authorize({ ctx, permission: "training.view" }));
+    } else {
+      if (!query.organizationId) {
+        return reply.code(400).send({ message: "organizationId é obrigatório." });
+      }
+      denyUnlessAllowed(
+        authorize({ ctx, permission: "training.view", organizationId: query.organizationId })
+      );
+    }
+
     const modalities = await listOrgModalities();
     return { modalities };
   });

@@ -119,6 +119,43 @@ describe("org authorize", () => {
     assert.equal(result, "ALLOW");
   });
 
+  it("coach can view training catalog when organizationId is provided", () => {
+    const result = authorize({
+      ctx: ctx({
+        userId: "coach-1",
+        memberships: [
+          {
+            organizationId: "org-1",
+            unitId: "unit-1",
+            role: "COACH",
+            status: "ACTIVE"
+          }
+        ]
+      }),
+      permission: "training.view",
+      organizationId: "org-1"
+    });
+    assert.equal(result, "ALLOW");
+  });
+
+  it("coach cannot view training catalog without organizationId", () => {
+    const result = authorize({
+      ctx: ctx({
+        userId: "coach-1",
+        memberships: [
+          {
+            organizationId: "org-1",
+            unitId: "unit-1",
+            role: "COACH",
+            status: "ACTIVE"
+          }
+        ]
+      }),
+      permission: "training.view"
+    });
+    assert.equal(result, "DENY");
+  });
+
   it("athlete self scope allows own view permission context", () => {
     const result = authorize({
       ctx: ctx({

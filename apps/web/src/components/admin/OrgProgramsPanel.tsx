@@ -62,7 +62,7 @@ export function OrgProgramsPanel({ token, organizationId, units, busy, onBusy, o
       const [programsData, blocksData, modalitiesData] = await Promise.all([
         apiGet<{ programs: OrgProgram[] }>(`/org/organizations/${organizationId}/programs`, token),
         apiGet<{ blocks: WorkoutBlock[] }>("/org/workout-blocks", token),
-        apiGet<{ modalities: PlatformModality[] }>("/org/modalities", token)
+        apiGet<{ modalities: PlatformModality[] }>(`/org/modalities?organizationId=${organizationId}`, token)
       ]);
       setPrograms(programsData.programs);
       setBlocks(blocksData.blocks);
