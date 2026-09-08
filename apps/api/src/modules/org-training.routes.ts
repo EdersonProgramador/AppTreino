@@ -4,6 +4,7 @@ import { requireAuth } from "../auth.js";
 import { prisma } from "../prisma.js";
 import { authorize } from "./org-auth/authorize.js";
 import { loadOrgAuthContext, writeAuditLog } from "./org-auth/context.js";
+import { canAccessOrgPlatform, hasActiveOrgStaffMembership } from "./org-auth/staff.js";
 import { authorizeOrg, httpOrgError } from "./org-auth/scope.js";
 import {
   createOrgTrainingExercise,
@@ -37,15 +38,11 @@ export async function registerOrgTrainingRoutes(app: FastifyInstance) {
     const ctx = await loadOrgAuthContext(user);
     const query = z.object({ organizationId: z.string().min(1).optional() }).parse(request.query);
 
-    if (ctx.isPlatformOperator || ctx.isPlatformAdmin) {
-      denyUnlessAllowed(authorize({ ctx, permission: "training.view" }));
-    } else {
-      if (!query.organizationId) {
-        return reply.code(400).send({ message: "organizationId é obrigatório." });
-      }
-      denyUnlessAllowed(
-        authorize({ ctx, permission: "training.view", organizationId: query.organizationId })
-      );
+    const allowed =
+      canAccessOrgPlatform(ctx) || hasActiveOrgStaffMembership(ctx, query.organizationId ?? null);
+
+    if (!allowed) {
+      return reply.code(403).send({ message: "Acesso negado ao recurso organizacional." });
     }
 
     const modalities = await listOrgModalities();

@@ -84,7 +84,10 @@ export function authorize(input: AuthorizeInput): AuthorizeResult {
   }
 
   if (!organizationId) {
-    return scope === "ORGANIZATION" ? "DENY" : "DENY";
+    if (scope === "ASSIGNED_ATHLETES" && !athleteId) {
+      return "ALLOW";
+    }
+    return "DENY";
   }
 
   if (scope === "ORGANIZATION") {

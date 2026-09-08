@@ -138,7 +138,7 @@ describe("org authorize", () => {
     assert.equal(result, "ALLOW");
   });
 
-  it("coach cannot view training catalog without organizationId", () => {
+  it("coach can view training catalog without organizationId", () => {
     const result = authorize({
       ctx: ctx({
         userId: "coach-1",
@@ -153,7 +153,7 @@ describe("org authorize", () => {
       }),
       permission: "training.view"
     });
-    assert.equal(result, "DENY");
+    assert.equal(result, "ALLOW");
   });
 
   it("athlete self scope allows own view permission context", () => {
