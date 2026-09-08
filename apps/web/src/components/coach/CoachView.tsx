@@ -21,6 +21,7 @@ import { CoachStaffBadge } from "../shared/CoachStaffBadge";
 import { useStaffSummary } from "../../hooks/useStaffSummary";
 import { CoachTrainingStudio } from "./CoachTrainingStudio";
 import { CoachRevenuePanel } from "./CoachRevenuePanel";
+import { CoachAccessGate } from "./CoachAccessGate";
 
 type OrgUser = { id: string; name: string; email: string | null };
 type Unit = { id: string; name: string };
@@ -113,7 +114,7 @@ type Props = {
 type Tab = "overview" | "athletes" | "classes" | "programs" | "nutrition" | "revenue";
 
 export function CoachView({ token, userName, onLogout }: Props) {
-  const { summary: staffSummary } = useStaffSummary(token);
+  const { summary: staffSummary, loading: staffSummaryLoading, refresh: refreshStaffSummary } = useStaffSummary(token);
   const [searchParams] = useSearchParams();
   const previewCoach = searchParams.get("preview") === "coach";
   const workspacePath = previewCoach ? "/org/me/workspace?preview=coach" : "/org/me/workspace";
@@ -134,6 +135,7 @@ export function CoachView({ token, userName, onLogout }: Props) {
   const [planUnitId, setPlanUnitId] = useState("");
   const [nutritionAssignPlanId, setNutritionAssignPlanId] = useState("");
   const [nutritionAssignAthleteId, setNutritionAssignAthleteId] = useState("");
+  const [showWelcome, setShowWelcome] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -151,9 +153,37 @@ export function CoachView({ token, userName, onLogout }: Props) {
     }
   }, [selectedOrgId, token, workspacePath]);
 
+  const retryAccess = useCallback(async () => {
+    await refreshStaffSummary();
+    await load();
+  }, [load, refreshStaffSummary]);
+
   useEffect(() => {
-    void load();
-  }, [load]);
+    void retryAccess();
+  }, [retryAccess]);
+
+  useEffect(() => {
+    if (previewCoach || !workspace || workspace.isStaff) return;
+    let attempts = 0;
+    const timer = window.setInterval(() => {
+      attempts += 1;
+      if (attempts > 3) {
+        window.clearInterval(timer);
+        return;
+      }
+      void retryAccess();
+    }, 2500);
+    return () => window.clearInterval(timer);
+  }, [previewCoach, retryAccess, workspace]);
+
+  useEffect(() => {
+    if (!workspace?.isStaff || !workspace.userId) return;
+    const key = `atlly-coach-welcome-${workspace.userId}`;
+    if (!localStorage.getItem(key)) {
+      setShowWelcome(true);
+      localStorage.setItem(key, "1");
+    }
+  }, [workspace?.isStaff, workspace?.userId]);
 
   useEffect(() => {
     if (!workspace?.organizations.length) return;
@@ -218,22 +248,14 @@ export function CoachView({ token, userName, onLogout }: Props) {
 
   if (workspace && !workspace.isStaff) {
     return (
-      <div className="ui-shell mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-4 px-6 text-sand">
-        <img src={assetUrl("assets/atlly-logo.png")} alt={brand.name} className="h-10 w-auto self-start" />
-        <h1 className="m-0 text-2xl font-bold">Sem acesso profissional</h1>
-        <p className="m-0 text-sand-muted">
-          Sua conta ainda não está vinculada como coach, nutricionista ou administrador de uma organização.
-          Peça ao owner da plataforma para adicioná-lo na equipe.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <Link className="admin-primary-button no-underline" to={paths.student}>
-            Ir para área do aluno
-          </Link>
-          <button type="button" className="admin-secondary-button" onClick={onLogout}>
-            Sair
-          </button>
-        </div>
-      </div>
+      <CoachAccessGate
+        userName={userName}
+        staffSummary={staffSummary}
+        staffLoading={staffSummaryLoading}
+        workspaceLoading={loading}
+        onRetry={retryAccess}
+        onLogout={onLogout}
+      />
     );
   }
 
@@ -294,6 +316,20 @@ export function CoachView({ token, userName, onLogout }: Props) {
       </header>
 
       <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-6">
+        {showWelcome && (
+          <div className="coach-welcome-banner" role="status">
+            <div>
+              <strong>Bem-vindo ao painel Coach ATLLY</strong>
+              <p>
+                Você continua como aluno em /aluno e gerencia turmas, estúdio e receitas aqui. Comissão de indicação
+                exige assinatura ATLLY ativa.
+              </p>
+            </div>
+            <button type="button" className="coach-welcome-banner__close" onClick={() => setShowWelcome(false)}>
+              Entendi
+            </button>
+          </div>
+        )}
         {error && <p className="m-0 text-sm text-red-400">{error}</p>}
         {feedback && <p className="m-0 text-sm text-emerald-400">{feedback}</p>}
 

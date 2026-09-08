@@ -148,6 +148,8 @@ import { StudentAiCoachChat } from "./StudentAiCoachChat";
 import { useStudentWeather } from "../../lib/weather";
 import { useMusicPlayerStore } from "../../stores/musicPlayerStore";
 import { useFeedChromeStore } from "../../stores/feedChromeStore";
+import { useStaffSummary } from "../../hooks/useStaffSummary";
+import { StudentCoachAccessCard } from "../shared/StudentCoachAccessCard";
 import { isNativeAppShell } from "../../lib/native-bridge";
 import { readStudentPanel, writeStudentPanel } from "../../lib/student-panel-persist";
 import { clearWorkoutRunner } from "../../lib/workout-runner-persist";
@@ -2283,6 +2285,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const hasAdminEnrollment = profile?.enrollmentStatus === "ACTIVE";
   /** Liberação: membership/enrollment ativos, ou admin em modo preview blindado. */
   const hasStudentAreaAccess = hasActiveMembership || hasAdminEnrollment || isAdminPreview;
+  const { summary: staffSummary, loading: staffSummaryLoading, error: staffSummaryError, refresh: refreshStaffSummary } =
+    useStaffSummary(token);
+  const showCoachAccessBanner =
+    Boolean(token) && hasStudentAreaAccess && (staffSummary.isStaff || staffSummary.isCoach);
 
   async function handlePreviewGenderFilter(next: "ALL" | "MALE" | "FEMALE") {
     if (!token || !isAdminPreview || previewGenderSaving) return;
@@ -2820,6 +2826,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     >
       {adminPreviewBanner}
       {token && !hideStudentNav ? <StudentDailyMotivation /> : null}
+      {showCoachAccessBanner && !hideStudentNav ? (
+        <div className="student-shell-coach-banner">
+          <StudentCoachAccessCard
+            compact
+            summary={staffSummary}
+            loading={staffSummaryLoading}
+            error={staffSummaryError}
+            onRefresh={() => void refreshStaffSummary()}
+          />
+        </div>
+      ) : null}
       {!hideStudentHeader && (
       <section className="student-app-header">
         <div className="student-header-brand">

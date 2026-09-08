@@ -3699,8 +3699,9 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   <span className="admin-coach-promote-panel__eyebrow">Usuários → Promover a coach</span>
                   <h3>Coach ATLLY — {selectedAdminStudent.student.name}</h3>
                   <p>
-                    Vincula o aluno como coach na organização. Ele mantém acesso de aluno, ganha painel em{" "}
-                    <strong>/coach</strong> e comissão de 8% enquanto a assinatura estiver ativa.
+                    Vincula o aluno como coach na organização. Ele mantém acesso de aluno e passa a usar o painel em{" "}
+                    <strong>/coach</strong>. Comissão de 8% e selo Coach ATLLY ficam ativos enquanto a assinatura
+                    estiver vigente.
                   </p>
                 </div>
                 {selectedAdminStudent.coachEligibility.isActiveCoach ? (

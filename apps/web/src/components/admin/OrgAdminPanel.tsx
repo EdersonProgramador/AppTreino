@@ -640,7 +640,9 @@ export function OrgAdminPanel({ token }: Props) {
                             </p>
                           ) : (
                             <p className="admin-coach-promote-panel__note">
-                              Assinatura ativa confirmada. Ao salvar, o aluno ganha painel /coach e comissão de indicação.
+                              Assinatura ativa confirmada. Ao salvar, o aluno ganha acesso imediato ao painel{" "}
+                              <strong>/coach</strong>. Comissão de indicação e selo Coach ATLLY exigem manter a matrícula
+                              ativa.
                             </p>
                           )}
                         </>

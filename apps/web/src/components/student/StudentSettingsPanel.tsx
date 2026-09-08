@@ -4,12 +4,11 @@ import {
   FiSettings,
   FiChevronLeft
 } from "react-icons/fi";
-import { Link } from "react-router-dom";
 import { useUiPrefsStore } from "../../stores/uiPrefsStore";
 import { uiSounds } from "../../lib/ui-sounds";
 import { ThemeModeSwitch } from "../shared/ThemeModeSwitch";
 import { CoachStaffBadge } from "../shared/CoachStaffBadge";
-import { paths } from "../../auth/paths";
+import { StudentCoachAccessCard } from "../shared/StudentCoachAccessCard";
 import { useStaffSummary } from "../../hooks/useStaffSummary";
 
 type StudentSettingsPanelProps = {
@@ -69,7 +68,8 @@ const SoundToggle = ({
 export const StudentSettingsPanel = ({ token, onBack }: StudentSettingsPanelProps) => {
   const soundEnabled = useUiPrefsStore((state) => state.soundEnabled);
   const setSoundEnabled = useUiPrefsStore((state) => state.setSoundEnabled);
-  const { summary: staffSummary } = useStaffSummary(token);
+  const { summary: staffSummary, loading: staffSummaryLoading, error: staffSummaryError, refresh: refreshStaffSummary } =
+    useStaffSummary(token);
 
   const handleSoundToggle = () => {
     const next = !soundEnabled;
@@ -129,31 +129,12 @@ export const StudentSettingsPanel = ({ token, onBack }: StudentSettingsPanelProp
         <ThemeModeSwitch />
       </div>
 
-      {staffSummary.isStaff ? (
-        <div className="grid gap-3 rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-panel)] p-4 sm:p-6">
-          <div className="grid gap-1 px-1">
-            <h3 className="m-0 text-lg font-extrabold text-sand">Painel profissional</h3>
-            <p className="m-0 text-sm text-sand-faint">
-              {staffSummary.isActiveCoach
-                ? "Acesse o Estúdio de Treinos, receitas de afiliado e o workspace da sua organização."
-                : staffSummary.isCoach
-                  ? "Renove ou mantenha sua assinatura ATLLY ativa para liberar comissões e o selo de coach."
-                  : "Abra o workspace da organização para gerenciar alunos e conteúdo."}
-            </p>
-            {staffSummary.organizations.length > 0 ? (
-              <p className="m-0 text-xs text-sand-muted">
-                {staffSummary.organizations.map((org) => org.name).join(" · ")}
-              </p>
-            ) : null}
-          </div>
-          <Link
-            to={paths.coach}
-            className="inline-flex items-center justify-center rounded-2xl border border-brand-gold/40 bg-brand-gold/15 px-4 py-3 text-sm font-extrabold text-sand no-underline transition hover:bg-brand-gold/25"
-          >
-            Abrir painel profissional
-          </Link>
-        </div>
-      ) : null}
+      <StudentCoachAccessCard
+        summary={staffSummary}
+        loading={staffSummaryLoading}
+        error={staffSummaryError}
+        onRefresh={() => void refreshStaffSummary()}
+      />
 
       <div className="grid gap-4 rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-panel)] p-4 sm:p-6">
         <div className="grid gap-1 px-1">

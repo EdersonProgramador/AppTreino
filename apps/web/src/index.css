@@ -17783,6 +17783,269 @@ html.light .student-profile-identity-copy strong {
   color: #9ec5ff;
 }
 
+.coach-access-gate {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 24px 16px;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(240, 180, 90, 0.1), transparent 45%),
+    radial-gradient(circle at 85% 10%, rgba(224, 106, 60, 0.08), transparent 40%),
+    var(--app-bg);
+}
+
+.coach-access-gate__card {
+  display: grid;
+  gap: 16px;
+  width: min(100%, 520px);
+  padding: 28px 24px;
+  border-radius: 24px;
+  border: 1px solid var(--app-border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)), var(--app-panel);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.coach-access-gate__logo {
+  width: auto;
+  height: 36px;
+}
+
+.coach-access-gate__eyebrow {
+  display: block;
+  color: var(--brand-gold);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.coach-access-gate__card h1 {
+  margin: 0;
+  font-size: clamp(24px, 4vw, 30px);
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.coach-access-gate__lead {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.coach-access-gate__checks {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coach-access-gate__checks li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--app-border);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--app-text-muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.coach-access-gate__checks li.is-ok {
+  border-color: rgba(48, 180, 129, 0.35);
+  background: rgba(48, 180, 129, 0.08);
+  color: #7ee2bb;
+}
+
+.coach-access-gate__hint {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(212, 175, 55, 0.08);
+  color: var(--app-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.coach-access-gate__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.student-coach-access-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: 24px;
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(212, 175, 55, 0.12), transparent 55%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
+    var(--app-panel);
+}
+
+.student-coach-access-card.is-compact {
+  padding: 14px 16px;
+  border-radius: 18px;
+  gap: 12px;
+}
+
+.student-coach-access-card__head {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.student-coach-access-card__icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  border-radius: 14px;
+  background: rgba(212, 175, 55, 0.16);
+  color: var(--brand-gold);
+}
+
+.student-coach-access-card.is-compact .student-coach-access-card__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+}
+
+.student-coach-access-card__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.student-coach-access-card__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.student-coach-access-card.is-compact .student-coach-access-card__title {
+  font-size: 15px;
+}
+
+.student-coach-access-card__subtitle {
+  margin: 6px 0 0;
+  color: var(--app-text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.student-coach-access-card.is-compact .student-coach-access-card__subtitle {
+  font-size: 13px;
+}
+
+.student-coach-access-card__orgs {
+  margin: 8px 0 0;
+  color: var(--brand-gold);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.student-coach-access-card__error {
+  margin: 0;
+  color: #f87171;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.student-coach-access-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.student-coach-access-card__primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.95), rgba(184, 134, 11, 0.95));
+  color: #111;
+  font-size: 14px;
+  font-weight: 800;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.student-coach-access-card__primary:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.student-coach-access-card__secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--app-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.student-coach-access-card__secondary:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.student-shell-coach-banner {
+  margin: 0 auto;
+  width: min(100%, 960px);
+  padding: 12px 16px 0;
+}
+
+.coach-welcome-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.14), rgba(212, 175, 55, 0.04));
+}
+
+.coach-welcome-banner strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 15px;
+}
+
+.coach-welcome-banner p {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.coach-welcome-banner__close {
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  background: rgba(212, 175, 55, 0.12);
+  color: var(--brand-gold);
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .student-athlete-name-row {
   display: flex;
   flex-wrap: wrap;

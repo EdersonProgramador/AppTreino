@@ -1481,6 +1481,44 @@ export async function registerOrgRoutes(app: FastifyInstance) {
       })
       .parse(request.body);
 
+    if (body.role === "COACH" && member.role !== "COACH") {
+      try {
+        await promoteUserToCoachInOrganization({
+          userId: member.userId,
+          organizationId: member.organizationId,
+          unitId: body.unitId ?? member.unitId
+        });
+        await ensureCoachReferralLink(member.userId);
+        if (member.role !== "COACH") {
+          await prisma.organizationMember.delete({ where: { id: memberId } });
+        }
+        const coachMember = await prisma.organizationMember.findFirst({
+          where: {
+            organizationId: member.organizationId,
+            userId: member.userId,
+            role: "COACH"
+          }
+        });
+        if (!coachMember) throw httpOrgError(500, "Falha ao promover membro a coach.");
+        await writeAuditLog({
+          userId: user.id,
+          organizationId: member.organizationId,
+          unitId: coachMember.unitId,
+          action: "organization_member.promote_coach",
+          resourceType: "organization_member",
+          resourceId: coachMember.id,
+          newValues: coachMember,
+          ipAddress: request.ip,
+          userAgent: request.headers["user-agent"]
+        });
+        return { member: coachMember };
+      } catch (err) {
+        const error = err as Error & { statusCode?: number };
+        if (error.statusCode) throw error;
+        throw err;
+      }
+    }
+
     const updated = await prisma.organizationMember.update({
       where: { id: memberId },
       data: {
@@ -1489,6 +1527,10 @@ export async function registerOrgRoutes(app: FastifyInstance) {
         ...(body.status !== undefined ? { status: body.status } : {})
       }
     });
+
+    if (updated.role === "COACH" && updated.status === "ACTIVE") {
+      await ensureCoachReferralLink(updated.userId);
+    }
 
     await writeAuditLog({
       userId: user.id,
