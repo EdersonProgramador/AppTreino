@@ -1506,9 +1506,7 @@ export async function registerOrgRoutes(app: FastifyInstance) {
           unitId: body.unitId ?? member.unitId
         });
         await ensureCoachReferralLink(member.userId);
-        if (member.role !== "COACH") {
-          await prisma.organizationMember.delete({ where: { id: memberId } });
-        }
+        await prisma.organizationMember.delete({ where: { id: memberId } });
         const coachMember = await prisma.organizationMember.findFirst({
           where: {
             organizationId: member.organizationId,
