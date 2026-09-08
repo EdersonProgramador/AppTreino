@@ -555,6 +555,7 @@ export function CoachView({ token, userName, onLogout }: Props) {
             <CoachTrainingStudio
               token={token}
               organizationId={selectedOrg.id}
+              organizationName={selectedOrg.name}
               units={selectedOrg.units}
               assignedAthletes={workspace.assignedAthletes}
               busy={busy}

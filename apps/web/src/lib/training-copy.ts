@@ -61,7 +61,19 @@ export const trainingCopy = {
   adminStepModalities: "Modalidades",
   adminStepExercises: "Exercícios",
   adminStepDivisions: "Divisões",
-  adminStepPublish: "Ciclos / Publicar"
+  adminStepPublish: "Ciclos / Publicar",
+  coachStudioTitle: "Estúdio de Treinos",
+  coachStudioSubtitle: "Produza conteúdo, publique ciclos e distribua para sua base de alunos",
+  coachStepModalities: "Modalidades",
+  coachStepExercises: "Exercícios",
+  coachStepDivisions: "Divisões",
+  coachStepPublish: "Ciclos / Publicar",
+  coachStepDistribute: "Distribuir",
+  coachStudioFlowHint:
+    "Fluxo coach: modalidades da plataforma → seus exercícios → divisões → publicar ciclos → distribuir alunos.",
+  coachOrgScopeLabel: "Organização ativa",
+  coachContentOwnLabel: "Meu conteúdo",
+  coachContentPlatformLabel: "Plataforma ATLLY"
 } as const;
 
 export function sessionLabelFromBlock(title: string) {

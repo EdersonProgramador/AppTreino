@@ -3810,6 +3810,19 @@ button.delete-action-button:hover,
   outline-offset: 2px;
 }
 
+.cms-chip.is-static {
+  cursor: default;
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 999px;
+  background: var(--app-fill);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+}
+
 .cms-badge-group {
   display: flex;
   flex-wrap: wrap;
