@@ -6,6 +6,7 @@ import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { apiPost } from "../../auth/api";
 import type { MenuStackParamList, StudentTabParamList } from "../../navigation/types";
+import { CoachAccessCard } from "../../student/CoachAccessCard";
 import { trainingCopy } from "../../student/copy";
 import { BackChip, EmptyState, SheetHeading, StudentPage } from "../../student/layout";
 import { useMenuStyles } from "../../student/menuStyles";
@@ -61,7 +62,7 @@ function MenuRow({
 
 export function MenuScreen() {
   const navigation = useNavigation<MenuNav>();
-  const { logout, publicConfig } = useStudent();
+  const { logout, publicConfig, session } = useStudent();
   const styles = useMenuStyles();
   const items: Array<{
     icon: keyof typeof Ionicons.glyphMap;
@@ -72,6 +73,7 @@ export function MenuScreen() {
     action: () => void;
   }> = [
     { icon: "person-outline", title: "Perfil do atleta", group: "Conta", action: () => navigation.navigate("Profile") },
+    { icon: "business-outline", title: "Minha organização", group: "Conta", action: () => navigation.navigate("Org") },
     { icon: "settings-outline", title: "Configurações do perfil", group: "Conta", action: () => navigation.navigate("ProfileSettings") },
     {
       icon: "barbell-outline",
@@ -203,6 +205,7 @@ export function MenuScreen() {
 
   return (
     <StudentPage>
+      <CoachAccessCard token={session.token} />
       <View style={styles.menuList}>
         {grouped.map((row, index) =>
           row.type === "group" ? (

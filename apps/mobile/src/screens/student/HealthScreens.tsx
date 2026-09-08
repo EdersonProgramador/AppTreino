@@ -18,6 +18,7 @@ import { trainingCopy } from "../../student/copy";
 import { BackChip, EmptyState, GreenButton, OutlineButton, SheetHeading, StudentPage } from "../../student/layout";
 import { useMenuStyles } from "../../student/menuStyles";
 import { StreakCalendar } from "../../student/StreakCalendar";
+import { PerformanceCharts } from "../../student/PerformanceCharts";
 import { useStudent } from "../../student/StudentContext";
 import { useSt } from "../../student/theme";
 import { uiSounds } from "../../student/uiSounds";
@@ -487,6 +488,7 @@ export function StatusScreen() {
           caption="Dias marcados com o ícone da modalidade concluída: treino, corrida, caminhada ou pedal."
         />
       </View>
+      <PerformanceCharts streak={streak} sportTotals={consistency?.sportTotals} weeklyVolume={consistency?.weeklyVolume} />
       <SheetHeading kicker="Acessos" title="Registros de acesso" />
       {attendance.length === 0 ? (
         <EmptyState icon="calendar-outline" title="Nenhum acesso registrado" text="Registre sua presença com o QR de check-in na recepção." />

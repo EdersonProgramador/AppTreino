@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, AppState, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -8,11 +9,13 @@ import { apiGet, apiPost, apiUploadFile } from "../../auth/api";
 import {
   estimateCalories,
   formatClock,
+  formatGrade,
   formatKm,
   formatPace,
   liveDistance,
   liveElapsedSeconds,
   liveElevation,
+  liveGradePercent,
   liveSpeedKmh,
   liveKmSplit,
   LAP_RADIUS_M,
@@ -26,7 +29,17 @@ import { useSt, type StudentTokens } from "../../student/theme";
 import { OutdoorShareCard } from "../../student/OutdoorShareCard";
 import { WeatherChip } from "../../student/WeatherChip";
 import { fetchWeather, type WeatherSnapshot } from "../../student/weather";
-import { hasHealthAccess, hydrateHealthGrants, markHealthPrompted, wasHealthPrompted } from "../../student/healthPermissions";
+import { hasHealthAccess, hydrateHealthGrants, markHealthPrompted, subscribeHealthGrants, wasHealthPrompted } from "../../student/healthPermissions";
+import {
+  GPS_BACKGROUND_WARN_KEY,
+  GPS_HEALTH_POLL_MS,
+  GPS_STALE_MS,
+  computeMobileGpsHealth,
+  gpsHealthHint,
+  gpsHealthLabel,
+  type GpsHealthStatus
+} from "../../student/gps-health";
+import { estimateHeartRateFromCadence, heartRateSession } from "../../student/heartRateMonitor";
 import { isMapCompassEnabled, setMapCompassEnabled, subscribeMapCompass } from "../../student/prefs";
 import {
   TrackingMap,
@@ -71,6 +84,14 @@ function mergeRoutePoints(
     }
   }
   return [...byT.values()].sort((a, b) => a.t - b.t);
+}
+
+function sampleTrack(points: GpsPoint[], max = 96): GpsPoint[] {
+  if (points.length <= max) return points;
+  const out: GpsPoint[] = [];
+  const step = (points.length - 1) / (max - 1);
+  for (let i = 0; i < max; i += 1) out.push(points[Math.round(i * step)]);
+  return out;
 }
 
 function nativeMapType(type: MapType): "standard" | "satellite" | "hybrid" {
@@ -121,6 +142,10 @@ export function ActivityScreen() {
   const lapMaxAwayRef = useRef(0);
   const autoArmLapRef = useRef(true);
   const lapMarkerRef = useRef<LapMarker | null>(null);
+  const lastGpsFixAtRef = useRef<number | null>(null);
+  const gpsStaleAlertedRef = useRef(false);
+  const matchBusyRef = useRef(false);
+  const appActiveRef = useRef(true);
   const [sport, setSport] = useState<OutdoorSport>("RUN");
   const [featureKeys, setFeatureKeys] = useState<string[] | null>(null);
   const [mapType, setMapType] = useState<MapType>("standard");
@@ -128,7 +153,7 @@ export function ActivityScreen() {
   const [layers, setLayers] = useState({ pois: true, bikeLanes: false, avalanche: false, slope: false, aspect: false });
   const [is3d, setIs3d] = useState(false);
   const [compassOn, setCompassOn] = useState(isMapCompassEnabled);
-  const [sheet, setSheet] = useState<"layers" | "finish" | "goals" | null>(null);
+  const [sheet, setSheet] = useState<"layers" | "finish" | "goals" | "gpsWarn" | null>(null);
   const [activity, setActivity] = useState<OutdoorActivityRow | null>(null);
   const [points, setPoints] = useState<GpsPoint[]>([]);
   const [elapsed, setElapsed] = useState(0);
@@ -190,6 +215,11 @@ export function ActivityScreen() {
     name: string;
     rows: Array<{ rank: number; name: string; elapsedSeconds: number; isPr: boolean }>
   } | null>(null);
+  const [gpsStatus, setGpsStatus] = useState<GpsHealthStatus>("idle");
+  const [roadMatched, setRoadMatched] = useState(false);
+  const [gpsWarnDismiss, setGpsWarnDismiss] = useState(false);
+  const [heartGranted, setHeartGranted] = useState(false);
+  const [heartBpm, setHeartBpm] = useState(0);
 
   const engineStatus = snap?.session.status;
   const sessionActive = Boolean(
@@ -208,6 +238,7 @@ export function ActivityScreen() {
   const liveSpeed = sessionActive && snap?.speedKmh && snap.speedKmh > 0 ? snap.speedKmh : sessionActive ? liveSpeedKmh(points) : 0;
   const elevation = useMemo(() => (sessionActive ? liveElevation(points) : { gain: 0, loss: 0 }), [points, sessionActive]);
   const liveCalories = sessionActive ? estimateCalories(sport, elapsed) : 0;
+  const liveGrade = sessionActive ? liveGradePercent(points) : null;
   const liveSplit = useMemo(
     () => (sessionActive ? liveKmSplit(points) : { kmIndex: 1, metersInSplit: 0, paceSecPerKm: null, completed: [] }),
     [points, sessionActive]
@@ -223,6 +254,7 @@ export function ActivityScreen() {
   const shownLaps = sessionActive ? locked?.lapsCount ?? laps.length : 0;
   const shownKmIndex = sessionActive ? locked?.kmIndex ?? liveSplit.kmIndex : 1;
   const shownKmPace = sessionActive ? locked?.kmPaceSecPerKm ?? liveSplit.paceSecPerKm : null;
+  const shownGrade = sessionActive ? liveGrade : null;
   const parsedKm = Number(targetKm.replace(",", "."));
   const durationSec = (Number(targetHours) || 0) * 3600 + (Number(targetMinutes) || 0) * 60;
   lapMarkerRef.current = lapMarker;
@@ -577,6 +609,9 @@ export function ActivityScreen() {
       if (!fix?.isAccepted) return;
       if (fix.seq <= lastBoundSeqRef.current) return;
       lastBoundSeqRef.current = fix.seq;
+      lastGpsFixAtRef.current = Date.now();
+      gpsStaleAlertedRef.current = false;
+      setGpsStatus(computeMobileGpsHealth(true, lastGpsFixAtRef.current, appActiveRef.current));
       const point: GpsPoint = {
         lat: fix.filteredLat,
         lng: fix.filteredLng,
@@ -637,8 +672,98 @@ export function ActivityScreen() {
     return () => clearInterval(id);
   }, [session.token]);
 
+  useEffect(() => subscribeHealthGrants((grants) => setHeartGranted(grants.heartRate)), []);
+
+  useEffect(() => {
+    if (!running || !heartGranted) return;
+    const timer = setInterval(() => {
+      const estimate = estimateHeartRateFromCadence(sport, shownCadence, speedKmh);
+      if (!estimate) return;
+      heartRateSession.push(estimate, true);
+      setHeartBpm(heartRateSession.current);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [running, heartGranted, sport, shownCadence, speedKmh]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      appActiveRef.current = state === "active";
+      if (running) {
+        setGpsStatus(computeMobileGpsHealth(true, lastGpsFixAtRef.current, appActiveRef.current));
+      }
+    });
+    return () => sub.remove();
+  }, [running]);
+
+  useEffect(() => {
+    if (!running) {
+      setGpsStatus("idle");
+      return;
+    }
+    const syncHealth = () => {
+      const next = computeMobileGpsHealth(true, lastGpsFixAtRef.current, appActiveRef.current);
+      setGpsStatus(next);
+      if (next === "stale" && !gpsStaleAlertedRef.current) {
+        gpsStaleAlertedRef.current = true;
+        setError("GPS sem atualização. Verifique permissões de localização em segundo plano.");
+      }
+    };
+    syncHealth();
+    const timer = setInterval(syncHealth, GPS_HEALTH_POLL_MS);
+    return () => clearInterval(timer);
+  }, [running]);
+
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(() => void matchRoadsLive(), 8000);
+    return () => clearInterval(timer);
+  }, [running, sport, session.token]);
+
+  async function matchRoadsLive() {
+    if (matchBusyRef.current || pauseHoldRef.current || finishingRef.current || sessionClosedRef.current) return;
+    const route = pointsRef.current;
+    if (route.length < 8) return;
+    matchBusyRef.current = true;
+    try {
+      const data = await apiPost<{ matched?: boolean }>(
+        "/student/activities/match-roads",
+        { sport, points: sampleTrack(route, 96) },
+        session.token
+      );
+      if (data.matched) setRoadMatched(true);
+    } catch {
+      /* best-effort */
+    } finally {
+      matchBusyRef.current = false;
+    }
+  }
+
+  async function requestStart() {
+    if (shareOpen || finishing) return;
+    try {
+      if ((await AsyncStorage.getItem(GPS_BACKGROUND_WARN_KEY)) === "1") {
+        await startOrResume();
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+    setGpsWarnDismiss(false);
+    setSheet("gpsWarn");
+  }
+
+  async function confirmGpsWarnStart() {
+    if (gpsWarnDismiss) {
+      await AsyncStorage.setItem(GPS_BACKGROUND_WARN_KEY, "1").catch(() => undefined);
+    }
+    setSheet(null);
+    await startOrResume();
+  }
+
   async function startOrResume() {
     if (shareOpen || finishing) return;
+    heartRateSession.reset();
+    setHeartBpm(0);
     setError(null);
     setLocked(null);
     const ok = await locate();
@@ -1023,6 +1148,8 @@ export function ActivityScreen() {
             typeof track.avgCadenceSpm === "number" && Number.isFinite(track.avgCadenceSpm)
               ? track.avgCadenceSpm
               : undefined,
+          avgHeartRateBpm: heartRateSession.average > 0 ? heartRateSession.average : undefined,
+          maxHeartRateBpm: heartRateSession.max > 0 ? heartRateSession.max : undefined,
           weather: weatherRef.current
             ? {
                 tempC: weatherRef.current.tempC,
@@ -1152,6 +1279,7 @@ export function ActivityScreen() {
     setFinishSplits(splits);
     setFinishAnalysis(result.activity?.splitsAnalysis ?? null);
     setBestEfforts(result.activity?.bestEfforts ?? []);
+    if ((result.activity as { roadMatched?: boolean } | undefined)?.roadMatched) setRoadMatched(true);
     setSegmentEfforts(result.segmentEfforts ?? []);
     setFinishStats({
       distanceMeters: result.activity?.distanceMeters ?? snap?.distanceM ?? distance,
@@ -1446,6 +1574,32 @@ export function ActivityScreen() {
               </Text>
             </View>
           ) : null}
+          {(running || paused) && gpsStatus !== "idle" ? (
+            <View
+              style={[
+                styles.mapChip,
+                styles.gpsChip,
+                gpsStatus === "active" && styles.gpsChipActive,
+                gpsStatus === "background" && styles.gpsChipBackground,
+                gpsStatus === "stale" && styles.gpsChipStale
+              ]}
+              pointerEvents="none"
+            >
+              <Ionicons name="locate" size={12} color="#fff" />
+              <Text style={styles.mapChipText}>{gpsHealthLabel(gpsStatus)}</Text>
+            </View>
+          ) : null}
+          {roadMatched && (running || paused) ? (
+            <View style={[styles.mapChip, styles.viaChip]} pointerEvents="none">
+              <Text style={styles.mapChipText}>Na via</Text>
+            </View>
+          ) : null}
+          {running && (gpsStatus === "stale" || gpsStatus === "background") && gpsHealthHint(gpsStatus) ? (
+            <View style={styles.gpsBanner} pointerEvents="none">
+              <Ionicons name="warning-outline" size={16} color="#fff" />
+              <Text style={styles.gpsBannerText}>{gpsHealthHint(gpsStatus)}</Text>
+            </View>
+          ) : null}
         </View>
         {!running && !paused ? (
           <View style={styles.segmentBanner}>
@@ -1541,6 +1695,31 @@ export function ActivityScreen() {
               </Text>
             </View>
           </View>
+          <View style={styles.stats}>
+            <View style={styles.stat}>
+              <Text style={styles.statLabel} numberOfLines={1}>Inclinação</Text>
+              <Text style={styles.statSecondary} numberOfLines={1}>{formatGrade(shownGrade)}</Text>
+            </View>
+            <Pressable
+              style={styles.stat}
+              onPress={() => navigation.navigate("MenuTab", { screen: "HealthPermissions" })}
+            >
+              <Text style={styles.statLabel} numberOfLines={1}>F. Cardíaca</Text>
+              <Text style={styles.statSecondary} numberOfLines={1}>
+                {heartGranted
+                  ? heartBpm > 0
+                    ? `~${heartBpm}`
+                    : "—"
+                  : "Ativar"}
+              </Text>
+            </Pressable>
+            <View style={styles.stat}>
+              <Text style={styles.statLabel} numberOfLines={1}>GPS</Text>
+              <Text style={styles.statSecondary} numberOfLines={1}>
+                {running || paused ? gpsHealthLabel(gpsStatus) || "—" : "—"}
+              </Text>
+            </View>
+          </View>
           <View style={styles.controls}>
             <Pressable style={styles.side} onPress={() => setSheet("layers")}>
               <Ionicons name="settings-outline" size={20} color="#15100b" />
@@ -1549,7 +1728,9 @@ export function ActivityScreen() {
               style={styles.play}
               onPress={() => {
                 if (shareOpen || finishing) return;
-                void (running ? pause() : startOrResume());
+                if (running) void pause();
+                else if (paused) void startOrResume();
+                else void requestStart();
               }}
             >
               <Ionicons name={running ? "pause" : "play"} size={28} color="#fff" />
@@ -1577,6 +1758,29 @@ export function ActivityScreen() {
           {error ? <Text style={styles.error}>{error}</Text> : null}
         </View>
       </View>
+
+      <Modal visible={sheet === "gpsWarn"} animationType="slide" transparent onRequestClose={() => setSheet(null)}>
+        <Pressable style={styles.backdrop} onPress={() => setSheet(null)} />
+        <View style={styles.sheet}>
+          <Text style={styles.sheetTitle}>GPS em segundo plano</Text>
+          <Text style={styles.meta}>
+            No app nativo, o GPS continua gravando com a tela apagada quando a permissão de localização em segundo plano
+            está ativa. Você verá a notificação ATLLY · GPS ativo durante a corrida.
+          </Text>
+          <Text style={styles.meta}>
+            Se o GPS parar, abra Configurações → Localização e permita acesso sempre / em segundo plano para o ATLLY.
+          </Text>
+          <Pressable
+            style={styles.chip}
+            onPress={() => setGpsWarnDismiss((current) => !current)}
+          >
+            <Text style={styles.chipText}>{gpsWarnDismiss ? "✓ Não mostrar novamente" : "Não mostrar novamente nesta sessão"}</Text>
+          </Pressable>
+          <Pressable style={styles.play} onPress={() => void confirmGpsWarnStart()}>
+            <Text style={{ color: "#fff", fontWeight: "800" }}>Entendi, iniciar</Text>
+          </Pressable>
+        </View>
+      </Modal>
 
       <Modal visible={sheet === "goals"} animationType="slide" transparent onRequestClose={() => setSheet(null)}>
         <Pressable style={styles.backdrop} onPress={() => setSheet(null)} />
@@ -1856,6 +2060,34 @@ function createStyles(st: StudentTokens) {
       borderRadius: 999,
       zIndex: 5
     },
+    gpsChip: {
+      bottom: 44,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4
+    },
+    gpsChipActive: { backgroundColor: "rgba(34,120,80,0.88)" },
+    gpsChipBackground: { backgroundColor: "rgba(34,100,160,0.88)" },
+    gpsChipStale: { backgroundColor: "rgba(180,48,32,0.88)" },
+    viaChip: {
+      bottom: 78,
+      backgroundColor: "rgba(34,120,80,0.82)"
+    },
+    gpsBanner: {
+      position: "absolute",
+      top: 52,
+      left: 12,
+      right: 12,
+      zIndex: 6,
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 8,
+      backgroundColor: "rgba(120,40,24,0.92)",
+      borderRadius: 14,
+      paddingHorizontal: 12,
+      paddingVertical: 10
+    },
+    gpsBannerText: { flex: 1, color: "#fff", fontSize: 12, lineHeight: 17, fontWeight: "600" },
     mapChipText: { color: "#fff", fontWeight: "700", fontSize: 12 },
     segmentBanner: {
       marginHorizontal: 12,

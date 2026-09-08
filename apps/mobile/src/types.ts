@@ -547,3 +547,62 @@ export type ClubChallengeRow = {
   progressMeters: number;
   percent: number;
 };
+
+export type LeaderboardPeriod = "day" | "week" | "month" | "year";
+export type LeaderboardMetric = "distance" | "activities" | "calories" | "elevation" | "time";
+
+export type LeaderboardRow = {
+  rank: number;
+  userId: string;
+  name: string;
+  avatarUrl?: string | null;
+  distanceMeters: number;
+  activities: number;
+  calories: number;
+  elevationMeters: number;
+  elapsedSeconds: number;
+  metricValue: number;
+  isMe: boolean;
+};
+
+export type LeaderboardResponse = {
+  cell: string;
+  period: LeaderboardPeriod;
+  metric: LeaderboardMetric;
+  sport: OutdoorSport | null;
+  ranking: LeaderboardRow[];
+  me: LeaderboardRow | null;
+};
+
+export type ActivityAchievementEarned = {
+  slug: string;
+  title: string;
+  description: string;
+  category: string;
+  value: number | null;
+  earnedAt: string;
+};
+
+export type ActivityAchievementPending = {
+  slug: string;
+  title: string;
+  description: string;
+  category: string;
+  threshold: number;
+  progress: number;
+  percent: number;
+};
+
+export type ActivityAchievementsResponse = {
+  earned: ActivityAchievementEarned[];
+  pending: ActivityAchievementPending[];
+};
+
+export type ChallengeRankingRow = {
+  rank: number;
+  userId: string;
+  name: string;
+  avatarUrl?: string | null;
+  progressMeters: number;
+  isMe: boolean;
+};

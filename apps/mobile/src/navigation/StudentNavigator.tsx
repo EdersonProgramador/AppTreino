@@ -21,6 +21,7 @@ import { MembershipScreen, PaymentsScreen, ProfileScreen, ProfileSettingsScreen,
 import { EventsScreen, LocationsScreen, QrScreen, RatingsScreen, SupportScreen, AiScreen } from "../screens/student/CommunityScreens";
 import { AssessmentsScreen, StatusScreen } from "../screens/student/HealthScreens";
 import { HealthPermissionsScreen } from "../screens/student/HealthPermissionsScreen";
+import { OrgScreen } from "../screens/student/OrgScreen";
 import { DailyMotivationCard } from "../student/DailyMotivationCard";
 import { MenuScreen, NotificationsScreen, SettingsScreen } from "../screens/student/MenuScreens";
 import { PlayScreen } from "../screens/student/PlayScreen";
@@ -155,6 +156,7 @@ function MenuStackScreen() {
       <MenuStack.Screen name="Payments" component={PaymentsScreen} />
       <MenuStack.Screen name="Assessments" component={AssessmentsScreen} />
       <MenuStack.Screen name="HealthPermissions" component={HealthPermissionsScreen} />
+      <MenuStack.Screen name="Org" component={OrgScreen} />
       <MenuStack.Screen name="Status" component={StatusScreen} />
       <MenuStack.Screen name="Events" component={EventsScreen} />
       <MenuStack.Screen name="Locations" component={LocationsScreen} />

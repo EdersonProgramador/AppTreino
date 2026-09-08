@@ -85,6 +85,33 @@ export function liveDistance(points: Array<{ lat: number; lng: number }>) {
   return distance;
 }
 
+export function formatGrade(percent: number | null | undefined) {
+  if (percent == null || !Number.isFinite(percent)) return "—";
+  const sign = percent > 0 ? "+" : "";
+  return `${sign}${percent.toFixed(1)}%`;
+}
+
+/** Inclinação recente (%): desnível / distância no último trecho (~60 m). */
+export function liveGradePercent(
+  points: Array<{ lat: number; lng: number; ele?: number | null }>,
+  windowMeters = 60
+): number | null {
+  if (points.length < 2) return null;
+  let dist = 0;
+  let endEle: number | null = null;
+  let startEle: number | null = null;
+  for (let i = points.length - 1; i > 0; i -= 1) {
+    const cur = points[i];
+    const prev = points[i - 1];
+    if (endEle == null && typeof cur.ele === "number") endEle = cur.ele;
+    dist += haversineMeters(prev, cur);
+    if (typeof prev.ele === "number") startEle = prev.ele;
+    if (dist >= windowMeters && startEle != null && endEle != null) break;
+  }
+  if (endEle == null || startEle == null || dist < 12) return null;
+  return ((endEle - startEle) / dist) * 100;
+}
+
 export function liveSpeedKmh(points: Array<{ lat: number; lng: number; t?: number }>) {
   if (points.length < 2) return 0;
   const last = points[points.length - 1];

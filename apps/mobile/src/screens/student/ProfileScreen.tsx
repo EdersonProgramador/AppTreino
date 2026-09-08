@@ -10,6 +10,7 @@ import { shareSocialPost } from "../../lib/shareSocialPost";
 import { brand } from "../../student/brand";
 import { BackChip, EmptyState, GreenButton, OutlineButton, SheetHeading, StudentPage } from "../../student/layout";
 import { useMenuStyles } from "../../student/menuStyles";
+import { ProfileStorePanel } from "../../student/ProfileStorePanel";
 import { PerformanceCharts } from "../../student/PerformanceCharts";
 import { StreakCalendar } from "../../student/StreakCalendar";
 import { useStudent } from "../../student/StudentContext";
@@ -270,6 +271,8 @@ export function ProfileScreen() {
           </View>
         </View>
       </View>
+
+      <ProfileStorePanel />
 
       <View style={[styles.card, { gap: 8 }]}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
