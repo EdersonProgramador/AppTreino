@@ -21,8 +21,8 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
-      - key: WEB_ORIGIN
-        value: https://edersonprogramador.com,https://www.edersonprogramador.com
+      - key:       WEB_ORIGIN
+        value: https://atlly.com.br,https://www.atlly.com.br,https://edersonprogramador.com,https://www.edersonprogramador.com
       - key: PUBLIC_BASE_URL
         value: https://apptreino-backend.onrender.com
       - key: GOOGLE_CLIENT_ID

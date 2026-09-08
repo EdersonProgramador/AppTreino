@@ -14,6 +14,8 @@ import {
   hasActiveStudentSubscription,
   promoteUserToCoachInOrganization
 } from "./coach-eligibility.js";
+import { listOrgModalities } from "./org-training.service.js";
+import { canAccessOrgPlatform, hasActiveOrgStaffMembership } from "./org-auth/staff.js";
 
 function webAppOrigin() {
   const origins = env.WEB_ORIGIN.split(",")
@@ -255,6 +257,21 @@ export async function registerOrgRoutes(app: FastifyInstance) {
       roles: [...new Set(staffMemberships.map((member) => member.role))],
       organizations
     };
+  });
+
+  app.get("/org/me/training/modalities", async (request, reply) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const staffMemberships = ctx.memberships.filter(
+      (member) => member.status === "ACTIVE" && STAFF_ROLES.has(member.role)
+    );
+    const isStaff =
+      staffMemberships.length > 0 || ctx.isPlatformAdmin || ctx.isPlatformOperator;
+    if (!isStaff) {
+      return reply.code(403).send({ message: "Acesso negado ao recurso organizacional." });
+    }
+    const modalities = await listOrgModalities();
+    return { modalities };
   });
 
   async function ensureCoachPreviewMembership(userId: string) {

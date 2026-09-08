@@ -4,7 +4,7 @@ import { requireAuth } from "../auth.js";
 import { prisma } from "../prisma.js";
 import { authorize } from "./org-auth/authorize.js";
 import { loadOrgAuthContext, writeAuditLog } from "./org-auth/context.js";
-import { canAccessOrgPlatform, hasActiveOrgStaffMembership } from "./org-auth/staff.js";
+import { canAccessOrgPlatform, hasActiveOrgStaffMembership, userHasActiveOrgStaffMembership } from "./org-auth/staff.js";
 import { authorizeOrg, httpOrgError } from "./org-auth/scope.js";
 import {
   createOrgTrainingExercise,
@@ -32,14 +32,26 @@ function denyUnlessAllowed(result: ReturnType<typeof authorize>) {
   }
 }
 
+function parseOrganizationIdQuery(value: unknown) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 export async function registerOrgTrainingRoutes(app: FastifyInstance) {
   app.get("/org/modalities", async (request, reply) => {
     const user = await requireAuth(app, request);
     const ctx = await loadOrgAuthContext(user);
     const query = z.object({ organizationId: z.string().min(1).optional() }).parse(request.query);
+    const organizationId = parseOrganizationIdQuery(query.organizationId);
 
-    const allowed =
-      canAccessOrgPlatform(ctx) || hasActiveOrgStaffMembership(ctx, query.organizationId ?? null);
+    let allowed =
+      canAccessOrgPlatform(ctx) || hasActiveOrgStaffMembership(ctx, organizationId ?? null);
+
+    if (!allowed) {
+      allowed = await userHasActiveOrgStaffMembership(user.id, organizationId ?? null);
+    }
 
     if (!allowed) {
       return reply.code(403).send({ message: "Acesso negado ao recurso organizacional." });
