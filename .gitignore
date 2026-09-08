@@ -21,3 +21,5 @@ backups/
 apps/api/apps/
 apps/web/test-results/
 
+.vercel
+.env*
