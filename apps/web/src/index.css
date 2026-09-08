@@ -25757,6 +25757,48 @@ button.student-activity-metric.is-on small {
   background: rgba(34, 120, 80, 0.82);
 }
 
+.student-activity-map-chip.is-gps {
+  top: 58px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.student-activity-map-chip.is-gps.is-active {
+  background: rgba(34, 120, 80, 0.88);
+}
+
+.student-activity-map-chip.is-gps.is-background {
+  background: rgba(180, 120, 20, 0.88);
+}
+
+.student-activity-map-chip.is-gps.is-stale {
+  background: rgba(180, 48, 32, 0.88);
+}
+
+.student-activity-gps-banner {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 96px;
+  z-index: 5;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(120, 40, 24, 0.92);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 600;
+  backdrop-filter: blur(12px);
+}
+
+.student-activity-gps-banner span {
+  flex: 1;
+}
+
 .student-activity-dock {
   position: absolute;
   left: 0;

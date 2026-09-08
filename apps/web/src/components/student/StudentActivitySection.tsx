@@ -11,6 +11,7 @@ import {
   ImagePlus,
   Layers,
   Loader2,
+  LocateFixed,
   Map as MapIcon,
   MapPinned,
   Music2,
@@ -49,6 +50,15 @@ import {
 } from "../../lib/activity-geo";
 import { activityMapSrc, hasActivityMapProvider, mapsConfigMessage } from "../../lib/activity-map-src";
 import { WebGpsPipeline, fixFromGeolocation } from "../../lib/gps-filter";
+import {
+  GPS_BACKGROUND_WARN_KEY,
+  GPS_HEALTH_POLL_MS,
+  GPS_STALE_MS,
+  computeGpsHealth,
+  gpsHealthHint,
+  gpsHealthLabel,
+  type GpsHealthStatus
+} from "../../lib/gps-health";
 import { WebStepCounter } from "../../lib/step-counter";
 import { WebHeartRateMonitor } from "../../lib/web-heart-rate";
 import type { OutdoorActivityRow, OutdoorSport, UploadResponse } from "../../types";
@@ -306,6 +316,8 @@ export function StudentActivitySection({
   const lastTrackRef = useRef<GpsPoint[]>([]);
   const lastFixRef = useRef<{ lat: number; lng: number } | null>(readStoredFix());
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
+  const lastGpsFixAtRef = useRef<number | null>(null);
+  const gpsStaleAlertedRef = useRef(false);
   const lastMatchedRef = useRef<GpsPoint[] | null>(null);
   const reviewTrackRef = useRef<GpsPoint[] | null>(null);
   const matchBusyRef = useRef(false);
@@ -375,6 +387,9 @@ export function StudentActivitySection({
   const stepsCountRef = useRef(0);
   const [heartBpm, setHeartBpm] = useState(0);
   const [heartConnected, setHeartConnected] = useState(false);
+  const [gpsStatus, setGpsStatus] = useState<GpsHealthStatus>("idle");
+  const [gpsWarnOpen, setGpsWarnOpen] = useState(false);
+  const [gpsWarnDismiss, setGpsWarnDismiss] = useState(false);
   const athleteKg = weightKg && weightKg > 30 && weightKg < 250 ? weightKg : 70;
 
   const sessionActive = Boolean(
@@ -879,6 +894,9 @@ export function StudentActivitySection({
       watchRef.current = null;
     }
     stepCounterRef.current.stop();
+    lastGpsFixAtRef.current = null;
+    gpsStaleAlertedRef.current = false;
+    setGpsStatus("idle");
   }
 
   function armLapStart(lat: number, lng: number) {
@@ -970,6 +988,9 @@ export function StudentActivitySection({
     followMapRef.current = true;
     postToMap({ type: "setFollow", on: true });
     autoArmLapRef.current = !lapMarkerRef.current;
+    lastGpsFixAtRef.current = null;
+    gpsStaleAlertedRef.current = false;
+    setGpsStatus(document.hidden ? "background" : "stale");
     void stepCounterRef.current.start(sportRef.current);
     applyMotionCount(
       stepCounterRef.current.getCount(liveDistance(pointsRef.current), sportRef.current),
@@ -981,6 +1002,10 @@ export function StudentActivitySection({
         const raw = fixFromGeolocation(pos);
         const result = pipelineRef.current.process(sportRef.current, raw);
         if (!result.accepted) return;
+
+        lastGpsFixAtRef.current = Date.now();
+        gpsStaleAlertedRef.current = false;
+        setGpsStatus(document.hidden ? "background" : "active");
 
         const point: GpsPoint = {
           lat: result.point.lat,
@@ -1200,6 +1225,64 @@ export function StudentActivitySection({
     pipelineRef.current.reset();
     postToMap({ type: "setTrack", points: [], fit: false });
     postToMap({ type: "setHeat", tracks: [], cells: [] });
+  }
+
+  useEffect(() => {
+    if (!running) {
+      setGpsStatus("idle");
+      return;
+    }
+    const syncHealth = () => {
+      const next = computeGpsHealth(running, lastGpsFixAtRef.current, document.hidden);
+      setGpsStatus(next);
+      if (next === "stale" && !gpsStaleAlertedRef.current) {
+        gpsStaleAlertedRef.current = true;
+        setError("GPS sem atualização. Mantenha a tela ligada e o site aberto em primeiro plano.");
+      }
+    };
+    syncHealth();
+    const timer = window.setInterval(syncHealth, GPS_HEALTH_POLL_MS);
+    const onVis = () => {
+      syncHealth();
+      if (document.visibilityState === "visible" && lastGpsFixAtRef.current) {
+        const gap = Date.now() - lastGpsFixAtRef.current;
+        if (gap > GPS_STALE_MS) {
+          setError(
+            `GPS interrompido por ${Math.round(gap / 1000)}s enquanto o site estava em segundo plano. Volte a manter a tela ligada.`
+          );
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [running]);
+
+  function requestStart() {
+    if (shareOpen || finishing || busy) return;
+    try {
+      if (sessionStorage.getItem(GPS_BACKGROUND_WARN_KEY) === "1") {
+        void startOrResume();
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+    setGpsWarnOpen(true);
+  }
+
+  function confirmGpsWarnStart() {
+    if (gpsWarnDismiss) {
+      try {
+        sessionStorage.setItem(GPS_BACKGROUND_WARN_KEY, "1");
+      } catch {
+        /* ignore */
+      }
+    }
+    setGpsWarnOpen(false);
+    void startOrResume();
   }
 
   async function startOrResume() {
@@ -1770,6 +1853,23 @@ export function StudentActivitySection({
         {roadMatched && (running || paused) ? (
           <div className="student-activity-map-chip is-via">Na via</div>
         ) : null}
+        {(running || paused) && gpsStatus !== "idle" ? (
+          <div
+            className={`student-activity-map-chip is-gps is-${gpsStatus}`}
+            role="status"
+            aria-live="polite"
+            title={gpsHealthHint(gpsStatus) ?? undefined}
+          >
+            <LocateFixed size={12} strokeWidth={2.5} />
+            {gpsHealthLabel(gpsStatus)}
+          </div>
+        ) : null}
+        {running && (gpsStatus === "stale" || gpsStatus === "background") ? (
+          <div className="student-activity-gps-banner" role="alert">
+            <LocateFixed size={16} />
+            <span>{gpsHealthHint(gpsStatus)}</span>
+          </div>
+        ) : null}
       </div>
 
       <div className="student-activity-dock" ref={dockRef}>
@@ -1910,7 +2010,7 @@ export function StudentActivitySection({
                 className="student-activity-run-btn is-start is-fit"
                 onClick={() => {
                   if (shareOpen || finishing) return;
-                  void startOrResume();
+                  requestStart();
                 }}
                 disabled={busy}
               >
@@ -1935,6 +2035,37 @@ export function StudentActivitySection({
           {error && <p className="student-activity-error">{error}</p>}
         </div>
       </div>
+
+      {gpsWarnOpen && (
+        <div className="student-activity-sheet" role="dialog" aria-label="Aviso de GPS">
+          <header>
+            <strong>GPS em segundo plano</strong>
+            <button type="button" onClick={() => setGpsWarnOpen(false)} aria-label="Fechar">
+              <X size={18} />
+            </button>
+          </header>
+          <p className="student-activity-hint">
+            No navegador, o GPS pode parar quando a tela apaga ou o site fica em segundo plano. Para
+            registrar toda a corrida, mantenha a <strong>tela ligada</strong> e o{" "}
+            <strong>navegador aberto</strong> durante a atividade.
+          </p>
+          <p className="student-activity-hint">
+            Para corrida com tela apagada, use o <strong>app nativo ATLLY</strong> (Android/iOS), que
+            continua gravando em background.
+          </p>
+          <label className="student-activity-layer">
+            <span>Não mostrar novamente nesta sessão</span>
+            <input
+              type="checkbox"
+              checked={gpsWarnDismiss}
+              onChange={(event) => setGpsWarnDismiss(event.target.checked)}
+            />
+          </label>
+          <button type="button" className="student-green-button" onClick={confirmGpsWarnStart}>
+            Entendi, iniciar
+          </button>
+        </div>
+      )}
 
       {goalsOpen && (
         <div className="student-activity-sheet" role="dialog" aria-label="Definir meta">
