@@ -1,5 +1,6 @@
 import type { Coupon, Plan } from "@prisma/client";
 import { resolveSubscriptionCheckoutPricing, previewLinkedCouponPricing } from "./modules/checkout.utils.js";
+import { resolveAppleProductId } from "./modules/apple-iap.utils.js";
 import { prisma } from "./prisma.js";
 
 export type SerializedPlan = {
@@ -22,6 +23,7 @@ export type SerializedPlan = {
   originalPriceInCents: number;
   effectivePriceInCents: number;
   discountInCents: number;
+  appleProductId: string | null;
 };
 
 export function parseCardBenefits(value: unknown): string[] {
@@ -89,7 +91,8 @@ export async function serializePlanRecord(
     couponMaxUses: linkedCoupon?.maxUses ?? plan.coupon?.maxUses ?? null,
     originalPriceInCents: adminPreview?.originalAmountInCents ?? pricing.originalAmountInCents,
     effectivePriceInCents: adminPreview?.amountInCents ?? pricing.amountInCents,
-    discountInCents: adminPreview?.discountInCents ?? pricing.discountInCents
+    discountInCents: adminPreview?.discountInCents ?? pricing.discountInCents,
+    appleProductId: resolveAppleProductId(plan)
   };
 }
 

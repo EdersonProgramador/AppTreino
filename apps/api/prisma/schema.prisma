@@ -180,6 +180,7 @@ model Plan {
   isFeatured   Boolean      @default(false) @map("is_featured")
   sortOrder    Int          @default(0) @map("sort_order")
   showOnFunnel Boolean      @default(true) @map("show_on_funnel")
+  appleProductId String?    @unique @map("apple_product_id")
   couponId     String?      @map("coupon_id")
   coupon       Coupon?      @relation("PlanFeaturedCoupon", fields: [couponId], references: [id], onDelete: SetNull)
   promoCoupons Coupon[]     @relation("PlanPromoCoupons")
@@ -224,7 +225,10 @@ model Payment {
   status                PaymentStatus @default(PENDING)
   dueDate               DateTime      @map("due_date")
   paidAt                DateTime?     @map("paid_at")
+  paymentProvider       PaymentProvider @default(ASAAS) @map("payment_provider")
   asaasPaymentId        String?       @unique @map("asaas_payment_id")
+  appleTransactionId    String?       @unique @map("apple_transaction_id")
+  appleOriginalTransactionId String?  @map("apple_original_transaction_id")
   paymentUrl            String?       @map("payment_url")
   deletedAt             DateTime?     @map("deleted_at")
   createdAt             DateTime      @default(now()) @map("created_at")
@@ -832,6 +836,13 @@ enum PaymentStatus {
   CANCELED
 
   @@map("payment_status")
+}
+
+enum PaymentProvider {
+  ASAAS
+  APPLE
+
+  @@map("payment_provider")
 }
 
 enum EventStatus {

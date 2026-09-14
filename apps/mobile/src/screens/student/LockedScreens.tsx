@@ -3,6 +3,9 @@ import { Alert, Image, Linking, Pressable, StyleSheet, Text, View } from "react-
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { apiGet, apiPost, NativeApiError } from "../../auth/api";
+import { AppleIapPanel } from "../../checkout/AppleIapPanel";
+import { configureAppleIap } from "../../lib/apple-iap";
+import { allowsAsaasCheckout, isIosStoreCheckout } from "../../lib/platform-pay";
 import { mediaUrl } from "../../lib/media";
 import { trainingCopy } from "../../student/copy";
 import { GreenButton, OutlineButton, SheetHeading, StudentPage } from "../../student/layout";
@@ -11,7 +14,13 @@ import { useSt, type StudentTokens } from "../../student/theme";
 import { uiSounds } from "../../student/uiSounds";
 import { money } from "../../theme";
 
-type CatalogPlan = { code: string; name: string; priceInCents: number };
+type CatalogPlan = {
+  code: string;
+  name: string;
+  priceInCents: number;
+  appleProductId?: string | null;
+  billingCycle?: "MONTHLY" | "YEARLY";
+};
 
 const BILLING = [
   { value: "UNDEFINED", label: "Escolher no checkout" },
@@ -59,6 +68,11 @@ export function SubscriptionScreen() {
   }, []);
 
   useEffect(() => {
+    void configureAppleIap(session.user.id);
+  }, [session.user.id]);
+
+  useEffect(() => {
+    if (isIosStoreCheckout()) return;
     const timer = setInterval(() => {
       void refresh();
     }, 4000);
@@ -66,6 +80,7 @@ export function SubscriptionScreen() {
   }, [refresh]);
 
   async function subscribe() {
+    if (isIosStoreCheckout()) return;
     setBusy(true);
     try {
       const response = await apiPost<{
@@ -112,7 +127,11 @@ export function SubscriptionScreen() {
       <SheetHeading
         kicker="Assinatura"
         title="Assine agora e comece a treinar."
-        subtitle="Escolha seu plano e finalize o pagamento com Pix ou cartão no checkout seguro do Asaas. O acesso é liberado automaticamente assim que o pagamento for confirmado."
+        subtitle={
+          isIosStoreCheckout()
+            ? "Assine via App Store para liberar treinos, corrida, IA e comunidade."
+            : "Escolha seu plano e finalize o pagamento com Pix ou cartão no checkout seguro do Asaas. O acesso é liberado automaticamente assim que o pagamento for confirmado."
+        }
       />
       {checkoutPayment ? (
         <View style={styles.note}>
@@ -138,34 +157,59 @@ export function SubscriptionScreen() {
             <Text style={styles.planPrice}>{money(plan.priceInCents)}</Text>
           </Pressable>
         ))}
-        <Text style={styles.label}>Pagamento</Text>
-        <View style={styles.row}>
-          {BILLING.map((item) => (
-            <Pressable
-              key={item.value}
-              onPress={() => setBillingType(item.value)}
-              style={[styles.chip, billingType === item.value && styles.chipOn]}
-            >
-              <Text style={[styles.chipText, billingType === item.value && styles.chipTextOn]}>{item.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-        {paymentUrl || pending?.paymentUrl ? (
-          <OutlineButton
-            label="Abrir checkout do Asaas"
-            icon="open-outline"
-            onPress={() => void Linking.openURL((paymentUrl || pending?.paymentUrl) as string)}
+        {isIosStoreCheckout() && selectedPlan ? (
+          <AppleIapPanel
+            session={session}
+            selectedPlan={{
+              code: selectedPlan.code,
+              name: selectedPlan.name,
+              priceInCents: selectedPlan.priceInCents,
+              billingCycle: selectedPlan.billingCycle ?? "MONTHLY",
+              appleProductId: selectedPlan.appleProductId ?? null,
+              cardBenefits: [],
+              isFeatured: false,
+              sortOrder: 0
+            }}
+            onSuccess={() => refresh()}
+            onError={(message) => {
+              if (message) Alert.alert("Assinatura", message);
+            }}
           />
-        ) : null}
-        {(__DEV__ || process.env.EXPO_PUBLIC_ENABLE_SANDBOX_CONFIRM === "true") && paymentId && !paymentUrl ? (
-          <OutlineButton label="Finalizar checkout sandbox" onPress={() => void confirmSandbox()} />
-        ) : null}
-        <GreenButton
-          label={busy ? "Gerando checkout…" : "Assinar agora"}
-          loading={busy}
-          onPress={() => void subscribe()}
-          disabled={busy || plans.length === 0}
-        />
+        ) : (
+          <>
+            <Text style={styles.label}>Pagamento</Text>
+            <View style={styles.row}>
+              {BILLING.map((item) => (
+                <Pressable
+                  key={item.value}
+                  onPress={() => setBillingType(item.value)}
+                  style={[styles.chip, billingType === item.value && styles.chipOn]}
+                >
+                  <Text style={[styles.chipText, billingType === item.value && styles.chipTextOn]}>{item.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+            {allowsAsaasCheckout() && (paymentUrl || pending?.paymentUrl) ? (
+              <OutlineButton
+                label="Abrir checkout do Asaas"
+                icon="open-outline"
+                onPress={() => void Linking.openURL((paymentUrl || pending?.paymentUrl) as string)}
+              />
+            ) : null}
+            {allowsAsaasCheckout() &&
+            (__DEV__ || process.env.EXPO_PUBLIC_ENABLE_SANDBOX_CONFIRM === "true") &&
+            paymentId &&
+            !paymentUrl ? (
+              <OutlineButton label="Finalizar checkout sandbox" onPress={() => void confirmSandbox()} />
+            ) : null}
+            <GreenButton
+              label={busy ? "Gerando checkout…" : "Assinar agora"}
+              loading={busy}
+              onPress={() => void subscribe()}
+              disabled={busy || plans.length === 0}
+            />
+          </>
+        )}
       </View>
     </StudentPage>
   );

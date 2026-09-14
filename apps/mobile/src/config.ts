@@ -1,6 +1,6 @@
 import Constants from "expo-constants";
 
-const DEFAULT_WEB_URL = "https://app-treino-api.vercel.app";
+const DEFAULT_WEB_URL = "https://atlly.com.br";
 const DEFAULT_WEB_PORT = "5174";
 
 function metroLanHost(): string | null {
@@ -45,7 +45,7 @@ function resolveWebUrl() {
   }
 }
 
-const DEFAULT_API_URL = "https://apptreino-backend.onrender.com";
+const DEFAULT_API_URL = "https://api.atlly.com.br";
 const DEFAULT_API_PORT = "3333";
 
 function resolveApiUrl() {
@@ -93,7 +93,7 @@ function resolveApiUrl() {
 export const WEB_URL = resolveWebUrl();
 export const API_URL = resolveApiUrl();
 
-/** App opens on login — not the marketing landing. */
+/** Entrada legada web — mobile não redireciona para URLs externas no funil de auth. */
 export const APP_ENTRY_URL = `${WEB_URL}/login?app=mobile`;
 export const APP_STUDENT_URL = `${WEB_URL}/aluno`;
 export const APP_ADMIN_URL = `${WEB_URL}/admin`;

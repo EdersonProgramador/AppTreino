@@ -200,6 +200,7 @@ export type MembershipRow = {
   startsAt?: string;
   endsAt?: string | null;
   plan?: {
+    code?: string;
     name?: string;
     priceInCents?: number;
     billingCycle?: string;
@@ -213,6 +214,8 @@ export type PaymentRow = {
   dueDate?: string;
   paidAt?: string | null;
   paymentUrl?: string | null;
+  membershipId?: string | null;
+  couponCode?: string | null;
 };
 
 export type PaymentCardRow = {

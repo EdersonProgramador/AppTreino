@@ -178,4 +178,29 @@ export async function ensureSchemaCompatibility() {
   await prisma.$executeRawUnsafe(`
     ALTER TABLE "workout_blocks" ADD COLUMN IF NOT EXISTS "created_by_user_id" TEXT;
   `);
+
+  await prisma.$executeRawUnsafe(`
+    DO $$ BEGIN
+      CREATE TYPE "payment_provider" AS ENUM ('ASAAS', 'APPLE');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "plans" ADD COLUMN IF NOT EXISTS "apple_product_id" TEXT;
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "plans_apple_product_id_key" ON "plans"("apple_product_id");
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "payment_provider" "payment_provider" NOT NULL DEFAULT 'ASAAS';
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "apple_transaction_id" TEXT;
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "apple_original_transaction_id" TEXT;
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "payments_apple_transaction_id_key" ON "payments"("apple_transaction_id");
+  `);
 }

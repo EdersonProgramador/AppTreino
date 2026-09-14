@@ -11,6 +11,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
+    "build:ios": "eas build --platform ios --profile production",
+    "submit:ios": "eas submit --platform ios --profile production",
     "postinstall": "node scripts/patch-h3-hermes.js"
   },
   "dependencies": {
@@ -48,6 +50,7 @@
     "react-native": "0.81.5",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-maps": "^1.20.1",
+    "react-native-purchases": "^8.12.0",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-track-player": "^4.1.2",

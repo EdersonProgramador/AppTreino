@@ -8,8 +8,10 @@ import { clearNativeSession, readNativeSession, writeNativeSession } from "./src
 import type { NativeSession } from "./src/auth/types";
 import { musicPlayback } from "./src/musicPlayback";
 import { StudentShell } from "./src/navigation/StudentShell";
+import { ActivateScreen } from "./src/screens/ActivateScreen";
 import { AdminNoticeScreen } from "./src/screens/AdminNoticeScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
+import { WelcomeScreen } from "./src/screens/WelcomeScreen";
 import { StudentProvider } from "./src/student/StudentContext";
 import { getTheme, hydrateMapCompass, hydrateTheme, setTheme } from "./src/student/prefs";
 import { StudentThemeProvider, tokensFor, useSt } from "./src/student/theme";
@@ -37,15 +39,19 @@ function StudentSoundsBoot() {
   return null;
 }
 
+type AuthPhase = "welcome" | "login" | "activate";
+
 function AppGate() {
   const [ready, setReady] = useState(false);
   const [session, setSession] = useState<NativeSession | null>(null);
+  const [authPhase, setAuthPhase] = useState<AuthPhase>("welcome");
 
   const onLogout = useCallback(() => {
     uiSounds.toggleOff();
     void musicPlayback.stop();
     void clearNativeSession();
     setSession(null);
+    setAuthPhase("welcome");
   }, []);
 
   useEffect(() => {
@@ -60,6 +66,7 @@ function AppGate() {
       if (!stored) {
         if (!cancelled) {
           setSession(null);
+          setAuthPhase("welcome");
           setReady(true);
         }
         return;
@@ -71,6 +78,7 @@ function AppGate() {
         if (!user) {
           await clearNativeSession();
           setSession(null);
+          setAuthPhase("welcome");
         } else {
           const next = { token: stored.token, user };
           await writeNativeSession(next);
@@ -81,6 +89,7 @@ function AppGate() {
         if (error instanceof NativeApiError && error.status === 401) {
           await clearNativeSession();
           setSession(null);
+          setAuthPhase("welcome");
         } else {
           // Falha de rede/servidor não invalida a sessão: mantém o acesso offline.
           setSession(stored);
@@ -102,8 +111,28 @@ function AppGate() {
     });
   }, []);
 
+  const openActivate = useCallback(() => {
+    setAuthPhase("activate");
+  }, []);
+
+  const openLogin = useCallback(() => {
+    setAuthPhase("login");
+  }, []);
+
+  const backToWelcome = useCallback(() => {
+    setAuthPhase("welcome");
+  }, []);
+
   if (!ready) return <BootScreen />;
-  if (!session) return <LoginScreen onLoggedIn={onLoggedIn} />;
+  if (!session && authPhase === "welcome") {
+    return <WelcomeScreen onActivate={openActivate} onLogin={openLogin} />;
+  }
+  if (!session && authPhase === "activate") {
+    return <ActivateScreen onBack={backToWelcome} onLoggedIn={onLoggedIn} />;
+  }
+  if (!session) {
+    return <LoginScreen onLoggedIn={onLoggedIn} onBackToWelcome={backToWelcome} onOpenActivate={openActivate} />;
+  }
   if (session.user.role === "ADMIN") {
     return <AdminNoticeScreen session={session} onLogout={onLogout} />;
   }

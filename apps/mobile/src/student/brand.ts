@@ -19,5 +19,8 @@ export const brand = {
   playTitle: "Play ATLLY",
   codeLabel: "Código",
   followAthletes: "Seguir atletas",
-  communityHint: "Conecte-se com outros atletas no Feed, Desafios e Corrida."
+  communityHint: "Conecte-se com outros atletas no Feed, Desafios e Corrida.",
+  areaEyebrow: "ATLLY Command",
+  commandLine: "Ative seu sistema. Treine com precisão.",
+  aiCoach: "ATLLY AI Coach"
 } as const;

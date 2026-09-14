@@ -32,6 +32,7 @@ import { registerUserRoutes } from "./modules/user.routes.js";
 import { registerOrgRoutes } from "./modules/org.routes.js";
 import { registerOrgTrainingRoutes } from "./modules/org-training.routes.js";
 import { registerCoachAffiliateRoutes } from "./modules/coach-affiliate.routes.js";
+import { registerAppleIapRoutes } from "./modules/apple-iap.routes.js";
 import type { Server as HttpServer } from "node:http";
 
 const app = Fastify({
@@ -231,6 +232,7 @@ await registerPublicRoutes(app);
 await registerMediaRoutes(app);
 await registerAuthRoutes(app);
 await registerCheckoutRoutes(app);
+await registerAppleIapRoutes(app);
 await registerAdminRoutes(app);
 await registerOrgRoutes(app);
 await registerOrgTrainingRoutes(app);

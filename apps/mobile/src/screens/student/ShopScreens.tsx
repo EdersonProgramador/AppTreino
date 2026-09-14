@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { apiPost, apiPut, NativeApiError } from "../../auth/api";
+import { isIosStoreCheckout } from "../../lib/platform-pay";
 import { mediaUrl } from "../../lib/media";
 import type { ShopStackParamList } from "../../navigation/types";
 import { labelOrderStatus, labelProductKind, labelShippingMethod } from "../../student/commerce";
@@ -48,13 +49,21 @@ export function ProductsScreen() {
   }
 
   async function buyNow(productId: string) {
+    const product = products.find((item) => item.id === productId);
+    if (isIosStoreCheckout() && product?.kind === "DIGITAL") {
+      Alert.alert(
+        "Compra digital",
+        "Produtos digitais no iOS são vendidos via App Store. Use a vitrine web ou aguarde a integração In-App Purchase deste item."
+      );
+      return;
+    }
     setBusyId(productId);
     try {
       const response = await apiPost<{ purchase: { paymentUrl?: string | null } }>("/student/purchases", { productId }, session.token);
       await refresh();
       setConfirmId(productId);
       uiSounds.paymentApproved();
-      if (response.purchase.paymentUrl) {
+      if (response.purchase.paymentUrl && !isIosStoreCheckout()) {
         await Linking.openURL(response.purchase.paymentUrl);
       }
       setTimeout(() => setConfirmId(null), 2500);
@@ -298,7 +307,19 @@ export function OrdersScreen() {
               <Text style={styles.kind}>{labelOrderStatus(order.status)}</Text>
               <Text style={styles.desc}>{new Date(order.createdAt).toLocaleDateString("pt-BR")}</Text>
               {order.status === "PENDING" && order.paymentUrl ? (
-                <GreenButton label="Pagar agora" onPress={() => void Linking.openURL(order.paymentUrl as string)} />
+                <GreenButton
+                  label="Pagar agora"
+                  onPress={() => {
+                    if (isIosStoreCheckout() && order.shippingMethod === "DIGITAL") {
+                      Alert.alert(
+                        "Pagamento digital",
+                        "Pedidos digitais no iOS usam App Store In-App Purchase. Finalize este item pelo site ou aguarde a integração IAP."
+                      );
+                      return;
+                    }
+                    void Linking.openURL(order.paymentUrl as string);
+                  }}
+                />
               ) : null}
             </View>
           ))}

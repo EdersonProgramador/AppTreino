@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { CompositeNavigationProp, useNavigation } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { apiPost } from "../../auth/api";
+import { apiDelete, apiPost } from "../../auth/api";
+import { WEB_URL } from "../../config";
 import type { MenuStackParamList, StudentTabParamList } from "../../navigation/types";
 import { CoachAccessCard } from "../../student/CoachAccessCard";
 import { trainingCopy } from "../../student/copy";
@@ -262,7 +263,7 @@ export function NotificationsScreen() {
 }
 
 export function SettingsScreen() {
-  const { hasAccess } = useStudent();
+  const { hasAccess, logout, session } = useStudent();
   const navigation = useNavigation();
   const { st, theme } = useSt();
   const styles = useMemo(() => createSettingsStyles(st), [st]);
@@ -453,6 +454,58 @@ export function SettingsScreen() {
             thumbColor={compassOn ? "#69e1ac" : st.card}
             ios_backgroundColor={st.lineStrong}
           />
+        </Pressable>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Legal e privacidade</Text>
+        <Text style={styles.sectionCopy}>Termos, política de privacidade e informações exigidas pela App Store.</Text>
+        <View style={styles.homeActions}>
+          <Pressable
+            onPress={() => void Linking.openURL(`${WEB_URL}/termos`)}
+            style={[styles.homeBtn, styles.homeBtnPrimary]}
+          >
+            <Text style={styles.homeBtnPrimaryText}>Termos de Uso</Text>
+          </Pressable>
+          <Pressable onPress={() => void Linking.openURL(`${WEB_URL}/privacidade`)} style={styles.homeBtn}>
+            <Text style={styles.homeBtnText}>Política de Privacidade</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Excluir conta</Text>
+        <Text style={styles.sectionCopy}>
+          Remove seu acesso e dados pessoais conforme a LGPD. Esta ação é permanente e não pode ser desfeita.
+        </Text>
+        <Pressable
+          onPress={() => {
+            Alert.alert(
+              "Excluir conta",
+              "Tem certeza? Seus dados pessoais serão removidos e você perderá o acesso ao ATLLY.",
+              [
+                { text: "Cancelar", style: "cancel" },
+                {
+                  text: "Excluir permanentemente",
+                  style: "destructive",
+                  onPress: () => {
+                    void (async () => {
+                      try {
+                        await apiDelete("/user/account", session.token);
+                        uiSounds.toggleOff();
+                        logout();
+                      } catch {
+                        Alert.alert("Conta", "Não foi possível excluir a conta agora. Tente novamente ou fale com o suporte.");
+                      }
+                    })();
+                  }
+                }
+              ]
+            );
+          }}
+          style={[styles.homeBtn, { borderColor: "rgba(223,56,56,0.45)" }]}
+        >
+          <Text style={[styles.homeBtnText, { color: "#df3838" }]}>Excluir minha conta</Text>
         </Pressable>
       </View>
 

@@ -2,7 +2,7 @@
   "expo": {
     "name": "ATLLY",
     "slug": "app-treino",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "scheme": "apptreino",
@@ -15,17 +15,17 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.edersonprogramador.apptreino",
+      "buildNumber": "1",
       "infoPlist": {
         "UIBackgroundModes": ["audio", "location"],
-        "NSMotionUsageDescription": "O Apptreino usa movimento e passos para gravar caminhada, corrida e a ofensiva.",
-        "NSHealthShareUsageDescription": "O Apptreino deseja acessar seus dados de saúde: batimento, distância a pé e correndo, ciclismo, energia ativa, exercícios, passos e rotas.",
-        "NSHealthUpdateUsageDescription": "O Apptreino deseja atualizar seus dados de saúde: batimento, distância a pé e correndo, ciclismo, energia ativa, exercícios e passos.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMotionUsageDescription": "O ATLLY usa movimento e passos para gravar caminhada, corrida e treinos.",
         "NSLocationWhenInUseUsageDescription": "Permitir a localização para gravar corrida, caminhada e ciclismo.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Permitir localização em segundo plano para gravar a atividade com o app minimizado.",
         "NSLocationAlwaysUsageDescription": "Permitir localização em segundo plano para gravar a atividade com o app minimizado.",
-        "NSCameraUsageDescription": "Permitir a camera para lives e compartilhar o treino.",
-        "NSMicrophoneUsageDescription": "Permitir o microfone ao gravar video e nas lives.",
-        "NSPhotoLibraryUsageDescription": "Permitir acesso as fotos para compartilhar o treino.",
+        "NSCameraUsageDescription": "Permitir a câmera para lives e compartilhar o treino.",
+        "NSMicrophoneUsageDescription": "Permitir o microfone ao gravar vídeo e nas lives.",
+        "NSPhotoLibraryUsageDescription": "Permitir acesso às fotos para compartilhar o treino.",
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
           "NSAllowsLocalNetworking": true

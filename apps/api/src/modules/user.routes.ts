@@ -938,5 +938,46 @@ export async function registerUserRoutes(app: FastifyInstance) {
     return reply.code(201).send({ plan });
   });
 
+  app.delete("/user/account", async (request, reply) => {
+    requireDatabase();
+    const user = await requireAuth(app, request);
+    if (isAdminStudentPreview(user)) {
+      return reply.code(403).send({ message: "Exclusão indisponível no modo preview do administrador." });
+    }
+
+    const dbUser = await prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      select: { id: true, email: true, phone: true, role: true }
+    });
+
+    if (dbUser.role === "ADMIN") {
+      return reply.code(403).send({ message: "Contas administrativas não podem ser excluídas pelo app." });
+    }
+
+    const deletedEmail = dbUser.email ? `deleted+${dbUser.id}@atlly.invalid` : null;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.membership.updateMany({
+        where: { userId: dbUser.id, deletedAt: null },
+        data: { status: "CANCELED", deletedAt: new Date() }
+      });
+      await tx.user.update({
+        where: { id: dbUser.id },
+        data: {
+          deletedAt: new Date(),
+          status: "INACTIVE",
+          passwordHash: null,
+          googleId: null,
+          asaasCustomerId: null,
+          email: deletedEmail,
+          phone: dbUser.phone ? null : undefined,
+          name: "Conta excluída"
+        }
+      });
+    });
+
+    return reply.send({ ok: true });
+  });
+
   attachCoachRoutes(app, "/user/coach");
 }

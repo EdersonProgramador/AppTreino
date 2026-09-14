@@ -70,7 +70,9 @@ const envSchema = z.object({
     .preprocess((value) => {
       const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
       return normalized.length ? normalized : "edersonprogramador@gmail.com";
-    }, z.string().email())
+    }, z.string().email()),
+  REVENUECAT_SECRET_KEY: z.preprocess((value) => (value === "" ? undefined : value), z.string().optional()),
+  REVENUECAT_WEBHOOK_AUTH: z.preprocess((value) => (value === "" ? undefined : value), z.string().optional())
 });
 
 export const env = envSchema.parse(process.env);

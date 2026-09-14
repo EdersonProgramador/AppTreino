@@ -1,7 +1,5 @@
 import { useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,20 +10,28 @@ import {
   View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as Linking from "expo-linking";
-import { API_URL, WEB_URL } from "../config";
+import { API_URL } from "../config";
+import {
+  AtllyAuthHeader,
+  AtllyCinemaPanel,
+  AtllyGhostLink,
+  AtllyPrimaryButton,
+  cinema
+} from "../auth/atllyAuthUi";
 import { loginWithPassword, NativeApiError, requestPasswordReset } from "../auth/api";
 import type { NativeSession } from "../auth/types";
 import { brand } from "../student/brand";
-import { useSt } from "../student/theme";
 import { uiSounds } from "../student/uiSounds";
 
 export function LoginScreen({
-  onLoggedIn
+  onLoggedIn,
+  onBackToWelcome,
+  onOpenActivate
 }: {
   onLoggedIn: (session: NativeSession) => void | Promise<void>;
+  onBackToWelcome?: () => void;
+  onOpenActivate?: () => void;
 }) {
-  const { st } = useSt();
   const [mode, setMode] = useState<"login" | "forgot">("login");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -74,24 +80,22 @@ export function LoginScreen({
   }
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: st.bg }]} edges={["top", "right", "bottom", "left"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "right", "bottom", "left"]}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-          <View style={styles.hero}>
-            <Image source={require("../../assets/atlly-logo.png")} style={styles.logo} accessibilityIgnoresInvertColors />
-            <Text style={[styles.category, { color: st.muted }]}>{brand.tagline}</Text>
-          </View>
-
-          <View style={[styles.panel, { borderColor: st.line, backgroundColor: st.cardSoft }]}>
-            <Text style={[styles.eyebrow, { color: st.gold }]}>{brand.name}</Text>
-            <Text style={[styles.title, { color: st.text }]}>{mode === "forgot" ? "Recuperar acesso" : "Entrar"}</Text>
-            <Text style={[styles.copy, { color: st.muted }]}>
-              {mode === "forgot"
+          <AtllyAuthHeader
+            kicker={brand.name}
+            title={mode === "forgot" ? "Recuperar acesso" : "Entrar"}
+            subtitle={
+              mode === "forgot"
                 ? "Informe o e-mail ou telefone cadastrado."
-                : "Comande sua mente. Evolua seu corpo. Acesse sua jornada de performance."}
-            </Text>
+                : "Comande sua mente. Evolua seu corpo. Acesse sua jornada de performance."
+            }
+            onBack={onBackToWelcome}
+          />
 
-            <Text style={[styles.label, { color: st.muted }]}>E-mail ou telefone</Text>
+          <AtllyCinemaPanel>
+            <Text style={styles.label}>E-mail ou telefone</Text>
             <TextInput
               autoCapitalize="none"
               autoComplete="username"
@@ -99,22 +103,22 @@ export function LoginScreen({
               keyboardType="email-address"
               onChangeText={setIdentifier}
               placeholder="Seu e-mail ou telefone"
-              placeholderTextColor={st.faint}
-              style={[styles.input, { color: st.text, borderColor: st.line, backgroundColor: st.inputBg }]}
+              placeholderTextColor={cinema.faint}
+              style={styles.input}
               value={identifier}
             />
 
             {mode === "login" ? (
               <>
-                <Text style={[styles.label, { color: st.muted }]}>Senha</Text>
+                <Text style={styles.label}>Senha</Text>
                 <TextInput
                   autoComplete="password"
                   onChangeText={setPassword}
                   onSubmitEditing={() => void submit()}
                   placeholder="Mínimo 6 caracteres"
-                  placeholderTextColor={st.faint}
+                  placeholderTextColor={cinema.faint}
                   secureTextEntry
-                  style={[styles.input, { color: st.text, borderColor: st.line, backgroundColor: st.inputBg }]}
+                  style={styles.input}
                   value={password}
                 />
               </>
@@ -122,27 +126,15 @@ export function LoginScreen({
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
             {success ? <Text style={styles.ok}>{success}</Text> : null}
-            {__DEV__ || error ? <Text style={[styles.debug, { color: st.faint }]}>API: {API_URL}</Text> : null}
+            {__DEV__ || error ? <Text style={styles.debug}>API: {API_URL}</Text> : null}
 
-            <Pressable
-              accessibilityRole="button"
+            <AtllyPrimaryButton
+              label={mode === "forgot" ? "Enviar link" : "Entrar na ATLLY"}
+              loading={submitting}
               disabled={submitting}
               onPress={() => void submit()}
-              style={({ pressed }) => [
-                styles.button,
-                { backgroundColor: st.gold },
-                pressed ? styles.buttonPressed : null,
-                submitting ? styles.buttonDisabled : null
-              ]}
-            >
-              {submitting ? (
-                <ActivityIndicator color={st.ink} />
-              ) : (
-                <Text style={[styles.buttonText, { color: "#0a0a0a" }]}>
-                  {mode === "forgot" ? "Enviar link" : "Entrar na ATLLY"}
-                </Text>
-              )}
-            </Pressable>
+              style={styles.cta}
+            />
 
             <Pressable
               onPress={() => {
@@ -152,15 +144,19 @@ export function LoginScreen({
               }}
               style={styles.linkWrap}
             >
-              <Text style={[styles.link, { color: st.gold }]}>
-                {mode === "login" ? "Esqueci a senha" : "Voltar ao login"}
-              </Text>
+              <Text style={styles.link}>{mode === "login" ? "Esqueci a senha" : "Voltar ao login"}</Text>
             </Pressable>
 
-            <Pressable onPress={() => void Linking.openURL(`${WEB_URL}/login`)} style={styles.linkWrap}>
-              <Text style={[styles.muted, { color: st.faint }]}>Criar conta em atlly.com.br</Text>
-            </Pressable>
-          </View>
+            {onOpenActivate ? (
+              <AtllyGhostLink
+                label="Ativar agora"
+                onPress={() => {
+                  uiSounds.toggleOn();
+                  onOpenActivate();
+                }}
+              />
+            ) : null}
+          </AtllyCinemaPanel>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -168,7 +164,7 @@ export function LoginScreen({
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
+  safe: { flex: 1, backgroundColor: cinema.bg },
   flex: { flex: 1 },
   scroll: {
     flexGrow: 1,
@@ -177,93 +173,41 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     gap: 20
   },
-  hero: {
-    alignItems: "center",
-    gap: 8
-  },
-  logo: {
-    width: 220,
-    height: 56,
-    resizeMode: "contain"
-  },
-  category: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 1.6,
-    textTransform: "uppercase",
-    textAlign: "center"
-  },
-  panel: {
-    borderRadius: 20,
-    borderWidth: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 22,
-    gap: 8
-  },
-  eyebrow: {
+  label: {
+    color: cinema.gold,
     fontSize: 12,
     fontWeight: "800",
-    letterSpacing: 1.4,
+    marginTop: 8,
     textTransform: "uppercase"
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "800"
-  },
-  copy: {
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: 12
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: "700",
-    marginTop: 8
-  },
   input: {
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
+    borderColor: cinema.lineStrong,
+    backgroundColor: cinema.inputBg,
+    color: cinema.text,
     fontSize: 16,
+    marginTop: 6,
     paddingHorizontal: 14,
     paddingVertical: 13
   },
   error: {
-    color: "#df3838",
+    color: cinema.error,
     fontSize: 14,
     fontWeight: "600",
     marginTop: 8
   },
   ok: {
-    color: "#1f7a52",
+    color: "#7dd4a8",
     fontSize: 14,
     fontWeight: "600",
     marginTop: 8
   },
-  button: {
-    alignItems: "center",
-    borderRadius: 14,
-    justifyContent: "center",
-    marginTop: 18,
-    minHeight: 52
-  },
-  buttonPressed: { opacity: 0.86 },
-  buttonDisabled: { opacity: 0.7 },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: "800"
-  },
-  linkWrap: {
-    alignItems: "center",
-    paddingVertical: 8
-  },
-  link: {
-    fontSize: 15,
-    fontWeight: "700"
-  },
-  muted: {
-    fontSize: 13
-  },
+  cta: { marginTop: 12 },
+  linkWrap: { alignItems: "center", paddingVertical: 6 },
+  link: { color: cinema.gold, fontSize: 15, fontWeight: "700" },
   debug: {
+    color: cinema.faint,
     fontSize: 11,
     textAlign: "center",
     marginTop: 4

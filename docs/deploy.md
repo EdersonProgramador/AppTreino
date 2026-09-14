@@ -48,6 +48,8 @@ GOOGLE_CLIENT_ID=<mesmo do Google Cloud / Vercel>
 ASAAS_API_KEY=<produção>
 ASAAS_API_URL=https://api.asaas.com/v3
 ASAAS_WEBHOOK_TOKEN=<token do webhook>
+REVENUECAT_SECRET_KEY=<secret API v1 do RevenueCat — validação IAP iOS>
+REVENUECAT_WEBHOOK_AUTH=<token Bearer do webhook RevenueCat>
 ```
 
 4. Domínio customizado no Render: `api.atlly.com.br`.
