@@ -478,11 +478,19 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   const cmsBlockModalityExercises = cmsBlockFormModality
     ? cmsExercises.filter((item) => (item.modalityLinks ?? []).some((link) => link.modality.id === cmsBlockFormModality))
     : cmsExercises;
-  const cmsProgramFormWorkoutBlocks = cmsProgramFormModality
-    ? cmsWorkoutBlocks.filter(
-        (item) => !item.modality || item.modality.id === cmsProgramFormModality
-      )
-    : cmsWorkoutBlocks;
+  const cmsProgramFormWorkoutBlocks = useMemo(() => {
+    const matchesModality = (item: CmsWorkoutBlockRow) =>
+      !cmsProgramFormModality || !item.modality || item.modality.id === cmsProgramFormModality;
+    const base = cmsWorkoutBlocks.filter(matchesModality);
+    if (!editingCmsProgram) return base;
+
+    const linkedBlocks = editingCmsProgram.days
+      .map((day) => day.workoutBlock)
+      .filter((block, index, list) => list.findIndex((item) => item.id === block.id) === index)
+      .filter((block) => !base.some((item) => item.id === block.id));
+
+    return [...linkedBlocks, ...base];
+  }, [cmsProgramFormModality, cmsWorkoutBlocks, editingCmsProgram]);
   const [cmsPrograms, setCmsPrograms] = useState<CmsProgramRow[]>([]);
   const filteredCmsPrograms = cmsProgramsModalityFilter
     ? cmsPrograms.filter((item) => item.modality?.id === cmsProgramsModalityFilter)
@@ -2018,6 +2026,16 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
+    const description = String(data.get("description") ?? "").trim();
+    if (description.length < 2) {
+      setFeedback("Informe uma descrição com pelo menos 2 caracteres para o aluno.");
+      return;
+    }
+    const parsedDays = parseCmsProgramDays(data);
+    if (!parsedDays.some((day) => day.dayNumber === 1)) {
+      setFeedback("Selecione a divisão da posição 1 do ciclo antes de salvar.");
+      return;
+    }
     const status = String(data.get("status") ?? "DRAFT");
     const durationYears = Math.max(0, Number(data.get("durationYears") ?? cmsProgramDurationYears) || 0);
     const durationMonths = Math.max(0, Number(data.get("durationMonths") ?? cmsProgramDurationMonths) || 0);
@@ -2026,8 +2044,8 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     const durationDays = estimateProgramCalendarDays(durationYears, durationMonths, durationWeeks, durationExtraDays);
     const plannedSessions = Math.max(1, Number(data.get("plannedSessions") ?? cmsProgramPlannedSessions) || 1);
     const payload = {
-      title: String(data.get("title") ?? ""),
-      description: String(data.get("description") ?? ""),
+      title: String(data.get("title") ?? "").trim(),
+      description,
       modalityId: String(data.get("modalityId") ?? ""),
       durationYears,
       durationMonths,
@@ -2043,7 +2061,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       totalWorkouts: plannedSessions,
       status,
       isActive: status === "PUBLISHED",
-      days: parseCmsProgramDays(data)
+      days: parsedDays
     };
 
     try {
@@ -2246,10 +2264,15 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
     }
   }
 
-  async function handleUpdateCmsProgramTotalWorkouts(programId: string, totalWorkouts: number) {
+  async function handleUpdateCmsProgramTotalWorkouts(programId: string, plannedSessions: number) {
+    if (!Number.isFinite(plannedSessions) || plannedSessions < 1) return;
     try {
-      await apiPut(`/admin/cms/programs/${programId}`, { totalWorkouts }, token);
-      await applyAdminChange(["programs"]);
+      await apiPut(
+        `/admin/cms/programs/${programId}`,
+        { plannedSessions, totalWorkouts: plannedSessions },
+        token
+      );
+      await applyAdminChange(["programs"], "Meta de sessões atualizada.");
     } catch (error) {
       setFeedback(getApiErrorMessage(error, "Não foi possível atualizar a meta de treinos."));
     }
@@ -5430,8 +5453,12 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   <textarea
                     name="description"
                     placeholder="Explique objetivo, frequência e como seguir o treino"
-                    required
-                    defaultValue={editingCmsProgram ? parseProgramMetadata(editingCmsProgram.description).description : ""}
+                    defaultValue={
+                      editingCmsProgram
+                        ? parseProgramMetadata(editingCmsProgram.description).description?.trim() ||
+                          editingCmsProgram.title
+                        : ""
+                    }
                   />
                 </label>
                 <div className={cmsFormSectionTitleClass}>
@@ -5456,20 +5483,20 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   {Array.from({ length: cmsProgramCycleLengthDays }).map((_, index) => {
                     const dayNumber = index + 1;
                     const editDay = editingCmsProgram?.days.find((day) => day.dayNumber === dayNumber);
-                    const dayBlocks = cmsProgramFormWorkoutBlocks.filter((block) => {
-                      if (!editDay) return true;
-                      return block.id === editDay.workoutBlock.id || !block.modality || block.modality.id === cmsProgramFormModality;
-                    });
-
                     return (
                       <div className="cms-builder-row program-day-row" key={`program-day-${dayNumber}`}>
                         <span>{dayNumber}</span>
-                        <select name={`workoutBlockId${dayNumber}`} required={dayNumber === 1} defaultValue={editDay?.workoutBlock.id ?? ""}>
+                        <select
+                          name={`workoutBlockId${dayNumber}`}
+                          required={dayNumber === 1}
+                          defaultValue={editDay?.workoutBlock.id ?? ""}
+                          key={`${editingCmsProgram?.id ?? "new"}-${dayNumber}-${editDay?.workoutBlock.id ?? "empty"}`}
+                        >
                           <option value="">{dayNumber === 1 ? "Selecione a primeira sessão" : "Sessão opcional"}</option>
-                          {dayBlocks.map((block) => (
+                          {cmsProgramFormWorkoutBlocks.map((block) => (
                             <option value={block.id} key={block.id}>
                               {block.identifier ?? block.title}{block.focus ? ` - ${block.focus}` : ""} ({block.weeklyFrequency ?? 1}x/semana)
-                              {block.modality?.id !== cmsProgramFormModality && block.modality ? " • sem modalidade definida" : ""}
+                              {block.modality?.id !== cmsProgramFormModality && block.modality ? " • outra modalidade" : ""}
                             </option>
                           ))}
                         </select>
@@ -5684,14 +5711,21 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                                 </select>
                                 <select
                                   aria-label="Meta de treinos"
-                                  value={item.totalWorkouts}
-                                  onChange={(event) => handleUpdateCmsProgramTotalWorkouts(item.id, Number(event.target.value))}
+                                  value={String(item.plannedSessions ?? item.totalWorkouts ?? 12)}
+                                  onChange={(event) =>
+                                    handleUpdateCmsProgramTotalWorkouts(item.id, Number(event.target.value))
+                                  }
                                 >
-                                  <option value="12">12 treinos</option>
-                                  <option value="18">18 treinos</option>
-                                  <option value="24">24 treinos</option>
-                                  <option value="30">30 treinos</option>
-                                  <option value="36">36 treinos</option>
+                                  {[12, 18, 24, 30, 36].map((value) => (
+                                    <option value={value} key={value}>
+                                      {value} treinos
+                                    </option>
+                                  ))}
+                                  {![12, 18, 24, 30, 36].includes(item.plannedSessions ?? item.totalWorkouts ?? 12) && (
+                                    <option value={item.plannedSessions ?? item.totalWorkouts}>
+                                      {item.plannedSessions ?? item.totalWorkouts} treinos (atual)
+                                    </option>
+                                  )}
                                 </select>
                               </div>
                               <form className="cms-assign-form" onSubmit={(event) => handleAssignCmsProgramSubmit(event, item.id)}>

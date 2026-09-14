@@ -7,6 +7,7 @@ import {
   Loader2,
   Megaphone,
   Play,
+  Pencil,
   Plus,
   RefreshCw,
   Save,
@@ -27,7 +28,7 @@ import {
   panelTitleClass,
   wideFieldClass
 } from "../../lib/admin-cms-classes";
-import { apiDelete, apiGet, apiPost } from "../../api";
+import { apiDelete, apiGet, apiPost, apiPut } from "../../api";
 
 type Unit = { id: string; name: string };
 type OrgUser = { id: string; name: string; email: string | null };
@@ -124,6 +125,7 @@ export function CoachTrainingStudio({
   const [programDays, setProgramDays] = useState<
     Array<{ workoutBlockId: string; dayNumber: number; order: number; label: string }>
   >([]);
+  const [editingProgramId, setEditingProgramId] = useState<string | null>(null);
 
   const [assignProgramId, setAssignProgramId] = useState("");
   const [assignAthleteId, setAssignAthleteId] = useState("");
@@ -242,9 +244,55 @@ export function CoachTrainingStudio({
     void load();
   }, [load]);
 
-  const filteredProgramBlocks = programModalityId
-    ? blocks.filter((block) => !block.modality?.id || block.modality.id === programModalityId)
-    : blocks;
+  const filteredProgramBlocks = useMemo(() => {
+    const base = programModalityId
+      ? blocks.filter((block) => !block.modality?.id || block.modality.id === programModalityId)
+      : blocks;
+    if (!editingProgramId) return base;
+
+    const editingProgram = programs.find((item) => item.id === editingProgramId);
+    if (!editingProgram) return base;
+
+    const linkedBlocks = editingProgram.days
+      .map((day) => blocks.find((block) => block.id === day.workoutBlockId))
+      .filter((block): block is WorkoutBlock => Boolean(block))
+      .filter((block, index, list) => list.findIndex((item) => item.id === block.id) === index)
+      .filter((block) => !base.some((item) => item.id === block.id));
+
+    return [...linkedBlocks, ...base];
+  }, [blocks, editingProgramId, programModalityId, programs]);
+
+  function resetProgramForm() {
+    setEditingProgramId(null);
+    setProgramTitle("");
+    setProgramDays([]);
+    setProgramDayNumber(1);
+    setProgramBlockId("");
+  }
+
+  function startEditProgram(program: OrgProgram) {
+    setEditingProgramId(program.id);
+    setProgramTitle(program.title);
+    setProgramModalityId(program.modality?.id ?? programModalityId);
+    setProgramUnitId(program.unit?.id ?? "");
+    setProgramDays(
+      [...program.days]
+        .sort((first, second) => first.dayNumber - second.dayNumber)
+        .map((day) => {
+          const block = blocks.find((item) => item.id === day.workoutBlockId);
+          return {
+            workoutBlockId: day.workoutBlockId,
+            dayNumber: day.dayNumber,
+            order: 1,
+            label: `Dia ${day.dayNumber}: ${block?.title ?? "Divisão"}`
+          };
+        })
+    );
+    setProgramDayNumber(
+      program.days.reduce((max, day) => Math.max(max, day.dayNumber), 0) + 1
+    );
+    setProgramBlockId("");
+  }
 
   const addBlockExercise = () => {
     const exercise = exercises.find((item) => item.id === blockExerciseId);
@@ -735,6 +783,11 @@ export function CoachTrainingStudio({
                 <span>{programs.length}</span>
               </div>
               <div className={`${crudFormClass} ${cmsFormClass}`}>
+                {editingProgramId && (
+                  <p className="col-span-full text-sm font-semibold text-amber-300">
+                    Editando ciclo — salve as alterações ou cancele para criar outro.
+                  </p>
+                )}
                 <label className={wideFieldClass}>
                   Título do ciclo
                   <input
@@ -812,38 +865,55 @@ export function CoachTrainingStudio({
                     </ul>
                   )}
                 </div>
-                <button
-                  type="button"
-                  className="primary-button"
-                  disabled={busy || programTitle.trim().length < 2 || !programModalityId || programDays.length === 0}
-                  onClick={() =>
-                    void onBusy(async () => {
-                      await apiPost(
-                        "/org/programs",
-                        {
-                          organizationId,
-                          unitId: programUnitId || undefined,
-                          modalityId: programModalityId,
+                <div className="col-span-full flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={busy || programTitle.trim().length < 2 || !programModalityId || programDays.length === 0}
+                    onClick={() =>
+                      void onBusy(async () => {
+                        const payload = {
                           title: programTitle.trim(),
-                          sourceType: "COACH",
-                          targetGender: "ALL",
+                          modalityId: programModalityId,
+                          unitId: programUnitId || null,
                           days: programDays.map(({ workoutBlockId, dayNumber, order }) => ({
                             workoutBlockId,
                             dayNumber,
                             order
                           }))
-                        },
-                        token
-                      );
-                      setProgramTitle("");
-                      setProgramDays([]);
-                      setProgramDayNumber(1);
-                      await load();
-                    }, "Ciclo criado (rascunho).")
-                  }
-                >
-                  <Save size={18} /> Criar rascunho
-                </button>
+                        };
+
+                        if (editingProgramId) {
+                          await apiPut(`/org/programs/${editingProgramId}`, payload, token);
+                        } else {
+                          await apiPost(
+                            "/org/programs",
+                            {
+                              organizationId,
+                              unitId: programUnitId || undefined,
+                              modalityId: programModalityId,
+                              title: programTitle.trim(),
+                              sourceType: "COACH",
+                              targetGender: "ALL",
+                              days: payload.days
+                            },
+                            token
+                          );
+                        }
+
+                        resetProgramForm();
+                        await load();
+                      }, editingProgramId ? "Ciclo atualizado." : "Ciclo criado (rascunho).")
+                    }
+                  >
+                    <Save size={18} /> {editingProgramId ? "Salvar alterações" : "Criar rascunho"}
+                  </button>
+                  {editingProgramId && (
+                    <button type="button" className="outline-button" disabled={busy} onClick={resetProgramForm}>
+                      Cancelar edição
+                    </button>
+                  )}
+                </div>
               </div>
             </section>
 
@@ -868,6 +938,16 @@ export function CoachTrainingStudio({
                       </small>
                     </span>
                     <div className="flex flex-wrap gap-2">
+                      {program.status === "DRAFT" && (
+                        <button
+                          type="button"
+                          className="outline-button compact-button"
+                          disabled={busy}
+                          onClick={() => startEditProgram(program)}
+                        >
+                          <Pencil size={14} /> Editar
+                        </button>
+                      )}
                       {program.status !== "PUBLISHED" && (
                         <button
                           type="button"

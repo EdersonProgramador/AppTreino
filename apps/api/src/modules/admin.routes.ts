@@ -3066,6 +3066,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       await assertModalitiesExist([body.modalityId]);
     }
 
+    if (body.days !== undefined && body.days.length === 0) {
+      throw httpError(400, "Cadastre ao menos uma sessão no programa.");
+    }
+
     const nextProgramDays = body.days ?? currentProgram.days;
     const nextCycleLengthDays = body.cycleLengthDays ?? currentProgram.cycleLengthDays;
     if (nextProgramDays.some((day) => day.dayNumber > nextCycleLengthDays)) {
@@ -3176,7 +3180,9 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         : null;
 
     await prisma.$transaction([
-      ...(body.days ? [prisma.programDayWorkout.deleteMany({ where: { programId: id } })] : []),
+      ...(body.days && body.days.length > 0
+        ? [prisma.programDayWorkout.deleteMany({ where: { programId: id } })]
+        : []),
       prisma.program.update({
         where: { id },
         data: {
