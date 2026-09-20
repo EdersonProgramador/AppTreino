@@ -6603,6 +6603,30 @@ html.light .finance-hub-tabs button {
   font-size: 0.75rem;
 }
 
+.student-header-coach-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  border: 1px solid rgba(212, 175, 55, 0.5);
+  border-radius: 999px;
+  padding: 0 11px;
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.95), rgba(184, 134, 11, 0.95));
+  color: #111 !important;
+  font-size: 11px;
+  font-weight: 900;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.student-header-coach-button:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.student-header-coach-button svg {
+  color: #111;
+}
+
 .student-streak-button {
   display: inline-grid;
   grid-template-columns: auto auto auto;
@@ -14052,7 +14076,8 @@ html.light .admin-workspace-shell .workspace-logout svg {
     font-size: 16px;
   }
 
-  .student-streak-button {
+  .student-streak-button,
+  .student-header-coach-button {
     min-height: 32px;
     padding: 0 7px;
   }

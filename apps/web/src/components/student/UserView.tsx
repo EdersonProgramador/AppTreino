@@ -49,7 +49,7 @@ import {
   X
 } from "lucide-react";
 import { Suspense, type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { formatPriceInBRL } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
@@ -149,7 +149,6 @@ import { useStudentWeather } from "../../lib/weather";
 import { useMusicPlayerStore } from "../../stores/musicPlayerStore";
 import { useFeedChromeStore } from "../../stores/feedChromeStore";
 import { useStaffSummary } from "../../hooks/useStaffSummary";
-import { StudentCoachAccessCard } from "../shared/StudentCoachAccessCard";
 import { isNativeAppShell } from "../../lib/native-bridge";
 import { readStudentPanel, writeStudentPanel } from "../../lib/student-panel-persist";
 import { clearWorkoutRunner } from "../../lib/workout-runner-persist";
@@ -2285,8 +2284,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const hasAdminEnrollment = profile?.enrollmentStatus === "ACTIVE";
   /** Liberação: membership/enrollment ativos, ou admin em modo preview blindado. */
   const hasStudentAreaAccess = hasActiveMembership || hasAdminEnrollment || isAdminPreview;
-  const { summary: staffSummary, loading: staffSummaryLoading, error: staffSummaryError, refresh: refreshStaffSummary } =
-    useStaffSummary(token);
+  const { summary: staffSummary } = useStaffSummary(token);
   const showCoachAccessBanner =
     Boolean(token) && hasStudentAreaAccess && (staffSummary.isStaff || staffSummary.isCoach);
 
@@ -2815,6 +2813,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     studentSection === "home" ||
     studentSection === "reels" ||
     studentSection === "live";
+  const isTrainingSection =
+    studentSection === "training" || studentSection === "player" || studentSection === "history";
 
   return (
     <main
@@ -2826,17 +2826,6 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     >
       {adminPreviewBanner}
       {token && !hideStudentNav ? <StudentDailyMotivation /> : null}
-      {showCoachAccessBanner && !hideStudentNav ? (
-        <div className="student-shell-coach-banner">
-          <StudentCoachAccessCard
-            compact
-            summary={staffSummary}
-            loading={staffSummaryLoading}
-            error={staffSummaryError}
-            onRefresh={() => void refreshStaffSummary()}
-          />
-        </div>
-      ) : null}
       {!hideStudentHeader && (
       <section className="student-app-header">
         <div className="student-header-brand">
@@ -2894,6 +2883,12 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               </button>
             </>
           )}
+          {showCoachAccessBanner && isTrainingSection ? (
+            <Link to={paths.coach} className="student-header-coach-button no-underline" aria-label="Abrir painel Coach ATLLY">
+              <Sparkles size={16} />
+              <span>Coach</span>
+            </Link>
+          ) : null}
           {!isFeedFamilySection && (
           <button className="student-streak-button" aria-label={`Ofensiva de ${currentStreak} dias`} onClick={() => {
             uiSounds.popupOpen();
