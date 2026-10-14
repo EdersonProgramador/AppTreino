@@ -3,6 +3,24 @@ export type GoogleAdsConversionKind = "purchase" | "signup" | "begin_checkout";
 /** Conta Google Ads ATLLY (Customer ID). */
 export const ATLLY_GOOGLE_ADS_CUSTOMER_ID = "244-230-6941";
 
+/** Google tag (gtag) — mesmo ID do snippet em Objetivos → Conversões. */
+export const ATLLY_GOOGLE_ADS_TAG_ID = "AW-18513371658";
+
+function isAtllyProductionHost() {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname.toLowerCase();
+  return host === "atlly.com.br" || host === "www.atlly.com.br";
+}
+
+function resolveGoogleAdsTagId(): string | null {
+  const fromEnv = readEnv("VITE_GOOGLE_ADS_ID");
+  if (fromEnv && isConfiguredGoogleAdsId(fromEnv)) return fromEnv;
+  if (isAtllyProductionHost() && isConfiguredGoogleAdsId(ATLLY_GOOGLE_ADS_TAG_ID)) {
+    return ATLLY_GOOGLE_ADS_TAG_ID;
+  }
+  return null;
+}
+
 declare global {
   interface Window {
     gtag?: (...args: unknown[]) => void;
@@ -39,11 +57,8 @@ function resolveGoogleAdsCustomerId(): ReturnType<typeof normalizeGoogleAdsCusto
   const fromEnv = normalizeGoogleAdsCustomerId(readEnv("VITE_GOOGLE_ADS_CUSTOMER_ID"));
   if (fromEnv) return fromEnv;
 
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname.toLowerCase();
-    if (host === "atlly.com.br" || host === "www.atlly.com.br") {
-      return normalizeGoogleAdsCustomerId(ATLLY_GOOGLE_ADS_CUSTOMER_ID);
-    }
+  if (isAtllyProductionHost()) {
+    return normalizeGoogleAdsCustomerId(ATLLY_GOOGLE_ADS_CUSTOMER_ID);
   }
 
   return null;
@@ -83,7 +98,7 @@ export function buildGoogleAdsSendTo(kind: GoogleAdsConversionKind): string | nu
   const direct = readEnv(directKey[kind]);
   if (direct?.includes("/")) return direct;
 
-  const adsId = readEnv("VITE_GOOGLE_ADS_ID");
+  const adsId = resolveGoogleAdsTagId();
   const labelKey = {
     purchase: "VITE_GOOGLE_ADS_CONVERSION_PURCHASE",
     signup: "VITE_GOOGLE_ADS_CONVERSION_SIGNUP",
@@ -98,9 +113,9 @@ export function initGoogleAdsAndGa4() {
 
   pushGoogleAdsAccountMetadata();
 
-  const adsId = readEnv("VITE_GOOGLE_ADS_ID");
+  const adsId = resolveGoogleAdsTagId();
   const ga4Id = readEnv("VITE_GA4_MEASUREMENT_ID");
-  const validAdsId = adsId && isConfiguredGoogleAdsId(adsId) ? adsId : null;
+  const validAdsId = adsId;
   const validGa4Id = ga4Id && isConfiguredGa4Id(ga4Id) ? ga4Id : null;
 
   if (!validAdsId && !validGa4Id) return;

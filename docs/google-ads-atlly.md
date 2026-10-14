@@ -4,6 +4,7 @@
 |--------|--------|
 | **Nome** | ATLLY (conta dedicada ao produto) |
 | **Customer ID** | `244-230-6941` (API: `2442306941`) |
+| **Google tag (gtag)** | `AW-18513371658` |
 | **Site de conversão** | `https://atlly.com.br` |
 | **Landing de venda** | `https://atlly.com.br/ativar` |
 
@@ -15,7 +16,7 @@ Defina no projeto **atlly**:
 
 ```txt
 VITE_GOOGLE_ADS_CUSTOMER_ID=244-230-6941
-VITE_GOOGLE_ADS_ID=AW-XXXXXXXXX
+VITE_GOOGLE_ADS_ID=AW-18513371658
 VITE_GOOGLE_ADS_CONVERSION_PURCHASE=<rótulo>
 VITE_GOOGLE_ADS_CONVERSION_SIGNUP=<rótulo>
 VITE_GOOGLE_ADS_CONVERSION_BEGIN_CHECKOUT=<rótulo>
@@ -25,6 +26,8 @@ VITE_GA4_MEASUREMENT_ID=G-XXXXXXXXXX
 O `VITE_GOOGLE_ADS_ID` deve ser o **AW-… desta conta (244-230-6941)**, não de outra conta (ex.: Baruc Shopping).
 
 Redeploy após salvar. Valide com [Tag Assistant](https://tagassistant.google.com/) em `/ativar`.
+
+**Não cole** o snippet HTML do Google Ads no `index.html`. O app injeta o mesmo `gtag/js?id=AW-18513371658` via `initGoogleAdsAndGa4()` em `atlly.com.br` (fallback no código) ou via `VITE_GOOGLE_ADS_ID` na Vercel.
 
 ## Adrails + Cursor
 
