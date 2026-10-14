@@ -1,0 +1,28 @@
+name: Marketing smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 12 * * *"
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/web/index.html"
+      - "apps/web/src/lib/google-ads.ts"
+      - "apps/web/src/lib/analytics.ts"
+      - "scripts/verify-atlly-marketing.mjs"
+
+permissions:
+  contents: read
+
+jobs:
+  production-tag:
+    name: ATLLY tag and API
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify production marketing
+        run: node scripts/verify-atlly-marketing.mjs

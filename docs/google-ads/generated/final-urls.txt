@@ -1,0 +1,10 @@
+# ATLLY — URLs finais (Google Ads / Adrails)
+# Gerado: 2026-10-14T18:26:58.478Z
+
+Performance Max: https://www.atlly.com.br/ativar?plan=PRO&coupon=GOOGLE15&utm_source=google&utm_medium=paid&utm_campaign=atlly_pro_pmax_br
+Search:          https://www.atlly.com.br/ativar?plan=PRO&coupon=GOOGLE15&utm_source=google&utm_medium=paid_search&utm_campaign=atlly_pro_search_br
+Display:         https://www.atlly.com.br/ativar?plan=PRO&coupon=GOOGLE15&utm_source=google&utm_medium=display&utm_campaign=atlly_pro_display_br
+
+Customer ID: 244-230-6941
+Tag: AW-18513371658
+Conversão (URL): contém /aluno

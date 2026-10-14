@@ -260,6 +260,17 @@ function gtagEvent(...args: unknown[]) {
   window.gtag(...args);
 }
 
+/** Sinal no dataLayer quando o aluno abre `/aluno` (conversão Google Ads por URL). */
+export function trackGoogleAdsConversionPathHit(pagePath: string) {
+  if (!pagePath.includes("/aluno")) return;
+  window.dataLayer = window.dataLayer ?? [];
+  window.dataLayer.push({
+    event: "atlly_conversion_page_view",
+    page_path: pagePath,
+    google_ads_tag_id: resolveGoogleAdsTagId() ?? undefined
+  });
+}
+
 export function trackGoogleAdsPageView(pagePath: string, pageTitle?: string) {
   const ga4Id = readEnv("VITE_GA4_MEASUREMENT_ID");
   if (!ga4Id || !isConfiguredGa4Id(ga4Id)) return;

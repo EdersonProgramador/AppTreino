@@ -83,7 +83,7 @@ Alternativa: em vez de ID + rótulo separados, use `VITE_GOOGLE_ADS_SEND_TO_PURC
 
 No Google Ads: **Objetivos → Conversões → Nova ação de conversão → Site** — copie o ID `AW-…` e o **rótulo de conversão** de cada ação. Evite duplicar a mesma conversão no GTM e no gtag (escolha um caminho ou desative a tag duplicada no GTM).
 
-Detalhes da conta ATLLY (`244-230-6941`), Adrails e MCP no Cursor: [google-ads-atlly.md](./google-ads-atlly.md).
+Detalhes da conta ATLLY (`244-230-6941`) e playbook manual: [google-ads-atlly.md](./google-ads-atlly.md) · [google-ads-manual-playbook.md](./google-ads-manual-playbook.md).
 
 Exemplo de URL de campanha (UTMs persistem 90 dias até o cadastro):
 

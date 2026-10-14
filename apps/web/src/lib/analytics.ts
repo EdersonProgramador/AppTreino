@@ -3,6 +3,7 @@ import {
   initGoogleAdsAndGa4,
   trackGa4FunnelEvent,
   trackGoogleAdsConversion,
+  trackGoogleAdsConversionPathHit,
   trackGoogleAdsPageView
 } from "./google-ads";
 
@@ -75,6 +76,7 @@ export function trackPageView(path: string, title?: string) {
     page_title: title ?? document.title
   });
   trackGoogleAdsPageView(path, title);
+  trackGoogleAdsConversionPathHit(path);
 }
 
 export function trackCompleteRegistration(planCode?: string | null) {

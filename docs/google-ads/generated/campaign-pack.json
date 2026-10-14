@@ -1,0 +1,22 @@
+{
+  "generatedAt": "2026-10-14T18:26:58.478Z",
+  "customerId": "244-230-6941",
+  "customerIdDigits": "2442306941",
+  "googleTagId": "AW-18513371658",
+  "conversionUrlContains": "/aluno",
+  "siteOrigin": "https://www.atlly.com.br",
+  "notes": [
+    "Criar campanhas pausadas; ativar após revisar conversão primária no Google Ads.",
+    "Cupom GOOGLE15 deve existir no admin ATLLY antes de veicular com coupon= na URL.",
+    "Adrails: colar performanceMaxFinalUrl como Final URL (PMax) ou equivalente Search."
+  ],
+  "urls": {
+    "performanceMax": "https://www.atlly.com.br/ativar?plan=PRO&coupon=GOOGLE15&utm_source=google&utm_medium=paid&utm_campaign=atlly_pro_pmax_br",
+    "search": "https://www.atlly.com.br/ativar?plan=PRO&coupon=GOOGLE15&utm_source=google&utm_medium=paid_search&utm_campaign=atlly_pro_search_br",
+    "display": "https://www.atlly.com.br/ativar?plan=PRO&coupon=GOOGLE15&utm_source=google&utm_medium=display&utm_campaign=atlly_pro_display_br"
+  },
+  "adrailsPrompts": {
+    "firstReview": "Review Google Ads account 2442306941 (ATLLY). List conversion actions for tag AW-18513371658, active campaigns, spend last 7 days.",
+    "createPMaxPaused": "Prepare a paused Performance Max campaign for Brazil, daily budget BRL 50, final URL from urls.performanceMax in docs/google-ads/generated/campaign-pack.json, optimize for primary conversion (page contains /aluno)."
+  }
+}
