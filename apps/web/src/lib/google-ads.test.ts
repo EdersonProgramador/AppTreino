@@ -3,6 +3,7 @@ import {
   ATLLY_GOOGLE_ADS_CUSTOMER_ID,
   ATLLY_GOOGLE_ADS_TAG_ID,
   formatGoogleAdsSendTo,
+  isValidGoogleAdsConversionLabel,
   normalizeGoogleAdsCustomerId
 } from "./google-ads.js";
 
@@ -16,5 +17,7 @@ assert.equal(ATLLY_GOOGLE_ADS_TAG_ID, "AW-18513371658");
 const atllyCustomer = normalizeGoogleAdsCustomerId("244-230-6941");
 assert.equal(atllyCustomer?.digits, "2442306941");
 assert.equal(atllyCustomer?.formatted, "244-230-6941");
+assert.equal(isValidGoogleAdsConversionLabel("AbCdEfGhIj"), true);
+assert.equal(isValidGoogleAdsConversionLabel("<rótulo da compra>"), false);
 
 console.log("google-ads.test.ts ok");

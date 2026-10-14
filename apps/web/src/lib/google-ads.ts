@@ -77,14 +77,60 @@ function pushGoogleAdsAccountMetadata() {
   });
 }
 
+/** Rótulo real do Google Ads (rejeita placeholders da Vercel/docs). */
+export function isValidGoogleAdsConversionLabel(label: string | null | undefined): boolean {
+  const normalized = label?.trim();
+  if (!normalized || normalized.length < 8 || normalized.length > 40) return false;
+  if (normalized.includes("/") || normalized.includes("<") || normalized.includes(">")) return false;
+  if (/rótulo|label|placeholder|xxxx/i.test(normalized)) return false;
+  return /^[A-Za-z0-9_-]+$/.test(normalized);
+}
+
 export function formatGoogleAdsSendTo(adsId: string | null | undefined, label: string | null | undefined): string | null {
   const normalizedLabel = label?.trim();
   if (!normalizedLabel) return null;
-  if (normalizedLabel.includes("/")) return normalizedLabel;
+  if (normalizedLabel.includes("/")) {
+    return isValidGoogleAdsConversionLabel(normalizedLabel.split("/").pop()) ? normalizedLabel : null;
+  }
+  if (!isValidGoogleAdsConversionLabel(normalizedLabel)) return null;
 
   const normalizedAdsId = adsId?.trim();
   if (!normalizedAdsId || !isConfiguredGoogleAdsId(normalizedAdsId)) return null;
   return `${normalizedAdsId}/${normalizedLabel}`;
+}
+
+function readConversionLabel(envKey: keyof ImportMetaEnv): string | null {
+  const raw = readEnv(envKey);
+  return isValidGoogleAdsConversionLabel(raw) ? raw!.trim() : null;
+}
+
+function resolveConversionLabel(kind: GoogleAdsConversionKind): string | null {
+  const byKind = {
+    purchase: readConversionLabel("VITE_GOOGLE_ADS_CONVERSION_PURCHASE"),
+    signup: readConversionLabel("VITE_GOOGLE_ADS_CONVERSION_SIGNUP"),
+    begin_checkout: readConversionLabel("VITE_GOOGLE_ADS_CONVERSION_BEGIN_CHECKOUT")
+  } satisfies Record<GoogleAdsConversionKind, string | null>;
+
+  const direct = readEnv(
+    {
+      purchase: "VITE_GOOGLE_ADS_SEND_TO_PURCHASE",
+      signup: "VITE_GOOGLE_ADS_SEND_TO_SIGNUP",
+      begin_checkout: "VITE_GOOGLE_ADS_SEND_TO_BEGIN_CHECKOUT"
+    }[kind]
+  );
+  if (direct?.includes("/")) {
+    const sendTo = formatGoogleAdsSendTo(resolveGoogleAdsTagId(), direct);
+    if (sendTo) return sendTo.split("/").pop() ?? null;
+  }
+
+  if (byKind[kind]) return byKind[kind];
+
+  const fallbackDefault = readConversionLabel("VITE_GOOGLE_ADS_CONVERSION_DEFAULT");
+  if (fallbackDefault) return fallbackDefault;
+
+  if (kind !== "purchase" && byKind.purchase) return byKind.purchase;
+
+  return null;
 }
 
 /** Monta `AW-xxx/label` a partir do ID da conta e do rótulo da ação de conversão. */
@@ -96,16 +142,46 @@ export function buildGoogleAdsSendTo(kind: GoogleAdsConversionKind): string | nu
   } satisfies Record<GoogleAdsConversionKind, keyof ImportMetaEnv>;
 
   const direct = readEnv(directKey[kind]);
-  if (direct?.includes("/")) return direct;
+  if (direct?.includes("/")) {
+    const parsed = formatGoogleAdsSendTo(null, direct);
+    if (parsed) return parsed;
+  }
 
   const adsId = resolveGoogleAdsTagId();
-  const labelKey = {
-    purchase: "VITE_GOOGLE_ADS_CONVERSION_PURCHASE",
-    signup: "VITE_GOOGLE_ADS_CONVERSION_SIGNUP",
-    begin_checkout: "VITE_GOOGLE_ADS_CONVERSION_BEGIN_CHECKOUT"
-  } satisfies Record<GoogleAdsConversionKind, keyof ImportMetaEnv>;
+  return formatGoogleAdsSendTo(adsId, resolveConversionLabel(kind));
+}
 
-  return formatGoogleAdsSendTo(adsId, readEnv(labelKey[kind]));
+function trackGoogleAdsKeyEvent(
+  kind: GoogleAdsConversionKind,
+  input?: {
+    valueCents?: number | null;
+    transactionId?: string | null;
+    planCode?: string | null;
+  }
+) {
+  const value = input?.valueCents != null ? input.valueCents / 100 : undefined;
+  const base = {
+    value,
+    currency: value != null ? "BRL" : undefined,
+    transaction_id: input?.transactionId ?? undefined,
+    plan_code: input?.planCode ?? undefined
+  };
+
+  if (kind === "purchase") {
+    gtagEvent("event", "purchase", {
+      ...base,
+      items: input?.planCode
+        ? [{ item_id: input.planCode, item_name: input.planCode, price: value }]
+        : undefined
+    });
+    return;
+  }
+  if (kind === "signup") {
+    gtagEvent("event", "sign_up", base);
+    gtagEvent("event", "generate_lead", base);
+    return;
+  }
+  gtagEvent("event", "begin_checkout", base);
 }
 
 function gtagLoaderScriptPresent(tagId: string) {
@@ -206,10 +282,22 @@ export function trackGoogleAdsConversion(
     planCode?: string | null;
   }
 ) {
-  const sendTo = buildGoogleAdsSendTo(kind);
-  if (!sendTo) return;
-
   const value = input?.valueCents != null ? input.valueCents / 100 : undefined;
+  trackGoogleAdsKeyEvent(kind, input);
+
+  const sendTo = buildGoogleAdsSendTo(kind);
+  if (!sendTo) {
+    window.dataLayer?.push({
+      event: "google_ads_conversion_pending",
+      google_ads_conversion_kind: kind,
+      reason: "missing_or_invalid_conversion_label",
+      value,
+      currency: value != null ? "BRL" : undefined,
+      transaction_id: input?.transactionId ?? undefined,
+      plan_code: input?.planCode ?? undefined
+    });
+    return;
+  }
 
   gtagEvent("event", "conversion", {
     send_to: sendTo,

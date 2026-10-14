@@ -27,6 +27,18 @@ O `VITE_GOOGLE_ADS_ID` deve ser o **AW-… desta conta (244-230-6941)**, não de
 
 Redeploy após salvar. Valide com [Tag Assistant](https://tagassistant.google.com/) em `/ativar`.
 
+**Importante:** não use texto placeholder (`<rótulo da compra>`) na Vercel — o build ignora rótulos inválidos e só dispara eventos `purchase` / `sign_up` / `begin_checkout` até você colar o rótulo real do Google Ads.
+
+### Conversão automática por URL (sem rótulo no código)
+
+No Google Ads → Conversões → Nova → **Site** → **Visualização de página**:
+
+| Conversão | URL contém |
+|-----------|------------|
+| Assinatura ativa | `/aluno` |
+
+Funciona só com a tag `AW-18513371658` já instalada.
+
 A tag **`AW-18513371658`** está no `apps/web/index.html` para o verificador do Google Ads ler o HTML estático. O app reutiliza o mesmo `gtag` para eventos de funil (sem carregar o script duas vezes).
 
 ## Adrails + Cursor
