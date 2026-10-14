@@ -108,39 +108,71 @@ export function buildGoogleAdsSendTo(kind: GoogleAdsConversionKind): string | nu
   return formatGoogleAdsSendTo(adsId, readEnv(labelKey[kind]));
 }
 
+function gtagLoaderScriptPresent(tagId: string) {
+  return Array.from(document.querySelectorAll('script[src*="googletagmanager.com/gtag/js"]')).some((node) =>
+    (node.getAttribute("src") ?? "").includes(tagId)
+  );
+}
+
+function ensureGtagStub() {
+  window.dataLayer = window.dataLayer ?? [];
+  if (typeof window.gtag !== "function") {
+    window.gtag = (...args: unknown[]) => {
+      window.dataLayer!.push(args);
+    };
+  }
+}
+
 export function initGoogleAdsAndGa4() {
   if (typeof document === "undefined") return;
 
   pushGoogleAdsAccountMetadata();
+  ensureGtagStub();
 
   const adsId = resolveGoogleAdsTagId();
   const ga4Id = readEnv("VITE_GA4_MEASUREMENT_ID");
   const validAdsId = adsId;
   const validGa4Id = ga4Id && isConfiguredGa4Id(ga4Id) ? ga4Id : null;
 
+  const adsScriptInHtml = validAdsId ? gtagLoaderScriptPresent(validAdsId) : false;
+  const ga4ScriptInHtml = validGa4Id ? gtagLoaderScriptPresent(validGa4Id) : false;
+
+  if (validAdsId && adsScriptInHtml) {
+    const customer = resolveGoogleAdsCustomerId();
+    gtagEvent("config", validAdsId, {
+      allow_enhanced_conversions: true,
+      ...(customer ? { customer_id: customer.digits } : {})
+    });
+  }
+
+  if (validGa4Id && !ga4ScriptInHtml && !document.getElementById("atlly-gtag-ga4")) {
+    const script = document.createElement("script");
+    script.id = "atlly-gtag-ga4";
+    script.async = true;
+    script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(validGa4Id)}`;
+    document.head.appendChild(script);
+    gtagEvent("config", validGa4Id, { send_page_view: false });
+  }
+
   if (!validAdsId && !validGa4Id) return;
+  if (adsScriptInHtml && (!validGa4Id || ga4ScriptInHtml)) return;
   if (document.getElementById("atlly-gtag")) return;
 
-  window.dataLayer = window.dataLayer ?? [];
-  function gtag(...args: unknown[]) {
-    window.dataLayer!.push(args);
-  }
-  window.gtag = gtag;
-  gtag("js", new Date());
+  const loaderId = validGa4Id && !ga4ScriptInHtml ? validGa4Id : validAdsId;
+  if (!loaderId || gtagLoaderScriptPresent(loaderId)) return;
 
-  const loaderId = validGa4Id ?? validAdsId!;
   const script = document.createElement("script");
   script.id = "atlly-gtag";
   script.async = true;
   script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(loaderId)}`;
   document.head.appendChild(script);
 
-  if (validGa4Id) {
-    gtag("config", validGa4Id, { send_page_view: false });
+  if (validGa4Id && loaderId === validGa4Id) {
+    gtagEvent("config", validGa4Id, { send_page_view: false });
   }
-  if (validAdsId) {
+  if (validAdsId && loaderId === validAdsId) {
     const customer = resolveGoogleAdsCustomerId();
-    gtag("config", validAdsId, {
+    gtagEvent("config", validAdsId, {
       allow_enhanced_conversions: true,
       ...(customer ? { customer_id: customer.digits } : {})
     });

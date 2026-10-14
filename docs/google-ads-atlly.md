@@ -27,7 +27,7 @@ O `VITE_GOOGLE_ADS_ID` deve ser o **AW-… desta conta (244-230-6941)**, não de
 
 Redeploy após salvar. Valide com [Tag Assistant](https://tagassistant.google.com/) em `/ativar`.
 
-**Não cole** o snippet HTML do Google Ads no `index.html`. O app injeta o mesmo `gtag/js?id=AW-18513371658` via `initGoogleAdsAndGa4()` em `atlly.com.br` (fallback no código) ou via `VITE_GOOGLE_ADS_ID` na Vercel.
+A tag **`AW-18513371658`** está no `apps/web/index.html` para o verificador do Google Ads ler o HTML estático. O app reutiliza o mesmo `gtag` para eventos de funil (sem carregar o script duas vezes).
 
 ## Adrails + Cursor
 
