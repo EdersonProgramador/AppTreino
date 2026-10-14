@@ -25,6 +25,10 @@ import {
 } from "./checkout.utils.js";
 import { syncSubscriptionPaymentFromAsaas } from "./asaas-payment-sync.js";
 import { applyReferralAttributionForUser } from "./coach-affiliate.service.js";
+import {
+  marketingAttributionBodySchema,
+  persistFirstTouchMarketingAttribution
+} from "./marketing-attribution.js";
 
 const planCodeSchema = z.string().trim().min(1).max(80);
 
@@ -56,7 +60,8 @@ const checkoutRegisterSchema = z
     }),
     acceptPrivacy: z.literal(true, {
       errorMap: () => ({ message: "Aceite a Política de Privacidade para continuar." })
-    })
+    }),
+    marketingAttribution: marketingAttributionBodySchema
   })
   .superRefine((data, ctx) => {
     if (!data.email && !data.phone) {
@@ -789,6 +794,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
 
     notifyWelcomeEmail(user);
     await applyReferralAttributionForUser(user.id, body.referralSlug);
+    await persistFirstTouchMarketingAttribution(user.id, body.marketingAttribution);
 
     const authUser = toAuthUser(user);
     const token = app.jwt.sign(authUser);

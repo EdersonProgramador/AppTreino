@@ -9,6 +9,10 @@ import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { applyReferralAttributionForUser } from "./coach-affiliate.service.js";
 import {
+  marketingAttributionBodySchema,
+  persistFirstTouchMarketingAttribution
+} from "./marketing-attribution.js";
+import {
   findUserByPhone,
   loginAccountNotFoundMessage,
   loginInvalidPasswordMessage,
@@ -81,7 +85,8 @@ const registerSchema = z
     acceptPrivacy: z.literal(true, {
       errorMap: () => ({ message: "Aceite a Política de Privacidade para continuar." })
     }),
-    referralSlug: z.string().trim().max(80).optional().nullable()
+    referralSlug: z.string().trim().max(80).optional().nullable(),
+    marketingAttribution: marketingAttributionBodySchema
   })
   .superRefine((data, ctx) => {
     const hasIdentifier = Boolean(data.email || data.phone);
@@ -107,7 +112,8 @@ const googleSchema = z.object({
   name: z.string().optional().or(z.literal("")),
   gender: z.enum(["MALE", "FEMALE"]).optional().or(z.literal("")),
   idToken: z.string().optional().or(z.literal("")),
-  credential: z.string().optional().or(z.literal(""))
+  credential: z.string().optional().or(z.literal("")),
+  marketingAttribution: marketingAttributionBodySchema
 });
 
 const forgotPasswordSchema = z
@@ -363,6 +369,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
     await recordDailyAttendance(user.id, user.role);
     await applyReferralAttributionForUser(user.id, body.referralSlug);
+    await persistFirstTouchMarketingAttribution(user.id, body.marketingAttribution);
     notifyWelcomeEmail(user);
     const authUser = toAuthUser(user);
     const token = app.jwt.sign(authUser);
@@ -431,6 +438,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           }
         }
       });
+      await persistFirstTouchMarketingAttribution(user.id, body.marketingAttribution);
       notifyWelcomeEmail(user);
     } else if (!user.googleId) {
       // Vincula Google a conta existente sem remover a senha de e-mail.

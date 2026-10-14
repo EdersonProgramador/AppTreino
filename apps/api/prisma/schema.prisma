@@ -93,10 +93,27 @@ model User {
   coachWallet                 CoachWallet?              @relation("CoachWallet")
   coachWithdrawalRequests     CoachWithdrawalRequest[]  @relation("CoachWithdrawalRequests")
   coachWithdrawalsApproved    CoachWithdrawalRequest[]  @relation("WithdrawalApprover")
+  marketingAttribution        UserMarketingAttribution?
   createdAt           DateTime             @default(now()) @map("created_at")
   updatedAt           DateTime             @updatedAt @map("updated_at")
 
   @@map("users")
+}
+
+/// First-touch UTM / landing path captured at signup (paid media attribution).
+model UserMarketingAttribution {
+  id           String   @id @default(cuid())
+  userId       String   @unique @map("user_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  utmSource    String?  @map("utm_source")
+  utmMedium    String?  @map("utm_medium")
+  utmCampaign  String?  @map("utm_campaign")
+  utmContent   String?  @map("utm_content")
+  utmTerm      String?  @map("utm_term")
+  landingPath  String?  @map("landing_path")
+  capturedAt   DateTime @default(now()) @map("captured_at")
+
+  @@map("user_marketing_attributions")
 }
 
 model PasswordResetToken {

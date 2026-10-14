@@ -30,6 +30,8 @@ import {
 } from "./session";
 import { paths, unpaidStudentActivatePath } from "./paths";
 import { clearCheckoutIntent, readCheckoutIntent, resolveCheckoutCouponSelection, resolveCheckoutPlanSelection, resolveCheckoutReferralSelection } from "../lib/checkout-intent";
+import { trackCompleteRegistration } from "../lib/analytics";
+import { readMarketingAttributionForApi } from "../lib/marketing-attribution-storage";
 import { fetchStudentPortalAccess } from "../lib/student-portal-access";
 import { preloadAdminPanel, preloadStudentPanel } from "./RouteGuards";
 import { useMusicPlayerStore } from "../stores/musicPlayerStore";
@@ -347,6 +349,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         resolveCheckoutCouponSelection({ checkoutIntent }) || null;
       const referralSlug =
         resolveCheckoutReferralSelection({ checkoutIntent }) || null;
+      const marketingAttribution = readMarketingAttributionForApi();
       const isCheckoutRegister = mode === "register" && Boolean(planCode);
       const endpoint =
         provider === "GOOGLE"
@@ -373,7 +376,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               phone: phone || (!identifier.includes("@") ? identifier : undefined),
               gender: mode === "register" ? gender || undefined : undefined,
               idToken: idToken || credential || undefined,
-              credential: credential || idToken || undefined
+              credential: credential || idToken || undefined,
+              marketingAttribution: mode === "register" ? marketingAttribution : undefined
             }
           : mode === "login"
             ? {
@@ -398,6 +402,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   planCode,
                   couponCode: couponForCheckout,
                   referralSlug,
+                  marketingAttribution,
                   billingType,
                   acceptTerms: acceptTerms ? true : undefined,
                   acceptPrivacy: acceptPrivacy ? true : undefined
@@ -416,6 +421,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   password,
                   provider,
                   referralSlug,
+                  marketingAttribution,
                   acceptTerms: acceptTerms ? true : undefined,
                   acceptPrivacy: acceptPrivacy ? true : undefined
                 };
@@ -432,6 +438,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           nativeCheckout?: NativeCheckoutPayload;
           paymentProviderError?: string;
         }>(endpoint, payload);
+
+        if (mode === "register") {
+          trackCompleteRegistration(planCode ?? checkoutIntent?.planCode ?? undefined);
+        }
 
         const checkoutIntentAfter = readCheckoutIntent();
         const planForCheckout = resolveCheckoutPlanSelection({

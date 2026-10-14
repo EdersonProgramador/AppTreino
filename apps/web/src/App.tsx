@@ -8,9 +8,11 @@ import { paths } from "./auth/paths";
 import { applyDocumentTheme, useUiPrefsStore } from "./stores/uiPrefsStore";
 import { ALL_UI_SOUND_PRELOAD } from "./lib/ui-sounds";
 import { installShellStateFlush } from "./lib/shell-persist";
+import { MarketingTracker } from "./components/marketing/MarketingTracker";
 
 const AppRoutes = () => (
   <SessionGate>
+    <MarketingTracker />
     <div className="app-view-stage is-visible">
       <Routes>
         <Route path={paths.home} element={<HomePage />} />

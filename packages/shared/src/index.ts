@@ -212,3 +212,12 @@ export {
   type SubscriptionPlanGoalDefinition,
   type SubscriptionPlanGoalProgress
 } from "./subscription-goals.js";
+export {
+  MARKETING_UTM_KEYS,
+  marketingAttributionHasSignal,
+  mergeMarketingAttribution,
+  normalizeMarketingAttribution,
+  parseMarketingAttributionFromSearch,
+  type MarketingAttribution,
+  type MarketingUtmKey
+} from "./marketing-attribution.js";

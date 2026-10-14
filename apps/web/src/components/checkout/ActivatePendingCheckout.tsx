@@ -13,6 +13,7 @@ import { isSandboxCheckoutEnabled } from "../../lib/sandbox-checkout";
 import { pickPendingCheckoutPayment, syncCheckoutPaymentStatus } from "../../lib/checkout-payment-sync";
 import { fetchStudentPortalAccess, hasStudentPortalAccess } from "../../lib/student-portal-access";
 import { uiSounds } from "../../lib/ui-sounds";
+import { trackInitiateCheckout, trackPurchase } from "../../lib/analytics";
 import type { CheckoutSessionResponse, NativeCheckoutPayload, PaymentRow, PlanCode } from "../../types/shared";
 import type { StudentMembershipRow, StudentProfile } from "../../types/student";
 import { SubscriptionCheckoutShell } from "./SubscriptionCheckoutShell";
@@ -115,6 +116,11 @@ export function ActivatePendingCheckout() {
           try {
             const synced = await syncCheckoutPaymentStatus(token, pending.id);
             if (synced.alreadyActive || synced.payment.status === "CONFIRMED") {
+              trackPurchase({
+                transactionId: synced.payment.id,
+                planCode: synced.membership?.plan?.code ?? selectedPlan,
+                valueCents: synced.payment.amountInCents
+              });
               clearCheckoutIntent();
               navigate(paths.student, { replace: true });
               return;
@@ -226,6 +232,11 @@ export function ActivatePendingCheckout() {
       });
     }
     if (response.membership && response.payment && hasStudentPortalAccess(profile, response.membership)) {
+      trackPurchase({
+        transactionId: response.payment.id,
+        planCode: response.membership.plan?.code ?? selectedPlan,
+        valueCents: response.payment.amountInCents
+      });
       clearCheckoutIntent();
       navigate(paths.student, { replace: true });
     }
@@ -265,8 +276,20 @@ export function ActivatePendingCheckout() {
 
       applyCheckoutSessionResponse(response);
 
+      trackInitiateCheckout({
+        planCode,
+        valueCents: response.payment?.amountInCents ?? selectedPlanRow?.priceInCents ?? null
+      });
+
       if (response.alreadyActive) {
         uiSounds.paymentApproved();
+        if (response.payment) {
+          trackPurchase({
+            transactionId: response.payment.id,
+            planCode,
+            valueCents: response.payment.amountInCents
+          });
+        }
         clearCheckoutIntent();
         navigate(paths.student, { replace: true });
         return;
@@ -292,6 +315,11 @@ export function ActivatePendingCheckout() {
       try {
         const synced = await syncCheckoutPaymentStatus(token, pending.id);
         if (synced.alreadyActive || synced.payment.status === "CONFIRMED") {
+          trackPurchase({
+            transactionId: synced.payment.id,
+            planCode: synced.membership?.plan?.code ?? selectedPlan,
+            valueCents: synced.payment.amountInCents
+          });
           navigate(paths.student, { replace: true });
           return;
         }
