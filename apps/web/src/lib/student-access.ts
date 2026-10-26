@@ -15,9 +15,12 @@ export function hasValidActiveMembership(membership: StudentMembershipRow | null
 
 /** Treinos exigem matrícula vigente ou liberação admin (`enrollmentStatus`). */
 export function hasStudentWorkoutAccess(
-  profile: Pick<StudentProfile, "enrollmentStatus"> | null | undefined,
+  profile: Pick<StudentProfile, "enrollmentStatus" | "studentAccessProfile"> | null | undefined,
   membership: StudentMembershipRow | null | undefined
 ) {
+  if (profile?.studentAccessProfile === "COACH_MANAGED" && profile.enrollmentStatus === "ACTIVE") {
+    return true;
+  }
   if (profile?.enrollmentStatus === "ACTIVE") return true;
   return hasValidActiveMembership(membership);
 }

@@ -2,11 +2,20 @@ import { PLAN_FEATURE_KEYS, type PlanFeatureKey } from "@app-treino/shared";
 import { isPlatformAdminUser } from "../../auth.js";
 import { prisma } from "../../prisma.js";
 import { validActiveMembershipWhere } from "../membership.utils.js";
+import { coachManagedFeatureKeys, isCoachManagedAthlete } from "../student-access.utils.js";
 
 /** Entitlements individuais — independentes de vínculo organizacional. */
 export async function listUserPlanFeatures(userId: string): Promise<PlanFeatureKey[]> {
   if (await isPlatformAdminUser(userId)) {
     return [...PLAN_FEATURE_KEYS];
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { studentAccessProfile: true, enrollmentStatus: true }
+  });
+  if (user && isCoachManagedAthlete(user)) {
+    return coachManagedFeatureKeys();
   }
 
   const membership = await prisma.membership.findFirst({
@@ -26,10 +35,6 @@ export async function listUserPlanFeatures(userId: string): Promise<PlanFeatureK
   });
 
   if (!membership) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { enrollmentStatus: true }
-    });
     return user?.enrollmentStatus === "ACTIVE" ? [...PLAN_FEATURE_KEYS] : [];
   }
 

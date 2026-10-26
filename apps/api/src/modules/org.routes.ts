@@ -16,6 +16,7 @@ import {
 } from "./coach-eligibility.js";
 import { listOrgModalities } from "./org-training.service.js";
 import { canAccessOrgPlatform, hasActiveOrgStaffMembership } from "./org-auth/staff.js";
+import { userHasCoachProAnnualPlan } from "./coach-pro-plan.service.js";
 
 function webAppOrigin() {
   const origins = env.WEB_ORIGIN.split(",")
@@ -717,6 +718,151 @@ export async function registerOrgRoutes(app: FastifyInstance) {
     });
 
     return reply.code(201).send({ link });
+  });
+
+  app.post("/org/coach-athletes/register", async (request, reply) => {
+    const user = await requireAuth(app, request);
+    const ctx = await loadOrgAuthContext(user);
+    const body = z
+      .object({
+        organizationId: z.string().min(1),
+        unitId: z.string().min(1),
+        name: z.string().trim().min(2).max(120),
+        email: z.string().trim().email().optional(),
+        phone: z.string().trim().min(8).max(20).optional()
+      })
+      .parse(request.body);
+
+    denyUnlessAllowed(
+      authorize({
+        ctx,
+        permission: "athletes.create",
+        organizationId: body.organizationId,
+        unitId: body.unitId
+      })
+    );
+
+    const coachCanRegister = (await userHasCoachProAnnualPlan(user.id)) || (await hasActiveStudentSubscription(user.id));
+    if (!coachCanRegister) {
+      throw httpOrgError(402, "Assine o plano Coach ATLLY Profissional (R$ 1.300/ano) para cadastrar alunos.");
+    }
+
+    const email = body.email?.toLowerCase();
+    let athlete = email
+      ? await prisma.user.findUnique({ where: { email } })
+      : body.phone
+        ? await prisma.user.findUnique({ where: { phone: body.phone } })
+        : null;
+
+    let createdUser = false;
+    if (!athlete) {
+      if (!email && !body.phone) {
+        throw httpOrgError(400, "Informe e-mail ou telefone para cadastrar o aluno.");
+      }
+      const tempPassword = randomBytes(12).toString("base64url");
+      athlete = await prisma.user.create({
+        data: {
+          name: body.name,
+          email: email ?? null,
+          phone: body.phone ?? null,
+          passwordHash: await hashPassword(tempPassword),
+          provider: "EMAIL",
+          role: "USER",
+          status: "ACTIVE",
+          enrollmentStatus: "ACTIVE",
+          studentAccessProfile: "COACH_MANAGED"
+        }
+      });
+      createdUser = true;
+    } else if (athlete.role !== "USER") {
+      throw httpOrgError(400, "Este e-mail/telefone pertence a uma conta que não é de aluno.");
+    } else {
+      athlete = await prisma.user.update({
+        where: { id: athlete.id },
+        data: {
+          name: body.name,
+          enrollmentStatus: "ACTIVE",
+          studentAccessProfile: "COACH_MANAGED"
+        }
+      });
+    }
+
+    const link = await prisma.athleteOrganizationLink.upsert({
+      where: {
+        athleteId_organizationId_unitId: {
+          athleteId: athlete.id,
+          organizationId: body.organizationId,
+          unitId: body.unitId
+        }
+      },
+      create: {
+        athleteId: athlete.id,
+        organizationId: body.organizationId,
+        unitId: body.unitId,
+        status: "ACTIVE"
+      },
+      update: { status: "ACTIVE", deletedAt: null, endedAt: null }
+    });
+
+    const coachMember = ctx.memberships.find(
+      (item) => item.organizationId === body.organizationId && item.role === "COACH" && item.status === "ACTIVE"
+    );
+    if (coachMember) {
+      const existingAssignment = await prisma.professionalAssignment.findFirst({
+        where: {
+          organizationId: body.organizationId,
+          unitId: body.unitId,
+          professionalId: user.id,
+          athleteId: athlete.id,
+          professionalType: "COACH",
+          deletedAt: null
+        },
+        select: { id: true }
+      });
+      if (existingAssignment) {
+        await prisma.professionalAssignment.update({
+          where: { id: existingAssignment.id },
+          data: { status: "ACTIVE", deletedAt: null, isPrimary: true }
+        });
+      } else {
+        await prisma.professionalAssignment.create({
+          data: {
+            organizationId: body.organizationId,
+            unitId: body.unitId,
+            professionalId: user.id,
+            athleteId: athlete.id,
+            professionalType: "COACH",
+            status: "ACTIVE",
+            isPrimary: true
+          }
+        });
+      }
+    }
+
+    await writeAuditLog({
+      userId: user.id,
+      organizationId: body.organizationId,
+      unitId: body.unitId,
+      action: "coach_athlete.register",
+      resourceType: "user",
+      resourceId: athlete.id,
+      newValues: { createdUser, studentAccessProfile: "COACH_MANAGED", linkId: link.id },
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"]
+    });
+
+    return reply.code(201).send({
+      athlete: {
+        id: athlete.id,
+        name: athlete.name,
+        email: athlete.email,
+        phone: athlete.phone,
+        studentAccessProfile: "COACH_MANAGED"
+      },
+      link,
+      createdUser,
+      managedAccess: true
+    });
   });
 
   app.post("/org/professional-assignments", async (request, reply) => {

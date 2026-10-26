@@ -18,6 +18,9 @@ import { loadCoachContext } from "./coach/context.js";
 import { buildWorkoutPlan } from "./coach/engine.js";
 import { attachCoachRoutes } from "./coach.routes.js";
 import { athleteRegistrationNumber } from "./athlete-registration.utils.js";
+import { readStudentAccessProfile } from "./student-access.utils.js";
+import { DEFAULT_SYSTEM_SETTINGS, ensureDefaultSystemSettings, sanitizePublicSystemSettings } from "./commerce.utils.js";
+import { mergePortalConfigForStudentAccess } from "@app-treino/shared";
 
 const eventRegistrationSchema = z.object({
   eventId: z.string().min(1)
@@ -224,7 +227,8 @@ export async function registerUserRoutes(app: FastifyInstance) {
       !pathname.startsWith("/user/payments") &&
       !pathname.startsWith("/user/uploads") &&
       !pathname.startsWith("/user/physical-assessments") &&
-      !pathname.startsWith("/user/agenda")
+      !pathname.startsWith("/user/agenda") &&
+      !pathname.startsWith("/user/portal-config")
     ) {
       await Promise.all([requireActiveMembership(authUser.id), recordDailyAttendance(authUser.id)]);
     }
@@ -280,6 +284,7 @@ export async function registerUserRoutes(app: FastifyInstance) {
         registrationNumber,
         locationId: profile.profile?.locationId ?? null,
         enrollmentStatus: profile.enrollmentStatus,
+        studentAccessProfile: readStudentAccessProfile(profile),
         achievements: achievements.map((item) => ({
           modalityId: item.modalityId,
           modalityName: item.modality?.name ?? item.modalityName,
@@ -288,6 +293,49 @@ export async function registerUserRoutes(app: FastifyInstance) {
           lastCompletedAt: item.lastCompletedAt
         }))
       }
+    };
+  });
+
+  app.get("/user/portal-config", async (request) => {
+    requireDatabase();
+    const authUser = await requireAuth(app, request);
+    await ensureDefaultSystemSettings();
+
+    const publicKeys = [
+      "qr_checkin_url",
+      "qr_checkin_enabled",
+      "module_products",
+      "module_purchases",
+      "module_qr",
+      "module_cards",
+      "module_favorites",
+      "module_ratings",
+      "module_contact",
+      "module_ai",
+      "module_social_publicar",
+      "module_social_momentos",
+      "module_social_clipes",
+      "module_social_live",
+      "module_social_nota"
+    ] as const;
+
+    const [user, records] = await Promise.all([
+      prisma.user.findUniqueOrThrow({
+        where: { id: authUser.id },
+        select: { studentAccessProfile: true }
+      }),
+      prisma.systemSetting.findMany({ where: { key: { in: [...publicKeys] } } })
+    ]);
+
+    const base = { ...DEFAULT_SYSTEM_SETTINGS };
+    for (const record of records) {
+      base[record.key] = record.value;
+    }
+    const sanitized = sanitizePublicSystemSettings(base);
+    const profile = readStudentAccessProfile(user);
+    return {
+      config: mergePortalConfigForStudentAccess(sanitized, profile),
+      studentAccessProfile: profile
     };
   });
 

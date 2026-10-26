@@ -29,6 +29,11 @@ import {
   marketingAttributionBodySchema,
   persistFirstTouchMarketingAttribution
 } from "./marketing-attribution.js";
+import {
+  COACH_MANAGED_CHECKOUT_MESSAGE,
+  assertNotCoachManagedSelfCheckout,
+  isCoachManagedAthlete
+} from "./student-access.utils.js";
 
 const planCodeSchema = z.string().trim().min(1).max(80);
 
@@ -295,6 +300,15 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       return reply.code(403).send({
         message: "Checkout indisponível no modo preview do administrador.",
         code: "ADMIN_PREVIEW_READONLY"
+      });
+    }
+    try {
+      await assertNotCoachManagedSelfCheckout(authUser.id);
+    } catch (err) {
+      const blocked = err as Error & { statusCode?: number; code?: string };
+      return reply.code(blocked.statusCode ?? 403).send({
+        message: blocked.message,
+        code: blocked.code ?? "COACH_MANAGED_NO_SELF_CHECKOUT"
       });
     }
     const body = checkoutSessionSchema.parse(request.body);
@@ -713,6 +727,12 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       (phone ? await prisma.user.findUnique({ where: { phone } }) : null);
 
     if (existingUser) {
+      if (isCoachManagedAthlete(existingUser)) {
+        return reply.code(403).send({
+          message: COACH_MANAGED_CHECKOUT_MESSAGE,
+          code: "COACH_MANAGED_NO_SELF_CHECKOUT"
+        });
+      }
       return reply.code(409).send({
         message: "E-mail já cadastrado. Faça login para continuar o pagamento."
       });

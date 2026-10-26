@@ -1,4 +1,6 @@
+import { COACH_PRO_ANNUAL_PLAN_CODE } from "@app-treino/shared";
 import { prisma } from "../prisma.js";
+import { userHasCoachProAnnualPlan } from "./coach-pro-plan.service.js";
 import { validActiveMembershipWhere } from "./membership.utils.js";
 
 export function httpCoachError(statusCode: number, message: string) {
@@ -19,7 +21,7 @@ export async function hasActiveStudentSubscription(userId: string) {
 }
 
 export async function getCoachEligibility(userId: string) {
-  const [coachMembership, hasActiveSubscription] = await Promise.all([
+  const [coachMembership, hasActiveSubscription, hasCoachProPlan] = await Promise.all([
     prisma.organizationMember.findFirst({
       where: {
         userId,
@@ -35,13 +37,18 @@ export async function getCoachEligibility(userId: string) {
       },
       orderBy: { createdAt: "asc" }
     }),
-    hasActiveStudentSubscription(userId)
+    hasActiveStudentSubscription(userId),
+    userHasCoachProAnnualPlan(userId)
   ]);
+
+  const subscriptionOk = hasActiveSubscription || hasCoachProPlan;
 
   return {
     hasCoachRole: Boolean(coachMembership),
-    hasActiveSubscription,
-    isActiveCoach: Boolean(coachMembership && hasActiveSubscription),
+    hasActiveSubscription: subscriptionOk,
+    hasCoachProPlan,
+    coachProPlanCode: COACH_PRO_ANNUAL_PLAN_CODE,
+    isActiveCoach: Boolean(coachMembership && subscriptionOk),
     coachMembership
   };
 }

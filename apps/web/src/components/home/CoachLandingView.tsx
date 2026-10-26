@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Check, ChevronRight, Menu, X } from "lucide-react";
+import { ArrowRight, Check, ChevronRight, Menu, X, XCircle } from "lucide-react";
+import { formatPriceInBRL } from "@app-treino/shared";
 import { brand } from "../../lib/brand";
 import { paths } from "../../auth/paths";
 import { assetUrl } from "../../lib/urls";
@@ -11,6 +12,10 @@ import {
   coachHeroTrust,
   coachHowItWorks,
   coachLandingNav,
+  coachManagedExcluded,
+  coachManagedIncluded,
+  coachProPriceCents,
+  coachProPricingBullets,
   coachStudioSteps
 } from "../../lib/coach-landing-content";
 
@@ -32,6 +37,7 @@ type Props = {
 export function CoachLandingView({ onSubscribe, onLogin }: Props) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const scrollRootRef = useRef<HTMLElement | null>(null);
+  const priceLabel = formatPriceInBRL(coachProPriceCents);
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 1024px)");
@@ -43,29 +49,40 @@ export function CoachLandingView({ onSubscribe, onLogin }: Props) {
     return () => media.removeEventListener("change", closeOnDesktop);
   }, []);
 
+  useEffect(() => {
+    document.title = `Coach Pro · ${brand.name}`;
+    return () => {
+      document.title = brand.name;
+    };
+  }, []);
+
   return (
-    <main ref={scrollRootRef} className="home-landing home-command coach-landing text-sand">
+    <main
+      id="topo"
+      ref={scrollRootRef}
+      className="home-landing home-command coach-landing coach-landing--pro text-sand"
+    >
       <div className="home-topbar border-b border-brand-gold/30 bg-gradient-to-r from-black via-[#1a1208] to-black px-4 py-2.5 text-center">
         <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-brand-gold sm:text-xs">
-          Programa Coach ATLLY · comissão de 8%
+          Coach Pro · plano anual exclusivo para profissionais
         </p>
         <p className="mt-0.5 text-[11px] text-brand-silver sm:text-xs">
-          Assinatura ativa + promoção admin = coach ativo com selo e receitas.{" "}
+          {priceLabel}/ano · treinos exclusivos para seus alunos · comissão de indicação 8%.{" "}
           <button type="button" className="font-bold text-brand-amber underline-offset-2 hover:underline" onClick={onSubscribe}>
-            Assinar ATLLY
+            Assinar Coach Pro
           </button>
         </p>
       </div>
 
       <header className="home-header sticky top-0 z-40 border-b border-white/10 bg-black/80 backdrop-blur-xl">
         <div className="mx-auto flex min-h-[64px] max-w-6xl items-center justify-between gap-3 px-4 sm:min-h-[72px] sm:px-8">
-          <a href="#topo" className="flex min-w-0 flex-col no-underline" aria-label={brand.name}>
+          <a href="#topo" className="flex min-w-0 flex-col no-underline" aria-label={`${brand.name} Coach Pro`}>
             <AtllyLogo className="h-8 w-auto max-w-[140px] sm:h-9 sm:max-w-[160px]" />
             <span className="mt-0.5 truncate text-[9px] font-bold uppercase tracking-[0.16em] text-brand-silver sm:tracking-[0.22em]">
-              Coach ATLLY
+              Coach Pro
             </span>
           </a>
-          <nav className="hidden items-center gap-5 lg:flex" aria-label="Navegação coach">
+          <nav className="hidden items-center gap-4 xl:flex" aria-label="Navegação coach">
             {coachLandingNav.map((item) => (
               <a key={item.href} href={item.href} className="text-sm font-bold text-brand-silver transition hover:text-brand-gold">
                 {item.label}
@@ -73,19 +90,19 @@ export function CoachLandingView({ onSubscribe, onLogin }: Props) {
             ))}
           </nav>
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-            <Link to={paths.home} className="hidden text-sm font-bold text-brand-silver no-underline transition hover:text-brand-gold sm:inline-flex">
+            <Link to={paths.home} className="hidden text-sm font-bold text-brand-silver no-underline transition hover:text-brand-gold md:inline-flex">
               Site ATLLY
             </Link>
             <button type="button" className="hidden text-sm font-bold text-brand-silver transition hover:text-brand-gold sm:inline-flex" onClick={onLogin}>
               Entrar
             </button>
             <button type="button" className="ui-btn-primary !min-h-10 !px-3 !text-xs sm:!min-h-11 sm:!px-5 sm:!text-sm" onClick={onSubscribe}>
-              Quero ser coach
+              Assinar Coach Pro
               <ArrowRight size={16} />
             </button>
             <button
               type="button"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/15 bg-white/5 text-sand lg:hidden"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/15 bg-white/5 text-sand xl:hidden"
               aria-label={mobileNavOpen ? "Fechar menu" : "Abrir menu"}
               aria-expanded={mobileNavOpen}
               onClick={() => setMobileNavOpen((value) => !value)}
@@ -95,7 +112,7 @@ export function CoachLandingView({ onSubscribe, onLogin }: Props) {
           </div>
         </div>
         {mobileNavOpen ? (
-          <nav className="home-mobile-nav border-t border-white/10 px-4 py-4 lg:hidden" aria-label="Navegação mobile coach">
+          <nav className="home-mobile-nav border-t border-white/10 px-4 py-4 xl:hidden" aria-label="Navegação mobile coach">
             <div className="mx-auto grid max-w-6xl gap-1">
               {coachLandingNav.map((item) => (
                 <a
@@ -118,29 +135,30 @@ export function CoachLandingView({ onSubscribe, onLogin }: Props) {
         ) : null}
       </header>
 
-      <section id="topo" className="coach-landing-hero relative overflow-hidden px-4 py-20 sm:px-8 sm:py-24">
+      <section className="coach-landing-hero relative overflow-hidden px-4 py-20 sm:px-8 sm:py-24">
         <div className="coach-landing-hero__glow pointer-events-none absolute inset-0" aria-hidden="true" />
-        <div className="relative z-10 mx-auto grid max-w-6xl gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+        <div className="relative z-10 mx-auto grid max-w-6xl gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
           <div className="animate-fade-up max-w-2xl">
-            <SectionEyebrow>Painel profissional</SectionEyebrow>
-            <h1 className="home-brand-signal mt-6 text-[clamp(2.2rem,6vw,4rem)] leading-[0.95]">
-              Treine como atleta.
-              <span className="mt-2 block text-[0.78em] tracking-[0.08em] text-brand-gold">Opere como coach.</span>
+            <SectionEyebrow>Somente para coaches</SectionEyebrow>
+            <h1 className="home-brand-signal mt-6 text-[clamp(2.2rem,6vw,3.75rem)] leading-[0.95]">
+              Sua operação profissional
+              <span className="mt-2 block text-[0.72em] tracking-[0.06em] text-brand-gold">na ATLLY.</span>
             </h1>
             <p className="mt-5 max-w-xl text-lg font-semibold text-brand-silver">
-              Produza treinos, distribua programas, indique alunos e receba comissão — tudo dentro da ATLLY.
+              Coach Pro reúne painel, estúdio e agenda para você prescrever treinos exclusivos — cada aluno segue só a rotina que
+              você publicou.
             </p>
             <p className="mt-4 max-w-xl text-base leading-relaxed text-sand-muted">
-              Coach ATLLY é para quem já vive a plataforma como aluno e quer escalar sua operação com Estúdio de Treinos,
-              workspace de organização e afiliado de 8% sobre indicações confirmadas.
+              Para quem conduz a rotina de outros atletas: cadastre alunos, monte programas, marque sessões e acompanhe a execução.
+              Sua metodologia, entregue em um só lugar.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <button type="button" className="ui-btn-primary shadow-glow" onClick={onSubscribe}>
-                Assinar e começar
+                Assinar Coach Pro — {priceLabel}/ano
                 <ArrowRight size={18} />
               </button>
               <button type="button" className="inline-flex items-center gap-2 text-sm font-extrabold text-brand-silver transition hover:text-brand-gold" onClick={onLogin}>
-                Já sou aluno — entrar
+                Já tenho conta — entrar no /coach
                 <ChevronRight size={18} />
               </button>
             </div>
@@ -154,22 +172,36 @@ export function CoachLandingView({ onSubscribe, onLogin }: Props) {
             </ul>
           </div>
 
-          <article className="home-panel animate-fade-up rounded-3xl border border-brand-gold/25 bg-black/40 p-6 backdrop-blur-sm" style={{ animationDelay: "100ms" }}>
-            <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-brand-gold">Requisito</p>
-            <h2 className="mt-3 font-display text-2xl font-bold uppercase">Coach ativo</h2>
-            <p className="mt-3 text-sm leading-relaxed text-sand-muted">
-              Para selo, link de indicação e comissão, você precisa de <strong className="text-sand">duas coisas</strong>:
+          <article
+            id="plano"
+            className="coach-pro-pricing-card home-plan-featured animate-fade-up scroll-mt-28 rounded-3xl border border-brand-gold/35 p-6 sm:p-8"
+            style={{ animationDelay: "100ms" }}
+          >
+            <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-brand-gold">Plano anual</p>
+            <h2 className="mt-2 font-display text-3xl font-bold uppercase tracking-tight text-sand">Coach Pro</h2>
+            <p className="mt-3 flex items-baseline gap-2">
+              <span className="font-display text-4xl font-extrabold text-brand-gold">{priceLabel}</span>
+              <span className="text-sm font-bold text-sand-muted">/ ano</span>
             </p>
-            <ol className="mt-4 grid gap-3 text-sm">
-              <li className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                <strong className="text-sand">1. Assinatura ATLLY vigente</strong>
-                <span className="mt-1 block text-sand-muted">Plano ativo como aluno na plataforma.</span>
-              </li>
-              <li className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                <strong className="text-sand">2. Promoção pelo admin</strong>
-                <span className="mt-1 block text-sand-muted">Vínculo COACH em uma organização parceira.</span>
-              </li>
-            </ol>
+            <p className="mt-3 text-sm leading-relaxed text-sand-muted">
+              Pagamento anual. Ferramentas profissionais e cadastro de alunos vinculados a você — treinos exclusivos do coach, sem
+              plano contratado pelo próprio aluno.
+            </p>
+            <ul className="mt-5 grid gap-2.5 border-t border-white/10 pt-5">
+              {coachProPricingBullets.map((item) => (
+                <li key={item} className="flex gap-2.5 text-sm text-sand-muted">
+                  <Check size={16} className="mt-0.5 shrink-0 text-brand-gold" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+            <button type="button" className="ui-btn-primary mt-6 w-full shadow-glow" onClick={onSubscribe}>
+              Contratar Coach Pro
+              <ArrowRight size={18} />
+            </button>
+            <p className="mt-4 text-center text-[11px] leading-relaxed text-sand-faint">
+              Após o pagamento, solicite ao admin ATLLY a promoção COACH na sua organização parceira.
+            </p>
           </article>
         </div>
       </section>
@@ -178,9 +210,9 @@ export function CoachLandingView({ onSubscribe, onLogin }: Props) {
         <div className="mx-auto max-w-6xl">
           <SectionEyebrow>Benefícios</SectionEyebrow>
           <h2 className="ui-display mt-4 max-w-3xl text-[clamp(1.75rem,4vw,2.5rem)] font-bold uppercase">
-            Ferramentas profissionais no mesmo ecossistema do atleta
+            Tudo que um coach precisa em um só lugar
           </h2>
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {coachBenefits.map((item) => (
               <article key={item.title} className="home-panel rounded-2xl border border-white/10 p-5">
                 <item.icon className="text-brand-gold" size={22} />
@@ -192,16 +224,59 @@ export function CoachLandingView({ onSubscribe, onLogin }: Props) {
         </div>
       </section>
 
-      <section id="estudio" className="px-4 py-16 sm:px-8">
+      <section id="alunos" className="px-4 py-16 sm:px-8">
+        <div className="mx-auto max-w-6xl">
+          <SectionEyebrow>Seus alunos</SectionEyebrow>
+          <h2 className="ui-display mt-4 max-w-3xl text-[clamp(1.75rem,4vw,2.25rem)] font-bold uppercase">
+            Treinos exclusivos do coach
+          </h2>
+          <p className="mt-4 max-w-2xl text-base leading-relaxed text-sand-muted">
+            Você cadastra no painel e define o que cada aluno vê: programas, agenda e acompanhamento. Nada de catálogo aberto — a
+            jornada é fechada à sua prescrição profissional.
+          </p>
+          <div className="mt-10 grid gap-6 lg:grid-cols-2">
+            <article className="home-panel rounded-3xl border border-brand-gold/25 p-6">
+              <h3 className="flex items-center gap-2 font-display text-lg font-bold uppercase text-brand-gold">
+                <Check size={20} />
+                Incluído para o aluno
+              </h3>
+              <ul className="mt-5 grid gap-3">
+                {coachManagedIncluded.map((item) => (
+                  <li key={item} className="flex gap-3 text-sm text-sand-muted">
+                    <Check size={16} className="mt-0.5 shrink-0 text-brand-gold" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </article>
+            <article className="home-panel rounded-3xl border border-white/10 p-6">
+              <h3 className="flex items-center gap-2 font-display text-lg font-bold uppercase text-sand">
+                <XCircle size={20} className="text-brand-telemetry-soft" />
+                Fechado no cadastro
+              </h3>
+              <ul className="mt-5 grid gap-3">
+                {coachManagedExcluded.map((item) => (
+                  <li key={item} className="flex gap-3 text-sm text-sand-muted">
+                    <XCircle size={16} className="mt-0.5 shrink-0 text-brand-telemetry-soft/90" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="estudio" className="home-band border-y border-white/10 px-4 py-16 sm:px-8">
         <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-2 lg:items-center">
           <div>
             <SectionEyebrow>Estúdio de Treinos</SectionEyebrow>
             <h2 className="ui-display mt-4 text-[clamp(1.75rem,4vw,2.25rem)] font-bold uppercase">
-              Do exercício ao programa publicado
+              Do exercício ao treino na agenda
             </h2>
             <p className="mt-4 text-base leading-relaxed text-sand-muted">
-              O Estúdio segue o fluxo produzir → publicar → distribuir. Você monta conteúdo próprio ou da organização e
-              entrega direto na jornada do aluno.
+              Produza conteúdo, publique programas e combine com a agenda — o fluxo pensado para coaches que operam dezenas de
+              alunos.
             </p>
             <ul className="mt-6 grid gap-3">
               {coachStudioSteps.map((step) => (
@@ -215,7 +290,7 @@ export function CoachLandingView({ onSubscribe, onLogin }: Props) {
           <article className="home-panel rounded-3xl border border-white/10 p-6">
             <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-brand-telemetry-soft">Fluxo</p>
             <div className="mt-4 grid gap-3">
-              {["Exercícios", "Divisões", "Programas", "Distribuir"].map((label, index) => (
+              {["Exercícios", "Divisões", "Programas", "Agenda", "Aluno"].map((label, index) => (
                 <div key={label} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
                   <span className="grid h-8 w-8 place-items-center rounded-full bg-brand-gold/15 text-xs font-extrabold text-brand-gold">
                     {index + 1}
@@ -228,12 +303,15 @@ export function CoachLandingView({ onSubscribe, onLogin }: Props) {
         </div>
       </section>
 
-      <section id="comissao" className="home-band border-y border-white/10 px-4 py-16 sm:px-8">
+      <section id="comissao" className="px-4 py-16 sm:px-8">
         <div className="mx-auto max-w-6xl">
-          <SectionEyebrow>Receitas</SectionEyebrow>
+          <SectionEyebrow>Receitas extras</SectionEyebrow>
           <h2 className="ui-display mt-4 max-w-3xl text-[clamp(1.75rem,4vw,2.25rem)] font-bold uppercase">
-            Indique alunos. Receba 8% enquanto estiver ativo.
+            Indicações com 8% de comissão
           </h2>
+          <p className="mt-4 max-w-2xl text-sm text-sand-muted">
+            Além da operação com seus alunos, compartilhe seu código de indicação e receba comissão sobre pagamentos confirmados.
+          </p>
           <div className="mt-8 grid gap-4 lg:grid-cols-2">
             <ul className="grid gap-3">
               {coachCommissionBullets.map((item) => (
@@ -243,22 +321,22 @@ export function CoachLandingView({ onSubscribe, onLogin }: Props) {
                 </li>
               ))}
             </ul>
-            <article className="home-plan-featured rounded-3xl border border-brand-gold/30 p-6">
+            <article className="home-panel rounded-3xl border border-brand-gold/25 p-6">
               <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-brand-gold">Exemplo</p>
               <p className="mt-3 text-sm text-sand-muted">
                 Aluno indicado paga R$ 99/mês → você recebe <strong className="text-sand">R$ 7,92</strong> por pagamento confirmado,
-                após carência de 14 dias, enquanto sua assinatura e papel de coach estiverem ativos.
+                após carência de 14 dias, com Coach Pro e papel de coach ativos.
               </p>
             </article>
           </div>
         </div>
       </section>
 
-      <section id="como-funciona" className="px-4 py-16 sm:px-8">
+      <section id="como-funciona" className="home-band border-y border-white/10 px-4 py-16 sm:px-8">
         <div className="mx-auto max-w-6xl">
           <SectionEyebrow>Como funciona</SectionEyebrow>
           <h2 className="ui-display mt-4 max-w-2xl text-[clamp(1.75rem,4vw,2.25rem)] font-bold uppercase">
-            Três passos para coach ativo
+            Três passos para operar como coach
           </h2>
           <div className="mt-10 grid gap-4 md:grid-cols-3">
             {coachHowItWorks.map((item) => (
@@ -272,21 +350,27 @@ export function CoachLandingView({ onSubscribe, onLogin }: Props) {
         </div>
       </section>
 
-      <section className="home-cta-band mx-4 mb-16 rounded-3xl px-6 py-12 sm:mx-8 sm:px-10">
+      <section className="home-cta-band mx-4 mb-8 rounded-3xl px-6 py-12 sm:mx-8 sm:px-10">
         <div className="mx-auto flex max-w-6xl flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-2xl">
-            <p className="home-cta-title font-display text-[clamp(1.5rem,3vw,2rem)] font-bold uppercase">Pronto para o painel profissional?</p>
+            <p className="home-cta-title font-display text-[clamp(1.5rem,3vw,2rem)] font-bold uppercase">
+              Pronto para o Coach Pro?
+            </p>
             <p className="home-cta-copy mt-3 text-base text-sand-muted">
-              Assine a ATLLY, solicite sua promoção a coach e acesse o Estúdio, o workspace e o programa de afiliados.
+              Contrate o plano anual, peça a promoção na organização e comece a cadastrar seus alunos hoje.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
             <button type="button" className="ui-btn-primary shadow-glow" onClick={onSubscribe}>
-              Assinar ATLLY
+              Assinar Coach Pro
               <ArrowRight size={18} />
             </button>
-            <button type="button" className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-white/15 px-5 text-sm font-extrabold text-sand transition hover:border-brand-gold/40" onClick={onLogin}>
-              Já tenho conta
+            <button
+              type="button"
+              className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-white/15 px-5 text-sm font-extrabold text-sand transition hover:border-brand-gold/40"
+              onClick={onLogin}
+            >
+              Entrar no painel
             </button>
           </div>
         </div>
@@ -294,7 +378,7 @@ export function CoachLandingView({ onSubscribe, onLogin }: Props) {
 
       <section id="faq" className="px-4 pb-20 sm:px-8">
         <div className="mx-auto max-w-3xl">
-          <SectionEyebrow>FAQ Coach</SectionEyebrow>
+          <SectionEyebrow>FAQ Coach Pro</SectionEyebrow>
           <h2 className="ui-display mt-4 text-[clamp(1.5rem,3vw,2rem)] font-bold uppercase">Dúvidas frequentes</h2>
           <div className="mt-8 grid gap-4">
             {coachFaq.map((item) => (
@@ -305,9 +389,13 @@ export function CoachLandingView({ onSubscribe, onLogin }: Props) {
             ))}
           </div>
           <p className="mt-8 text-center text-sm text-sand-faint">
-            Link oficial:{" "}
+            Landing exclusiva para coaches:{" "}
             <Link to={paths.coachLanding} className="font-bold text-brand-gold no-underline hover:underline">
               atlly.com.br{paths.coachLanding}
+            </Link>
+            {" · "}
+            <Link to={paths.home} className="font-bold text-brand-silver no-underline hover:text-brand-gold">
+              Site geral ATLLY
             </Link>
           </p>
         </div>

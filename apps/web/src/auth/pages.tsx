@@ -13,6 +13,7 @@ import { assetUrl } from "../lib/urls";
 import { brand } from "../lib/brand";
 import { useAuth } from "./AuthContext";
 import { AdminPanel, CoachPanel, StudentPanel, TransitionScreen } from "./RouteGuards";
+import { COACH_PRO_ANNUAL_PLAN_CODE } from "@app-treino/shared";
 import { activatePath, homePathForRole, loginPath, paths } from "./paths";
 import { setPostLoginDestination } from "./session";
 import type { AuthMode } from "../types/auth";
@@ -78,7 +79,7 @@ export function CoachLandingPage() {
 
   return (
     <CoachLandingView
-      onSubscribe={() => navigate(paths.activate)}
+      onSubscribe={() => navigate(activatePath(COACH_PRO_ANNUAL_PLAN_CODE))}
       onLogin={() => {
         setPostLoginDestination(paths.coach);
         navigate(paths.login);

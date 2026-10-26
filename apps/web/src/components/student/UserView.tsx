@@ -636,9 +636,19 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   useEffect(() => {
     setAccessReady(false);
     void loadUserData();
-    apiGet<{ config: Record<string, string> }>("/public/config")
-      .then((response) => setPublicConfig(response.config))
-      .catch(() => {});
+    if (token) {
+      apiGet<{ config: Record<string, string> }>("/user/portal-config", token)
+        .then((response) => setPublicConfig(response.config))
+        .catch(() =>
+          apiGet<{ config: Record<string, string> }>("/public/config")
+            .then((response) => setPublicConfig(response.config))
+            .catch(() => {})
+        );
+    } else {
+      apiGet<{ config: Record<string, string> }>("/public/config")
+        .then((response) => setPublicConfig(response.config))
+        .catch(() => {});
+    }
     loadStudentCards();
   }, [token]);
 

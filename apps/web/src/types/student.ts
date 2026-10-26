@@ -66,6 +66,7 @@ export interface StudentProfile {
   locationId?: string | null;
   /** Liberação administrativa (sem membership Asaas) ou espelho pós-pagamento. */
   enrollmentStatus?: "PENDING" | "ACTIVE" | "CANCELED";
+  studentAccessProfile?: "PLATFORM_FULL" | "COACH_MANAGED";
   achievements?: Array<{
     modalityId: string;
     modalityName: string;

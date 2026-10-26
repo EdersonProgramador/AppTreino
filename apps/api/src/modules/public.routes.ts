@@ -6,6 +6,7 @@ import { prisma } from "../prisma.js";
 import { serializePublicPlan } from "../plan-serializer.js";
 import { buildPublicUploadUrl } from "../upload-security.js";
 import { DEFAULT_SYSTEM_SETTINGS, ensureDefaultSystemSettings, sanitizePublicSystemSettings } from "./commerce.utils.js";
+import { ensureCoachProAnnualPlan } from "./coach-pro-plan.service.js";
 
 function getWebAppOrigin() {
   const origins = env.WEB_ORIGIN.split(",")
@@ -162,6 +163,8 @@ export async function registerPublicRoutes(app: FastifyInstance) {
     if (!env.DATABASE_URL) {
       return { plans: fallbackPlans.filter((plan) => plan.showOnFunnel) };
     }
+
+    await ensureCoachProAnnualPlan();
 
     const plans = await prisma.plan.findMany({
       where: { deletedAt: null, showOnFunnel: true },

@@ -1,4 +1,5 @@
 import type { UserRole } from "./rbac.js";
+import { coachProAnnualPlanCard } from "./coach-pro.js";
 
 export type { UserRole, RbacResource, RbacAction, Permission } from "./rbac.js";
 export type { OrganizationMemberRole, AccessScope, OrgPermission, PlanFeatureKey } from "./org-rbac.js";
@@ -42,6 +43,17 @@ export {
   isCoachReferralCode,
   normalizeReferralCode
 } from "./coach-affiliate.js";
+export {
+  COACH_PRO_ANNUAL_PLAN_CODE,
+  COACH_PRO_ANNUAL_PRICE_CENTS,
+  COACH_MANAGED_MODULE_OVERRIDES,
+  COACH_MANAGED_PLAN_FEATURES,
+  STUDENT_ACCESS_PROFILES,
+  coachProAnnualPlanCard,
+  isStudentAccessProfile,
+  mergePortalConfigForStudentAccess
+} from "./coach-pro.js";
+export type { StudentAccessProfile } from "./coach-pro.js";
 
 export type MembershipStatus = "ACTIVE" | "PENDING" | "OVERDUE" | "CANCELED";
 
@@ -139,6 +151,17 @@ export const initialPlans: Plan[] = [
       "Suporte dedicado"
     ],
     sortOrder: 1
+  },
+  {
+    ...coachProAnnualPlanCard(),
+    cardBenefits: [
+      "Painel Coach ATLLY e estúdio de treinos",
+      "Cadastro de alunos gerenciados",
+      "Programas, agenda e operação anual",
+      "Alunos: treino do coach, corrida e treino ATLLY"
+    ],
+    sortOrder: 90,
+    showOnFunnel: true
   }
 ];
 

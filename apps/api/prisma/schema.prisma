@@ -18,6 +18,7 @@ model User {
   googleId            String?              @unique @map("google_id")
   role                UserRole             @default(USER)
   status              UserStatus           @default(ACTIVE)
+  studentAccessProfile StudentAccessProfile @default(PLATFORM_FULL) @map("student_access_profile")
   enrollmentStatus    EnrollmentStatus     @default(PENDING) @map("enrollment_status")
   asaasCustomerId     String?              @unique @map("asaas_customer_id")
   deletedAt           DateTime?            @map("deleted_at")
@@ -776,6 +777,13 @@ enum UserStatus {
   INACTIVE
 
   @@map("user_status")
+}
+
+enum StudentAccessProfile {
+  PLATFORM_FULL
+  COACH_MANAGED
+
+  @@map("student_access_profile")
 }
 
 enum BillingCycle {

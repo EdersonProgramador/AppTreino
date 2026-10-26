@@ -481,7 +481,7 @@ export function HomeView({
               to={paths.coachLanding}
               className="inline-flex items-center gap-2 rounded-2xl border border-brand-gold/35 bg-brand-gold/10 px-5 py-3 text-sm font-extrabold text-sand no-underline transition hover:bg-brand-gold/20"
             >
-              Programa Coach ATLLY — comissão 8%
+              Coach Pro — landing para profissionais
               <ChevronRight size={18} />
             </Link>
           </div>

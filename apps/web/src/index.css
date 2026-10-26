@@ -18133,6 +18133,17 @@ html.light .student-profile-identity-copy strong {
   background: radial-gradient(circle at 70% 40%, rgba(212, 175, 55, 0.08), transparent 50%);
 }
 
+.coach-landing--pro {
+  --coach-landing-accent: rgba(212, 175, 55, 0.14);
+}
+
+.coach-pro-pricing-card {
+  background:
+    linear-gradient(145deg, rgba(212, 175, 55, 0.08), transparent 42%),
+    rgba(0, 0, 0, 0.45);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
 .cms-filter-bar .cms-filter-select {
   min-width: 180px;
   flex: 0 0 auto;

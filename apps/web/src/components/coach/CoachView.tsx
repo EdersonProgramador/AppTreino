@@ -11,6 +11,7 @@ import {
   RefreshCw,
   ShieldCheck,
   UsersRound,
+  UserPlus,
   Utensils,
   Wallet,
   LayoutGrid
@@ -139,6 +140,10 @@ export function CoachView({ token, userName, onLogout }: Props) {
   const [nutritionAssignPlanId, setNutritionAssignPlanId] = useState("");
   const [nutritionAssignAthleteId, setNutritionAssignAthleteId] = useState("");
   const [showWelcome, setShowWelcome] = useState(false);
+  const [regName, setRegName] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regPhone, setRegPhone] = useState("");
+  const [regUnitId, setRegUnitId] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -208,7 +213,10 @@ export function CoachView({ token, userName, onLogout }: Props) {
     if (selectedOrg?.units[0] && !planUnitId) {
       setPlanUnitId(selectedOrg.units[0].id);
     }
-  }, [classUnitId, planUnitId, selectedOrg]);
+    if (selectedOrg?.units[0] && !regUnitId) {
+      setRegUnitId(selectedOrg.units[0].id);
+    }
+  }, [classUnitId, planUnitId, regUnitId, selectedOrg]);
 
   const runAction = async (action: () => Promise<void>, successMessage: string) => {
     setBusy(true);
@@ -421,8 +429,89 @@ export function CoachView({ token, userName, onLogout }: Props) {
           </section>
         )}
 
-        {tab === "athletes" && workspace && (
+        {tab === "athletes" && workspace && selectedOrg && (
           <section className="coach-layout-2">
+            <article className="coach-section">
+              <div className="coach-section__head">
+                <h2 className="coach-section__title">
+                  <UserPlus size={20} />
+                  Cadastrar aluno
+                </h2>
+              </div>
+              <p className="coach-empty" style={{ marginBottom: "1rem" }}>
+                O aluno recebe apenas treinos exclusivos que você agenda e distribui — jornada fechada à sua operação.
+              </p>
+              <div className="coach-form-stack">
+                <label>
+                  Nome completo
+                  <input
+                    className="admin-input"
+                    placeholder="Nome do aluno"
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                  />
+                </label>
+                <label>
+                  E-mail (opcional se tiver telefone)
+                  <input
+                    className="admin-input"
+                    type="email"
+                    placeholder="aluno@email.com"
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                  />
+                </label>
+                <label>
+                  Telefone (opcional se tiver e-mail)
+                  <input
+                    className="admin-input"
+                    placeholder="5511999999999"
+                    value={regPhone}
+                    onChange={(e) => setRegPhone(e.target.value)}
+                  />
+                </label>
+                <label>
+                  Unidade
+                  <select className="admin-input" value={regUnitId} onChange={(e) => setRegUnitId(e.target.value)}>
+                    {selectedOrg.units.map((unit) => (
+                      <option key={unit.id} value={unit.id}>
+                        {unit.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="admin-primary-button"
+                  disabled={
+                    busy ||
+                    regName.trim().length < 2 ||
+                    !regUnitId ||
+                    (!regEmail.trim() && !regPhone.trim())
+                  }
+                  onClick={() =>
+                    void runAction(async () => {
+                      await apiPost(
+                        "/org/coach-athletes/register",
+                        {
+                          organizationId: selectedOrg.id,
+                          unitId: regUnitId,
+                          name: regName.trim(),
+                          email: regEmail.trim() || undefined,
+                          phone: regPhone.trim() || undefined
+                        },
+                        token
+                      );
+                      setRegName("");
+                      setRegEmail("");
+                      setRegPhone("");
+                    }, "Aluno cadastrado.")
+                  }
+                >
+                  Cadastrar aluno
+                </button>
+              </div>
+            </article>
             <article className="coach-section">
               <div className="coach-section__head">
                 <h2 className="coach-section__title">
