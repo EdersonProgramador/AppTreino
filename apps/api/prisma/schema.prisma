@@ -29,6 +29,9 @@ model User {
   attendances         AttendanceRecord[]
   physicalAssessments PhysicalAssessment[]
   eventRegistrations  EventRegistration[]
+  agendaSlotsCoached  AgendaSlot[]           @relation("AgendaSlotCoach")
+  agendaSlotsCreated  AgendaSlot[]           @relation("AgendaSlotCreator")
+  agendaBookings      AgendaBooking[]
   supportTickets      SupportTicket[]      @relation("SupportTicketStudent")
   assignedTickets     SupportTicket[]      @relation("SupportTicketAssignee")
   aiWorkoutPlans      AiWorkoutPlan[]
@@ -331,6 +334,7 @@ model Modality {
   unitModalities UnitModality[]
   professionalAssignments ProfessionalAssignment[]
   trainingClasses TrainingClass[]
+  agendaSlots     AgendaSlot[]
   deletedAt     DateTime?          @map("deleted_at")
   createdAt     DateTime           @default(now()) @map("created_at")
   updatedAt     DateTime           @updatedAt @map("updated_at")
@@ -605,6 +609,63 @@ model EventRegistration {
   @@index([eventId])
   @@index([userId])
   @@map("event_registrations")
+}
+
+enum AgendaSlotStatus {
+  SCHEDULED
+  CANCELLED
+
+  @@map("agenda_slot_status")
+}
+
+enum AgendaBookingStatus {
+  CONFIRMED
+  CANCELLED
+
+  @@map("agenda_booking_status")
+}
+
+model AgendaSlot {
+  id             String            @id @default(cuid())
+  organizationId String            @map("organization_id")
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unitId         String?           @map("unit_id")
+  unit           Unit?             @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  coachId        String            @map("coach_id")
+  coach          User              @relation("AgendaSlotCoach", fields: [coachId], references: [id], onDelete: Cascade)
+  createdById    String            @map("created_by_id")
+  createdBy      User              @relation("AgendaSlotCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  trainingType   String            @map("training_type")
+  locationName   String            @map("location_name")
+  startsAt       DateTime          @map("starts_at")
+  endsAt         DateTime          @map("ends_at")
+  capacity       Int               @default(15)
+  status         AgendaSlotStatus  @default(SCHEDULED)
+  deletedAt      DateTime?         @map("deleted_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  bookings       AgendaBooking[]
+  modalityId     String?           @map("modality_id")
+  modality       Modality?         @relation(fields: [modalityId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, startsAt, status])
+  @@index([coachId, startsAt])
+  @@map("agenda_slots")
+}
+
+model AgendaBooking {
+  id        String              @id @default(cuid())
+  slotId    String              @map("slot_id")
+  slot      AgendaSlot          @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  userId    String              @map("user_id")
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    AgendaBookingStatus @default(CONFIRMED)
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+
+  @@unique([slotId, userId])
+  @@index([userId, status])
+  @@map("agenda_bookings")
 }
 
 model SupportTicket {
@@ -2007,6 +2068,7 @@ model Organization {
   referralAttributions    UserReferralAttribution[]
   orgExercises            Exercise[]                @relation("OrgExercises")
   orgWorkoutBlocks        WorkoutBlock[]            @relation("OrgWorkoutBlocks")
+  agendaSlots             AgendaSlot[]
 
   @@index([status, deletedAt])
   @@map("organizations")
@@ -2038,6 +2100,7 @@ model Unit {
   auditLogs               AuditLog[]
   orgExercises            Exercise[]                @relation("UnitExercises")
   orgWorkoutBlocks        WorkoutBlock[]            @relation("UnitWorkoutBlocks")
+  agendaSlots             AgendaSlot[]
 
   @@index([organizationId, status, deletedAt])
   @@map("units")

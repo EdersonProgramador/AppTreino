@@ -37,6 +37,10 @@
   },
   "submit": {
     "production": {
+      "android": {
+        "track": "internal",
+        "releaseStatus": "draft"
+      },
       "ios": {
         "appleId": "REPLACE_WITH_APPLE_ID",
         "ascAppId": "REPLACE_WITH_ASC_APP_ID",

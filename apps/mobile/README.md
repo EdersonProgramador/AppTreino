@@ -27,8 +27,21 @@ No celular: **Expo Go** (QR). Persistência GPS usa `expo-sqlite` (compatível c
 
 > `react-native-webrtc`, `react-native-track-player` e Google Maps nativo no Android exigem **development build** (`npx expo run:android` / `run:ios`). No Expo Go o áudio cai para `expo-av` e a live não abre.
 
-## URL
+## URL (dev local)
 
 ```txt
 EXPO_PUBLIC_WEB_URL=http://SEU_IP_LAN:5174
+EXPO_PUBLIC_API_URL=http://SEU_IP_LAN:3333
 ```
+
+## Build de produção (EAS)
+
+```bash
+npm install
+eas login
+npm run build:production    # iOS + Android (profile production)
+npm run submit:ios          # após preencher submit.production.ios no eas.json
+npm run submit:android
+```
+
+Secrets obrigatórios no projeto EAS: ver `eas.secrets.example.env` e `docs/deploy.md` §7.

@@ -46,3 +46,26 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  mobile:
+    name: Mobile Typecheck
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Install mobile dependencies
+        working-directory: apps/mobile
+        run: npm ci
+
+      - name: Typecheck mobile
+        working-directory: apps/mobile
+        run: npm run typecheck

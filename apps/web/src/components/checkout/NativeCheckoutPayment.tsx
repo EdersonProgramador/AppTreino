@@ -446,13 +446,15 @@ export function NativeCheckoutPayment({
                   <p>Abra o app do banco e aponte a câmera.</p>
                 </div>
               </div>
-              <div className="native-checkout__qr-wrap">
-                <img
-                  className="native-checkout__qr"
-                  src={`data:image/png;base64,${pixPayload.qrCodeBase64}`}
-                  alt="QR Code Pix ATLLY"
-                />
-              </div>
+              {pixPayload.qrCodeBase64 ? (
+                <div className="native-checkout__qr-wrap">
+                  <img
+                    className="native-checkout__qr"
+                    src={`data:image/png;base64,${pixPayload.qrCodeBase64}`}
+                    alt="QR Code Pix ATLLY"
+                  />
+                </div>
+              ) : null}
               <label className="native-checkout__field native-checkout__copy-field">
                 <span className="native-checkout__label">Código Pix copia e cola</span>
                 <div className="native-checkout__copy-row">

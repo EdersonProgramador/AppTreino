@@ -2,6 +2,8 @@
 
 **Operação manual (sem ferramentas pagas):** [google-ads-manual-playbook.md](./google-ads-manual-playbook.md)
 
+**API + OAuth (scripts locais):** [google-ads-api-oauth.md](./google-ads-api-oauth.md)
+
 | Campo | Valor |
 |--------|--------|
 | **Nome** | ATLLY (conta dedicada ao produto) |

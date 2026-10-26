@@ -125,6 +125,7 @@ export type StudentProfile = {
   coverUrl?: string | null;
   isPrivate?: boolean;
   createdAt?: string | null;
+  registrationNumber?: number | null;
   locationId?: string | null;
   enrollmentStatus?: "PENDING" | "ACTIVE" | "CANCELED";
   achievements?: Array<{

@@ -17,6 +17,7 @@ import { assertModuleEnabled } from "./commerce.utils.js";
 import { loadCoachContext } from "./coach/context.js";
 import { buildWorkoutPlan } from "./coach/engine.js";
 import { attachCoachRoutes } from "./coach.routes.js";
+import { athleteRegistrationNumber } from "./athlete-registration.utils.js";
 
 const eventRegistrationSchema = z.object({
   eventId: z.string().min(1)
@@ -222,7 +223,8 @@ export async function registerUserRoutes(app: FastifyInstance) {
       !pathname.startsWith("/user/membership") &&
       !pathname.startsWith("/user/payments") &&
       !pathname.startsWith("/user/uploads") &&
-      !pathname.startsWith("/user/physical-assessments")
+      !pathname.startsWith("/user/physical-assessments") &&
+      !pathname.startsWith("/user/agenda")
     ) {
       await Promise.all([requireActiveMembership(authUser.id), recordDailyAttendance(authUser.id)]);
     }
@@ -231,13 +233,13 @@ export async function registerUserRoutes(app: FastifyInstance) {
   app.get("/user/profile", async (request) => {
     requireDatabase();
     const user = await requireAuth(app, request);
-    const [profile, achievements] = await Promise.all([
-      prisma.user.findUniqueOrThrow({
-        where: { id: user.id },
-        include: {
-          profile: true
-        }
-      }),
+    const profile = await prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      include: {
+        profile: true
+      }
+    });
+    const [achievements, registrationNumber] = await Promise.all([
       prisma.modalityAchievement.findMany({
         where: { userId: user.id },
         include: {
@@ -251,7 +253,8 @@ export async function registerUserRoutes(app: FastifyInstance) {
         orderBy: {
           lastCompletedAt: "desc"
         }
-      })
+      }),
+      athleteRegistrationNumber(profile.id, profile.createdAt)
     ]);
 
     return {
@@ -274,6 +277,7 @@ export async function registerUserRoutes(app: FastifyInstance) {
         coverUrl: profile.profile?.coverUrl ?? null,
         isPrivate: Boolean(profile.profile?.isPrivate),
         createdAt: profile.createdAt,
+        registrationNumber,
         locationId: profile.profile?.locationId ?? null,
         enrollmentStatus: profile.enrollmentStatus,
         achievements: achievements.map((item) => ({

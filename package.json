@@ -34,7 +34,11 @@
     "payments:assets": "node scripts/ensure-payment-assets.mjs",
     "marketing:verify": "node scripts/verify-atlly-marketing.mjs",
     "marketing:campaign-pack": "node scripts/generate-google-ads-campaign-pack.mjs",
-    "marketing:check": "npm run build --workspace @app-treino/shared && npm test --workspace @app-treino/shared && npm run marketing:verify"
+    "marketing:check": "npm run build --workspace @app-treino/shared && npm test --workspace @app-treino/shared && npm run marketing:verify",
+    "google-ads:install": "npm install --prefix scripts/google-ads",
+    "google-ads:oauth": "node scripts/google-ads/oauth-generate-refresh-token.mjs",
+    "google-ads:list-campaigns": "node scripts/google-ads/list-campaigns.mjs",
+    "google-ads:list-conversions": "node scripts/google-ads/list-conversion-actions.mjs"
   },
   "devDependencies": {
     "sharp": "^0.34.5"

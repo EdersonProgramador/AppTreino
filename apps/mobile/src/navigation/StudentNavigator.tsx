@@ -202,7 +202,7 @@ export function StudentNavigator() {
         <Tabs.Screen
           name="FeedTab"
           component={FeedStackScreen}
-          options={{ title: "Feed", tabBarIcon: icon("home-outline", "home") }}
+          options={{ title: "Timeline", tabBarIcon: icon("home-outline", "home") }}
         />
         <Tabs.Screen
           name="ActivityTab"

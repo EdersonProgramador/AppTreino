@@ -36,7 +36,7 @@ import {
 } from "./feedChrome";
 import { RunnerIcon } from "./RunnerIcon";
 import { StreakKindIcons } from "./StreakCalendar";
-import { moduleOn, studentCodeFromName, useSt, type StudentTokens } from "./theme";
+import { moduleOn, useSt, type StudentTokens } from "./theme";
 import { navigateStudentTarget } from "./navigate";
 import { uiSounds } from "./uiSounds";
 
@@ -150,7 +150,7 @@ export function StudentChrome({ play = false }: { play?: boolean }) {
   useEffect(() => subscribeFeedCreateMenu(setCreateMenuOpen), []);
   useEffect(() => subscribeFeedSearch(setSearchOpen), []);
 
-  const code = studentCodeFromName(profile?.name);
+  const code = profile?.registrationNumber ?? null;
   const unread = notifications.filter((item) => !item.readAt).length;
   const showCart = moduleOn(publicConfig, "module_products") && (cart?.itemCount ?? 0) > 0;
   // StudentChrome lives inside a stack screen; tab route is on a parent navigator.
@@ -261,7 +261,8 @@ export function StudentChrome({ play = false }: { play?: boolean }) {
               {brand.tagline}
             </Text>
             <Text style={styles.code} numberOfLines={1}>
-              {profile?.name ?? brand.athlete} · {brand.codeLabel} {code}
+              {profile?.name ?? brand.athlete}
+              {code != null ? ` · ${brand.codeLabel} ${code}` : ""}
             </Text>
           </Pressable>
           <View style={styles.actions}>
@@ -416,7 +417,7 @@ export function StudentChrome({ play = false }: { play?: boolean }) {
           <Pressable style={[styles.socialMenu, { marginTop: insets.top + 58 }]} onPress={() => undefined}>
             {(
               [
-                { label: "Feed", icon: "home-outline" as const, action: () => navigation.navigate("FeedTab", { screen: "Feed" }) },
+                { label: "Timeline", icon: "home-outline" as const, action: () => navigation.navigate("FeedTab", { screen: "Feed" }) },
                 { label: "Treino", icon: "barbell-outline" as const, action: () => navigation.navigate("TrainingTab", { screen: "Training" }) },
                 { label: "Corrida", runner: true as const, action: () => navigation.navigate("ActivityTab", { screen: "Activity" }) },
                 { label: "Desafios", icon: "trophy-outline" as const, action: () => navigation.navigate("ClubTab", { screen: "Club" }) },

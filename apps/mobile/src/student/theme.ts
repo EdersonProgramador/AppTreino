@@ -122,11 +122,6 @@ export function moduleOn(config: Record<string, string>, key: string) {
   return config[key] !== "false";
 }
 
-export function studentCodeFromName(name?: string | null) {
-  if (!name) return 1;
-  return name.length * 193 + 1;
-}
-
 export function streakFromDates(dates: string[]) {
   const streakDateSet = new Set(dates);
   const date = new Date();

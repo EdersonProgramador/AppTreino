@@ -989,15 +989,18 @@ export function ActivateScreen({
 
               {payBillingType === "PIX" ? (
                 <>
+                  {pixPayload?.copyPaste && !pixPayload?.qrCodeBase64 ? (
+                    <Text style={styles.hint}>Use o código Pix copia e cola abaixo no app do banco.</Text>
+                  ) : null}
                   {pixPayload?.qrCodeBase64 ? (
                     <Image
                       source={{ uri: `data:image/png;base64,${pixPayload.qrCodeBase64}` }}
                       style={styles.qr}
                       accessibilityLabel="QR Code Pix"
                     />
-                  ) : (
+                  ) : !pixPayload?.copyPaste ? (
                     <AtllySecondaryButton label="Gerar QR Code Pix" loading={busy} disabled={busy} onPress={() => void generatePix()} />
-                  )}
+                  ) : null}
                   {pixPayload?.expiresAt ? (
                     <Text style={styles.hint}>Expira em {new Date(pixPayload.expiresAt).toLocaleString("pt-BR")}</Text>
                   ) : null}

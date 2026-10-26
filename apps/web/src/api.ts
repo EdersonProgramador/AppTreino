@@ -63,17 +63,30 @@ export class ApiError extends Error {
 }
 
 async function getErrorMessage(response: Response) {
-  try {
-    const data = (await response.json()) as { message?: string; error?: string; issues?: Array<{ message: string }> };
-    const issueMessage = data.issues?.[0]?.message;
-    const baseMessage = data.message ?? data.error;
-    const detail =
-      baseMessage && !baseMessage.startsWith("Dados inválidos")
-        ? baseMessage
-        : issueMessage ?? baseMessage;
-    if (detail) return detail;
-  } catch {
-    // ignore
+  const contentType = response.headers.get("content-type") ?? "";
+  const raw = await response.text();
+  if (!contentType.includes("application/json")) {
+    if (raw.trimStart().startsWith("<!") || raw.toLowerCase().includes("<!doctype")) {
+      return "Resposta inválida da API (HTML). Verifique se o proxy do Vite inclui esta rota ou se a API está no ar.";
+    }
+    if (raw) return raw.slice(0, 200);
+  } else {
+    try {
+      const data = JSON.parse(raw) as {
+        message?: string;
+        error?: string;
+        issues?: Array<{ message: string }>;
+      };
+      const issueMessage = data.issues?.[0]?.message;
+      const baseMessage = data.message ?? data.error;
+      const detail =
+        baseMessage && !baseMessage.startsWith("Dados inválidos")
+          ? baseMessage
+          : issueMessage ?? baseMessage;
+      if (detail) return detail;
+    } catch {
+      // ignore
+    }
   }
   if (COLD_START_STATUSES.has(response.status)) {
     return "Servidor indisponível. Ele está acordando — tente de novo em instantes.";

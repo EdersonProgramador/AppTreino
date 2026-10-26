@@ -32,6 +32,7 @@ import { registerUserRoutes } from "./modules/user.routes.js";
 import { registerOrgRoutes } from "./modules/org.routes.js";
 import { registerOrgTrainingRoutes } from "./modules/org-training.routes.js";
 import { registerCoachAffiliateRoutes } from "./modules/coach-affiliate.routes.js";
+import { registerAgendaRoutes } from "./modules/agenda.routes.js";
 import { registerAppleIapRoutes } from "./modules/apple-iap.routes.js";
 import type { Server as HttpServer } from "node:http";
 
@@ -236,6 +237,7 @@ await registerAppleIapRoutes(app);
 await registerAdminRoutes(app);
 await registerOrgRoutes(app);
 await registerOrgTrainingRoutes(app);
+await registerAgendaRoutes(app);
 await registerCoachAffiliateRoutes(app);
 await registerUserRoutes(app);
 await registerStudentRoutes(app);

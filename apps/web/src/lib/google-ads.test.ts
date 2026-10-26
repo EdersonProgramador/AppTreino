@@ -8,7 +8,7 @@ import {
 } from "./google-ads.js";
 
 assert.equal(formatGoogleAdsSendTo("AW-123456789", "AbCdEfGhIj"), "AW-123456789/AbCdEfGhIj");
-assert.equal(formatGoogleAdsSendTo("AW-123456789", "AW-999/FullLabel"), "AW-999/FullLabel");
+assert.equal(formatGoogleAdsSendTo("AW-123456789", "AW-999/AbCdEfGhIj"), "AW-999/AbCdEfGhIj");
 assert.equal(formatGoogleAdsSendTo(null, "AbCdEfGhIj"), null);
 assert.equal(formatGoogleAdsSendTo("invalid", "AbCdEfGhIj"), null);
 

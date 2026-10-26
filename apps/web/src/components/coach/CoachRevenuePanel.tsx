@@ -107,63 +107,63 @@ export function CoachRevenuePanel({ token, busy, onBusy }: Props) {
 
   if (loading && !summary) {
     return (
-      <div className="flex items-center gap-2 text-sm text-sand-muted">
-        <Loader2 className="animate-spin" size={18} />
+      <p className="coach-empty">
+        <Loader2 className="inline animate-spin mr-2" size={18} />
         Carregando receitas...
-      </div>
+      </p>
     );
   }
 
   if (!summary) {
-    return (
-      <div className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5 text-sm text-red-400">
-        {panelError ?? "Não foi possível carregar receitas."}
-      </div>
-    );
+    return <p className="coach-alert coach-alert--error">{panelError ?? "Não foi possível carregar receitas."}</p>;
   }
 
   const wallet = summary.wallet;
   const commissionActive = summary.isActiveCoach !== false;
 
   return (
-    <section className="grid gap-6">
+    <section className="coach-panel-body">
       {summary.eligibilityMessage ? (
-        <article className="rounded-3xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+        <p className="coach-alert" style={{ borderColor: "rgba(245, 158, 11, 0.35)", background: "rgba(245, 158, 11, 0.12)" }}>
           {summary.eligibilityMessage}
-        </article>
-      ) : null}
-      <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-sand">
-          <Wallet size={18} />
-          Receitas de afiliado
-        </h2>
-        <p className="mb-4 text-sm text-sand-muted">
-          Comissão de {summary.commissionRateLabel} sobre cada pagamento confirmado de alunos indicados, enquanto
-          estiverem ativos na plataforma.
         </p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-2xl border border-[color:var(--app-border)] px-4 py-3">
-            <span className="block text-xs uppercase tracking-wide text-sand-muted">Disponível</span>
-            <strong className="text-xl text-emerald-400">{formatPriceInBRL(wallet.availableInCents)}</strong>
-          </div>
-          <div className="rounded-2xl border border-[color:var(--app-border)] px-4 py-3">
-            <span className="block text-xs uppercase tracking-wide text-sand-muted">Pendente</span>
-            <strong className="text-xl">{formatPriceInBRL(wallet.pendingInCents)}</strong>
-            <span className="block text-xs text-sand-muted">Carência {summary.holdingDays} dias</span>
-          </div>
-          <div className="rounded-2xl border border-[color:var(--app-border)] px-4 py-3">
-            <span className="block text-xs uppercase tracking-wide text-sand-muted">Em saque</span>
-            <strong className="text-xl">{formatPriceInBRL(wallet.lockedInCents)}</strong>
-          </div>
-          <div className="rounded-2xl border border-[color:var(--app-border)] px-4 py-3">
-            <span className="block text-xs uppercase tracking-wide text-sand-muted">Já sacado</span>
-            <strong className="text-xl">{formatPriceInBRL(wallet.withdrawnInCents)}</strong>
-          </div>
+      ) : null}
+      <article className="coach-section coach-section--wide">
+        <div className="coach-section__head">
+          <h2 className="coach-section__title">
+            <Wallet size={20} />
+            Receitas de afiliado
+          </h2>
+          <p className="coach-section__subtitle">
+            Comissão de {summary.commissionRateLabel} sobre cada pagamento confirmado de alunos indicados, enquanto
+            estiverem ativos na plataforma.
+          </p>
+        </div>
+        <div className="coach-kpi-grid">
+          <article className="coach-kpi coach-kpi--nutrition">
+            <p className="coach-kpi__label">Disponível</p>
+            <strong className="coach-kpi__value text-emerald-500">{formatPriceInBRL(wallet.availableInCents)}</strong>
+          </article>
+          <article className="coach-kpi coach-kpi--programs">
+            <p className="coach-kpi__label">Pendente</p>
+            <strong className="coach-kpi__value">{formatPriceInBRL(wallet.pendingInCents)}</strong>
+            <span className="block text-xs text-sand-muted mt-1">Carência {summary.holdingDays} dias</span>
+          </article>
+          <article className="coach-kpi coach-kpi--classes">
+            <p className="coach-kpi__label">Em saque</p>
+            <strong className="coach-kpi__value">{formatPriceInBRL(wallet.lockedInCents)}</strong>
+          </article>
+          <article className="coach-kpi coach-kpi--athletes">
+            <p className="coach-kpi__label">Já sacado</p>
+            <strong className="coach-kpi__value">{formatPriceInBRL(wallet.withdrawnInCents)}</strong>
+          </article>
         </div>
       </article>
 
-      <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5">
-        <h2 className="mb-4 text-lg font-bold text-sand">Indicação</h2>
+      <article className="coach-section">
+        <div className="coach-section__head">
+          <h2 className="coach-section__title">Indicação</h2>
+        </div>
         {summary.referralUrl && referralCode ? (
           <div className="grid gap-4">
             <p className="text-sm text-sand-muted">
@@ -208,10 +208,12 @@ export function CoachRevenuePanel({ token, busy, onBusy }: Props) {
         )}
       </article>
 
-      <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5">
-        <h2 className="mb-4 text-lg font-bold text-sand">Solicitar saque</h2>
-        <div className="grid max-w-xl gap-3">
-          <label className="grid gap-1 text-sm">
+      <article className="coach-section">
+        <div className="coach-section__head">
+          <h2 className="coach-section__title">Solicitar saque</h2>
+        </div>
+        <div className="coach-form-stack max-w-xl">
+          <label>
             Chave PIX
             <input
               className="admin-input"
@@ -233,7 +235,7 @@ export function CoachRevenuePanel({ token, busy, onBusy }: Props) {
           >
             Salvar PIX
           </button>
-          <label className="grid gap-1 text-sm">
+          <label>
             Valor do saque (R$)
             <input
               className="admin-input"
@@ -265,16 +267,18 @@ export function CoachRevenuePanel({ token, busy, onBusy }: Props) {
         </div>
       </article>
 
-      <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5">
-        <h2 className="mb-4 text-lg font-bold text-sand">Extrato de comissões</h2>
+      <article className="coach-section">
+        <div className="coach-section__head">
+          <h2 className="coach-section__title">Extrato de comissões</h2>
+        </div>
         {summary.commissions.length === 0 ? (
-          <p className="text-sm text-sand-muted">Nenhuma comissão registrada ainda.</p>
+          <p className="coach-empty">Nenhuma comissão registrada ainda.</p>
         ) : (
-          <ul className="grid gap-2 text-sm">
+          <ul className="coach-list">
             {summary.commissions.map((item) => (
-              <li key={item.id} className="rounded-2xl border border-[color:var(--app-border)] px-4 py-3">
+              <li key={item.id} className="coach-list-item">
                 <strong>{formatPriceInBRL(item.amountInCents)}</strong>
-                <span className="block text-xs text-sand-muted">
+                <span>
                   {item.athlete.name} · {item.status} · {new Date(item.createdAt).toLocaleDateString("pt-BR")}
                 </span>
               </li>
@@ -284,13 +288,15 @@ export function CoachRevenuePanel({ token, busy, onBusy }: Props) {
       </article>
 
       {summary.withdrawals.length > 0 && (
-        <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-panel)] p-5">
-          <h2 className="mb-4 text-lg font-bold text-sand">Saques</h2>
-          <ul className="grid gap-2 text-sm">
+        <article className="coach-section">
+          <div className="coach-section__head">
+            <h2 className="coach-section__title">Saques</h2>
+          </div>
+          <ul className="coach-list">
             {summary.withdrawals.map((item) => (
-              <li key={item.id} className="rounded-2xl border border-[color:var(--app-border)] px-4 py-3">
+              <li key={item.id} className="coach-list-item">
                 <strong>{formatPriceInBRL(item.amountInCents)}</strong>
-                <span className="block text-xs text-sand-muted">
+                <span>
                   {item.status} · {new Date(item.createdAt).toLocaleDateString("pt-BR")}
                 </span>
               </li>

@@ -11,7 +11,6 @@ import {
   parseAsaasDueDate,
   purchaseExternalReference,
   resolveAsaasDueDate,
-  tryFetchAsaasPixQrCode,
   tryPayAsaasCreditCard,
   tryPrepareAsaasPixPayment,
   type AsaasCreditCardHolderInput,
@@ -75,13 +74,6 @@ function paymentStatusToPurchaseStatus(status: string) {
 function resolvePaidAt(input: { paymentDate?: string | null; confirmedDate?: string | null }) {
   const raw = input.paymentDate ?? input.confirmedDate;
   return raw ? new Date(raw) : new Date();
-}
-
-function canReuseStorePixCharge(input: { asaasPaymentId?: string | null; status: string; dueDate: Date }) {
-  const dueDateStr = resolveAsaasDueDate(input.dueDate);
-  const storedDay = formatAsaasDate(input.dueDate);
-  if (storedDay < dueDateStr) return false;
-  return Boolean(input.asaasPaymentId) && input.status === "PENDING";
 }
 
 function orderDescription(order: OrderWithItems) {
@@ -148,38 +140,23 @@ async function prepareNativeStorePixCheckout(input: {
     };
   }
 
-  if (canReuseStorePixCharge(input) && input.asaasPaymentId) {
-    const { pix, providerError } = await tryFetchAsaasPixQrCode(input.asaasPaymentId);
-    if (pix) {
-      return {
-        nativeCheckout: {
-          billingType: "PIX" as const,
-          pix: {
-            qrCodeBase64: pix.encodedImage,
-            copyPaste: pix.payload,
-            expiresAt: pix.expirationDate ?? null
-          }
-        },
-        asaasPaymentId: input.asaasPaymentId,
-        providerError: providerError ?? undefined
-      };
-    }
-  }
-
   const dueDateStr = resolveAsaasDueDate(input.dueDate);
   const dueDate = parseAsaasDueDate(dueDateStr);
-  const { payment: asaasPayment, pix, providerError } = await tryPrepareAsaasPixPayment({
-    customerId,
-    amountInCents: input.amountInCents,
-    dueDate,
-    externalReference: input.externalReference,
-    description: input.description
-  });
+  const { payment: asaasPayment, pix, providerError } = await tryPrepareAsaasPixPayment(
+    {
+      customerId,
+      amountInCents: input.amountInCents,
+      dueDate,
+      externalReference: input.externalReference,
+      description: input.description
+    },
+    { preferredAsaasPaymentId: input.asaasPaymentId }
+  );
 
   if (!asaasPayment || !pix) {
     return {
       nativeCheckout: null,
-      asaasPaymentId: input.asaasPaymentId ?? null,
+      asaasPaymentId: asaasPayment?.id ?? input.asaasPaymentId ?? null,
       providerError: providerError ?? "Não foi possível gerar o Pix."
     };
   }

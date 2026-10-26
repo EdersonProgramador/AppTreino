@@ -13,13 +13,13 @@ export const SOCIAL_MODULE_KEYS = {
 } as const;
 
 export function socialModuleDefaultEnabled(key: string) {
-  return key === SOCIAL_MODULE_KEYS.publicar || key === SOCIAL_MODULE_KEYS.momentos;
+  return key === SOCIAL_MODULE_KEYS.publicar;
 }
 
 export function socialModulesFromConfig(config: Record<string, string>) {
   return {
     publicar: moduleEnabled(config, SOCIAL_MODULE_KEYS.publicar, true),
-    momentos: moduleEnabled(config, SOCIAL_MODULE_KEYS.momentos, true),
+    momentos: false,
     clipes: moduleEnabled(config, SOCIAL_MODULE_KEYS.clipes, false),
     live: moduleEnabled(config, SOCIAL_MODULE_KEYS.live, false),
     nota: moduleEnabled(config, SOCIAL_MODULE_KEYS.nota, false)

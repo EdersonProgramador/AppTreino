@@ -1,7 +1,7 @@
 # Render blueprint — API App Treino
 # Docs: https://render.com/docs/blueprint-spec
 #
-# Domínio customizado: api.edersonprogramador.com
+# Domínio customizado: api.atlly.com.br
 # Banco: Neon (configure DATABASE_URL manualmente no dashboard)
 
 services:
@@ -21,15 +21,19 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
-      - key:       WEB_ORIGIN
+      - key: WEB_ORIGIN
         value: https://atlly.com.br,https://www.atlly.com.br,https://edersonprogramador.com,https://www.edersonprogramador.com
       - key: PUBLIC_BASE_URL
-        value: https://apptreino-backend.onrender.com
+        value: https://api.atlly.com.br
+      - key: ASAAS_API_URL
+        value: https://api.asaas.com/v3
+      - key: REVENUECAT_SECRET_KEY
+        sync: false
+      - key: REVENUECAT_WEBHOOK_AUTH
+        sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: ASAAS_API_KEY
-        sync: false
-      - key: ASAAS_API_URL
         sync: false
       - key: ASAAS_WEBHOOK_TOKEN
         sync: false

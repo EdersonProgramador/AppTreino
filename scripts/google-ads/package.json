@@ -1,0 +1,11 @@
+{
+  "name": "@app-treino/google-ads-scripts",
+  "private": true,
+  "type": "module",
+  "description": "OAuth e CLI local para Google Ads API (conta ATLLY). Não deployar secrets no Render/Vercel.",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "google-ads-api": "^21.0.0",
+    "google-auth-library": "^10.5.0"
+  }
+}

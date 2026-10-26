@@ -890,18 +890,13 @@ export function StudentFeedSection({
           )
         : null}
 
-      {(socialModules.momentos || socialModules.live) && (
+      {socialModules.live && (
       <div className="student-feed-stories">
         <header>
           <div>
-            <strong>Momentos</strong>
-            <small>Somem em 24h</small>
+            <strong>Ao vivo</strong>
+            <small>Transmissões ativas</small>
           </div>
-          {socialModules.momentos ? (
-            <button type="button" className="student-feed-story-gallery-link" onClick={() => void openGallery()}>
-              Galeria
-            </button>
-          ) : null}
         </header>
         <div className="student-feed-story-rail">
           {socialModules.momentos ? (

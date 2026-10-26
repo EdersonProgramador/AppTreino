@@ -61,6 +61,8 @@ export interface StudentProfile {
   coverUrl?: string | null;
   isPrivate?: boolean;
   createdAt?: string | null;
+  /** Ordem de cadastro entre alunos na plataforma (1 = primeiro). */
+  registrationNumber?: number | null;
   locationId?: string | null;
   /** Liberação administrativa (sem membership Asaas) ou espelho pós-pagamento. */
   enrollmentStatus?: "PENDING" | "ACTIVE" | "CANCELED";

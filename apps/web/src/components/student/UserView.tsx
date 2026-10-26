@@ -13,6 +13,8 @@ import {
   ClipboardList,
   CreditCard,
   Dumbbell,
+  FileText,
+  Medal,
   Eye,
   Flame,
   Headphones,
@@ -131,6 +133,7 @@ import { StudentSettingsPanel } from "./StudentSettingsPanel";
 import { StudentMusicPlayerHost } from "./StudentMusicPlayerHost";
 import { StudentPlaySection } from "./StudentPlaySection";
 import { StudentFeedSection } from "./StudentFeedSection";
+import { StudentAgendaSection } from "./StudentAgendaSection";
 import {
   StudentChatSection,
   StudentLiveSection,
@@ -986,6 +989,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       "assessments",
       "status",
       "events",
+      "agenda",
+      "wod",
+      "graduations",
+      "contracts",
       "support",
       "ai",
       "history",
@@ -2466,7 +2473,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       ),
     [consistency?.sessions]
   );
-  const studentCode = profile?.name ? String(profile.name.length * 193 + 1) : "1931";
+  const studentCode =
+    profile?.registrationNumber != null ? String(profile.registrationNumber) : null;
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentCalendarMonth = currentDate.getMonth() + 1;
@@ -2811,8 +2819,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const isFeedFamilySection =
     studentSection === "feed" ||
     studentSection === "home" ||
+    studentSection === "agenda" ||
     studentSection === "reels" ||
     studentSection === "live";
+  const membershipDaysLeft =
+    membership?.endsAt != null
+      ? Math.max(0, Math.ceil((new Date(membership.endsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+      : null;
   const isTrainingSection =
     studentSection === "training" || studentSection === "player" || studentSection === "history";
 
@@ -2841,7 +2854,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             <strong className="student-brand-name">{brand.name}</strong>
             <span className="student-brand-category">{brand.category}</span>
             <span className="student-brand-athlete">
-              {profile?.name ?? brand.athlete} · {brand.codeLabel} {studentCode}
+              {profile?.name ?? brand.athlete}
+              {studentCode ? ` · ${brand.codeLabel} ${studentCode}` : ""}
             </span>
           </button>
         </div>
@@ -2868,7 +2882,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               <button
                 type="button"
                 className="student-icon-button"
-                aria-label="Pesquisar no Feed"
+                aria-label="Pesquisar na Timeline"
                 onClick={() => {
                   uiSounds.popupOpen();
                   if (studentSection === "reels" || studentSection === "live") {
@@ -3058,11 +3072,39 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               )}
             </button>
             {socialMenuOpen && (
-              <section className="student-social-menu" aria-label="Menu da rede social">
+              <section className="student-social-menu student-timeline-menu" aria-label="Menu da Timeline">
+                <header className="student-timeline-menu-head">
+                  <div className="student-timeline-menu-user">
+                    {profile?.avatarUrl ? (
+                      <img src={mediaUrl(profile.avatarUrl)} alt="" />
+                    ) : (
+                      <UserRound size={22} />
+                    )}
+                    <div>
+                      <strong>{profile?.name ?? "Aluno"}</strong>
+                      <span>
+                        {membership?.status === "ACTIVE" || profile?.enrollmentStatus === "ACTIVE" ? "Ativo" : "Pendente"}
+                        {membershipDaysLeft != null ? ` · Validade: ${membershipDaysLeft} dias` : ""}
+                      </span>
+                    </div>
+                  </div>
+                  <button type="button" className="student-timeline-menu-org" onClick={() => { setSocialMenuOpen(false); goToSection("org"); }}>
+                    <span>Você está em</span>
+                    <strong>{studentLocations[0]?.name ?? "Minha organização"}</strong>
+                    <ChevronRight size={16} />
+                  </button>
+                </header>
                 {(
                   [
-                    { label: "Feed", icon: Home, action: () => goToSection("feed") },
-                    { label: "Treino", icon: Dumbbell, action: () => openTrainingCatalog() },
+                    { label: "Início", icon: Home, action: () => goToSection("feed") },
+                    { label: "Agenda", icon: CalendarDays, action: () => goToSection("agenda") },
+                    { label: "Treinos", icon: Dumbbell, action: () => openTrainingCatalog() },
+                    { label: "WOD", icon: Target, action: () => goToSection("wod") },
+                    { label: "Recordes pessoais", icon: Trophy, action: () => goToSection("history") },
+                    { label: "Graduações", icon: Medal, action: () => goToSection("graduations") },
+                    { label: "Avaliação física", icon: Ruler, action: () => goToSection("assessments") },
+                    { label: "Financeiro", icon: CircleDollarSign, action: () => goToSection("payments") },
+                    { label: "Contratos", icon: FileText, action: () => goToSection("contracts") },
                     { label: "Corrida", icon: CorridaNavIcon, action: () => openCorrida() },
                     { label: "Desafios", icon: Trophy, action: () => goToSection("club") },
                     { label: "Menu completo", icon: Menu, action: () => goToSection("menu") },
@@ -3138,6 +3180,50 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             onOpenPeerProfile={openPeerProfile}
             onOpenLive={openLiveById}
           />
+        )}
+
+        {studentSection === "agenda" && token && (
+          <StudentAgendaSection
+            token={token}
+            onSuccess={(message) => setSuccess(message)}
+            onError={(message) => setError(message)}
+          />
+        )}
+
+        {studentSection === "wod" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Treino do dia</span>
+              <h1>WOD</h1>
+              <p>Workout of the Day — em breve você verá aqui o WOD publicado pelo coach.</p>
+            </div>
+            <button type="button" className="student-primary-button" onClick={() => openTrainingCatalog()}>
+              Ir para treinos
+            </button>
+          </section>
+        )}
+
+        {studentSection === "graduations" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Progressão</span>
+              <h1>Graduações</h1>
+              <p>Acompanhe faixas, níveis e graduações da sua box — módulo em desenvolvimento.</p>
+            </div>
+          </section>
+        )}
+
+        {studentSection === "contracts" && (
+          <section className="student-sheet">
+            <div className="student-sheet-heading">
+              <span>Documentos</span>
+              <h1>Contratos</h1>
+              <p>Termos, contratos de matrícula e assinaturas digitais aparecerão aqui.</p>
+            </div>
+            <button type="button" className="student-primary-button" onClick={() => goToSection("membership")}>
+              Ver matrícula
+            </button>
+          </section>
         )}
 
         {studentSection === "reels" && token && socialModules.clipes && (
@@ -4935,6 +5021,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               [
                 { group: "Conta", icon: UserRound, title: brand.athleteProfile, action: () => goToSection("profile") },
                 { group: "Conta", icon: Settings, title: "Configurações do perfil", action: () => goToSection("profile-settings") },
+                { group: "Treino", icon: CalendarDays, title: "Agenda", action: () => goToSection("agenda"), favorite: true },
                 { group: "Treino", icon: Dumbbell, title: trainingCopy.workout, action: () => openTrainingCatalog(), favorite: true },
                 { group: "Treino", icon: CorridaNavIcon, title: "Corrida", action: () => openCorrida(), favorite: true },
                 { group: "Treino", icon: Trophy, title: "Desafios", action: () => goToSection("club"), favorite: true },
@@ -5240,7 +5327,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       )}
       {!hideStudentNav && (
       <nav className="student-bottom-nav" aria-label={brand.navAria}>
-        <button className={isFeedFamilySection ? "active" : ""} onClick={() => goToSection("feed")}><Home size={22} />Feed</button>
+        <button className={isFeedFamilySection ? "active" : ""} onClick={() => goToSection("feed")}><Home size={22} />Timeline</button>
         <button className={studentSection === "activity" ? "active" : ""} onClick={() => openCorrida()}><CorridaNavIcon size={22} />Corrida</button>
         <button className={studentSection === "training" || studentSection === "player" || studentSection === "history" ? "active" : ""} onClick={() => openTrainingCatalog()}><Dumbbell size={22} />Treino</button>
         <button className={studentSection === "club" ? "active" : ""} onClick={() => goToSection("club")}><Trophy size={22} />Desafios</button>

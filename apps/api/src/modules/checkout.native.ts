@@ -8,7 +8,6 @@ import {
   formatAsaasDate,
   parseAsaasDueDate,
   resolveAsaasDueDate,
-  tryFetchAsaasPixQrCode,
   tryPayAsaasCreditCard,
   tryPrepareAsaasPixPayment,
   updateAsaasCustomer,
@@ -145,13 +144,6 @@ function paymentDescription(membership: CheckoutMembership, planName: string) {
   return asaasCheckoutItemDescription(planName);
 }
 
-function canReuseNativePixCharge(payment: Payment) {
-  const dueDateStr = resolveAsaasDueDate(payment.dueDate);
-  const storedDay = formatAsaasDate(payment.dueDate);
-  if (storedDay < dueDateStr) return false;
-  return Boolean(payment.asaasPaymentId) && ["PENDING", "OVERDUE"].includes(payment.status);
-}
-
 async function ensurePaymentDueDateForAsaas(payment: Payment) {
   const dueDateStr = resolveAsaasDueDate(payment.dueDate);
   const storedDay = formatAsaasDate(payment.dueDate);
@@ -208,31 +200,27 @@ export async function prepareNativeSubscriptionCheckout(input: {
   const description = paymentDescription(input.membership, input.planName);
   let payment = await ensurePaymentDueDateForAsaas(input.payment);
 
-  if (canReuseNativePixCharge(payment)) {
-    const { pix, providerError } = await tryFetchAsaasPixQrCode(payment.asaasPaymentId as string);
-    if (pix) {
-      return {
-        payment,
-        nativeCheckout: {
-          billingType: "PIX" as const,
-          pix: {
-            qrCodeBase64: pix.encodedImage,
-            copyPaste: pix.payload,
-            expiresAt: pix.expirationDate ?? null
-          }
-        },
-        providerError: providerError ?? undefined
-      };
-    }
-  }
+  const { payment: asaasPayment, pix, providerError } = await tryPrepareAsaasPixPayment(
+    {
+      customerId,
+      amountInCents: payment.amountInCents,
+      dueDate: payment.dueDate,
+      externalReference: payment.id,
+      description
+    },
+    { preferredAsaasPaymentId: payment.asaasPaymentId }
+  );
 
-  const { payment: asaasPayment, pix, providerError } = await tryPrepareAsaasPixPayment({
-    customerId,
-    amountInCents: payment.amountInCents,
-    dueDate: payment.dueDate,
-    externalReference: payment.id,
-    description
-  });
+  if (asaasPayment?.id) {
+    payment = await prisma.payment.update({
+      where: { id: input.payment.id },
+      data: {
+        asaasPaymentId: asaasPayment.id,
+        paymentUrl: null,
+        status: asaasStatusToPaymentStatus(asaasPayment.status)
+      }
+    });
+  }
 
   if (!asaasPayment || !pix) {
     return {
@@ -242,14 +230,7 @@ export async function prepareNativeSubscriptionCheckout(input: {
     };
   }
 
-  const updatedPayment = await prisma.payment.update({
-    where: { id: input.payment.id },
-    data: {
-      asaasPaymentId: asaasPayment.id,
-      paymentUrl: null,
-      status: asaasStatusToPaymentStatus(asaasPayment.status)
-    }
-  });
+  const updatedPayment = payment;
 
   return {
     payment: updatedPayment,
