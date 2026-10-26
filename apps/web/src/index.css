@@ -29661,6 +29661,455 @@ html.light .student-app-shell .student-hero-card {
   gap: 1rem;
 }
 
+.student-subscription-checkout {
+  gap: 0.75rem;
+  width: min(100% - 32px, 42rem);
+  margin-inline: auto;
+  justify-items: stretch;
+  padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+}
+
+.student-subscription-checkout .activate-funnel-panel.is-student-portal {
+  width: 100%;
+  min-width: 0;
+}
+
+.student-subscription-checkout .activate-plan-stage,
+.student-subscription-checkout .activate-payment-stage {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.student-subscription-checkout .activate-plan-stage__head,
+.student-subscription-checkout .activate-payment-stage .activate-plan-stage__head {
+  text-align: center;
+}
+
+.student-subscription-checkout .native-checkout__field {
+  display: grid;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+.student-subscription-checkout .native-checkout__trust-badges {
+  justify-self: center;
+  max-width: 100%;
+  height: auto;
+  margin-top: 0.5rem;
+}
+
+/* Checkout no funil: não herdar input branco do portal claro (texto sumia ao digitar). */
+html.light
+  .student-app-shell
+  .student-subscription-checkout
+  .activate-funnel-panel.is-student-portal
+  :is(.native-checkout__input, .native-checkout__select, .activate-coupon-field__row input) {
+  background: rgba(5, 7, 12, 0.82) !important;
+  background-color: rgba(5, 7, 12, 0.82) !important;
+  background-image: none !important;
+  color: #ecf2fa !important;
+  -webkit-text-fill-color: #ecf2fa !important;
+  caret-color: #ecf2fa !important;
+  border-color: rgba(180, 210, 255, 0.22) !important;
+}
+
+html.light
+  .student-app-shell
+  .student-subscription-checkout
+  .activate-funnel-panel.is-student-portal
+  :is(.native-checkout__input, .activate-coupon-field__row input)::placeholder {
+  color: #8a98ae !important;
+  -webkit-text-fill-color: #8a98ae !important;
+  opacity: 1;
+}
+
+html.light
+  .student-app-shell
+  .student-subscription-checkout
+  .activate-funnel-panel.is-student-portal
+  :is(.native-checkout__input, .activate-coupon-field__row input):focus {
+  background: rgba(8, 12, 20, 0.95) !important;
+  color: #ecf2fa !important;
+  -webkit-text-fill-color: #ecf2fa !important;
+}
+
+html.light
+  .student-app-shell
+  .student-subscription-checkout
+  .activate-funnel-panel.is-student-portal
+  .native-checkout__label,
+html.light
+  .student-app-shell
+  .student-subscription-checkout
+  .activate-funnel-panel.is-student-portal
+  .cpf-field-feedback {
+  color: #b8c4d4 !important;
+}
+
+html.light
+  .student-app-shell
+  .student-subscription-checkout
+  .activate-funnel-panel.is-student-portal
+  .cpf-field-feedback--valid {
+  color: #86efac !important;
+}
+
+html.light
+  .student-app-shell
+  .student-subscription-checkout
+  .activate-funnel-panel.is-student-portal
+  .cpf-field-feedback--invalid {
+  color: #ffb4a8 !important;
+}
+
+html.light
+  .student-app-shell
+  .student-subscription-checkout
+  .activate-funnel-panel.is-student-portal
+  .cpf-field-feedback--incomplete {
+  color: #fde68a !important;
+}
+
+.student-subscription-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: grid;
+  place-items: center;
+  padding: max(12px, env(safe-area-inset-top, 0px)) 16px calc(var(--student-nav-bar, 70px) + 16px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Mesma área útil de Corrida/Treino (entre header e nav do app aluno). */
+.student-app-shell.has-subscription-overlay > .student-subscription-overlay.is-screen-sheet {
+  position: absolute;
+  top: var(--student-header-offset);
+  right: 0;
+  bottom: var(--student-nav-offset);
+  left: 0;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.student-subscription-overlay.is-screen-sheet.is-expanded {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.student-subscription-overlay.is-expanded {
+  place-items: start center;
+  padding-top: max(72px, env(safe-area-inset-top, 0px) + 56px);
+  overflow-y: auto;
+}
+
+.student-subscription-overlay__backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  background: rgba(5, 10, 18, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.student-app-shell.has-subscription-overlay .student-app-scroll {
+  pointer-events: auto;
+}
+
+.student-subscription-overlay__dialog {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 400px);
+  border-radius: 1.25rem;
+  padding: 1.35rem 1.25rem 1.25rem;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  background: linear-gradient(165deg, #0f1628 0%, #121c30 52%, #0a101c 100%);
+  color: #ecf2fa;
+  box-shadow:
+    0 28px 64px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(122, 212, 240, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.student-app-shell.has-subscription-overlay .student-subscription-overlay.is-screen-sheet .student-subscription-overlay__dialog {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  max-height: 100%;
+  margin: 0;
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: max(20px, env(safe-area-inset-top, 0px)) 20px 24px;
+  overflow-y: auto;
+  background: linear-gradient(180deg, rgba(5, 10, 18, 0.72) 0%, rgba(8, 14, 24, 0.88) 42%, rgba(10, 16, 28, 0.94) 100%);
+}
+
+.student-app-shell.has-subscription-overlay
+  .student-subscription-overlay.is-screen-sheet.is-expanded
+  .student-subscription-overlay__dialog {
+  justify-content: flex-start;
+  padding: 12px 12px 20px;
+  background: linear-gradient(165deg, #0f1628 0%, #121c30 48%, #0a101c 100%);
+}
+
+.student-subscription-overlay__dialog--inline {
+  width: 100%;
+  box-shadow: none;
+}
+
+html.light .student-subscription-sheet .student-subscription-overlay__dialog--inline {
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  background: linear-gradient(165deg, #0f1628 0%, #121c30 52%, #0a101c 100%);
+}
+
+.student-subscription-overlay__dialog.is-expanded {
+  width: min(100%, 42rem);
+  max-height: none;
+  margin-bottom: 1rem;
+  padding: 1rem 1rem 1.25rem;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.student-app-shell.has-subscription-overlay .student-subscription-overlay.is-screen-sheet .student-subscription-overlay__dialog.is-expanded {
+  width: 100%;
+  max-width: 100%;
+  margin-bottom: 0;
+  padding: 12px 12px 20px;
+}
+
+.student-subscription-overlay__dialog.is-expanded .student-subscription-checkout {
+  width: 100%;
+  margin: 0;
+  padding-bottom: 0;
+}
+
+.student-app-shell.has-subscription-overlay .student-subscription-overlay.is-screen-sheet .student-subscription-overlay__backdrop {
+  background: rgba(5, 10, 18, 0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.student-app-shell.is-activity.has-subscription-overlay .student-subscription-overlay.is-screen-sheet .student-subscription-overlay__dialog:not(.is-expanded) {
+  background: linear-gradient(180deg, rgba(6, 14, 10, 0.78) 0%, rgba(8, 18, 14, 0.92) 55%, rgba(10, 20, 16, 0.96) 100%);
+}
+
+.student-app-shell.has-subscription-overlay .student-subscription-overlay.is-screen-sheet .student-subscription-overlay__actions {
+  margin-top: auto;
+  padding-top: 1.25rem;
+  width: 100%;
+  max-width: 420px;
+  margin-inline: auto;
+}
+
+.student-app-shell.has-subscription-overlay .student-subscription-overlay.is-screen-sheet .student-subscription-overlay__head {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 420px;
+  margin-inline: auto;
+  width: 100%;
+}
+
+.student-subscription-overlay__head {
+  display: grid;
+  gap: 0.65rem;
+  text-align: center;
+}
+
+.student-subscription-overlay__eyebrow {
+  font-size: var(--st-xs);
+  font-weight: var(--st-weight-label);
+  letter-spacing: var(--st-tracking-label);
+  text-transform: uppercase;
+  color: #7ad4f0;
+}
+
+.student-subscription-overlay__head h2 {
+  margin: 0;
+  font-size: clamp(1.2rem, 4.5vw, 1.45rem);
+  font-weight: var(--st-weight-title);
+  line-height: var(--st-lh-tight);
+  color: #ecf2fa !important;
+  letter-spacing: -0.02em;
+}
+
+.student-subscription-overlay__head p {
+  margin: 0;
+  font-size: var(--st-body);
+  line-height: var(--st-lh-snug);
+  color: #b8c4d4 !important;
+}
+
+html.light .student-subscription-overlay__dialog .student-subscription-overlay__eyebrow {
+  color: #7ad4f0 !important;
+}
+
+html.light .student-subscription-overlay__dialog .student-subscription-overlay__head h2 {
+  color: #ecf2fa !important;
+}
+
+html.light .student-subscription-overlay__dialog .student-subscription-overlay__head p {
+  color: #b8c4d4 !important;
+}
+
+html.light .student-subscription-overlay__dialog .student-subscription-overlay__secondary {
+  color: #dce6f4 !important;
+}
+
+.student-subscription-overlay__actions {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1.25rem;
+}
+
+.student-subscription-overlay__cta {
+  min-height: 48px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 1.25rem;
+  font-size: var(--st-body);
+  font-weight: 800;
+  color: #15100b;
+  cursor: pointer;
+  background: linear-gradient(135deg, #e8c547, #d4af37 45%, #c9922e);
+  box-shadow: 0 12px 28px rgba(212, 175, 55, 0.35);
+}
+
+.student-subscription-overlay__cta:hover {
+  filter: brightness(1.05);
+}
+
+.student-subscription-overlay__secondary {
+  min-height: 44px;
+  border: 1px solid rgba(180, 210, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #dce6f4;
+  font-size: var(--st-body);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.student-subscription-overlay__secondary:hover {
+  border-color: rgba(212, 175, 55, 0.45);
+  color: #e8c547;
+}
+
+.student-subscription-back {
+  justify-self: start;
+  margin: 0 0 0.25rem;
+  padding: 0;
+  color: var(--app-text-muted);
+}
+
+.student-subscription-back:hover {
+  color: var(--brand-gold);
+}
+
+/* Funil escuro dentro do portal aluno (tema claro) — evita títulos ilegíveis */
+html.light .student-app-shell .student-subscription-checkout .activate-funnel-panel.is-student-portal {
+  color: #ecf2fa;
+  border-color: rgba(8, 12, 22, 0.12);
+  background: linear-gradient(165deg, #0f1628 0%, #121c30 48%, #0a101c 100%);
+  box-shadow:
+    0 20px 48px rgba(15, 23, 42, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+html.light
+  .student-app-shell
+  .student-subscription-checkout
+  .activate-funnel-panel.is-student-portal
+  :is(h2, h3, .activate-plan-stage__title, .activate-plan-card__head strong, .activate-funnel-guarantee strong) {
+  color: #ecf2fa !important;
+}
+
+html.light
+  .student-app-shell
+  .student-subscription-checkout
+  .activate-funnel-panel.is-student-portal
+  :is(
+    p,
+    .activate-plan-stage__copy,
+    .activate-plan-loading,
+    .activate-funnel-step__label,
+    .activate-plan-card__head span,
+    .activate-plan-card__cycle,
+    .activate-plan-perks li,
+    .activate-funnel-trust,
+    .activate-funnel-guarantee span,
+    .activate-coupon-field__hint
+  ) {
+  color: #b8c4d4 !important;
+}
+
+html.light
+  .student-app-shell
+  .student-subscription-checkout
+  .activate-funnel-panel.is-student-portal
+  .activate-funnel-step.is-active
+  .activate-funnel-step__label {
+  color: #dce6f4 !important;
+}
+
+html.light
+  .student-app-shell
+  .student-subscription-checkout
+  .activate-funnel-panel.is-student-portal
+  .home-telemetry-label {
+  color: #7ad4f0;
+}
+
+html.light
+  .student-app-shell
+  .student-subscription-checkout
+  .activate-funnel-panel.is-student-portal
+  .activate-plan-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(180, 210, 255, 0.16);
+}
+
+html.light
+  .student-app-shell
+  .student-subscription-checkout
+  .activate-funnel-panel.is-student-portal
+  .activate-plan-card.is-selected {
+  border-color: rgba(212, 175, 55, 0.65);
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.35);
+}
+
+html.light
+  .student-app-shell
+  .student-subscription-checkout
+  .activate-funnel-panel.is-student-portal
+  .activate-plan-card__amount {
+  color: #e8c547 !important;
+}
+
+html.light
+  .student-app-shell
+  .student-subscription-checkout
+  .activate-funnel-panel.is-student-portal
+  .activate-funnel-ai-note {
+  color: #7ad4f0;
+}
+
 .activate-account-tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -29859,21 +30308,21 @@ html.light .student-app-shell .student-hero-card {
 
 .cpf-field-feedback--valid,
 .activate-page .cpf-field-feedback--valid,
-.activate-page .native-checkout__field .cpf-field-feedback--valid {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__field .cpf-field-feedback--valid {
   color: #4ade80 !important;
   font-weight: 700;
 }
 
 .cpf-field-feedback--incomplete,
 .activate-page .cpf-field-feedback--incomplete,
-.activate-page .native-checkout__field .cpf-field-feedback--incomplete {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__field .cpf-field-feedback--incomplete {
   color: #facc15 !important;
   font-weight: 700;
 }
 
 .cpf-field-feedback--invalid,
 .activate-page .cpf-field-feedback--invalid,
-.activate-page .native-checkout__field .cpf-field-feedback--invalid {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__field .cpf-field-feedback--invalid {
   color: #ff8f7a !important;
   font-weight: 700;
 }
@@ -29971,12 +30420,12 @@ html.light .activate-page.home-command .activate-billing-field select {
 }
 
 /* ===== ATLLY — checkout nativo ===== */
-.activate-page .native-checkout {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout {
   display: grid;
   gap: 1rem;
 }
 
-.activate-page .native-checkout__summary {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__summary {
   display: grid;
   gap: 0.4rem;
   padding: 1rem 1.1rem;
@@ -29986,7 +30435,7 @@ html.light .activate-page.home-command .activate-billing-field select {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-.activate-page .native-checkout__eyebrow {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__eyebrow {
   font-size: 0.6875rem;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -29994,21 +30443,21 @@ html.light .activate-page.home-command .activate-billing-field select {
   color: #7ec8e3;
 }
 
-.activate-page .native-checkout__summary strong {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__summary strong {
   font-size: 1.125rem;
   font-weight: 800;
   color: #f4f8ff;
   letter-spacing: -0.01em;
 }
 
-.activate-page .native-checkout__summary p {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__summary p {
   margin: 0;
   color: #b8c4d4;
   font-size: 0.875rem;
   line-height: 1.45;
 }
 
-.activate-page .native-checkout__secure {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__secure {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -30018,13 +30467,13 @@ html.light .activate-page.home-command .activate-billing-field select {
   color: #86efac;
 }
 
-.activate-page .native-checkout__methods {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__methods {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
-.activate-page .native-checkout__method {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__method {
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
@@ -30041,7 +30490,7 @@ html.light .activate-page.home-command .activate-billing-field select {
   transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
-.activate-page .native-checkout__method-icon {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__method-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -30052,15 +30501,15 @@ html.light .activate-page.home-command .activate-billing-field select {
   border: 1px solid rgba(180, 210, 255, 0.1);
 }
 
-.activate-page .native-checkout__method-icon--pix {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__method-icon--pix {
   color: #32bcad;
 }
 
-.activate-page .native-checkout__method-icon--card {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__method-icon--card {
   color: #d4af37;
 }
 
-.activate-page .native-checkout__panel--idle {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__panel--idle {
   padding: 1rem 1.1rem;
   border-radius: 16px;
   border: 1px dashed rgba(180, 210, 255, 0.16);
@@ -30068,39 +30517,39 @@ html.light .activate-page.home-command .activate-billing-field select {
   text-align: center;
 }
 
-.activate-page .native-checkout__idle-copy {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__idle-copy {
   margin: 0;
   color: #8a98ae;
   font-size: 0.875rem;
   line-height: 1.45;
 }
 
-.activate-page .native-checkout__method--pix.is-active {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__method--pix.is-active {
   border-color: rgba(50, 188, 173, 0.55);
   background: linear-gradient(145deg, rgba(50, 188, 173, 0.14), rgba(72, 180, 220, 0.08));
   box-shadow: 0 0 0 1px rgba(50, 188, 173, 0.18), 0 10px 24px rgba(0, 0, 0, 0.18);
 }
 
-.activate-page .native-checkout__method--card.is-active {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__method--card.is-active {
   border-color: rgba(212, 175, 55, 0.45);
   background: linear-gradient(145deg, rgba(212, 175, 55, 0.12), rgba(255, 255, 255, 0.04));
   box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.16), 0 10px 24px rgba(0, 0, 0, 0.18);
 }
 
-.activate-page .native-checkout__method-logo {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__method-logo {
   display: block;
   object-fit: contain;
   background: transparent;
   filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.28));
 }
 
-.activate-page .native-checkout__method-logo--pix {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__method-logo--pix {
   height: 38px;
   width: auto;
   max-width: 100%;
 }
 
-.activate-page .native-checkout__method-logo--card {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__method-logo--card {
   width: 100%;
   max-width: 100%;
   height: 40px;
@@ -30108,7 +30557,7 @@ html.light .activate-page.home-command .activate-billing-field select {
   object-position: left center;
 }
 
-.activate-page .native-checkout__hero-logo {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__hero-logo {
   width: min(100%, 260px);
   height: auto;
   object-fit: contain;
@@ -30116,7 +30565,7 @@ html.light .activate-page.home-command .activate-billing-field select {
   filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.32));
 }
 
-.activate-page .native-checkout__qr-logo {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__qr-logo {
   width: min(100%, 180px);
   height: auto;
   object-fit: contain;
@@ -30124,7 +30573,7 @@ html.light .activate-page.home-command .activate-billing-field select {
   filter: drop-shadow(0 3px 12px rgba(0, 0, 0, 0.3));
 }
 
-.activate-page .native-checkout__brands-panel {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__brands-panel {
   display: grid;
   gap: 0.55rem;
   padding: 0.85rem 0.95rem;
@@ -30133,7 +30582,7 @@ html.light .activate-page.home-command .activate-billing-field select {
   background: rgba(255, 255, 255, 0.03);
 }
 
-.activate-page .native-checkout__brands-strip {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__brands-strip {
   width: 100%;
   max-width: 460px;
   height: auto;
@@ -30145,7 +30594,7 @@ html.light .activate-page.home-command .activate-billing-field select {
   filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.24));
 }
 
-.activate-page .native-checkout__trust-badges {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__trust-badges {
   width: 100%;
   max-width: 560px;
   height: auto;
@@ -30158,23 +30607,23 @@ html.light .activate-page.home-command .activate-billing-field select {
   filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.22));
 }
 
-.activate-page .native-checkout__method-copy {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__method-copy {
   display: grid;
   gap: 0.15rem;
 }
 
-.activate-page .native-checkout__method-copy strong {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__method-copy strong {
   font-size: 0.9375rem;
   font-weight: 800;
   color: #ecf2fa;
 }
 
-.activate-page .native-checkout__method-copy small {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__method-copy small {
   font-size: 0.75rem;
   color: #8a98ae;
 }
 
-.activate-page .native-checkout__panel {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__panel {
   display: grid;
   gap: 1rem;
   padding: 1.1rem;
@@ -30184,26 +30633,26 @@ html.light .activate-page.home-command .activate-billing-field select {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
-.activate-page .native-checkout__panel--pix {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__panel--pix {
   border-color: rgba(50, 188, 173, 0.22);
 }
 
-.activate-page .native-checkout__panel--card {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__panel--card {
   border-color: rgba(212, 175, 55, 0.22);
 }
 
-.activate-page .native-checkout__hero-logo--card {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__hero-logo--card {
   width: min(100%, 320px);
   max-height: 52px;
   object-fit: contain;
 }
 
-.activate-page .native-checkout__empty-cta {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__empty-cta {
   width: min(100%, 360px);
   margin-top: 0.35rem;
 }
 
-.activate-page .native-checkout__empty {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__empty {
   display: grid;
   justify-items: center;
   gap: 0.55rem;
@@ -30211,60 +30660,60 @@ html.light .activate-page.home-command .activate-billing-field select {
   text-align: center;
 }
 
-.activate-page .native-checkout__empty-icon {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__empty-icon {
   width: 56px;
   height: 56px;
 }
 
-.activate-page .native-checkout__empty strong {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__empty strong {
   font-size: 1rem;
   color: #ecf2fa;
 }
 
-.activate-page .native-checkout__empty p,
-.activate-page .native-checkout__hint {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__empty p,
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__hint {
   margin: 0;
   color: #8a98ae;
   font-size: 0.8125rem;
   line-height: 1.45;
 }
 
-.activate-page .native-checkout__form-head,
-.activate-page .native-checkout__qr-header {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__form-head,
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__qr-header {
   display: grid;
   gap: 0.75rem;
   align-items: center;
 }
 
-.activate-page .native-checkout__qr-header {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__qr-header {
   grid-template-columns: auto 1fr;
 }
 
-.activate-page .native-checkout__form-head strong,
-.activate-page .native-checkout__qr-header strong {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__form-head strong,
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__qr-header strong {
   display: block;
   color: #ecf2fa;
   font-size: 0.9375rem;
 }
 
-.activate-page .native-checkout__form-head p,
-.activate-page .native-checkout__qr-header p {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__form-head p,
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__qr-header p {
   margin: 0.15rem 0 0;
   color: #8a98ae;
   font-size: 0.8125rem;
 }
 
-.activate-page .native-checkout__method:hover {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__method:hover {
   border-color: rgba(180, 210, 255, 0.28);
   background: rgba(255, 255, 255, 0.05);
 }
 
-.activate-page .native-checkout__section {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__section {
   display: grid;
   gap: 0.75rem;
 }
 
-.activate-page .native-checkout__section-title {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__section-title {
   font-size: 0.6875rem;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -30272,12 +30721,12 @@ html.light .activate-page.home-command .activate-billing-field select {
   color: #7ec8e3;
 }
 
-.activate-page .native-checkout__qr-wrap {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__qr-wrap {
   display: flex;
   justify-content: center;
 }
 
-.activate-page .native-checkout__qr {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__qr {
   width: min(100%, 240px);
   aspect-ratio: 1;
   border-radius: 18px;
@@ -30286,18 +30735,18 @@ html.light .activate-page.home-command .activate-billing-field select {
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
 }
 
-.activate-page .native-checkout__field {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__field {
   display: grid;
   gap: 0.4rem;
 }
 
-.activate-page .native-checkout__label {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__label {
   font-size: 0.8125rem;
   font-weight: 700;
   color: #ecf2fa;
 }
 
-.activate-page .native-checkout__input {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__input {
   width: 100%;
   min-height: 46px;
   border-radius: 12px;
@@ -30309,37 +30758,39 @@ html.light .activate-page.home-command .activate-billing-field select {
   font-weight: 600;
   outline: none;
   transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
-  -webkit-text-fill-color: #ecf2fa;
+  -webkit-text-fill-color: #ecf2fa !important;
   caret-color: #ecf2fa;
 }
 
-.activate-page .native-checkout__input::placeholder {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__input::placeholder {
   color: #6e7c94;
   font-weight: 500;
   opacity: 1;
 }
 
-.activate-page .native-checkout__input:focus {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__input:focus {
   border-color: rgba(212, 175, 55, 0.55);
   box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.14);
   background: rgba(8, 12, 20, 0.95) !important;
+  color: #ecf2fa !important;
+  -webkit-text-fill-color: #ecf2fa !important;
 }
 
-.activate-page .native-checkout__input:-webkit-autofill,
-.activate-page .native-checkout__input:-webkit-autofill:hover,
-.activate-page .native-checkout__input:-webkit-autofill:focus {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__input:-webkit-autofill,
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__input:-webkit-autofill:hover,
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__input:-webkit-autofill:focus {
   -webkit-box-shadow: 0 0 0 1000px rgba(8, 12, 20, 0.98) inset !important;
   box-shadow: 0 0 0 1000px rgba(8, 12, 20, 0.98) inset !important;
   -webkit-text-fill-color: #ecf2fa !important;
   border-color: rgba(212, 175, 55, 0.45);
 }
 
-.activate-page .native-checkout__input--card {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__input--card {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.08em;
 }
 
-.activate-page .native-checkout__select {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__select {
   appearance: none;
   cursor: pointer;
   background-image:
@@ -30355,13 +30806,13 @@ html.light .activate-page.home-command .activate-billing-field select {
   padding-right: 2.2rem;
 }
 
-.activate-page .native-checkout__copy-row {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__copy-row {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 0.55rem;
 }
 
-.activate-page .native-checkout__copy-btn {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__copy-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -30377,12 +30828,12 @@ html.light .activate-page.home-command .activate-billing-field select {
   cursor: pointer;
 }
 
-.activate-page .native-checkout__copy-btn:hover {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__copy-btn:hover {
   background: rgba(50, 188, 173, 0.18);
   border-color: rgba(50, 188, 173, 0.5);
 }
 
-.activate-page .native-checkout__waiting {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__waiting {
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
@@ -30391,7 +30842,7 @@ html.light .activate-page.home-command .activate-billing-field select {
   font-weight: 700;
 }
 
-.activate-page .native-checkout__verify-btn {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__verify-btn {
   align-self: flex-start;
   margin-top: 0.35rem;
   border: 1px solid rgba(50, 188, 173, 0.45);
@@ -30405,45 +30856,45 @@ html.light .activate-page.home-command .activate-billing-field select {
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.activate-page .native-checkout__verify-btn:hover:not(:disabled) {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__verify-btn:hover:not(:disabled) {
   background: rgba(50, 188, 173, 0.2);
   border-color: rgba(50, 188, 173, 0.65);
 }
 
-.activate-page .native-checkout__verify-btn:disabled {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__verify-btn:disabled {
   opacity: 0.65;
   cursor: wait;
 }
 
-.activate-page .native-checkout__card-form {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__card-form {
   gap: 1.1rem;
 }
 
-.activate-page .native-checkout__grid {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
-.activate-page .native-checkout__full {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__full {
   grid-column: 1 / -1;
 }
 
-.activate-page .native-checkout__submit {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__submit {
   margin-top: 0.15rem;
 }
 
-.activate-page .native-checkout__cta--pix {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__cta--pix {
   box-shadow: 0 12px 28px rgba(50, 188, 173, 0.18);
 }
 
-.activate-page .native-checkout__cta--card {
+:is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__cta--card {
   box-shadow: 0 12px 28px rgba(212, 175, 55, 0.16);
 }
 
 @media (max-width: 640px) {
-  .activate-page .native-checkout__grid,
-  .activate-page .native-checkout__methods {
+  :is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__grid,
+  :is(.activate-page, .activate-funnel-panel.is-student-portal) .native-checkout__methods {
     grid-template-columns: 1fr;
   }
 }

@@ -280,6 +280,7 @@ export function StudentActivitySection({
   onOpenPlay,
   onPublished,
   onLiveChromeChange,
+  onRequirePlatformSubscription,
   preferredSport = "RUN",
   preferredSportKey = 0,
   athleteGender,
@@ -289,6 +290,8 @@ export function StudentActivitySection({
   onOpenPlay: () => void;
   onPublished: () => void;
   onLiveChromeChange?: (immersive: boolean) => void;
+  /** Bloqueia início da sessão e pede assinatura ATLLY (aluno coach-managed). */
+  onRequirePlatformSubscription?: () => void;
   preferredSport?: OutdoorSport;
   preferredSportKey?: number;
   athleteGender?: "MALE" | "FEMALE" | null;
@@ -1262,6 +1265,10 @@ export function StudentActivitySection({
 
   function requestStart() {
     if (shareOpen || finishing || busy) return;
+    if (onRequirePlatformSubscription) {
+      onRequirePlatformSubscription();
+      return;
+    }
     try {
       if (sessionStorage.getItem(GPS_BACKGROUND_WARN_KEY) === "1") {
         void startOrResume();
@@ -1287,6 +1294,10 @@ export function StudentActivitySection({
 
   async function startOrResume() {
     if (shareOpen || finishing) return;
+    if (onRequirePlatformSubscription) {
+      onRequirePlatformSubscription();
+      return;
+    }
     setError(null);
     setBusy(true);
     setLocked(null);

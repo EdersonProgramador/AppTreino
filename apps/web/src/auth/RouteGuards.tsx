@@ -184,15 +184,20 @@ export function StudentPortalGate({ children }: { children: ReactNode }) {
     }
 
     let cancelled = false;
-    void fetchStudentPortalAccess(token).then((access) => {
-      if (cancelled) return;
-      if (access.hasAccess) {
+    void fetchStudentPortalAccess(token)
+      .then((access) => {
+        if (cancelled) return;
+        if (access.hasAccess) {
+          setState("allowed");
+          return;
+        }
+        setRedirectTo(unpaidStudentActivatePath(access.membership));
+        setState("blocked");
+      })
+      .catch(() => {
+        if (cancelled) return;
         setState("allowed");
-        return;
-      }
-      setRedirectTo(unpaidStudentActivatePath(access.membership));
-      setState("blocked");
-    });
+      });
 
     return () => {
       cancelled = true;

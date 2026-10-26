@@ -33,6 +33,7 @@ import {
 } from "./shipping.service.js";
 import { ensureProgramCycleRecorded, recordProgramCycleCompletion } from "./program-completion.utils.js";
 import { attachCoachRoutes } from "./coach.routes.js";
+import { COACH_MANAGED_CHECKOUT_HINT, isCoachManagedAthlete } from "./student-access.utils.js";
 
 const substituteSchema = z.object({
   exerciseId: z.string().min(1)
@@ -466,6 +467,7 @@ export async function getPublishedWorkouts(
   const student = await prisma.user.findUnique({
     where: { id: userId },
     select: {
+      studentAccessProfile: true,
       profile: {
         select: {
           gender: true
@@ -477,7 +479,9 @@ export async function getPublishedWorkouts(
   const includeAllGenders = Boolean(options?.includeAllGenders);
 
   const includePlatformCatalog =
-    options?.bypassEnrollment || (await userHasPlanFeature(userId, "fixed_training_programs"));
+    options?.bypassEnrollment ||
+    (await userHasPlanFeature(userId, "fixed_training_programs")) ||
+    isCoachManagedAthlete(student ?? { studentAccessProfile: "PLATFORM_FULL" });
 
   let publishedPrograms: Awaited<
     ReturnType<
@@ -1221,6 +1225,17 @@ export async function registerStudentRoutes(app: FastifyInstance) {
         }
       }
     });
+
+    if (assignment.program.sourceType === "PLATFORM") {
+      const hasPlatformTraining = await userHasPlanFeature(authUser.id, "fixed_training_programs");
+      const athlete = await prisma.user.findUnique({
+        where: { id: authUser.id },
+        select: { studentAccessProfile: true }
+      });
+      if (isCoachManagedAthlete(athlete ?? { studentAccessProfile: "PLATFORM_FULL" }) && !hasPlatformTraining) {
+        throw httpError(403, COACH_MANAGED_CHECKOUT_HINT);
+      }
+    }
 
     const requestedDay = body.dayNumber ?? assignment.currentDay;
     if (requestedDay !== assignment.currentDay) {

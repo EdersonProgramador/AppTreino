@@ -50,10 +50,20 @@ import {
   Video,
   X
 } from "lucide-react";
-import { Suspense, type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
-import { formatPriceInBRL } from "@app-treino/shared";
+import { COACH_PRO_ANNUAL_PLAN_CODE, formatPriceInBRL } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
 import { useAuth } from "../../auth/AuthContext";
 import { BRAZILIAN_STATES, CITIES_BY_STATE } from "../../brazil-data";
@@ -128,9 +138,11 @@ import { resolvePendingPaymentForSelectedPlan, paymentMatchesPlanPricing } from 
 import { pickPendingCheckoutPayment, syncCheckoutPaymentStatus } from "../../lib/checkout-payment-sync";
 import {
   filterWorkoutsForCoachManagedAccess,
+  isCoachOrgWorkoutSource,
   hasStudentPortalAccess,
   hasStudentWorkoutAccess,
   hasValidActiveMembership,
+  isCoachManagedStudent,
   needsCoachManagedPlatformUpsell
 } from "../../lib/student-access";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
@@ -235,6 +247,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const trainingWeather = useStudentWeather("WORKOUT", studentSection === "training");
   const [membership, setMembership] = useState<StudentMembershipRow | null>(null);
   const [accessReady, setAccessReady] = useState(false);
+  const [coachUpsellNotice, setCoachUpsellNotice] = useState<string | null>(null);
+  const [coachUpsellOverlayOpen, setCoachUpsellOverlayOpen] = useState(false);
+  const [coachSubscriptionFunnelOpen, setCoachSubscriptionFunnelOpen] = useState(false);
+  const [studentCheckoutPaymentOpen, setStudentCheckoutPaymentOpen] = useState(false);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [attendance, setAttendance] = useState<Array<{ id: string; date: string }>>([]);
   const [assessments, setAssessments] = useState<PhysicalAssessmentRow[]>([]);
@@ -453,13 +469,23 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
     try {
       const genderFilter = options?.previewGender ?? previewGenderFilter;
-      const [profileResponse, membershipResponse, paymentsResponse] = await Promise.all([
+      const [profileResponse, membershipResponse, paymentsResponse, portalConfigResponse] = await Promise.all([
         apiGet<{ profile: StudentProfile }>("/user/profile", token),
         apiGet<{ membership: StudentMembershipRow | null }>("/user/membership", token),
-        apiGet<{ payments: PaymentRow[] }>("/user/payments", token)
+        apiGet<{ payments: PaymentRow[] }>("/user/payments", token),
+        apiGet<{ config: Record<string, string>; studentAccessProfile?: StudentProfile["studentAccessProfile"] }>(
+          "/user/portal-config",
+          token
+        ).catch(() => null)
       ]);
 
       let profile = profileResponse.profile;
+      if (portalConfigResponse?.studentAccessProfile && !profile.studentAccessProfile) {
+        profile = { ...profile, studentAccessProfile: portalConfigResponse.studentAccessProfile };
+      }
+      if (portalConfigResponse?.config) {
+        setPublicConfig(portalConfigResponse.config);
+      }
       let membership = membershipResponse.membership;
       let payments = paymentsResponse.payments;
 
@@ -495,23 +521,26 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           ? "/student/workout/programs?includeAllGenders=true"
           : "/student/workout/programs";
       const workoutProgramsResponse = hasAccess
-        ? await apiGet<StudentWorkoutProgramsResponse>(workoutProgramsPath, token)
+        ? await apiGet<StudentWorkoutProgramsResponse>(workoutProgramsPath, token).catch(() => ({
+            workouts: [] as StudentWorkoutProgramsResponse["workouts"]
+          }))
         : { workouts: [] as StudentWorkoutProgramsResponse["workouts"] };
-      const visibleWorkouts = filterWorkoutsForCoachManagedAccess(
-        workoutProgramsResponse.workouts,
+      const allPublishedWorkouts = workoutProgramsResponse.workouts;
+      const sessionEligibleWorkouts = filterWorkoutsForCoachManagedAccess(
+        allPublishedWorkouts,
         profile,
         membership
       );
-      const firstPublishedWorkout = visibleWorkouts[0] ?? null;
+      const firstPublishedWorkout = allPublishedWorkouts[0] ?? sessionEligibleWorkouts[0] ?? null;
       const restoredProgramId = selectedWorkoutProgramId ?? restoredPanel?.programId ?? null;
       const restoredWorkout = restoredProgramId
-        ? visibleWorkouts.find((item) => item.programId === restoredProgramId) ?? null
+        ? allPublishedWorkouts.find((item) => item.programId === restoredProgramId) ?? null
         : null;
 
       setProfile(profile);
       setMembership(membership);
       setPayments(payments);
-      setPublishedWorkouts(visibleWorkouts);
+      setPublishedWorkouts(allPublishedWorkouts);
       setTodayWorkout(restoredWorkout ?? firstPublishedWorkout);
       setCheckoutPayment(hasAccess ? null : pickPendingCheckoutPayment(payments));
 
@@ -633,10 +662,12 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         flushShellStateToNative();
       }
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) return;
+      setAccessReady(true);
+      if (error instanceof ApiError && error.status === 401) {
+        return;
+      }
       const message = error instanceof ApiError ? error.message : null;
       setError(message ?? "Não foi possível carregar sua área. Verifique API e banco.");
-      setAccessReady(true);
     }
   }
 
@@ -887,6 +918,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     });
   }, [publishedWorkouts]);
 
+  const scrollStudentPortalToTop = useCallback(() => {
+    const scroller = document.querySelector(".student-app-scroll");
+    if (scroller instanceof HTMLElement) {
+      scroller.scrollTop = 0;
+    }
+    window.scrollTo(0, 0);
+  }, []);
+
   useEffect(() => {
     if (studentSection !== "player") {
       setPlayerSessionActive(false);
@@ -897,12 +936,20 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   }, [studentSection]);
 
   useEffect(() => {
-    const scroller = document.querySelector(".student-app-scroll");
-    if (scroller instanceof HTMLElement) {
-      scroller.scrollTop = 0;
-    }
-    window.scrollTo(0, 0);
-  }, [studentSection]);
+    scrollStudentPortalToTop();
+  }, [studentSection, scrollStudentPortalToTop]);
+
+  useEffect(() => {
+    if (!coachUpsellOverlayOpen) return;
+    if (studentSection !== "activity" && studentSection !== "training") return;
+    scrollStudentPortalToTop();
+  }, [
+    coachSubscriptionFunnelOpen,
+    coachUpsellOverlayOpen,
+    studentCheckoutPaymentOpen,
+    studentSection,
+    scrollStudentPortalToTop
+  ]);
 
   /** Menu inferior some no treino iniciado e na corrida ao vivo. O header do aluno permanece na atividade outdoor. */
   const hideStudentHeader =
@@ -946,6 +993,12 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       useMusicPlayerStore.getState().collapse();
     } else {
       useMusicPlayerStore.getState().showMiniDock();
+    }
+    if (nextSection !== "activity" && nextSection !== "training") {
+      setCoachUpsellNotice(null);
+      setCoachUpsellOverlayOpen(false);
+      setCoachSubscriptionFunnelOpen(false);
+      setStudentCheckoutPaymentOpen(false);
     }
     setStudentSection(nextSection);
   };
@@ -1069,29 +1122,57 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     setSearchParams(cleaned, { replace: true });
   }, [searchParams, setSearchParams, catalogPlans]);
 
-  const redirectCoachManagedToSubscription = (message: string) => {
-    setError(message);
-    goToSection("subscription");
+  const openCoachUpsellOverlay = (message: string) => {
+    setError(null);
+    setCoachUpsellNotice(message);
+    setCoachSubscriptionFunnelOpen(false);
+    setStudentCheckoutPaymentOpen(false);
+    setCoachUpsellOverlayOpen(true);
   };
 
-  const openTrainingCatalog = () => {
-    if (needsCoachManagedPlatformUpsell(profile, membership)) {
-      const coachWorkouts = filterWorkoutsForCoachManagedAccess(publishedWorkouts, profile, membership);
-      if (coachWorkouts.length === 0) {
-        redirectCoachManagedToSubscription(
-          "Assine o plano ATLLY para acessar treinos do catálogo. Treinos exclusivos do coach aparecem aqui quando publicados."
-        );
-        return;
-      }
+  const redirectCoachManagedToSubscription = (
+    message: string,
+    target: Extract<StudentPanelSection, "activity" | "training">
+  ) => {
+    openCoachUpsellOverlay(message);
+    if (target === "activity") {
+      setCorridaOpenKey((key) => key + 1);
+      goToSection("activity");
+      return;
     }
     setSelectedWorkoutModality(null);
     setSelectedWorkoutProgramId(null);
     goToSection("training");
   };
 
+  const openTrainingCatalog = () => {
+    setSelectedWorkoutModality(null);
+    setSelectedWorkoutProgramId(null);
+    goToSection("training");
+  };
+
+  const isPlatformWorkoutLocked = (workout: { sourceType?: string | null } | null | undefined) =>
+    Boolean(
+      workout &&
+        needsCoachManagedPlatformUpsell(profile, membership) &&
+        !isCoachOrgWorkoutSource(workout.sourceType)
+    );
+
+  const selectWorkoutProgram = (programId: string) => {
+    const program = publishedWorkouts.find((item) => item.programId === programId) ?? null;
+    if (isPlatformWorkoutLocked(program)) {
+      openCoachUpsellOverlay("Assine o plano ATLLY para acessar treinos do catálogo.");
+      return;
+    }
+    setSelectedWorkoutProgramId(programId);
+  };
+
   const openCorrida = () => {
     if (needsCoachManagedPlatformUpsell(profile, membership)) {
-      redirectCoachManagedToSubscription("Assine o plano ATLLY para usar corrida, caminhada e ciclismo.");
+      redirectCoachManagedToSubscription(
+        "Assine o plano ATLLY para usar corrida, caminhada e ciclismo.",
+        "activity"
+      );
       return;
     }
     setCorridaOpenKey((key) => key + 1);
@@ -1106,6 +1187,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     const target = todayWorkout ?? (publishedWorkouts.length === 1 ? publishedWorkouts[0] : null);
     if (!target) {
       openTrainingCatalog();
+      return;
+    }
+    if (isPlatformWorkoutLocked(target)) {
+      openCoachUpsellOverlay("Assine o plano ATLLY para acessar treinos do catálogo.");
+      goToSection("training");
       return;
     }
     setSelectedWorkoutModality(target.modality ?? "Hipertrofia");
@@ -1467,6 +1553,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
   const handleStartWorkoutSession = async (workoutToStart = todayWorkout) => {
     if (!workoutToStart) return;
+    if (isPlatformWorkoutLocked(workoutToStart)) {
+      openCoachUpsellOverlay("Assine o plano ATLLY para acessar treinos do catálogo.");
+      return;
+    }
     if (workoutToStart.cycleCompleted) {
       flashError(trainingCopy.programCompleted);
       return;
@@ -1492,6 +1582,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
   const handleRepeatWorkoutProgram = async (workoutToRepeat: TodayWorkoutResponse["workout"]) => {
     if (!token || !workoutToRepeat.cycleCompleted) return;
+    if (isPlatformWorkoutLocked(workoutToRepeat)) {
+      openCoachUpsellOverlay("Assine o plano ATLLY para acessar treinos do catálogo.");
+      return;
+    }
 
     setRepeatingProgramId(workoutToRepeat.programId);
     setError(null);
@@ -2338,6 +2432,15 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const latestAiPlan = aiPlans[0];
   const hasActiveMembership = hasValidActiveMembership(membership);
   const coachManagedUpsell = needsCoachManagedPlatformUpsell(profile, membership);
+  const studentCheckoutPlans = useMemo(
+    () =>
+      coachManagedUpsell
+        ? catalogPlans.filter((plan) => plan.code !== COACH_PRO_ANNUAL_PLAN_CODE)
+        : catalogPlans,
+    [catalogPlans, coachManagedUpsell]
+  );
+  const selectedStudentCheckoutPlan =
+    studentCheckoutPlans.find((plan) => plan.code === checkoutDraft.planCode) ?? studentCheckoutPlans[0] ?? null;
   /** Liberação: portal aluno (coach, assinatura, matrícula admin) ou preview. */
   const hasStudentAreaAccess = hasStudentPortalAccess(profile, membership) || isAdminPreview;
   const { summary: staffSummary } = useStaffSummary(token);
@@ -2426,7 +2529,226 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     </div>
   ) : null;
   const needsOnboarding =
-    !isAdminPreview && Boolean(profile && (!profile.gender || !profile.objective || !profile.level));
+    !isAdminPreview &&
+    Boolean(
+      profile &&
+        (isCoachManagedStudent(profile)
+          ? !profile.gender
+          : !profile.gender || !profile.objective || !profile.level)
+    );
+
+  const closeCoachSubscriptionOverlay = () => {
+    setCoachUpsellNotice(null);
+    setCoachSubscriptionFunnelOpen(false);
+    setStudentCheckoutPaymentOpen(false);
+    setCoachUpsellOverlayOpen(false);
+  };
+
+  const renderCoachSubscriptionOverlay = (panel: ReactNode, expanded = false) => (
+    <div
+      className={`student-subscription-overlay is-screen-sheet${expanded ? " is-expanded" : ""}`}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="coach-subscription-title"
+    >
+      <button
+        type="button"
+        className="student-subscription-overlay__backdrop"
+        aria-label="Fechar"
+        onClick={() => {
+          uiSounds.radioSelect();
+          if (expanded && coachSubscriptionFunnelOpen) {
+            if (studentCheckoutPaymentOpen) {
+              setStudentCheckoutPaymentOpen(false);
+              scrollStudentPortalToTop();
+              return;
+            }
+            setCoachSubscriptionFunnelOpen(false);
+            return;
+          }
+          closeCoachSubscriptionOverlay();
+        }}
+      />
+      <div className={`student-subscription-overlay__dialog${expanded ? " is-expanded" : ""}`}>{panel}</div>
+    </div>
+  );
+
+  const renderSubscriptionCheckout = (backSection: StudentPanelSection) => {
+    const coachUpsellAsOverlay = Boolean(
+      coachUpsellOverlayOpen && (studentSection === "activity" || studentSection === "training")
+    );
+
+    const coachUpsellCtaPanel = (
+      <>
+        <header className="student-subscription-overlay__head">
+          <span className="student-subscription-overlay__eyebrow">Plano ATLLY</span>
+          <h2 id="coach-subscription-title">Corrida e treinos do catálogo</h2>
+          <p>
+            {coachUpsellNotice ??
+              "Sua conta veio do coach. Treinos do coach continuam liberados; para corrida e catálogo ATLLY, assine o plano aluno."}
+          </p>
+        </header>
+        <div className="student-subscription-overlay__actions">
+          <button
+            type="button"
+            className="student-subscription-overlay__cta"
+            onClick={() => {
+              uiSounds.radioSelect();
+              if (
+                selectedStudentCheckoutPlan &&
+                checkoutDraft.planCode !== selectedStudentCheckoutPlan.code
+              ) {
+                setCheckoutDraft((current) => ({
+                  ...current,
+                  planCode: selectedStudentCheckoutPlan.code
+                }));
+              }
+              setStudentCheckoutPaymentOpen(false);
+              setCoachSubscriptionFunnelOpen(true);
+            }}
+          >
+            Assine agora
+          </button>
+          <button
+            type="button"
+            className="student-subscription-overlay__secondary"
+            onClick={() => {
+              if (coachUpsellAsOverlay) {
+                closeCoachSubscriptionOverlay();
+                return;
+              }
+              goToSection(backSection);
+            }}
+          >
+            Voltar
+          </button>
+        </div>
+      </>
+    );
+
+    if (coachManagedUpsell && !coachSubscriptionFunnelOpen) {
+      if (coachUpsellAsOverlay) {
+        return renderCoachSubscriptionOverlay(coachUpsellCtaPanel, false);
+      }
+      return (
+        <section className="student-sheet student-subscription-sheet">
+          <div className="student-subscription-overlay__dialog student-subscription-overlay__dialog--inline">
+            {coachUpsellCtaPanel}
+          </div>
+        </section>
+      );
+    }
+
+    const funnelPanel = (
+    <section className="student-subscription-sheet student-subscription-checkout activate-account-panel">
+      {coachManagedUpsell ? (
+        <button
+          type="button"
+          className="activate-back-step student-subscription-back"
+          onClick={() => setCoachSubscriptionFunnelOpen(false)}
+        >
+          ← Voltar
+        </button>
+      ) : (
+        <div className="student-sheet-heading">
+          <span>Ativação</span>
+          <h1>Escolha seu plano</h1>
+          <p>Confirme o plano para liberar treinos, corrida, IA e comunidade.</p>
+        </div>
+      )}
+      <SubscriptionFunnelPanel
+        variant="student"
+        step={3}
+        stepIndicator={studentCheckoutPaymentOpen ? 3 : 1}
+        sequentialCheckout
+        paymentStageOpen={studentCheckoutPaymentOpen}
+        onOpenPaymentStage={() => {
+          uiSounds.radioSelect();
+          setStudentCheckoutPaymentOpen(true);
+          scrollStudentPortalToTop();
+        }}
+        showPaymentStep
+        planStageEyebrow={coachManagedUpsell ? "Upgrade ATLLY" : null}
+        planStageTitle={coachManagedUpsell ? "Assinatura individual" : "Escolha seu plano"}
+        planStageCopy={
+          coachManagedUpsell
+            ? "Plano aluno para corrida, outdoor e catálogo. Treinos do coach seguem pelo vínculo."
+            : "Acesso imediato após confirmação do pagamento."
+        }
+        plans={studentCheckoutPlans}
+        plansLoading={catalogPlansLoading}
+        monthlyBaseline={catalogMonthlyBaseline}
+        selectedPlanCode={checkoutDraft.planCode}
+        onSelectPlan={(code) => {
+          uiSounds.radioSelect();
+          const nextPlan = studentCheckoutPlans.find((plan) => plan.code === code) ?? null;
+          setCheckoutDraft((current) => ({
+            ...current,
+            planCode: code,
+            billingType:
+              !planAllowsCreditCardCheckout(nextPlan) && current.billingType === "CREDIT_CARD"
+                ? "PIX"
+                : current.billingType
+          }));
+          setCheckoutPayment(null);
+          setNativeCheckout(null);
+        }}
+        billingType={checkoutDraft.billingType}
+        onBillingTypeChange={(value) => {
+          setCheckoutDraft((current) => ({ ...current, billingType: value }));
+          setCheckoutPayment(null);
+          setNativeCheckout(null);
+        }}
+        checkoutLoading={Boolean(checkoutLoading)}
+        pendingPayment={currentCheckoutPayment}
+        nativeCheckout={nativeCheckout}
+        checkoutToken={token}
+        payerName={profile?.name ?? null}
+        payerEmail={profile?.email ?? null}
+        payerPhone={profile?.phone ?? null}
+        payerDocument={profile?.document ?? null}
+        onPrepareCheckout={(input) => void submitSubscriptionCheckout(input)}
+        onCheckoutSessionResponse={applyCheckoutSessionResponse}
+        onPaymentConfirmed={() => void handleNativePaymentConfirmed()}
+        onCheckoutError={setError}
+        onConfirmSandbox={() => void handleConfirmSandboxPayment()}
+        showSandbox={Boolean(isSandboxCheckoutEnabled() && currentCheckoutPayment && currentCheckoutPayment.status === "PENDING")}
+        couponCode={checkoutCoupon}
+        stagedCouponCode={appliedCoupon}
+        couponDraft={couponDraft}
+        onCouponDraftChange={setCouponDraft}
+        onApplyCoupon={handleApplySubscriptionCoupon}
+        onRemoveCoupon={handleRemoveSubscriptionCoupon}
+        couponFeedback={couponFeedback}
+        couponApplying={couponApplying}
+        couponValidForSelection={couponValidForSelection}
+        rejectedCouponCode={rejectedCouponCode}
+        onRejectedCouponDismissed={() => setRejectedCouponCode(null)}
+        selectedPlanHasDiscount={planHasPromoDiscount(selectedStudentCheckoutPlan ?? selectedCatalogPlan)}
+        onBackToAccount={() => {
+          uiSounds.radioSelect();
+          if (studentCheckoutPaymentOpen) {
+            setStudentCheckoutPaymentOpen(false);
+            scrollStudentPortalToTop();
+            return;
+          }
+          if (coachManagedUpsell) {
+            setCoachSubscriptionFunnelOpen(false);
+            return;
+          }
+          goToSection(backSection);
+        }}
+      />
+    </section>
+    );
+
+    if (coachManagedUpsell && coachUpsellAsOverlay) {
+      return renderCoachSubscriptionOverlay(funnelPanel, true);
+    }
+
+    return funnelPanel;
+  };
+
   const lockedFeatures = [
     {
       icon: Dumbbell,
@@ -2662,7 +2984,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         <section className="auth-panel">
           <span className="eyebrow">Personalização</span>
           <h1>Complete seu perfil de treino</h1>
-          <p>Faltam alguns dados do perfil. Depois, escolha a assinatura para liberar os treinos.</p>
+          <p>
+            {isCoachManagedStudent(profile)
+              ? "Confirme seu sexo biológico para filtrar treinos do coach. Corrida e catálogo ATLLY exigem assinatura."
+              : "Faltam alguns dados do perfil. Depois, escolha a assinatura para liberar os treinos."}
+          </p>
           <WorkoutOnboarding
             mode="complete"
             submitting={completingOnboarding}
@@ -2732,74 +3058,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           {error ? <div className="activate-funnel-error">{error}</div> : null}
           {success ? <div className="success-box">{success}</div> : null}
 
-          {studentSection === "subscription" ? (
-            <>
-            {coachManagedUpsell ? (
-              <p className="activate-login-hint mb-4">
-                Sua conta foi criada pelo coach. Treinos do coach seguem liberados pelo vínculo. Para{" "}
-                <strong>corrida</strong> e <strong>treinos ATLLY do catálogo</strong>, assine abaixo.
-              </p>
-            ) : null}
-            <SubscriptionFunnelPanel
-              step={3}
-              showPaymentStep
-              plans={catalogPlans}
-              plansLoading={catalogPlansLoading}
-              monthlyBaseline={catalogMonthlyBaseline}
-              selectedPlanCode={checkoutDraft.planCode}
-              onSelectPlan={(code) => {
-                uiSounds.radioSelect();
-                const nextPlan = catalogPlans.find((plan) => plan.code === code) ?? null;
-                setCheckoutDraft((current) => ({
-                  ...current,
-                  planCode: code,
-                  billingType:
-                    !planAllowsCreditCardCheckout(nextPlan) && current.billingType === "CREDIT_CARD"
-                      ? "PIX"
-                      : current.billingType
-                }));
-                setCheckoutPayment(null);
-                setNativeCheckout(null);
-              }}
-              billingType={checkoutDraft.billingType}
-              onBillingTypeChange={(value) => {
-                setCheckoutDraft((current) => ({ ...current, billingType: value }));
-                setCheckoutPayment(null);
-                setNativeCheckout(null);
-              }}
-              checkoutLoading={Boolean(checkoutLoading)}
-              pendingPayment={currentCheckoutPayment}
-              nativeCheckout={nativeCheckout}
-              checkoutToken={token}
-              payerName={profile?.name ?? null}
-              payerEmail={profile?.email ?? null}
-              payerPhone={profile?.phone ?? null}
-              payerDocument={profile?.document ?? null}
-              onPrepareCheckout={(input) => void submitSubscriptionCheckout(input)}
-              onCheckoutSessionResponse={applyCheckoutSessionResponse}
-              onPaymentConfirmed={() => void handleNativePaymentConfirmed()}
-              onCheckoutError={setError}
-              onConfirmSandbox={() => void handleConfirmSandboxPayment()}
-              showSandbox={Boolean(isSandboxCheckoutEnabled() && currentCheckoutPayment && currentCheckoutPayment.status === "PENDING")}
-              couponCode={checkoutCoupon}
-              stagedCouponCode={appliedCoupon}
-              couponDraft={couponDraft}
-              onCouponDraftChange={setCouponDraft}
-              onApplyCoupon={handleApplySubscriptionCoupon}
-              onRemoveCoupon={handleRemoveSubscriptionCoupon}
-              couponFeedback={couponFeedback}
-              couponApplying={couponApplying}
-              couponValidForSelection={couponValidForSelection}
-              rejectedCouponCode={rejectedCouponCode}
-              onRejectedCouponDismissed={() => setRejectedCouponCode(null)}
-              selectedPlanHasDiscount={planHasPromoDiscount(selectedCatalogPlan)}
-              onBackToAccount={() => {
-                uiSounds.radioSelect();
-                goToSection("settings");
-              }}
-            />
-            </>
-          ) : null}
+          {studentSection === "subscription" ? renderSubscriptionCheckout("settings") : null}
 
           {studentSection === "locked" ? (
             <section className="locked-content activate-locked-panel" aria-label="Funcionalidades bloqueadas">
@@ -2873,6 +3132,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     CLOSED: "Encerrado"
   };
 
+  const coachSubscriptionOverlay = Boolean(
+    hasStudentAreaAccess &&
+      coachManagedUpsell &&
+      coachUpsellOverlayOpen &&
+      (studentSection === "activity" || studentSection === "training")
+  );
+  const showStudentFeedSection = Boolean(token && (studentSection === "home" || studentSection === "feed"));
   const isFeedFamilySection =
     studentSection === "feed" ||
     studentSection === "home" ||
@@ -2892,7 +3158,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         musicQueueLength && !musicMiniHidden ? " has-music-dock" : ""
       }${studentSection === "play" ? " is-play" : ""}${studentSection === "activity" ? " is-activity" : ""}${
         studentSection === "ai" ? " is-ai" : ""
-      }${isFeedFamilySection ? " is-feed" : ""}`}
+      }${isFeedFamilySection ? " is-feed" : ""}${coachSubscriptionOverlay ? " has-subscription-overlay" : ""}`}
     >
       {adminPreviewBanner}
       {token && !hideStudentNav ? <StudentDailyMotivation /> : null}
@@ -3230,7 +3496,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       )}
 
       <div className="student-app-scroll">
-        {error && (
+        {studentSection === "subscription" && hasStudentAreaAccess ? renderSubscriptionCheckout("menu") : null}
+
+        {error && !coachSubscriptionOverlay && studentSection !== "subscription" && (
           <div
             className={`error-box${errorTone === "warning" ? " is-warning" : ""}`}
             key={`error-${errorTick}`}
@@ -3245,7 +3513,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           </div>
         )}
 
-        {(studentSection === "home" || studentSection === "feed") && token && (
+        {showStudentFeedSection && (
           <StudentFeedSection
             token={token}
             publicConfig={publicConfig}
@@ -3335,23 +3603,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
         {studentSection === "club" && token && <StudentClubSection token={token} />}
 
-        {studentSection === "activity" && token && coachManagedUpsell ? (
-          <section className="locked-content activate-locked-panel" aria-label="Corrida bloqueada">
-            <LockedOverlay onCheckout={() => goToSection("subscription")} />
-            <div className="section-heading locked-heading">
-              <span className="eyebrow">Plano ATLLY</span>
-              <h2>Corrida e outdoor</h2>
-              <p className="locked-heading-copy">
-                Sua conta veio do convite do coach. Para corrida, caminhada e ciclismo, assine o plano ATLLY na aba
-                Assinatura.
-              </p>
-            </div>
-            <button type="button" className="student-primary-button" onClick={() => goToSection("subscription")}>
-              Ver planos
-            </button>
-          </section>
-        ) : null}
-        {studentSection === "activity" && token && !coachManagedUpsell ? (
+        {studentSection === "activity" && token ? (
           <StudentActivitySection
             token={token}
             preferredSport="RUN"
@@ -3361,6 +3613,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             onOpenPlay={() => goToSection("play")}
             onPublished={() => goToSection("feed")}
             onLiveChromeChange={setActivityLiveChrome}
+            onRequirePlatformSubscription={
+              coachManagedUpsell
+                ? () =>
+                    openCoachUpsellOverlay(
+                      "Assine o plano ATLLY para usar corrida, caminhada e ciclismo."
+                    )
+                : undefined
+            }
           />
         ) : null}
 
@@ -3422,12 +3682,21 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                         {trainingCopy.browseWorkouts}
                       </button>
                     </>
+                  ) : publishedWorkouts.length > 0 ? (
+                    <button
+                      className="student-green-button"
+                      type="button"
+                      onClick={() => {
+                        setSelectedWorkoutModality(null);
+                        setSelectedWorkoutProgramId(null);
+                      }}
+                    >
+                      {trainingCopy.browseWorkouts}
+                    </button>
                   ) : (
-                    publishedWorkouts.length === 0 ? (
-                      <button className="student-green-button" type="button" disabled>
-                        {trainingCopy.browseWorkouts}
-                      </button>
-                    ) : null
+                    <button className="student-green-button" type="button" disabled>
+                      {trainingCopy.browseWorkouts}
+                    </button>
                   )}
                   {publicConfig["module_ai"] !== "false" && (
                     <button
@@ -3599,12 +3868,12 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                               role="button"
                               tabIndex={0}
                               onClick={() => {
-                                setSelectedWorkoutProgramId(programWorkout.programId);
+                                selectWorkoutProgram(programWorkout.programId);
                               }}
                               onKeyDown={(event) => {
                                 if (event.key === "Enter" || event.key === " ") {
                                   event.preventDefault();
-                                  setSelectedWorkoutProgramId(programWorkout.programId);
+                                  selectWorkoutProgram(programWorkout.programId);
                                 }
                               }}
                             >
@@ -3628,7 +3897,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                                   void handleRepeatWorkoutProgram(programWorkout);
                                   return;
                                 }
-                                setSelectedWorkoutProgramId(programWorkout.programId);
+                                selectWorkoutProgram(programWorkout.programId);
                               }}
                             >
                               {repeating
@@ -5116,6 +5385,16 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 { group: "Treino", icon: CorridaNavIcon, title: "Corrida", action: () => openCorrida(), favorite: true },
                 { group: "Treino", icon: Trophy, title: "Desafios", action: () => goToSection("club"), favorite: true },
                 { group: "Treino", icon: Sparkles, title: brand.aiCoach, action: () => goToSection("ai"), moduleKey: "module_ai" },
+                ...(coachManagedUpsell
+                  ? [
+                      {
+                        group: "Conta",
+                        icon: CreditCard,
+                        title: "Assinatura ATLLY",
+                        action: () => goToSection("subscription")
+                      } as const
+                    ]
+                  : []),
                 { group: "Conta", icon: ShieldCheck, title: "Matrículas", action: () => goToSection("membership") },
                 { group: "Conta", icon: Building2, title: "Minha organização", action: () => goToSection("org") },
                 { group: "Conta", icon: CreditCard, title: "Pagamentos", action: () => goToSection("payments"), favorite: true },
@@ -5415,6 +5694,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           hideMini={studentSection === "player"}
         />
       )}
+      {coachSubscriptionOverlay ? renderSubscriptionCheckout("training") : null}
+
       {!hideStudentNav && (
       <nav className="student-bottom-nav" aria-label={brand.navAria}>
         <button className={isFeedFamilySection ? "active" : ""} onClick={() => goToSection("feed")}><Home size={22} />Timeline</button>

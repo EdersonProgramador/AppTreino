@@ -58,6 +58,16 @@ type SubscriptionFunnelPanelProps = {
   rejectedCouponCode?: string | null;
   onRejectedCouponDismissed?: () => void;
   selectedPlanHasDiscount?: boolean;
+  /** Indicador visual (pode divergir de `step` quando conta já existe no app aluno). */
+  stepIndicator?: 1 | 2 | 3;
+  variant?: "activate" | "student";
+  planStageEyebrow?: string | null;
+  planStageTitle?: string;
+  planStageCopy?: string;
+  /** No app aluno: plano primeiro, pagamento só após continuar. */
+  sequentialCheckout?: boolean;
+  paymentStageOpen?: boolean;
+  onOpenPaymentStage?: () => void;
 };
 
 const STEPS = [
@@ -160,9 +170,30 @@ export function SubscriptionFunnelPanel({
   couponValidForSelection = false,
   rejectedCouponCode = null,
   onRejectedCouponDismissed,
-  selectedPlanHasDiscount = false
+  selectedPlanHasDiscount = false,
+  stepIndicator,
+  variant = "activate",
+  planStageEyebrow,
+  planStageTitle,
+  planStageCopy,
+  sequentialCheckout = false,
+  paymentStageOpen = false,
+  onOpenPaymentStage
 }: SubscriptionFunnelPanelProps) {
+  const progressStep = stepIndicator ?? step;
+  const resolvedPlanEyebrow =
+    planStageEyebrow === null ? null : planStageEyebrow ?? (variant === "student" ? "Plano ATLLY" : brand.areaEyebrow);
+  const resolvedPlanTitle = planStageTitle ?? "Escolha seu plano";
+  const resolvedPlanCopy =
+    planStageCopy ??
+    (variant === "student"
+      ? "Corrida, outdoor e catálogo de treinos após confirmação do pagamento."
+      : "Acesso imediato após confirmação do pagamento.");
   const selectedPlan = plans.find((plan) => plan.code === selectedPlanCode) ?? null;
+  const showPlanSection = (step === 1 || showPaymentStep) && (!sequentialCheckout || !paymentStageOpen);
+  const showPaymentSection =
+    Boolean(showPaymentStep && step === 3 && selectedPlan && checkoutToken) &&
+    (!sequentialCheckout || paymentStageOpen);
   const selectedPlanCheckoutError = selectedPlan ? getCheckoutMinimumAmountMessage(selectedPlan) : null;
   const canCheckoutSelectedPlan = selectedPlan ? isCheckoutEligiblePlan(selectedPlan) : false;
   const couponBlocksCheckout = Boolean(stagedCouponCode) && couponValidForSelection === null;
@@ -197,12 +228,12 @@ export function SubscriptionFunnelPanel({
   }, [billingType, onBillingTypeChange, selectedPlan, selectedPlanAllowsCreditCard]);
 
   return (
-    <div className="activate-funnel-panel">
+    <div className={`activate-funnel-panel${variant === "student" ? " is-student-portal" : ""}`}>
       <div className="activate-funnel-steps" aria-label="Progresso da ativação">
         {STEPS.map((item) => (
           <div
             key={item.id}
-            className={`activate-funnel-step${step >= item.id ? " is-active" : ""}${step === item.id ? " is-current" : ""}`}
+            className={`activate-funnel-step${progressStep >= item.id ? " is-active" : ""}${progressStep === item.id ? " is-current" : ""}`}
           >
             <span className="activate-funnel-step__dot">{item.id}</span>
             <span className="activate-funnel-step__label">{item.label}</span>
@@ -212,12 +243,12 @@ export function SubscriptionFunnelPanel({
 
       {error ? <div className="activate-funnel-error">{error}</div> : null}
 
-      {(step === 1 || showPaymentStep) && (
+      {showPlanSection ? (
         <section className="activate-plan-stage">
           <header className="activate-plan-stage__head">
-            <span className="home-telemetry-label">{brand.areaEyebrow}</span>
-            <h2 className="activate-plan-stage__title">Escolha seu plano</h2>
-            <p className="activate-plan-stage__copy">Acesso imediato após confirmação do pagamento.</p>
+            {resolvedPlanEyebrow ? <span className="home-telemetry-label">{resolvedPlanEyebrow}</span> : null}
+            <h2 className="activate-plan-stage__title">{resolvedPlanTitle}</h2>
+            <p className="activate-plan-stage__copy">{resolvedPlanCopy}</p>
           </header>
 
           {plansLoading && plans.length === 0 ? (
@@ -295,8 +326,23 @@ export function SubscriptionFunnelPanel({
               </button>
             </>
           ) : null}
+
+          {sequentialCheckout && !paymentStageOpen && showPaymentStep && step === 3 ? (
+            <>
+              {selectedPlanCheckoutError ? <p className="activate-coupon-feedback is-error">{selectedPlanCheckoutError}</p> : null}
+              <button
+                type="button"
+                className="ui-btn-primary activate-funnel-cta"
+                onClick={() => onOpenPaymentStage?.()}
+                disabled={!selectedPlan || !canCheckoutSelectedPlan || !onOpenPaymentStage}
+              >
+                Continuar para pagamento
+                <ArrowRight size={18} />
+              </button>
+            </>
+          ) : null}
         </section>
-      )}
+      ) : null}
 
       {step === 2 && accountSlot ? (
         <section className="activate-account-stage">
@@ -316,11 +362,13 @@ export function SubscriptionFunnelPanel({
         </section>
       ) : null}
 
-      {showPaymentStep && step === 3 && selectedPlan && checkoutToken ? (
+      {showPaymentSection ? (
         <section className="activate-payment-stage">
           <header className="activate-plan-stage__head">
-            <span className="home-telemetry-label">Passo 3</span>
-            <h2 className="activate-plan-stage__title">Finalize sua ativação</h2>
+            <span className="home-telemetry-label">{variant === "student" ? "Pagamento" : "Passo 3"}</span>
+            <h2 className="activate-plan-stage__title">
+              {variant === "student" ? "Finalize sua assinatura" : "Finalize sua ativação"}
+            </h2>
             <p className="activate-plan-stage__copy">
               Pagamento 100% {brand.name}
               {selectedPlanAllowsCreditCard ? " · Pix ou cartão de crédito na mesma tela." : " · Pix na mesma tela."}
@@ -360,7 +408,7 @@ export function SubscriptionFunnelPanel({
 
           {onBackToAccount ? (
             <button type="button" className="activate-back-step" onClick={onBackToAccount}>
-              ← Voltar para Conta
+              {sequentialCheckout ? "← Voltar para o plano" : "← Voltar para Conta"}
             </button>
           ) : null}
         </section>
