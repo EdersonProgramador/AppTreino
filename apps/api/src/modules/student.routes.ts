@@ -11,7 +11,7 @@ import {
   studentMatchesProgramTargetGender
 } from "./cms-publication.utils.js";
 import { fetchOrganizationProgramsForAthlete, mergePublishedPrograms } from "./org-workouts.utils.js";
-import { assertIndividualFeature, listUserPlanFeatures } from "./org-auth/entitlements.js";
+import { listUserPlanFeatures, userHasPlanFeature } from "./org-auth/entitlements.js";
 import { validActiveMembershipWhere } from "./membership.utils.js";
 import {
   assertModuleEnabled,
@@ -463,10 +463,6 @@ export async function getPublishedWorkouts(
     }
   }
 
-  if (!options?.bypassEnrollment) {
-    await assertIndividualFeature(userId, "fixed_training_programs");
-  }
-
   const student = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -480,7 +476,17 @@ export async function getPublishedWorkouts(
   const studentGender = student?.profile?.gender ?? null;
   const includeAllGenders = Boolean(options?.includeAllGenders);
 
-  let publishedPrograms = await prisma.program.findMany({
+  const includePlatformCatalog =
+    options?.bypassEnrollment || (await userHasPlanFeature(userId, "fixed_training_programs"));
+
+  let publishedPrograms: Awaited<
+    ReturnType<
+      typeof prisma.program.findMany<{ include: { days: true } }>
+    >
+  > = [];
+
+  if (includePlatformCatalog) {
+    publishedPrograms = await prisma.program.findMany({
     where: {
       sourceType: "PLATFORM",
       status: "PUBLISHED",
@@ -526,9 +532,10 @@ export async function getPublishedWorkouts(
       days: true
     },
     orderBy: [{ sortOrder: "asc" }, { publishedAt: "desc" }, { createdAt: "asc" }]
-  });
+    });
+  }
 
-  if (!includeAllGenders) {
+  if (includePlatformCatalog && !includeAllGenders) {
     publishedPrograms = publishedPrograms.filter((program) =>
       studentMatchesProgramTargetGender(program.targetGender, studentGender)
     );

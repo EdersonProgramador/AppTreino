@@ -64,9 +64,15 @@ export function CoachAthleteInviteView() {
     setError(null);
     const form = new FormData(event.currentTarget);
     const name = String(form.get("name") ?? "").trim();
+    const gender = String(form.get("gender") ?? "");
     const email = String(form.get("email") ?? "").trim();
     const phone = String(form.get("phone") ?? "").trim();
     const password = String(form.get("password") ?? "");
+    if (gender !== "MALE" && gender !== "FEMALE") {
+      setError("Selecione o sexo biológico para montar os treinos.");
+      setSubmitting(false);
+      return;
+    }
     const acceptTerms = form.get("acceptTerms") === "on";
     const acceptPrivacy = form.get("acceptPrivacy") === "on";
 
@@ -87,9 +93,10 @@ export function CoachAthleteInviteView() {
         token: string;
         user: { id: string; name: string; email: string; role: string };
       }>("/auth/register-coach-athlete", {
-        inviteToken: token,
-        name,
-        email: email || undefined,
+          inviteToken: token,
+          name,
+          gender,
+          email: email || undefined,
         phone: phone || undefined,
         password,
         acceptTerms: true,
@@ -160,6 +167,17 @@ export function CoachAthleteInviteView() {
             autoComplete="name"
             placeholder="Como aparece no perfil"
           />
+        </label>
+
+        <label className="ui-label login-field">
+          <span className="login-field-caption">Sexo biológico</span>
+          <select className="ui-input" name="gender" required defaultValue="">
+            <option value="" disabled>
+              Selecione
+            </option>
+            <option value="MALE">Masculino</option>
+            <option value="FEMALE">Feminino</option>
+          </select>
         </label>
 
         <div className="login-form-row-split">

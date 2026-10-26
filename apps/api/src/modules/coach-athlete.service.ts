@@ -187,10 +187,12 @@ export async function registerCoachManagedAthlete(input: {
   organizationId: string;
   unitId: string;
   name: string;
+  gender: "MALE" | "FEMALE";
   email?: string;
   phone?: string;
   password?: string;
 }) {
+  const gender = input.gender;
   await assertCoachManagedAthleteAccess(input.coachUserId, input.ctx, input.organizationId);
 
   const email = input.email?.toLowerCase();
@@ -219,7 +221,13 @@ export async function registerCoachManagedAthlete(input: {
         role: "USER",
         status: "ACTIVE",
         enrollmentStatus: "ACTIVE",
-        studentAccessProfile: "COACH_MANAGED"
+        studentAccessProfile: "COACH_MANAGED",
+        profile: {
+          create: {
+            phone: input.phone ?? null,
+            gender
+          }
+        }
       }
     });
     createdUser = true;
@@ -233,7 +241,13 @@ export async function registerCoachManagedAthlete(input: {
         name: input.name,
         enrollmentStatus: "ACTIVE",
         studentAccessProfile: "COACH_MANAGED",
-        ...(password && password.length >= 6 ? { passwordHash: await hashPassword(password) } : {})
+        ...(password && password.length >= 6 ? { passwordHash: await hashPassword(password) } : {}),
+        profile: {
+          upsert: {
+            create: { phone: input.phone ?? null, gender },
+            update: { gender, ...(input.phone ? { phone: input.phone } : {}) }
+          }
+        }
       }
     });
   }
@@ -253,6 +267,7 @@ export async function registerCoachAthleteViaInvite(input: {
   app: FastifyInstance;
   inviteToken: string;
   name: string;
+  gender: "MALE" | "FEMALE";
   email?: string;
   phone?: string;
   password: string;
@@ -294,6 +309,7 @@ export async function registerCoachAthleteViaInvite(input: {
       profile: {
         create: {
           phone: input.phone ?? null,
+          gender: input.gender,
           termsAcceptedAt: input.consentAt,
           privacyAcceptedAt: input.consentAt
         }

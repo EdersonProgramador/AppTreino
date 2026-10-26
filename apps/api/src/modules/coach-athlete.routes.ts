@@ -26,6 +26,7 @@ const registerBodySchema = z.object({
   organizationId: z.string().min(1),
   unitId: z.string().min(1),
   name: z.string().trim().min(2).max(120),
+  gender: z.enum(["MALE", "FEMALE"]),
   email: z.string().trim().email().optional(),
   phone: z.string().trim().min(8).max(20).optional(),
   initialPassword: z.string().min(6).max(72).optional()
@@ -82,6 +83,7 @@ async function handleCoachAthleteRegister(app: FastifyInstance, request: Fastify
     organizationId: body.organizationId,
     unitId: body.unitId,
     name: body.name,
+    gender: body.gender,
     email: body.email,
     phone: body.phone,
     password: body.initialPassword

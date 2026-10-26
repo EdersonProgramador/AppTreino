@@ -126,7 +126,12 @@ import { paths } from "../../auth/paths";
 import { clearCheckoutIntent, readCheckoutIntent } from "../../lib/checkout-intent";
 import { resolvePendingPaymentForSelectedPlan, paymentMatchesPlanPricing } from "../../lib/checkout-pending";
 import { pickPendingCheckoutPayment, syncCheckoutPaymentStatus } from "../../lib/checkout-payment-sync";
-import { hasStudentWorkoutAccess, hasValidActiveMembership } from "../../lib/student-access";
+import {
+  hasStudentPortalAccess,
+  hasStudentWorkoutAccess,
+  hasValidActiveMembership,
+  needsCoachManagedPlatformUpsell
+} from "../../lib/student-access";
 import { useCatalogPlans } from "../../hooks/useCatalogPlans";
 import { LockedOverlay } from "./LockedOverlay";
 import { StudentSettingsPanel } from "./StudentSettingsPanel";
@@ -2308,9 +2313,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const computedBodyFatPct = computedBodyFat?.value ?? null;
   const latestAiPlan = aiPlans[0];
   const hasActiveMembership = hasValidActiveMembership(membership);
-  const hasAdminEnrollment = profile?.enrollmentStatus === "ACTIVE";
-  /** Liberação: membership/enrollment ativos, ou admin em modo preview blindado. */
-  const hasStudentAreaAccess = hasActiveMembership || hasAdminEnrollment || isAdminPreview;
+  const coachManagedUpsell = needsCoachManagedPlatformUpsell(profile, membership);
+  /** Liberação: portal aluno (coach, assinatura, matrícula admin) ou preview. */
+  const hasStudentAreaAccess = hasStudentPortalAccess(profile, membership) || isAdminPreview;
   const { summary: staffSummary } = useStaffSummary(token);
   const showCoachAccessBanner =
     Boolean(token) && hasStudentAreaAccess && (staffSummary.isStaff || staffSummary.isCoach);
@@ -2704,6 +2709,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           {success ? <div className="success-box">{success}</div> : null}
 
           {studentSection === "subscription" ? (
+            <>
+            {coachManagedUpsell ? (
+              <p className="activate-login-hint mb-4">
+                Sua conta foi criada pelo coach. Treinos do coach seguem liberados pelo vínculo. Para{" "}
+                <strong>corrida</strong> e <strong>treinos ATLLY do catálogo</strong>, assine abaixo.
+              </p>
+            ) : null}
             <SubscriptionFunnelPanel
               step={3}
               showPaymentStep
@@ -2762,6 +2774,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 goToSection("settings");
               }}
             />
+            </>
           ) : null}
 
           {studentSection === "locked" ? (

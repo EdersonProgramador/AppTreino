@@ -4,19 +4,12 @@ import { prisma } from "../../prisma.js";
 import { validActiveMembershipWhere } from "../membership.utils.js";
 import { coachManagedFeatureKeys, isCoachManagedAthlete } from "../student-access.utils.js";
 
-/** Entitlements individuais — independentes de vínculo organizacional. */
-export async function listUserPlanFeatures(userId: string): Promise<PlanFeatureKey[]> {
-  if (await isPlatformAdminUser(userId)) {
-    return [...PLAN_FEATURE_KEYS];
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { studentAccessProfile: true, enrollmentStatus: true }
-  });
-  if (user && isCoachManagedAthlete(user)) {
-    return coachManagedFeatureKeys();
-  }
+async function listMembershipPlanFeatures(
+  userId: string,
+  options?: { grantAllWhenPlanHasNoFeatures?: boolean; grantAllWhenNoMembership?: boolean }
+): Promise<PlanFeatureKey[]> {
+  const grantAllWhenNoMembership = options?.grantAllWhenNoMembership ?? false;
+  const grantAllWhenPlanHasNoFeatures = options?.grantAllWhenPlanHasNoFeatures ?? true;
 
   const membership = await prisma.membership.findFirst({
     where: {
@@ -35,15 +28,45 @@ export async function listUserPlanFeatures(userId: string): Promise<PlanFeatureK
   });
 
   if (!membership) {
-    return user?.enrollmentStatus === "ACTIVE" ? [...PLAN_FEATURE_KEYS] : [];
+    return grantAllWhenNoMembership ? [...PLAN_FEATURE_KEYS] : [];
   }
 
   const features = membership.plan.features.map((item) => item.featureKey);
   if (!features.length) {
-    return [...PLAN_FEATURE_KEYS];
+    return grantAllWhenPlanHasNoFeatures ? [...PLAN_FEATURE_KEYS] : [];
   }
 
   return PLAN_FEATURE_KEYS.filter((key) => features.includes(key));
+}
+
+/** Entitlements individuais — independentes de vínculo organizacional. */
+export async function listUserPlanFeatures(userId: string): Promise<PlanFeatureKey[]> {
+  if (await isPlatformAdminUser(userId)) {
+    return [...PLAN_FEATURE_KEYS];
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { studentAccessProfile: true, enrollmentStatus: true }
+  });
+
+  if (user && isCoachManagedAthlete(user)) {
+    const fromMembership = await listMembershipPlanFeatures(userId, {
+      grantAllWhenNoMembership: false,
+      grantAllWhenPlanHasNoFeatures: true
+    });
+    const keys = new Set<PlanFeatureKey>([...coachManagedFeatureKeys(), ...fromMembership]);
+    return PLAN_FEATURE_KEYS.filter((key) => keys.has(key));
+  }
+
+  if (!user) {
+    return [];
+  }
+
+  return listMembershipPlanFeatures(userId, {
+    grantAllWhenNoMembership: user.enrollmentStatus === "ACTIVE",
+    grantAllWhenPlanHasNoFeatures: true
+  });
 }
 
 export async function userHasPlanFeature(userId: string, featureKey: string): Promise<boolean> {

@@ -25,15 +25,8 @@ export const COACH_MANAGED_MODULE_OVERRIDES: Record<string, string> = {
   module_contact: "false"
 };
 
-/** Features individuais permitidas: treino ATLLY + corrida/caminhada/bike + histórico. */
-export const COACH_MANAGED_PLAN_FEATURES = [
-  "running_engine",
-  "walking_engine",
-  "cycling_engine",
-  "fixed_training_programs",
-  "progress_tracking",
-  "activity_history"
-] as const;
+/** Sem features de catálogo ATLLY/corrida — só assinatura B2C ou treinos org/coach. */
+export const COACH_MANAGED_PLAN_FEATURES = [] as const;
 
 export function mergePortalConfigForStudentAccess(
   base: Record<string, string>,

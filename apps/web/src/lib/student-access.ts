@@ -13,14 +13,42 @@ export function hasValidActiveMembership(membership: StudentMembershipRow | null
   return true;
 }
 
-/** Treinos exigem matrícula vigente ou liberação admin (`enrollmentStatus`). */
+export function isCoachManagedStudent(
+  profile: Pick<StudentProfile, "studentAccessProfile"> | null | undefined
+) {
+  return profile?.studentAccessProfile === "COACH_MANAGED";
+}
+
+/** Entrada no portal /aluno (convite coach, matrícula admin ou assinatura). */
+export function hasStudentPortalAccess(
+  profile: Pick<StudentProfile, "enrollmentStatus" | "studentAccessProfile"> | null | undefined,
+  membership: StudentMembershipRow | null | undefined
+) {
+  if (hasValidActiveMembership(membership)) return true;
+  if (isCoachManagedStudent(profile) && profile?.enrollmentStatus === "ACTIVE") return true;
+  if (profile?.enrollmentStatus === "ACTIVE") return true;
+  return false;
+}
+
+/** Catálogo ATLLY + corrida exigem assinatura B2C (coach-managed não inclui por padrão). */
+export function hasPlatformTrainingSubscription(
+  profile: Pick<StudentProfile, "studentAccessProfile"> | null | undefined,
+  membership: StudentMembershipRow | null | undefined
+) {
+  return hasValidActiveMembership(membership);
+}
+
+export function needsCoachManagedPlatformUpsell(
+  profile: Pick<StudentProfile, "studentAccessProfile" | "enrollmentStatus"> | null | undefined,
+  membership: StudentMembershipRow | null | undefined
+) {
+  return isCoachManagedStudent(profile) && profile?.enrollmentStatus === "ACTIVE" && !hasValidActiveMembership(membership);
+}
+
+/** @deprecated Use hasStudentPortalAccess — mantido para chamadas existentes. */
 export function hasStudentWorkoutAccess(
   profile: Pick<StudentProfile, "enrollmentStatus" | "studentAccessProfile"> | null | undefined,
   membership: StudentMembershipRow | null | undefined
 ) {
-  if (profile?.studentAccessProfile === "COACH_MANAGED" && profile.enrollmentStatus === "ACTIVE") {
-    return true;
-  }
-  if (profile?.enrollmentStatus === "ACTIVE") return true;
-  return hasValidActiveMembership(membership);
+  return hasStudentPortalAccess(profile, membership);
 }

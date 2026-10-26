@@ -143,6 +143,7 @@ export function CoachView({ token, userName, onLogout }: Props) {
   const [nutritionAssignAthleteId, setNutritionAssignAthleteId] = useState("");
   const [showWelcome, setShowWelcome] = useState(false);
   const [regName, setRegName] = useState("");
+  const [regGender, setRegGender] = useState<"" | "MALE" | "FEMALE">("");
   const [regEmail, setRegEmail] = useState("");
   const [regPhone, setRegPhone] = useState("");
   const [regPassword, setRegPassword] = useState("");
@@ -548,6 +549,18 @@ export function CoachView({ token, userName, onLogout }: Props) {
                     />
                   </label>
                   <label>
+                    Sexo biológico
+                    <select
+                      className="admin-input"
+                      value={regGender}
+                      onChange={(e) => setRegGender(e.target.value as "" | "MALE" | "FEMALE")}
+                    >
+                      <option value="">Selecione</option>
+                      <option value="MALE">Masculino</option>
+                      <option value="FEMALE">Feminino</option>
+                    </select>
+                  </label>
+                  <label>
                     E-mail (opcional se tiver telefone)
                     <input
                       className="admin-input"
@@ -584,6 +597,7 @@ export function CoachView({ token, userName, onLogout }: Props) {
                     disabled={
                       busy ||
                       regName.trim().length < 2 ||
+                      !regGender ||
                       !regUnitId ||
                       regPassword.trim().length < 6 ||
                       (!regEmail.trim() && !regPhone.trim())
@@ -596,6 +610,7 @@ export function CoachView({ token, userName, onLogout }: Props) {
                             organizationId: selectedOrg.id,
                             unitId: regUnitId,
                             name: regName.trim(),
+                            gender: regGender,
                             email: regEmail.trim() || undefined,
                             phone: regPhone.trim() || undefined,
                             initialPassword: regPassword.trim()
@@ -603,6 +618,7 @@ export function CoachView({ token, userName, onLogout }: Props) {
                           token
                         );
                         setRegName("");
+                        setRegGender("");
                         setRegEmail("");
                         setRegPhone("");
                         setRegPassword("");

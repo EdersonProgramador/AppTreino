@@ -153,6 +153,9 @@ const registerCoachAthleteSchema = z
   .object({
     inviteToken: z.string().min(10),
     name: z.string().trim().min(2).max(120),
+    gender: z.enum(["MALE", "FEMALE"], {
+      errorMap: () => ({ message: "Selecione o sexo biológico para montar os treinos." })
+    }),
     email: z.string().optional().or(z.literal("")),
     phone: z.string().optional().or(z.literal("")),
     password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
@@ -422,6 +425,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           app,
           inviteToken: body.inviteToken,
           name: body.name,
+          gender: body.gender,
           email: email || undefined,
           phone: phone || undefined,
           password: body.password,

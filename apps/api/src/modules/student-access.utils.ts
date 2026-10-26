@@ -5,7 +5,6 @@ import {
   isStudentAccessProfile
 } from "@app-treino/shared";
 import type { User } from "@prisma/client";
-import { prisma } from "../prisma.js";
 
 export function normalizeStudentAccessProfile(value: string | null | undefined): StudentAccessProfile {
   return isStudentAccessProfile(value) ? value : "PLATFORM_FULL";
@@ -23,21 +22,6 @@ export function isCoachManagedAthlete(user: Pick<User, "studentAccessProfile">) 
   return readStudentAccessProfile(user) === "COACH_MANAGED";
 }
 
-export const COACH_MANAGED_CHECKOUT_MESSAGE =
-  "Sua conta é gerenciada pelo seu coach. A assinatura ATLLY individual não se aplica — use o app com o acesso que seu coach liberou.";
-
-export async function assertNotCoachManagedSelfCheckout(userId: string) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { studentAccessProfile: true }
-  });
-  if (user && isCoachManagedAthlete(user)) {
-    const error = new Error(COACH_MANAGED_CHECKOUT_MESSAGE) as Error & {
-      statusCode: number;
-      code: string;
-    };
-    error.statusCode = 403;
-    error.code = "COACH_MANAGED_NO_SELF_CHECKOUT";
-    throw error;
-  }
-}
+/** Aluno coach pode assinar ATLLY para corrida e catálogo; cadastro inicial não passa pelo checkout. */
+export const COACH_MANAGED_CHECKOUT_HINT =
+  "Assine o plano ATLLY para liberar corrida e treinos do catálogo. Treinos do seu coach continuam pelo vínculo.";
