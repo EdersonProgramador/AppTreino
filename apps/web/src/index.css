@@ -6301,17 +6301,43 @@ html.light .finance-hub-tabs button {
 }
 
 .student-avatar {
+  position: relative;
   display: grid;
   width: 42px;
   height: 42px;
   place-items: center;
-  overflow: hidden;
+  overflow: visible;
   padding: 0;
   border: 3px solid rgba(255, 255, 255, 0.82);
   border-radius: 50%;
   background: rgba(212, 175, 55, 0.16);
   color: #fff;
   cursor: pointer;
+}
+
+.student-avatar > img,
+.student-avatar > svg:not(.student-avatar-timeline-badge svg) {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.student-avatar-timeline-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  z-index: 2;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 2px solid rgba(0, 0, 0, 0.85);
+  border-radius: 50%;
+  background: linear-gradient(145deg, #f0d882 0%, #d4af37 55%, #9a7b1a 100%);
+  color: #15100b;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
 }
 
 .student-avatar-menu-wrap {
@@ -6391,9 +6417,6 @@ html.light .finance-hub-tabs button {
 }
 
 .student-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
   display: block;
 }
 
@@ -18783,6 +18806,89 @@ html.light .student-timeline-menu .student-social-menu-item.is-danger svg {
 html.light .student-app-shell .student-timeline-menu .student-social-menu-item span,
 html.light .student-app-shell .student-timeline-menu .student-timeline-menu-user span,
 html.light .student-app-shell .student-timeline-menu .student-timeline-menu-org span {
+  color: inherit !important;
+}
+
+/* Menu Timeline — tema escuro (html.dark + .theme-dark no ui-shell) */
+html.dark .student-social-menu.student-timeline-menu,
+html.dark .student-app-header .student-social-menu.student-timeline-menu,
+.theme-dark .student-social-menu.student-timeline-menu {
+  background:
+    linear-gradient(135deg, rgba(0, 0, 0, 0.97) 0%, rgba(20, 14, 6, 0.98) 55%, rgba(212, 175, 55, 0.18) 100%),
+    #000 !important;
+  border-color: rgba(212, 175, 55, 0.22) !important;
+  color: #fff !important;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45) !important;
+  scrollbar-color: rgba(255, 255, 255, 0.32) rgba(255, 255, 255, 0.08);
+}
+
+html.dark .student-timeline-menu-head,
+.theme-dark .student-timeline-menu-head {
+  border-bottom-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+html.dark .student-timeline-menu-user img,
+html.dark .student-timeline-menu-user svg,
+.theme-dark .student-timeline-menu-user img,
+.theme-dark .student-timeline-menu-user svg {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #fff !important;
+}
+
+html.dark .student-timeline-menu-user strong,
+html.dark .student-timeline-menu-org strong,
+.theme-dark .student-timeline-menu-user strong,
+.theme-dark .student-timeline-menu-org strong {
+  color: #fff !important;
+}
+
+html.dark .student-timeline-menu-user span,
+html.dark .student-timeline-menu-org span,
+.theme-dark .student-timeline-menu-user span,
+.theme-dark .student-timeline-menu-org span {
+  color: rgba(255, 255, 255, 0.88) !important;
+}
+
+html.dark .student-timeline-menu-org,
+.theme-dark .student-timeline-menu-org {
+  background: rgba(212, 175, 55, 0.1) !important;
+  border-color: rgba(212, 175, 55, 0.28) !important;
+  color: #fff !important;
+}
+
+html.dark .student-timeline-menu .student-social-menu-item,
+html.dark .student-timeline-menu .student-social-menu-item span,
+.theme-dark .student-timeline-menu .student-social-menu-item,
+.theme-dark .student-timeline-menu .student-social-menu-item span {
+  color: #fff !important;
+}
+
+html.dark .student-timeline-menu .student-social-menu-item svg,
+.theme-dark .student-timeline-menu .student-social-menu-item svg {
+  color: rgba(212, 175, 55, 0.95) !important;
+}
+
+html.dark .student-timeline-menu .student-social-menu-item:hover,
+.theme-dark .student-timeline-menu .student-social-menu-item:hover {
+  background: rgba(212, 175, 55, 0.16) !important;
+}
+
+html.dark .student-timeline-menu .student-social-menu-item.is-danger,
+html.dark .student-timeline-menu .student-social-menu-item.is-danger span,
+html.dark .student-timeline-menu .student-social-menu-item.is-danger svg,
+.theme-dark .student-timeline-menu .student-social-menu-item.is-danger,
+.theme-dark .student-timeline-menu .student-social-menu-item.is-danger span,
+.theme-dark .student-timeline-menu .student-social-menu-item.is-danger svg {
+  color: #ffd5d5 !important;
+  border-top-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+html.dark .student-app-shell .student-timeline-menu .student-social-menu-item span,
+html.dark .student-app-shell .student-timeline-menu .student-timeline-menu-user span,
+html.dark .student-app-shell .student-timeline-menu .student-timeline-menu-org span,
+.theme-dark .student-app-shell .student-timeline-menu .student-social-menu-item span,
+.theme-dark .student-app-shell .student-timeline-menu .student-timeline-menu-user span,
+.theme-dark .student-app-shell .student-timeline-menu .student-timeline-menu-org span {
   color: inherit !important;
 }
 

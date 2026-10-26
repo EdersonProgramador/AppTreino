@@ -3064,7 +3064,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             <button
               type="button"
               className="student-avatar"
-              aria-label="Menu social"
+              aria-label="Menu da Timeline"
+              title="Menu da Timeline"
               aria-expanded={socialMenuOpen}
               onClick={() => {
                 setNotificationsOpen(false);
@@ -3084,6 +3085,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
               ) : (
                 <UserRound size={28} />
               )}
+              <span className="student-avatar-timeline-badge" aria-hidden="true">
+                <Home size={11} strokeWidth={2.5} />
+              </span>
             </button>
             {socialMenuOpen && (
               <section className="student-social-menu student-timeline-menu" aria-label="Menu da Timeline">
