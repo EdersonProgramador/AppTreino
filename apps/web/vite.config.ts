@@ -46,7 +46,9 @@ export default defineConfig({
       "/plans": apiProxy,
       "/public": apiProxy,
       "/org": apiProxy,
-      "/coach": apiProxy,
+      // Não proxyar GET /coach — é rota do React; só subpaths da API.
+      "/coach/affiliate": apiProxy,
+      "/coach/managed-athletes": apiProxy,
       "/socket.io": {
         target: "http://127.0.0.1:3333",
         changeOrigin: true,

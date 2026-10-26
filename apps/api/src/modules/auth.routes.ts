@@ -20,6 +20,7 @@ import {
   normalizePhone,
   resolveLoginIdentifierKind
 } from "./auth.utils.js";
+import { registerCoachAthleteViaInvite } from "./coach-athlete.service.js";
 
 type AuthProvider = "EMAIL" | "GOOGLE";
 type AuthRouteUser = {
@@ -147,6 +148,31 @@ const resetPasswordSchema = z.object({
   token: z.string().min(1, "Token de redefinição inválido."),
   password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres.")
 });
+
+const registerCoachAthleteSchema = z
+  .object({
+    inviteToken: z.string().min(10),
+    name: z.string().trim().min(2).max(120),
+    email: z.string().optional().or(z.literal("")),
+    phone: z.string().optional().or(z.literal("")),
+    password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
+    acceptTerms: z.literal(true, {
+      errorMap: () => ({ message: "Aceite os Termos de Uso para continuar." })
+    }),
+    acceptPrivacy: z.literal(true, {
+      errorMap: () => ({ message: "Aceite a Política de Privacidade para continuar." })
+    })
+  })
+  .superRefine((data, ctx) => {
+    const email = normalizeEmail(data.email);
+    const phone = normalizePhone(data.phone);
+    if (!email && !phone) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Informe e-mail ou telefone."
+      });
+    }
+  });
 
 function requireDatabase() {
   if (!env.DATABASE_URL) {
@@ -378,6 +404,48 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       token,
       user: authUser
     });
+    }
+  );
+
+  app.post(
+    "/auth/register-coach-athlete",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+      requireDatabase();
+      const body = registerCoachAthleteSchema.parse(request.body);
+      const email = normalizeEmail(body.email);
+      const phone = normalizePhone(body.phone);
+      const consentAt = new Date();
+
+      try {
+        const { athlete } = await registerCoachAthleteViaInvite({
+          app,
+          inviteToken: body.inviteToken,
+          name: body.name,
+          email: email || undefined,
+          phone: phone || undefined,
+          password: body.password,
+          consentAt
+        });
+
+        await recordDailyAttendance(athlete.id, athlete.role);
+        notifyWelcomeEmail(athlete);
+        const authUser = toAuthUser(athlete);
+        const token = app.jwt.sign(authUser);
+
+        return reply.code(201).send({
+          token,
+          user: authUser
+        });
+      } catch (error) {
+        const statusCode =
+          error && typeof error === "object" && "statusCode" in error && typeof error.statusCode === "number"
+            ? error.statusCode
+            : 500;
+        return reply.code(statusCode).send({
+          message: error instanceof Error ? error.message : "Não foi possível criar a conta."
+        });
+      }
     }
   );
 

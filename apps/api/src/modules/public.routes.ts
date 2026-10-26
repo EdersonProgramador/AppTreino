@@ -7,6 +7,7 @@ import { serializePublicPlan } from "../plan-serializer.js";
 import { buildPublicUploadUrl } from "../upload-security.js";
 import { DEFAULT_SYSTEM_SETTINGS, ensureDefaultSystemSettings, sanitizePublicSystemSettings } from "./commerce.utils.js";
 import { ensureCoachProAnnualPlan } from "./coach-pro-plan.service.js";
+import { loadCoachAthleteInviteContext } from "./coach-athlete.service.js";
 
 function getWebAppOrigin() {
   const origins = env.WEB_ORIGIN.split(",")
@@ -138,6 +139,28 @@ async function loadPublicPost(id: string) {
 }
 
 export async function registerPublicRoutes(app: FastifyInstance) {
+  app.get("/public/coach-athlete-invite", async (request, reply) => {
+    const query = z.object({ token: z.string().min(10) }).parse(request.query);
+    try {
+      const invite = await loadCoachAthleteInviteContext(app, query.token);
+      return {
+        ok: true,
+        coachName: invite.coach.name,
+        organizationName: invite.organization.name,
+        unitName: invite.unit.name
+      };
+    } catch (error) {
+      const statusCode =
+        error && typeof error === "object" && "statusCode" in error && typeof error.statusCode === "number"
+          ? error.statusCode
+          : 400;
+      return reply.code(statusCode).send({
+        ok: false,
+        message: error instanceof Error ? error.message : "Convite inválido."
+      });
+    }
+  });
+
   app.get("/plans", async (request) => {
     const couponQuery = z.object({ coupon: z.string().trim().max(40).optional() }).parse(request.query ?? {});
     const explicitCoupon = couponQuery.coupon?.toUpperCase() || null;

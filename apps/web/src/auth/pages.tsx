@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, LogIn } from "lucide-react";
 import { ActivateView } from "../components/checkout/ActivateView";
 import { LoginView } from "../components/auth/LoginView";
+import { CoachAthleteInviteView } from "../components/auth/CoachAthleteInviteView";
 import { SubscriptionCheckoutShell } from "../components/checkout/SubscriptionCheckoutShell";
 import { AppDownloadSoonView } from "../components/home/AppDownloadSoonView";
 import { HomeView } from "../components/home/HomeView";
@@ -129,6 +130,30 @@ export function RefundPolicyPageRoute() {
   if (isTransitioning) return <TransitionScreen message={transitionMessage} />;
   if (user && token) return <Navigate to={homePathForRole(user.role)} replace />;
   return <RefundPolicyPage />;
+}
+
+export function CoachAthleteInvitePage() {
+  const { user, token, phase, transitionMessage } = useAuth();
+
+  if (phase === "restoring" || phase === "redirecting") {
+    return <TransitionScreen message={transitionMessage} />;
+  }
+
+  if (user && token) {
+    return <Navigate to={homePathForRole(user.role)} replace />;
+  }
+
+  return (
+    <SubscriptionCheckoutShell
+      eyebrow="Convite do coach"
+      title="Crie sua conta de aluno"
+      subtitle="Você será vinculado automaticamente ao coach que enviou este link."
+      backHref={paths.home}
+      backLabel="Voltar ao site"
+    >
+      <CoachAthleteInviteView />
+    </SubscriptionCheckoutShell>
+  );
 }
 
 export function LoginPage() {

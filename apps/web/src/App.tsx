@@ -2,7 +2,21 @@ import { useEffect, useLayoutEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { SoundProvider, useSoundEnabled as useLibrarySoundEnabled } from "react-sounds";
 import { AuthProvider } from "./auth/AuthContext";
-import { AdminPage, ActivatePage, CoachLandingPage, CoachPage, DownloadPage, HomePage, LoginPage, PrivacyPageRoute, RefundPolicyPageRoute, SharedPostRoute, StudentPage, TermsPageRoute } from "./auth/pages";
+import {
+  AdminPage,
+  ActivatePage,
+  CoachAthleteInvitePage,
+  CoachLandingPage,
+  CoachPage,
+  DownloadPage,
+  HomePage,
+  LoginPage,
+  PrivacyPageRoute,
+  RefundPolicyPageRoute,
+  SharedPostRoute,
+  StudentPage,
+  TermsPageRoute
+} from "./auth/pages";
 import { AuthenticatedRoute, GuestRoute, ProtectedRoute, RoleHomeRedirect, SessionGate } from "./auth/RouteGuards";
 import { paths } from "./auth/paths";
 import { applyDocumentTheme, useUiPrefsStore } from "./stores/uiPrefsStore";
@@ -26,6 +40,7 @@ const AppRoutes = () => (
 
         <Route element={<GuestRoute />}>
           <Route path={paths.login} element={<LoginPage />} />
+          <Route path={paths.conviteCoach} element={<CoachAthleteInvitePage />} />
         </Route>
 
         <Route path={paths.app} element={<RoleHomeRedirect />} />

@@ -49,6 +49,7 @@ export const paths = {
   coachLanding: "/para-coaches",
   coachPreview: "/coach?preview=coach",
   activate: "/ativar",
+  conviteCoach: "/convite-coach",
   app: "/app",
   sharedPost: "/p/:postId"
 } as const;
@@ -79,6 +80,7 @@ export function isGuestPath(pathname: string) {
     pathname === paths.activate ||
     pathname === paths.download ||
     pathname === paths.coachLanding ||
+    pathname === paths.conviteCoach ||
     pathname === paths.terms ||
     pathname === paths.privacy ||
     pathname === paths.refundPolicy ||

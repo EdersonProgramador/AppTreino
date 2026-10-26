@@ -155,6 +155,8 @@ export const ORG_ROLE_PERMISSIONS: Record<OrganizationMemberRole, readonly OrgPe
   ],
   COACH: [
     "athletes.view",
+    "athletes.create",
+    "athletes.link",
     "training.view",
     "training.create",
     "training.update",

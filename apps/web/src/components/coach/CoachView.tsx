@@ -4,8 +4,10 @@ import {
   ArrowLeft,
   CalendarDays,
   ClipboardList,
+  Copy,
   Dumbbell,
   Eye,
+  Link2,
   Loader2,
   LogOut,
   RefreshCw,
@@ -16,7 +18,7 @@ import {
   Wallet,
   LayoutGrid
 } from "lucide-react";
-import { apiGet, apiPost } from "../../api";
+import { ApiError, apiGet, apiPost } from "../../api";
 import { brand } from "../../lib/brand";
 import { assetUrl } from "../../lib/urls";
 import { paths } from "../../auth/paths";
@@ -143,7 +145,12 @@ export function CoachView({ token, userName, onLogout }: Props) {
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPhone, setRegPhone] = useState("");
+  const [regPassword, setRegPassword] = useState("");
   const [regUnitId, setRegUnitId] = useState("");
+  const [regMode, setRegMode] = useState<"manual" | "invite">("manual");
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -217,6 +224,59 @@ export function CoachView({ token, userName, onLogout }: Props) {
       setRegUnitId(selectedOrg.units[0].id);
     }
   }, [classUnitId, planUnitId, regUnitId, selectedOrg]);
+
+  const loadInviteLink = useCallback(async () => {
+    if (!selectedOrg || !regUnitId) {
+      setInviteError("Selecione a unidade antes de gerar o link.");
+      return;
+    }
+    setInviteLoading(true);
+    setInviteError(null);
+    try {
+      const payload = { organizationId: selectedOrg.id, unitId: regUnitId };
+      let data: { inviteUrl: string; inviteToken: string };
+      try {
+        data = await apiPost("/org/coach-athletes/invite-link", payload, token);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          data = await apiPost("/coach/managed-athletes/invite-link", payload, token);
+        } else {
+          throw err;
+        }
+      }
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const localInviteUrl = data.inviteToken
+        ? `${origin}/convite-coach?token=${encodeURIComponent(data.inviteToken)}`
+        : data.inviteUrl;
+      setInviteUrl(localInviteUrl || data.inviteUrl);
+      setFeedback("Link de convite gerado.");
+    } catch (err) {
+      let message = err instanceof Error ? err.message : "Não foi possível gerar o link.";
+      if (err instanceof ApiError && err.status === 402) {
+        message =
+          "Plano Coach ATLLY Profissional necessário (R$ 1.300/ano) para cadastrar alunos. Ative em Para Coaches.";
+      }
+      if (err instanceof ApiError && err.status === 404) {
+        message =
+          "Rota da API não encontrada. Reinicie a API local ou faça deploy da versão mais recente no Render.";
+      }
+      setInviteError(message);
+      setError(message);
+      setInviteUrl(null);
+    } finally {
+      setInviteLoading(false);
+    }
+  }, [regUnitId, selectedOrg, token]);
+
+  useEffect(() => {
+    if (regMode !== "invite") {
+      setInviteError(null);
+      return;
+    }
+    setInviteUrl(null);
+    if (!selectedOrg || !regUnitId) return;
+    void loadInviteLink();
+  }, [loadInviteLink, regMode, regUnitId, selectedOrg?.id]);
 
   const runAction = async (action: () => Promise<void>, successMessage: string) => {
     setBusy(true);
@@ -442,74 +502,156 @@ export function CoachView({ token, userName, onLogout }: Props) {
                 O aluno recebe apenas treinos exclusivos que você agenda e distribui — jornada fechada à sua operação.
               </p>
               <div className="coach-form-stack">
-                <label>
-                  Nome completo
-                  <input
-                    className="admin-input"
-                    placeholder="Nome do aluno"
-                    value={regName}
-                    onChange={(e) => setRegName(e.target.value)}
-                  />
-                </label>
-                <label>
-                  E-mail (opcional se tiver telefone)
-                  <input
-                    className="admin-input"
-                    type="email"
-                    placeholder="aluno@email.com"
-                    value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
-                  />
-                </label>
-                <label>
-                  Telefone (opcional se tiver e-mail)
-                  <input
-                    className="admin-input"
-                    placeholder="5511999999999"
-                    value={regPhone}
-                    onChange={(e) => setRegPhone(e.target.value)}
-                  />
-                </label>
-                <label>
-                  Unidade
-                  <select className="admin-input" value={regUnitId} onChange={(e) => setRegUnitId(e.target.value)}>
-                    {selectedOrg.units.map((unit) => (
-                      <option key={unit.id} value={unit.id}>
-                        {unit.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              <div className="activate-account-tabs mb-4" role="tablist" aria-label="Modo de cadastro">
                 <button
                   type="button"
-                  className="admin-primary-button"
-                  disabled={
-                    busy ||
-                    regName.trim().length < 2 ||
-                    !regUnitId ||
-                    (!regEmail.trim() && !regPhone.trim())
-                  }
-                  onClick={() =>
-                    void runAction(async () => {
-                      await apiPost(
-                        "/org/coach-athletes/register",
-                        {
-                          organizationId: selectedOrg.id,
-                          unitId: regUnitId,
-                          name: regName.trim(),
-                          email: regEmail.trim() || undefined,
-                          phone: regPhone.trim() || undefined
-                        },
-                        token
-                      );
-                      setRegName("");
-                      setRegEmail("");
-                      setRegPhone("");
-                    }, "Aluno cadastrado.")
-                  }
+                  role="tab"
+                  aria-selected={regMode === "manual"}
+                  className={regMode === "manual" ? "is-active" : undefined}
+                  onClick={() => setRegMode("manual")}
                 >
-                  Cadastrar aluno
+                  Cadastro manual
                 </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={regMode === "invite"}
+                  className={regMode === "invite" ? "is-active" : undefined}
+                  onClick={() => {
+                    setRegMode("invite");
+                    setInviteError(null);
+                    setInviteUrl(null);
+                  }}
+                >
+                  Link de convite
+                </button>
+              </div>
+              <label>
+                Unidade
+                <select className="admin-input" value={regUnitId} onChange={(e) => setRegUnitId(e.target.value)}>
+                  {selectedOrg.units.map((unit) => (
+                    <option key={unit.id} value={unit.id}>
+                      {unit.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {regMode === "manual" ? (
+                <div className="coach-form-stack">
+                  <label>
+                    Nome completo
+                    <input
+                      className="admin-input"
+                      placeholder="Nome do aluno"
+                      value={regName}
+                      onChange={(e) => setRegName(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    E-mail (opcional se tiver telefone)
+                    <input
+                      className="admin-input"
+                      type="email"
+                      placeholder="aluno@email.com"
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Telefone (opcional se tiver e-mail)
+                    <input
+                      className="admin-input"
+                      placeholder="5511999999999"
+                      value={regPhone}
+                      onChange={(e) => setRegPhone(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Senha inicial (repasse ao aluno)
+                    <input
+                      className="admin-input"
+                      type="password"
+                      minLength={6}
+                      autoComplete="new-password"
+                      placeholder="Mínimo 6 caracteres"
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="admin-primary-button"
+                    disabled={
+                      busy ||
+                      regName.trim().length < 2 ||
+                      !regUnitId ||
+                      regPassword.trim().length < 6 ||
+                      (!regEmail.trim() && !regPhone.trim())
+                    }
+                    onClick={() =>
+                      void runAction(async () => {
+                        await apiPost(
+                          "/org/coach-athletes/register",
+                          {
+                            organizationId: selectedOrg.id,
+                            unitId: regUnitId,
+                            name: regName.trim(),
+                            email: regEmail.trim() || undefined,
+                            phone: regPhone.trim() || undefined,
+                            initialPassword: regPassword.trim()
+                          },
+                          token
+                        );
+                        setRegName("");
+                        setRegEmail("");
+                        setRegPhone("");
+                        setRegPassword("");
+                      }, "Aluno cadastrado. Passe a senha inicial para ele entrar em /login.")
+                    }
+                  >
+                    Cadastrar aluno
+                  </button>
+                </div>
+              ) : (
+                <div className="coach-form-stack">
+                  <p className="text-sm text-sand-muted">
+                    Envie este link para o aluno criar a própria conta. Ele será vinculado automaticamente a você nesta
+                    unidade.
+                  </p>
+                  {inviteError ? <p className="coach-alert coach-alert--error">{inviteError}</p> : null}
+                  {inviteLoading ? (
+                    <p className="coach-empty">
+                      <Loader2 className="spin inline" size={16} /> Gerando link…
+                    </p>
+                  ) : inviteUrl ? (
+                    <>
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs break-all text-sand-muted">
+                        {inviteUrl}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="admin-primary-button"
+                          onClick={() =>
+                            void navigator.clipboard.writeText(inviteUrl).then(() => {
+                              setFeedback("Link copiado.");
+                            })
+                          }
+                        >
+                          <Copy size={16} /> Copiar link
+                        </button>
+                        <button type="button" className="outline-button compact-button" onClick={() => void loadInviteLink()}>
+                          <Link2 size={16} /> Atualizar link
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <button type="button" className="admin-primary-button" disabled={!regUnitId || inviteLoading} onClick={() => void loadInviteLink()}>
+                      Gerar link de convite
+                    </button>
+                  )}
+                </div>
+              )}
               </div>
             </article>
             <article className="coach-section">

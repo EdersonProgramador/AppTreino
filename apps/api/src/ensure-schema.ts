@@ -254,4 +254,14 @@ export async function ensureSchemaCompatibility() {
     CREATE INDEX IF NOT EXISTS "agenda_slots_organization_id_starts_at_status_idx"
       ON "agenda_slots"("organization_id", "starts_at", "status");
   `);
+
+  await prisma.$executeRawUnsafe(`
+    DO $$ BEGIN
+      CREATE TYPE "student_access_profile" AS ENUM ('PLATFORM_FULL', 'COACH_MANAGED');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "student_access_profile" "student_access_profile" NOT NULL DEFAULT 'PLATFORM_FULL';
+  `);
 }
