@@ -127,6 +127,7 @@ import { clearCheckoutIntent, readCheckoutIntent } from "../../lib/checkout-inte
 import { resolvePendingPaymentForSelectedPlan, paymentMatchesPlanPricing } from "../../lib/checkout-pending";
 import { pickPendingCheckoutPayment, syncCheckoutPaymentStatus } from "../../lib/checkout-payment-sync";
 import {
+  filterWorkoutsForCoachManagedAccess,
   hasStudentPortalAccess,
   hasStudentWorkoutAccess,
   hasValidActiveMembership,
@@ -496,16 +497,21 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       const workoutProgramsResponse = hasAccess
         ? await apiGet<StudentWorkoutProgramsResponse>(workoutProgramsPath, token)
         : { workouts: [] as StudentWorkoutProgramsResponse["workouts"] };
-      const firstPublishedWorkout = workoutProgramsResponse.workouts[0] ?? null;
+      const visibleWorkouts = filterWorkoutsForCoachManagedAccess(
+        workoutProgramsResponse.workouts,
+        profile,
+        membership
+      );
+      const firstPublishedWorkout = visibleWorkouts[0] ?? null;
       const restoredProgramId = selectedWorkoutProgramId ?? restoredPanel?.programId ?? null;
       const restoredWorkout = restoredProgramId
-        ? workoutProgramsResponse.workouts.find((item) => item.programId === restoredProgramId) ?? null
+        ? visibleWorkouts.find((item) => item.programId === restoredProgramId) ?? null
         : null;
 
       setProfile(profile);
       setMembership(membership);
       setPayments(payments);
-      setPublishedWorkouts(workoutProgramsResponse.workouts);
+      setPublishedWorkouts(visibleWorkouts);
       setTodayWorkout(restoredWorkout ?? firstPublishedWorkout);
       setCheckoutPayment(hasAccess ? null : pickPendingCheckoutPayment(payments));
 
@@ -1063,13 +1069,31 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     setSearchParams(cleaned, { replace: true });
   }, [searchParams, setSearchParams, catalogPlans]);
 
+  const redirectCoachManagedToSubscription = (message: string) => {
+    setError(message);
+    goToSection("subscription");
+  };
+
   const openTrainingCatalog = () => {
+    if (needsCoachManagedPlatformUpsell(profile, membership)) {
+      const coachWorkouts = filterWorkoutsForCoachManagedAccess(publishedWorkouts, profile, membership);
+      if (coachWorkouts.length === 0) {
+        redirectCoachManagedToSubscription(
+          "Assine o plano ATLLY para acessar treinos do catálogo. Treinos exclusivos do coach aparecem aqui quando publicados."
+        );
+        return;
+      }
+    }
     setSelectedWorkoutModality(null);
     setSelectedWorkoutProgramId(null);
     goToSection("training");
   };
 
   const openCorrida = () => {
+    if (needsCoachManagedPlatformUpsell(profile, membership)) {
+      redirectCoachManagedToSubscription("Assine o plano ATLLY para usar corrida, caminhada e ciclismo.");
+      return;
+    }
     setCorridaOpenKey((key) => key + 1);
     goToSection("activity");
   };
@@ -3311,7 +3335,23 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
         {studentSection === "club" && token && <StudentClubSection token={token} />}
 
-        {studentSection === "activity" && token && (
+        {studentSection === "activity" && token && coachManagedUpsell ? (
+          <section className="locked-content activate-locked-panel" aria-label="Corrida bloqueada">
+            <LockedOverlay onCheckout={() => goToSection("subscription")} />
+            <div className="section-heading locked-heading">
+              <span className="eyebrow">Plano ATLLY</span>
+              <h2>Corrida e outdoor</h2>
+              <p className="locked-heading-copy">
+                Sua conta veio do convite do coach. Para corrida, caminhada e ciclismo, assine o plano ATLLY na aba
+                Assinatura.
+              </p>
+            </div>
+            <button type="button" className="student-primary-button" onClick={() => goToSection("subscription")}>
+              Ver planos
+            </button>
+          </section>
+        ) : null}
+        {studentSection === "activity" && token && !coachManagedUpsell ? (
           <StudentActivitySection
             token={token}
             preferredSport="RUN"
@@ -3322,7 +3362,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             onPublished={() => goToSection("feed")}
             onLiveChromeChange={setActivityLiveChrome}
           />
-        )}
+        ) : null}
 
         {studentSection === "org" && token && authUser?.id && (
           <StudentOrgSection token={token} athleteId={authUser.id} />

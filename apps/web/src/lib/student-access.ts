@@ -26,8 +26,25 @@ export function hasStudentPortalAccess(
 ) {
   if (hasValidActiveMembership(membership)) return true;
   if (isCoachManagedStudent(profile) && profile?.enrollmentStatus === "ACTIVE") return true;
-  if (profile?.enrollmentStatus === "ACTIVE") return true;
+  if (
+    profile?.enrollmentStatus === "ACTIVE" &&
+    profile?.studentAccessProfile !== "COACH_MANAGED"
+  ) {
+    return true;
+  }
   return false;
+}
+
+export function isCoachOrgWorkoutSource(sourceType: string | null | undefined) {
+  return sourceType === "ORGANIZATION" || sourceType === "COACH";
+}
+
+/** Treinos ATLLY (catálogo plataforma) — exige assinatura se veio do coach. */
+export function filterWorkoutsForCoachManagedAccess<
+  T extends { sourceType?: string | null }
+>(workouts: T[], profile: Pick<StudentProfile, "studentAccessProfile" | "enrollmentStatus"> | null | undefined, membership: StudentMembershipRow | null | undefined) {
+  if (!needsCoachManagedPlatformUpsell(profile, membership)) return workouts;
+  return workouts.filter((item) => isCoachOrgWorkoutSource(item.sourceType));
 }
 
 /** Catálogo ATLLY + corrida exigem assinatura B2C (coach-managed não inclui por padrão). */

@@ -894,6 +894,7 @@ export async function getPublishedWorkouts(
       return {
         programId: programDay.program.id,
         programTitle: programDay.program.title,
+        sourceType: programDay.program.sourceType,
         assignmentId: assignment.id,
         dayNumber: currentDay,
         totalDays: assignment.program.days.length,

@@ -2,7 +2,11 @@ import { PLAN_FEATURE_KEYS, type PlanFeatureKey } from "@app-treino/shared";
 import { isPlatformAdminUser } from "../../auth.js";
 import { prisma } from "../../prisma.js";
 import { validActiveMembershipWhere } from "../membership.utils.js";
-import { coachManagedFeatureKeys, isCoachManagedAthlete } from "../student-access.utils.js";
+import {
+  coachManagedFeatureKeys,
+  isCoachManagedAthlete,
+  readStudentAccessProfile
+} from "../student-access.utils.js";
 
 async function listMembershipPlanFeatures(
   userId: string,
@@ -63,8 +67,12 @@ export async function listUserPlanFeatures(userId: string): Promise<PlanFeatureK
     return [];
   }
 
+  const accessProfile = readStudentAccessProfile(user);
+  const adminEnrollmentWithoutMembership =
+    user.enrollmentStatus === "ACTIVE" && accessProfile === "PLATFORM_FULL";
+
   return listMembershipPlanFeatures(userId, {
-    grantAllWhenNoMembership: user.enrollmentStatus === "ACTIVE",
+    grantAllWhenNoMembership: adminEnrollmentWithoutMembership,
     grantAllWhenPlanHasNoFeatures: true
   });
 }
