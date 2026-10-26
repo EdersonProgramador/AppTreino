@@ -28513,6 +28513,66 @@ html.light .student-app-shell .student-hero-card {
   margin-top: 0.25rem;
 }
 
+.login-form-row-split {
+  display: grid;
+  gap: 0.875rem;
+}
+
+@media (min-width: 520px) {
+  .login-form-row-split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.login-form--command .login-field-hint {
+  margin: -0.35rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #8a98ae;
+}
+
+.login-consent-block {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1rem;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.login-form--command .login-consent-block__title {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: #ecf2fa;
+}
+
+.login-form--command .login-consent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #b8c4d4;
+  cursor: pointer;
+}
+
+.login-form--command .login-consent-row input[type="checkbox"] {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+  accent-color: #d4af37;
+}
+
+.login-form--command .login-consent-row a {
+  color: #e8c547;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.login-form--command .login-consent-row a:hover {
+  text-decoration: underline;
+}
+
 .login-form--command .login-field-caption {
   color: #ecf2fa;
   font-size: 0.8125rem;

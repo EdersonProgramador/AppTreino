@@ -1,5 +1,5 @@
-import { Loader2 } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { Loader2, UserPlus } from "lucide-react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../../api";
 import { paths } from "../../auth/paths";
@@ -13,6 +13,10 @@ type InvitePreview = {
   organizationName: string;
   unitName: string;
 };
+
+function InvitePanelShell({ children }: { children: ReactNode }) {
+  return <section className="activate-funnel-panel login-command-panel">{children}</section>;
+}
 
 export function CoachAthleteInviteView() {
   const [searchParams] = useSearchParams();
@@ -31,9 +35,7 @@ export function CoachAthleteInviteView() {
       return;
     }
     let cancelled = false;
-    void apiGet<InvitePreview>(
-      `/public/coach-athlete-invite?token=${encodeURIComponent(token)}`
-    )
+    void apiGet<InvitePreview>(`/public/coach-athlete-invite?token=${encodeURIComponent(token)}`)
       .then((data) => {
         if (cancelled) return;
         if (!data?.ok) {
@@ -68,6 +70,12 @@ export function CoachAthleteInviteView() {
     const acceptTerms = form.get("acceptTerms") === "on";
     const acceptPrivacy = form.get("acceptPrivacy") === "on";
 
+    if (!email && !phone) {
+      setError("Informe e-mail ou telefone para criar sua conta.");
+      setSubmitting(false);
+      return;
+    }
+
     if (!acceptTerms || !acceptPrivacy) {
       setError("Aceite os termos e a política de privacidade.");
       setSubmitting(false);
@@ -75,18 +83,18 @@ export function CoachAthleteInviteView() {
     }
 
     try {
-      const response = await apiPost<{ token: string; user: { id: string; name: string; email: string; role: string } }>(
-        "/auth/register-coach-athlete",
-        {
-          inviteToken: token,
-          name,
-          email: email || undefined,
-          phone: phone || undefined,
-          password,
-          acceptTerms: true,
-          acceptPrivacy: true
-        }
-      );
+      const response = await apiPost<{
+        token: string;
+        user: { id: string; name: string; email: string; role: string };
+      }>("/auth/register-coach-athlete", {
+        inviteToken: token,
+        name,
+        email: email || undefined,
+        phone: phone || undefined,
+        password,
+        acceptTerms: true,
+        acceptPrivacy: true
+      });
       const store = useAuthStore.getState();
       store.beginSignIn();
       let destination = store.establishSession(response);
@@ -107,68 +115,126 @@ export function CoachAthleteInviteView() {
 
   if (loadingPreview) {
     return (
-      <div className="login-form login-form--command grid min-h-[240px] place-items-center">
-        <Loader2 className="spin text-brand-gold" size={28} />
-      </div>
+      <InvitePanelShell>
+        <div className="login-form login-form--command grid min-h-[280px] place-items-center">
+          <Loader2 className="animate-spin text-brand-gold" size={28} aria-label="Carregando convite" />
+        </div>
+      </InvitePanelShell>
     );
   }
 
   if (previewError || !preview) {
     return (
-      <div className="login-form login-form--command">
+      <InvitePanelShell>
+        <header className="login-command-panel__head">
+          <span className="home-telemetry-label">Convite</span>
+          <h2 className="login-command-panel__title">Link indisponível</h2>
+        </header>
         <p className="ui-error login-feedback">{previewError ?? "Convite inválido."}</p>
-        <Link to={paths.login} className="mt-4 inline-block text-sm font-bold text-brand-gold no-underline">
+        <Link to={paths.login} className="login-command-panel__activate-link no-underline">
           Ir para entrar
         </Link>
-      </div>
+      </InvitePanelShell>
     );
   }
 
   return (
-    <form className="login-form login-form--command" onSubmit={(e) => void handleSubmit(e)}>
-      <p className="login-form-lead text-sm text-sand-muted">
-        Você foi convidado por <strong className="text-sand">{preview.coachName}</strong> (
-        {preview.organizationName} · {preview.unitName}). Crie sua conta para receber treinos exclusivos do seu coach.
-      </p>
-      <label>
-        Nome completo
-        <input className="admin-input" name="name" required minLength={2} autoComplete="name" />
-      </label>
-      <label>
-        E-mail
-        <input className="admin-input" type="email" name="email" autoComplete="email" placeholder="Opcional se usar telefone" />
-      </label>
-      <label>
-        Telefone
-        <input className="admin-input" name="phone" autoComplete="tel" placeholder="Opcional se usar e-mail" />
-      </label>
-      <label>
-        Senha
-        <input className="admin-input" type="password" name="password" required minLength={6} autoComplete="new-password" />
-      </label>
-      <label className="login-consent-row">
-        <input type="checkbox" name="acceptTerms" required />
-        <span>
-          Li e aceito os{" "}
-          <Link to={paths.terms} target="_blank" rel="noreferrer">
-            Termos de Uso
-          </Link>{" "}
-          da {brand.name}
-        </span>
-      </label>
-      <label className="login-consent-row">
-        <input type="checkbox" name="acceptPrivacy" required />
-        <span>
-          Li e aceito a{" "}
-          <Link to={paths.privacy} target="_blank" rel="noreferrer">
-            Política de Privacidade
+    <InvitePanelShell>
+      <header className="login-command-panel__head">
+        <span className="home-telemetry-label">{preview.organizationName}</span>
+        <h2 className="login-command-panel__title">Conta de aluno</h2>
+        <p className="login-command-panel__copy">
+          Convite de <strong>{preview.coachName}</strong> · {preview.unitName}. Use e-mail ou telefone e defina uma
+          senha para acessar treinos exclusivos do seu coach.
+        </p>
+      </header>
+
+      <form className="login-form login-form--command" onSubmit={(e) => void handleSubmit(e)}>
+        <label className="ui-label login-field">
+          <span className="login-field-caption">Nome completo</span>
+          <input
+            className="ui-input"
+            name="name"
+            required
+            minLength={2}
+            autoComplete="name"
+            placeholder="Como aparece no perfil"
+          />
+        </label>
+
+        <div className="login-form-row-split">
+          <label className="ui-label login-field">
+            <span className="login-field-caption">E-mail</span>
+            <input
+              className="ui-input"
+              type="email"
+              name="email"
+              autoComplete="email"
+              placeholder="seu@email.com"
+            />
+          </label>
+          <label className="ui-label login-field">
+            <span className="login-field-caption">Telefone</span>
+            <input className="ui-input" name="phone" type="tel" autoComplete="tel" placeholder="(00) 00000-0000" />
+          </label>
+        </div>
+        <p className="login-field-hint">Informe e-mail ou telefone (pelo menos um).</p>
+
+        <label className="ui-label login-field">
+          <span className="login-field-caption">Senha</span>
+          <input
+            className="ui-input"
+            type="password"
+            name="password"
+            required
+            minLength={6}
+            autoComplete="new-password"
+            placeholder="Mínimo 6 caracteres"
+          />
+        </label>
+
+        <div className="login-consent-block">
+          <span className="login-consent-block__title">Consentimento (LGPD)</span>
+          <label className="login-consent-row">
+            <input type="checkbox" name="acceptTerms" required />
+            <span>
+              Li e aceito os{" "}
+              <Link to={paths.terms} target="_blank" rel="noreferrer">
+                Termos de Uso
+              </Link>{" "}
+              da {brand.name}.
+            </span>
+          </label>
+          <label className="login-consent-row">
+            <input type="checkbox" name="acceptPrivacy" required />
+            <span>
+              Li e aceito a{" "}
+              <Link to={paths.privacy} target="_blank" rel="noreferrer">
+                Política de Privacidade
+              </Link>
+              .
+            </span>
+          </label>
+        </div>
+
+        {error ? <div className="ui-error login-feedback">{error}</div> : null}
+
+        <button
+          type="submit"
+          className={`ui-btn-primary login-submit-button${submitting ? " is-loading" : ""}`}
+          disabled={submitting}
+        >
+          {submitting ? <Loader2 className="animate-spin" size={18} /> : <UserPlus size={18} />}
+          <span>Criar conta e entrar</span>
+        </button>
+
+        <p className="login-command-panel__activate">
+          Já tem conta?{" "}
+          <Link className="login-command-panel__activate-link" to={paths.login}>
+            Entrar
           </Link>
-        </span>
-      </label>
-      {error ? <div className="ui-error login-feedback">{error}</div> : null}
-      <button type="submit" className="ui-btn-primary w-full" disabled={submitting}>
-        {submitting ? <Loader2 className="spin" size={18} /> : "Criar conta e entrar"}
-      </button>
-    </form>
+        </p>
+      </form>
+    </InvitePanelShell>
   );
 }
