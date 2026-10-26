@@ -7609,6 +7609,83 @@ html.light .finance-hub-tabs button {
   max-width: 7.5rem;
 }
 
+.student-training-source-legend {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  background: var(--app-fill);
+  text-align: left;
+}
+
+.student-training-source-legend.is-compact {
+  margin-top: 0.5rem;
+  padding: 0.65rem 0.85rem;
+}
+
+.student-training-source-legend__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.student-training-source-legend__copy {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--app-text-muted);
+  text-align: center;
+}
+
+.student-workout-source-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.22rem 0.55rem;
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.student-workout-source-badge.is-coach {
+  background: rgba(105, 225, 172, 0.16);
+  color: #0d5c45;
+  border: 1px solid rgba(16, 120, 88, 0.35);
+}
+
+.student-workout-source-badge.is-platform {
+  background: rgba(212, 175, 55, 0.14);
+  color: #8a5a12;
+  border: 1px solid rgba(168, 106, 16, 0.38);
+}
+
+.student-modality-source-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.student-program-card-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 0.65rem;
+}
+
+.student-program-card-title-row h2 {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .student-modality-list {
   display: grid;
   gap: 14px;

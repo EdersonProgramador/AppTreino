@@ -2785,16 +2785,39 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const totalWorkoutDays = consistency?.totalWorkoutDays ?? totalWorkoutGoalFromPrograms ?? totalWorkoutDaysFromPrograms;
   const workoutsCompleted = Math.min(consistency?.completedWorkoutCount ?? 0, totalWorkoutDays);
   const workoutProgressPercent = Math.min(100, Math.round((workoutsCompleted / Math.max(totalWorkoutDays, 1)) * 100));
-  const publishedModalities = useMemo(
-    () =>
-      Array.from(new Set(publishedWorkouts.map((item) => item.modality ?? "Hipertrofia"))).map((modality) => ({
-        modality,
-        count: publishedWorkouts.filter((item) => (item.modality ?? "Hipertrofia") === modality).length,
-        imageUrl:
-          publishedWorkouts.find((item) => (item.modality ?? "Hipertrofia") === modality)?.modalityImageUrl ?? null
-      })),
+  const trainingSourceCounts = useMemo(
+    () => ({
+      platform: publishedWorkouts.filter((item) => !isCoachOrgWorkoutSource(item.sourceType)).length,
+      coach: publishedWorkouts.filter((item) => isCoachOrgWorkoutSource(item.sourceType)).length
+    }),
     [publishedWorkouts]
   );
+  const showTrainingSourceLegend =
+    trainingSourceCounts.platform > 0 || trainingSourceCounts.coach > 0;
+  const publishedModalities = useMemo(
+    () =>
+      Array.from(new Set(publishedWorkouts.map((item) => item.modality ?? "Hipertrofia"))).map((modality) => {
+        const modalityWorkouts = publishedWorkouts.filter(
+          (item) => (item.modality ?? "Hipertrofia") === modality
+        );
+        return {
+          modality,
+          count: modalityWorkouts.length,
+          platformCount: modalityWorkouts.filter((item) => !isCoachOrgWorkoutSource(item.sourceType)).length,
+          coachCount: modalityWorkouts.filter((item) => isCoachOrgWorkoutSource(item.sourceType)).length,
+          imageUrl: modalityWorkouts.find((item) => item.modalityImageUrl)?.modalityImageUrl ?? null
+        };
+      }),
+    [publishedWorkouts]
+  );
+  const renderWorkoutSourceBadge = (sourceType?: string | null) => {
+    const isCoach = isCoachOrgWorkoutSource(sourceType);
+    return (
+      <span className={`student-workout-source-badge${isCoach ? " is-coach" : " is-platform"}`}>
+        {isCoach ? "Treino do coach" : "Catálogo ATLLY"}
+      </span>
+    );
+  };
   const modalityWorkouts = selectedWorkoutModality
     ? publishedWorkouts.filter((item) => (item.modality ?? "Hipertrofia") === selectedWorkoutModality)
     : [];
@@ -3764,6 +3787,23 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   <span>{trainingCopy.workout}</span>
                   <h1>{trainingCopy.modalities}</h1>
                   <p>{publishedModalities.length > 0 ? trainingCopy.pickModality : trainingCopy.noWorkoutsHint}</p>
+                  {showTrainingSourceLegend ? (
+                    <div className="student-training-source-legend" role="note">
+                      <div className="student-training-source-legend__badges">
+                        {trainingSourceCounts.coach > 0
+                          ? renderWorkoutSourceBadge("COACH")
+                          : null}
+                        {trainingSourceCounts.platform > 0
+                          ? renderWorkoutSourceBadge("PLATFORM")
+                          : null}
+                      </div>
+                      <p className="student-training-source-legend__copy">
+                        {coachManagedUpsell
+                          ? "Treinos do coach seguem liberados; catálogo ATLLY exige assinatura individual."
+                          : "Identifique a origem de cada programa antes de abrir o treino."}
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
                 <StudentWeatherChip weather={trainingWeather} sport="WORKOUT" compact />
 
@@ -3789,6 +3829,20 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                         <span className="student-modality-copy">
                           <strong>{item.modality}</strong>
                           <small>{trainingCopy.workoutsCount(item.count)}</small>
+                          {item.platformCount > 0 || item.coachCount > 0 ? (
+                            <span className="student-modality-source-tags">
+                              {item.coachCount > 0 ? (
+                                <span className="student-workout-source-badge is-coach">
+                                  {item.coachCount} coach
+                                </span>
+                              ) : null}
+                              {item.platformCount > 0 ? (
+                                <span className="student-workout-source-badge is-platform">
+                                  {item.platformCount} ATLLY
+                                </span>
+                              ) : null}
+                            </span>
+                          ) : null}
                         </span>
                       </button>
                     ))}
@@ -3824,6 +3878,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   <span>{selectedWorkoutModality}</span>
                   <h1>{trainingCopy.modalityWorkoutsHeading}</h1>
                   <p>{trainingCopy.pickWorkout}</p>
+                  {showTrainingSourceLegend ? (
+                    <div className="student-training-source-legend is-compact" role="note">
+                      <div className="student-training-source-legend__badges">
+                        {renderWorkoutSourceBadge("COACH")}
+                        {renderWorkoutSourceBadge("PLATFORM")}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
                 <StudentWeatherChip weather={trainingWeather} sport="WORKOUT" compact />
 
@@ -3877,7 +3939,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                                 }
                               }}
                             >
-                              <h2>{programWorkout.programTitle}</h2>
+                              <div className="student-program-card-title-row">
+                                <h2>{programWorkout.programTitle}</h2>
+                                {renderWorkoutSourceBadge(programWorkout.sourceType)}
+                              </div>
                               <p>
                                 {focus} · {trainingCopy.sessionsDone(done, total)}
                                 {cycleCompleted
