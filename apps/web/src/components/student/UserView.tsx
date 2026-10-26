@@ -238,6 +238,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [socialMenuOpen, setSocialMenuOpen] = useState(false);
+  const [profileAvatarBroken, setProfileAvatarBroken] = useState(false);
   const [corridaOpenKey, setCorridaOpenKey] = useState(0);
   const [studentLocations, setStudentLocations] = useState<StudentLocationRow[]>([]);
   const [studentAvatarPreview, setStudentAvatarPreview] = useState<string | null>(null);
@@ -375,6 +376,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   }, [studentSection]);
 
   useEffect(() => {
+    setProfileAvatarBroken(false);
+  }, [profile?.avatarUrl]);
+
+  useEffect(() => {
     if (!socialMenuOpen) return;
     function onDocClick(event: MouseEvent) {
       const target = event.target;
@@ -385,6 +390,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [socialMenuOpen]);
+
+  const closeSocialMenu = useCallback(() => {
+    setSocialMenuOpen(false);
+    uiSounds.popupClose();
+  }, []);
 
   useEffect(() => {
     if (!success) return;
@@ -3065,18 +3075,27 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 });
               }}
             >
-              {profile?.avatarUrl ? (
-                <img src={mediaUrl(profile.avatarUrl)} alt="" />
+              {profile?.avatarUrl && !profileAvatarBroken ? (
+                <img
+                  src={mediaUrl(profile.avatarUrl)}
+                  alt=""
+                  onError={() => setProfileAvatarBroken(true)}
+                />
               ) : (
                 <UserRound size={28} />
               )}
             </button>
             {socialMenuOpen && (
               <section className="student-social-menu student-timeline-menu" aria-label="Menu da Timeline">
+                <div className="student-timeline-menu-accent" aria-hidden="true" />
                 <header className="student-timeline-menu-head">
                   <div className="student-timeline-menu-user">
-                    {profile?.avatarUrl ? (
-                      <img src={mediaUrl(profile.avatarUrl)} alt="" />
+                    {profile?.avatarUrl && !profileAvatarBroken ? (
+                      <img
+                        src={mediaUrl(profile.avatarUrl)}
+                        alt=""
+                        onError={() => setProfileAvatarBroken(true)}
+                      />
                     ) : (
                       <UserRound size={22} />
                     )}
@@ -3088,12 +3107,15 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                       </span>
                     </div>
                   </div>
-                  <button type="button" className="student-timeline-menu-org" onClick={() => { setSocialMenuOpen(false); goToSection("org"); }}>
-                    <span>Você está em</span>
-                    <strong>{studentLocations[0]?.name ?? "Minha organização"}</strong>
-                    <ChevronRight size={16} />
+                  <button type="button" className="student-timeline-menu-org" onClick={() => { closeSocialMenu(); goToSection("org"); }}>
+                    <div className="student-timeline-menu-org-copy">
+                      <span>Você está em</span>
+                      <strong>{studentLocations[0]?.name ?? "Minha organização"}</strong>
+                    </div>
+                    <ChevronRight size={16} aria-hidden />
                   </button>
                 </header>
+                <div className="student-timeline-menu-body">
                 {(
                   [
                     { label: "Início", icon: Home, action: () => goToSection("feed") },
@@ -3127,7 +3149,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                     type="button"
                     className="student-social-menu-item"
                     onClick={() => {
-                      setSocialMenuOpen(false);
+                      closeSocialMenu();
                       uiSounds.itemSelect();
                       item.action();
                     }}
@@ -3140,7 +3162,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   type="button"
                   className="student-social-menu-item is-danger"
                   onClick={() => {
-                    setSocialMenuOpen(false);
+                    closeSocialMenu();
                     uiSounds.toggleOff();
                     onLogout();
                   }}
@@ -3148,6 +3170,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                   <LogOut size={18} strokeWidth={2} />
                   <span>Sair</span>
                 </button>
+                </div>
               </section>
             )}
           </div>

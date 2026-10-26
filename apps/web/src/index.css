@@ -6184,6 +6184,7 @@ html.light .finance-hub-tabs button {
   left: auto;
   z-index: 50;
   isolation: isolate;
+  overflow: visible;
   flex: 0 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -6309,12 +6310,13 @@ html.light .finance-hub-tabs button {
   border: 3px solid rgba(255, 255, 255, 0.82);
   border-radius: 50%;
   background: rgba(212, 175, 55, 0.16);
-  color: inherit;
+  color: #fff;
   cursor: pointer;
 }
 
 .student-avatar-menu-wrap {
   position: relative;
+  z-index: 80;
 }
 
 .student-social-menu {
@@ -6334,10 +6336,10 @@ html.light .finance-hub-tabs button {
   color: var(--app-text);
 }
 
-.student-app-header .student-social-menu,
-.student-app-header .student-social-menu-item,
-.student-app-header .student-social-menu-item span,
-.student-app-header .student-social-menu-item svg {
+.student-app-header .student-social-menu:not(.student-timeline-menu),
+.student-app-header .student-social-menu:not(.student-timeline-menu) .student-social-menu-item,
+.student-app-header .student-social-menu:not(.student-timeline-menu) .student-social-menu-item span,
+.student-app-header .student-social-menu:not(.student-timeline-menu) .student-social-menu-item svg {
   color: var(--app-text) !important;
 }
 
@@ -6395,7 +6397,8 @@ html.light .finance-hub-tabs button {
   display: block;
 }
 
-.student-app-header strong {
+.student-app-header .student-header-brand strong,
+.student-app-header .student-streak-button strong {
   display: block;
   overflow: hidden;
   font-size: var(--st-title-sm);
@@ -6405,7 +6408,8 @@ html.light .finance-hub-tabs button {
   white-space: nowrap;
 }
 
-.student-app-header span {
+.student-app-header .student-header-brand span,
+.student-app-header .student-streak-button span {
   display: block;
   margin-top: 2px;
   font-size: var(--st-sm);
@@ -18703,23 +18707,83 @@ html.light .student-header-search button[type="submit"] {
 }
 
 /* Notificações (dropdown): texto escuro no Claro — não herdar branco do header */
-html.light .student-social-menu,
-html.light .student-app-header .student-social-menu {
+html.light .student-social-menu:not(.student-timeline-menu),
+html.light .student-app-header .student-social-menu:not(.student-timeline-menu) {
   background: #ffffff !important;
   border-color: rgba(21, 26, 34, 0.12) !important;
   color: #0e1116 !important;
 }
 
-html.light .student-app-header .student-social-menu-item,
-html.light .student-app-header .student-social-menu-item span,
-html.light .student-app-header .student-social-menu-item svg {
+html.light .student-app-header .student-social-menu:not(.student-timeline-menu) .student-social-menu-item,
+html.light .student-app-header .student-social-menu:not(.student-timeline-menu) .student-social-menu-item span,
+html.light .student-app-header .student-social-menu:not(.student-timeline-menu) .student-social-menu-item svg {
   color: #0e1116 !important;
 }
 
-html.light .student-app-header .student-social-menu-item.is-danger,
-html.light .student-app-header .student-social-menu-item.is-danger span,
-html.light .student-app-header .student-social-menu-item.is-danger svg {
+html.light .student-app-header .student-social-menu:not(.student-timeline-menu) .student-social-menu-item.is-danger,
+html.light .student-app-header .student-social-menu:not(.student-timeline-menu) .student-social-menu-item.is-danger span,
+html.light .student-app-header .student-social-menu:not(.student-timeline-menu) .student-social-menu-item.is-danger svg {
   color: #c0392b !important;
+}
+
+html.light .student-social-menu.student-timeline-menu,
+html.light .student-app-header .student-social-menu.student-timeline-menu {
+  background: #ffffff !important;
+  border-color: rgba(21, 26, 34, 0.12) !important;
+  color: #0e1116 !important;
+  box-shadow: 0 18px 40px rgba(21, 26, 34, 0.14) !important;
+}
+
+html.light .student-timeline-menu-head {
+  border-bottom-color: rgba(21, 26, 34, 0.08) !important;
+}
+
+html.light .student-timeline-menu-user img,
+html.light .student-timeline-menu-user svg {
+  background: rgba(21, 26, 34, 0.06) !important;
+  color: #44403a !important;
+}
+
+html.light .student-timeline-menu-user strong,
+html.light .student-timeline-menu-org strong {
+  color: #0e1116 !important;
+}
+
+html.light .student-timeline-menu-user span,
+html.light .student-timeline-menu-org span {
+  color: #44403a !important;
+}
+
+html.light .student-timeline-menu-org {
+  background: rgba(212, 175, 55, 0.12) !important;
+  border-color: rgba(212, 175, 55, 0.35) !important;
+  color: #0e1116 !important;
+}
+
+html.light .student-timeline-menu .student-social-menu-item,
+html.light .student-timeline-menu .student-social-menu-item span {
+  color: #0e1116 !important;
+}
+
+html.light .student-timeline-menu .student-social-menu-item svg {
+  color: #9a7b1a !important;
+}
+
+html.light .student-timeline-menu .student-social-menu-item:hover {
+  background: rgba(212, 175, 55, 0.14) !important;
+}
+
+html.light .student-timeline-menu .student-social-menu-item.is-danger,
+html.light .student-timeline-menu .student-social-menu-item.is-danger span,
+html.light .student-timeline-menu .student-social-menu-item.is-danger svg {
+  color: #c0392b !important;
+  border-top-color: rgba(21, 26, 34, 0.1) !important;
+}
+
+html.light .student-app-shell .student-timeline-menu .student-social-menu-item span,
+html.light .student-app-shell .student-timeline-menu .student-timeline-menu-user span,
+html.light .student-app-shell .student-timeline-menu .student-timeline-menu-org span {
+  color: inherit !important;
 }
 
 html.light .student-notification-panel,
@@ -19447,7 +19511,8 @@ html.light article.student-info-card input {
   line-height: var(--st-lh-snug);
 }
 
-.student-app-shell .student-app-header span,
+.student-app-shell .student-app-header .student-brand-copy span,
+.student-app-shell .student-app-header .student-streak-button span,
 .student-app-shell .student-bottom-nav button,
 .student-app-shell .student-payment-card-body span,
 .student-app-shell .student-calendar-weekdays span {
@@ -30206,26 +30271,61 @@ html.light .activate-page.home-command .activate-billing-field select {
   }
 }
 
-.student-timeline-menu {
-  width: min(280px, calc(100vw - 24px));
-  padding: 0;
-  overflow: hidden;
-  border: 0;
-  background: linear-gradient(165deg, #6b2d9e 0%, #5a2490 48%, #4a1d78 100%);
-  color: #fff;
+.student-social-menu.student-timeline-menu {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  width: min(260px, calc(100vw - 32px));
+  min-width: 0;
+  max-height: min(70vh, 520px);
+  padding: 0 0 6px 5px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid rgba(21, 26, 34, 0.12);
+  background: #ffffff;
+  color: #0e1116;
+  box-shadow: 0 18px 40px rgba(21, 26, 34, 0.14);
+  z-index: 90;
+  scrollbar-color: rgba(21, 26, 34, 0.28) rgba(21, 26, 34, 0.06);
+}
+
+.student-timeline-menu-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px 8px 0;
+}
+
+.student-timeline-menu-accent {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  border-radius: 16px 0 0 16px;
+  background: linear-gradient(180deg, #f0d882 0%, #d4af37 45%, #9a7b1a 100%);
+  pointer-events: none;
 }
 
 .student-timeline-menu-head {
   display: grid;
+  flex-shrink: 0;
   gap: 12px;
   padding: 14px 14px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  border-bottom: 1px solid rgba(21, 26, 34, 0.08);
 }
 
 .student-timeline-menu-user {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+}
+
+.student-timeline-menu-user > div {
+  flex: 1;
+  min-width: 0;
 }
 
 .student-timeline-menu-user img,
@@ -30234,58 +30334,107 @@ html.light .activate-page.home-command .activate-billing-field select {
   height: 44px;
   border-radius: 50%;
   object-fit: cover;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(21, 26, 34, 0.06);
+  color: #44403a;
 }
 
 .student-timeline-menu-user strong {
   display: block;
+  overflow: visible;
   font-size: 15px;
-  color: #fff;
+  font-weight: 800;
+  line-height: 1.25;
+  white-space: normal;
+  text-overflow: unset;
+  color: #0e1116;
 }
 
 .student-timeline-menu-user span {
   display: block;
+  margin-top: 2px;
   font-size: 12px;
-  opacity: 0.9;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: normal;
+  color: #44403a;
 }
 
 .student-timeline-menu-org {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
+  box-sizing: border-box;
   padding: 10px 12px;
-  border: 0;
+  border: 1px solid rgba(212, 175, 55, 0.35);
   border-radius: 12px;
-  background: rgba(0, 0, 0, 0.12);
-  color: #fff;
+  background: rgba(212, 175, 55, 0.12);
+  color: #0e1116;
   text-align: left;
   cursor: pointer;
 }
 
+.student-timeline-menu-org-copy {
+  flex: 1;
+  min-width: 0;
+}
+
 .student-timeline-menu-org span {
+  display: block;
+  margin-top: 0;
   font-size: 11px;
-  opacity: 0.85;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+  color: #44403a;
 }
 
 .student-timeline-menu-org strong {
-  flex: 1;
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
   font-size: 13px;
-  color: #fff;
+  font-weight: 800;
+  line-height: 1.25;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #0e1116;
 }
 
 .student-timeline-menu .student-social-menu-item {
-  color: #fff !important;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  color: #0e1116 !important;
   border-radius: 10px;
 }
 
+.student-timeline-menu .student-social-menu-item svg {
+  flex-shrink: 0;
+  color: #9a7b1a !important;
+}
+
 .student-timeline-menu .student-social-menu-item:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(212, 175, 55, 0.16);
 }
 
 .student-timeline-menu .student-social-menu-item.is-danger {
-  border-top-color: rgba(255, 255, 255, 0.2);
-  color: #ffd5d5 !important;
+  border-top-color: rgba(21, 26, 34, 0.1);
+  color: #c0392b !important;
+}
+
+.student-timeline-menu .student-social-menu-item.is-danger span,
+.student-timeline-menu .student-social-menu-item.is-danger svg {
+  color: #c0392b !important;
+}
+
+.student-app-shell .student-timeline-menu .student-social-menu-item span,
+.student-app-shell .student-timeline-menu .student-timeline-menu-user span,
+.student-app-shell .student-timeline-menu .student-timeline-menu-org span {
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit !important;
 }
 
 .student-app-scroll:has(> .student-agenda) {

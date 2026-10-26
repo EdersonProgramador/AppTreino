@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Clock, Info, MapPin, Users } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiDelete, apiGet, apiPost } from "../../api";
 
 const WEEKDAY_LABELS = ["D", "S", "T", "Q", "Q", "S", "S"] as const;
@@ -74,6 +74,10 @@ export function StudentAgendaSection({ token, onSuccess, onError }: Props) {
   const [slots, setSlots] = useState<AgendaSlotRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const onSuccessRef = useRef(onSuccess);
+  const onErrorRef = useRef(onError);
+  onSuccessRef.current = onSuccess;
+  onErrorRef.current = onError;
 
   const weekDays = useMemo(
     () => WEEKDAY_LABELS.map((label, index) => {
@@ -88,22 +92,25 @@ export function StudentAgendaSection({ token, onSuccess, onError }: Props) {
     return mid.toLocaleDateString("pt-BR", { month: "long" });
   }, [weekAnchor]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await apiGet<{ slots: AgendaSlotRow[] }>(`/user/agenda/slots?date=${selectedDate}`, token);
-      setSlots(data.slots);
-    } catch (err) {
-      onError?.(err instanceof Error ? err.message : "Não foi possível carregar a agenda.");
-      setSlots([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [onError, selectedDate, token]);
+  const fetchSlots = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!opts?.silent) setLoading(true);
+      try {
+        const data = await apiGet<{ slots: AgendaSlotRow[] }>(`/user/agenda/slots?date=${selectedDate}`, token);
+        setSlots(data.slots);
+      } catch (err) {
+        onErrorRef.current?.(err instanceof Error ? err.message : "Não foi possível carregar a agenda.");
+        setSlots([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [selectedDate, token]
+  );
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void fetchSlots();
+  }, [fetchSlots]);
 
   const book = async (slot: AgendaSlotRow) => {
     setBusyId(slot.id);
@@ -118,12 +125,12 @@ export function StudentAgendaSection({ token, onSuccess, onError }: Props) {
         };
       }>("/user/agenda/bookings", { slotId: slot.id }, token);
       const c = res.confirmation;
-      onSuccess?.(
+      onSuccessRef.current?.(
         `Reserva confirmada: ${c.trainingType} · ${formatTimeRange(c.startsAt, c.endsAt)} · ${c.locationName} (${c.organizationName}).`
       );
-      await load();
+      await fetchSlots({ silent: true });
     } catch (err) {
-      onError?.(err instanceof Error ? err.message : "Não foi possível reservar.");
+      onErrorRef.current?.(err instanceof Error ? err.message : "Não foi possível reservar.");
     } finally {
       setBusyId(null);
     }
@@ -134,10 +141,10 @@ export function StudentAgendaSection({ token, onSuccess, onError }: Props) {
     setBusyId(slot.id);
     try {
       await apiDelete(`/user/agenda/bookings/${slot.bookingId}`, token);
-      onSuccess?.("Reserva cancelada.");
-      await load();
+      onSuccessRef.current?.("Reserva cancelada.");
+      await fetchSlots({ silent: true });
     } catch (err) {
-      onError?.(err instanceof Error ? err.message : "Não foi possível cancelar.");
+      onErrorRef.current?.(err instanceof Error ? err.message : "Não foi possível cancelar.");
     } finally {
       setBusyId(null);
     }
