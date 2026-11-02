@@ -100,11 +100,7 @@ export function DownloadPage() {
     return <TransitionScreen message={transitionMessage} />;
   }
 
-  if (user && token) {
-    return <Navigate to={homePathForRole(user.role)} replace />;
-  }
-
-  return <AppDownloadSoonView />;
+  return <AppDownloadSoonView loggedIn={Boolean(user && token)} studentHomePath={user ? homePathForRole(user.role) : null} />;
 }
 
 export function SharedPostRoute() {

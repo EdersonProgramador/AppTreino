@@ -25817,6 +25817,22 @@ html.light .install-pwa-instructions-lead {
   color: rgba(24, 24, 27, 0.65);
 }
 
+.app-download-soon .install-pwa-section {
+  color: var(--app-text);
+}
+
+.app-download-soon .install-pwa-instructions-title,
+.app-download-soon .install-pwa-step,
+.app-download-soon .install-pwa-platform-note,
+.app-download-soon .install-pwa-footnote {
+  color: var(--app-text);
+}
+
+.app-download-soon .install-pwa-instructions-lead,
+.app-download-soon .install-pwa-platform-tip {
+  color: var(--app-text-faint);
+}
+
 .install-pwa-instructions-close {
   border: 0;
   background: transparent;

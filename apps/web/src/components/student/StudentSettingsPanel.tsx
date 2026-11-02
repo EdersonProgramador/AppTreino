@@ -10,10 +10,13 @@ import { ThemeModeSwitch } from "../shared/ThemeModeSwitch";
 import { CoachStaffBadge } from "../shared/CoachStaffBadge";
 import { StudentCoachAccessCard } from "../shared/StudentCoachAccessCard";
 import { useStaffSummary } from "../../hooks/useStaffSummary";
+import { canShowPwaInstallHelp } from "../../lib/pwa-install";
+import { Smartphone } from "lucide-react";
 
 type StudentSettingsPanelProps = {
   token: string | null;
   onBack: () => void;
+  onOpenPwaInstall?: () => void;
 };
 
 const SoundToggle = ({
@@ -65,7 +68,7 @@ const SoundToggle = ({
   </button>
 );
 
-export const StudentSettingsPanel = ({ token, onBack }: StudentSettingsPanelProps) => {
+export const StudentSettingsPanel = ({ token, onBack, onOpenPwaInstall }: StudentSettingsPanelProps) => {
   const soundEnabled = useUiPrefsStore((state) => state.soundEnabled);
   const setSoundEnabled = useUiPrefsStore((state) => state.setSoundEnabled);
   const { summary: staffSummary, loading: staffSummaryLoading, error: staffSummaryError, refresh: refreshStaffSummary } =
@@ -128,6 +131,28 @@ export const StudentSettingsPanel = ({ token, onBack }: StudentSettingsPanelProp
       <div className="grid gap-4 rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-panel)] p-4 sm:p-6">
         <ThemeModeSwitch />
       </div>
+
+      {canShowPwaInstallHelp() && onOpenPwaInstall ? (
+        <div className="grid gap-3 rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-panel)] p-4 sm:p-6">
+          <div className="grid gap-1 px-1">
+            <h3 className="m-0 text-lg font-extrabold text-sand">Instalar no celular (PWA)</h3>
+            <p className="m-0 text-sm text-sand-faint">
+              iPhone: Safari → Compartilhar → Adicionar à Tela de Início. Android: Instalar app no Chrome.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-extrabold text-emerald-200"
+            onClick={() => {
+              uiSounds.radioSelect();
+              onOpenPwaInstall();
+            }}
+          >
+            <Smartphone size={18} aria-hidden="true" />
+            Ver passo a passo
+          </button>
+        </div>
+      ) : null}
 
       <StudentCoachAccessCard
         summary={staffSummary}

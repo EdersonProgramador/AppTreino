@@ -59,7 +59,13 @@ function StoreListingCard({
   );
 }
 
-export function AppDownloadSoonView() {
+export function AppDownloadSoonView({
+  loggedIn = false,
+  studentHomePath = null
+}: {
+  loggedIn?: boolean;
+  studentHomePath?: string | null;
+}) {
   const live = hasPublishedStoreListing();
 
   return (
@@ -76,9 +82,15 @@ export function AppDownloadSoonView() {
           </span>
         </Link>
         <div className="flex items-center gap-3">
-          <Link className="guest-chrome-link text-sm font-bold no-underline" to={paths.login}>
-            Entrar
-          </Link>
+          {loggedIn && studentHomePath ? (
+            <Link className="guest-chrome-link text-sm font-bold no-underline" to={studentHomePath}>
+              Voltar ao portal
+            </Link>
+          ) : (
+            <Link className="guest-chrome-link text-sm font-bold no-underline" to={paths.login}>
+              Entrar
+            </Link>
+          )}
         </div>
       </header>
 

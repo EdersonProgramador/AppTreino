@@ -2,6 +2,7 @@ import { Download, Smartphone, X } from "lucide-react";
 import { useState } from "react";
 import {
   canOfferPwaInstall,
+  canShowPwaInstallHelp,
   dismissPwaBanner,
   isPwaBannerDismissed,
   usePwaInstall
@@ -13,7 +14,7 @@ export function InstallPwaBanner() {
   const [visible, setVisible] = useState(() => !isPwaBannerDismissed());
   const [expanded, setExpanded] = useState(false);
 
-  if (!canOfferPwaInstall() || !visible) return null;
+  if (!canShowPwaInstallHelp() || !canOfferPwaInstall() || !visible) return null;
 
   function close(dismiss: boolean) {
     if (dismiss) dismissPwaBanner();

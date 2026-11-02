@@ -174,7 +174,7 @@ import { useMusicPlayerStore } from "../../stores/musicPlayerStore";
 import { useFeedChromeStore } from "../../stores/feedChromeStore";
 import { useStaffSummary } from "../../hooks/useStaffSummary";
 import { isNativeAppShell } from "../../lib/native-bridge";
-import { canOfferPwaInstall, usePwaInstall } from "../../lib/pwa-install";
+import { canOfferPwaInstall, canShowPwaInstallHelp, usePwaInstall } from "../../lib/pwa-install";
 import { readStudentPanel, writeStudentPanel } from "../../lib/student-panel-persist";
 import { clearWorkoutRunner } from "../../lib/workout-runner-persist";
 import { flushShellStateToNative } from "../../lib/shell-persist";
@@ -206,7 +206,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const clearSectionHighlight = useStudentSyncStore((state) => state.clearSectionHighlight);
   const [searchParams, setSearchParams] = useSearchParams();
   const pwaInstall = usePwaInstall();
-  const showPwaMenuItem = canOfferPwaInstall();
+  const showPwaMenuItem = canShowPwaInstallHelp();
   const [pwaInstallHelpOpen, setPwaInstallHelpOpen] = useState(false);
   const openPwaInstall = useCallback(() => {
     uiSounds.radioSelect();
@@ -3177,6 +3177,15 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       (studentSection === "activity" || studentSection === "training")
   );
   const showStudentFeedSection = Boolean(token && (studentSection === "home" || studentSection === "feed"));
+  const showPwaInstallBanner = Boolean(
+    token &&
+      canOfferPwaInstall() &&
+      !hideStudentNav &&
+      (studentSection === "feed" ||
+        studentSection === "training" ||
+        studentSection === "menu" ||
+        studentSection === "settings")
+  );
   const isFeedFamilySection =
     studentSection === "feed" ||
     studentSection === "home" ||
@@ -3568,7 +3577,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           </div>
         )}
 
-        {showStudentFeedSection && !isNativeAppShell() ? <InstallPwaBanner /> : null}
+        {showPwaInstallBanner ? <InstallPwaBanner /> : null}
 
         {showStudentFeedSection && (
           <StudentFeedSection
@@ -5607,7 +5616,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
         )}
 
         {studentSection === "settings" && (
-          <StudentSettingsPanel token={token} onBack={() => goToSection("menu")} />
+          <StudentSettingsPanel
+            token={token}
+            onBack={() => goToSection("menu")}
+            onOpenPwaInstall={() => setPwaInstallHelpOpen(true)}
+          />
         )}
 
         {studentSection === "play" && token && <StudentPlaySection token={token} />}

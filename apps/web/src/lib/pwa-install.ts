@@ -54,10 +54,18 @@ export function isPwaStandalone(): boolean {
   return window.matchMedia("(display-mode: standalone)").matches || nav.standalone === true;
 }
 
-export function canOfferPwaInstall(): boolean {
+/** Mostrar textos e passo a passo (menu, /baixar-app, configurações). */
+export function canShowPwaInstallHelp(): boolean {
   if (typeof window === "undefined") return false;
-  if (isNativeAppShell() || isPwaStandalone()) return false;
-  if (!window.isSecureContext) return false;
+  if (isPwaStandalone()) return false;
+  if (!window.isSecureContext && !import.meta.env.DEV) return false;
+  return true;
+}
+
+/** Prompt nativo de instalação (Android) — não dentro do WebView do app Expo. */
+export function canOfferPwaInstall(): boolean {
+  if (!canShowPwaInstallHelp()) return false;
+  if (isNativeAppShell()) return false;
   return true;
 }
 

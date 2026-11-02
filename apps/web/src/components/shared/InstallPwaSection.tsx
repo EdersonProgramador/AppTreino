@@ -1,10 +1,10 @@
-import { canOfferPwaInstall, usePwaInstall } from "../../lib/pwa-install";
+import { canShowPwaInstallHelp, usePwaInstall } from "../../lib/pwa-install";
 import { InstallPwaInstructions } from "./InstallPwaInstructions";
 
 export function InstallPwaSection() {
   const pwa = usePwaInstall();
 
-  if (!canOfferPwaInstall()) return null;
+  if (!canShowPwaInstallHelp()) return null;
 
   return (
     <section
@@ -13,6 +13,7 @@ export function InstallPwaSection() {
     >
       <span className="ui-eyebrow">Instalar no celular</span>
       <InstallPwaInstructions
+        showBothPlatforms
         hints={pwa}
         onInstall={() => void pwa.promptInstall()}
       />
