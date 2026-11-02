@@ -71,7 +71,7 @@ import { BRAZILIAN_STATES, CITIES_BY_STATE } from "../../brazil-data";
 import { levelLabel } from "../onboarding/onboarding.schema";
 import { calculateBodyFatEstimate } from "../../lib/body-composition";
 import { buildMonthCalendar, formatAssessmentDateTime, formatDateTimeLocalInputValue, monthLabel } from "../../lib/dates";
-import { shouldPinStudentBottomNavToViewport } from "../../lib/mobile-viewport";
+import { refreshStudentBottomNavDock, shouldPinStudentBottomNavToViewport } from "../../lib/mobile-viewport";
 import { formatProgramDuration } from "../../lib/cms";
 import { assetUrl, mediaUrl } from "../../lib/urls";
 import {
@@ -2579,6 +2579,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       !needsOnboarding &&
       hasStudentAreaAccess;
     document.documentElement.classList.toggle("has-portal-bottom-nav", portalNav);
+    if (portalNav) refreshStudentBottomNavDock();
     return () => document.documentElement.classList.remove("has-portal-bottom-nav");
   }, [pinBottomNavToBody, hideStudentNav, accessReady, needsOnboarding, hasStudentAreaAccess]);
 

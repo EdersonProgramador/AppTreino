@@ -12,6 +12,8 @@ export function shouldPinStudentBottomNavToViewport(): boolean {
   return ios || standalone || native || window.matchMedia("(max-width: 900px)").matches;
 }
 
+let safeAreaProbe: HTMLDivElement | null = null;
+
 /** iPhone / mobile web: altura estável + safe-area quando env() falha no PWA. */
 export function wireMobileStudentViewport() {
   if (typeof window === "undefined" || typeof document === "undefined") return () => undefined;
@@ -22,15 +24,19 @@ export function wireMobileStudentViewport() {
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
   function readSafeAreaBottomPx() {
-    const probe = document.createElement("div");
-    probe.setAttribute(
-      "style",
-      "position:fixed;bottom:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;padding-bottom:env(safe-area-inset-bottom);padding-bottom:constant(safe-area-inset-bottom);"
-    );
-    document.body.appendChild(probe);
-    const fromEnv = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
-    probe.remove();
+    if (!document.body) return isIos ? 34 : 0;
 
+    if (!safeAreaProbe) {
+      safeAreaProbe = document.createElement("div");
+      safeAreaProbe.setAttribute("aria-hidden", "true");
+      safeAreaProbe.setAttribute(
+        "style",
+        "position:fixed;bottom:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;padding-bottom:env(safe-area-inset-bottom);padding-bottom:constant(safe-area-inset-bottom);"
+      );
+      document.body.appendChild(safeAreaProbe);
+    }
+
+    const fromEnv = parseFloat(getComputedStyle(safeAreaProbe).paddingBottom) || 0;
     if (fromEnv > 0) return fromEnv;
 
     const vv = window.visualViewport;
@@ -90,24 +96,60 @@ export function wireMobileStudentViewport() {
     syncStudentBottomNavDock(safeBottom);
   }
 
-  sync();
+  let syncRaf = 0;
+  const scheduleSync = () => {
+    if (syncRaf) return;
+    syncRaf = window.requestAnimationFrame(() => {
+      syncRaf = 0;
+      sync();
+    });
+  };
 
-  const dockObserver = new MutationObserver(() => sync());
+  const start = () => {
+    scheduleSync();
+    window.setTimeout(scheduleSync, 300);
+  };
+
   if (document.body) {
-    dockObserver.observe(document.body, { childList: true, subtree: true });
+    start();
+  } else {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
   }
 
-  window.visualViewport?.addEventListener("resize", sync);
-  window.visualViewport?.addEventListener("scroll", sync);
-  window.addEventListener("resize", sync);
-  window.addEventListener("orientationchange", () => window.setTimeout(sync, 150));
-  window.requestAnimationFrame(() => sync());
-  window.setTimeout(sync, 300);
+  const dockObserver = new MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (!(node instanceof HTMLElement)) continue;
+        if (node.classList.contains("student-bottom-nav-dock") || node.querySelector(".student-bottom-nav-dock")) {
+          scheduleSync();
+          return;
+        }
+      }
+    }
+  });
+  if (document.body) {
+    dockObserver.observe(document.body, { childList: true, subtree: false });
+  }
+
+  window.visualViewport?.addEventListener("resize", scheduleSync);
+  window.visualViewport?.addEventListener("scroll", scheduleSync);
+  window.addEventListener("resize", scheduleSync);
+  window.addEventListener("orientationchange", () => window.setTimeout(scheduleSync, 150));
+  const onDockRefresh = () => scheduleSync();
+  window.addEventListener("atlly:refresh-bottom-nav", onDockRefresh);
 
   return () => {
     dockObserver.disconnect();
-    window.visualViewport?.removeEventListener("resize", sync);
-    window.visualViewport?.removeEventListener("scroll", sync);
-    window.removeEventListener("resize", sync);
+    if (syncRaf) window.cancelAnimationFrame(syncRaf);
+    window.visualViewport?.removeEventListener("resize", scheduleSync);
+    window.visualViewport?.removeEventListener("scroll", scheduleSync);
+    window.removeEventListener("resize", scheduleSync);
+    window.removeEventListener("atlly:refresh-bottom-nav", onDockRefresh);
   };
+}
+
+/** Re-sync após o menu inferior montar (portal). */
+export function refreshStudentBottomNavDock() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event("atlly:refresh-bottom-nav"));
 }

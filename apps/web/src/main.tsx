@@ -18,7 +18,11 @@ wirePwaInstallPrompt();
 import "./index.css";
 
 startPwaUpdateWatcher();
-wireMobileStudentViewport();
+if (document.body) {
+  wireMobileStudentViewport();
+} else {
+  document.addEventListener("DOMContentLoaded", () => wireMobileStudentViewport(), { once: true });
+}
 
 wireStudentSyncBus();
 wireEventBusBroadcast();

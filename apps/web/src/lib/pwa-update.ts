@@ -21,7 +21,6 @@ export function startPwaUpdateWatcher() {
         void registration.update().catch(() => undefined);
       };
       check();
-      window.setInterval(check, 60 * 60 * 1000);
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") check();
       });
