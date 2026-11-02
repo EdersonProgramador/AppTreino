@@ -62,7 +62,7 @@ import {
   useRef,
   useState
 } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { COACH_PRO_ANNUAL_PLAN_CODE, formatPriceInBRL } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
@@ -93,6 +93,7 @@ import { StudentPeerProfileSection } from "./StudentPeerProfileSection";
 import { RunnerIcon } from "../shared/RunnerIcon";
 import { AnimatedList } from "../shared/AnimatedList";
 import { InstallPwaBanner } from "../shared/InstallPwaBanner";
+import { InstallPwaInstructions } from "../shared/InstallPwaInstructions";
 import { MediaImg } from "../shared/MediaImg";
 import {
   useStudentSyncStore,
@@ -204,17 +205,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const markAllNotificationsRead = useStudentSyncStore((state) => state.markAllNotificationsRead);
   const clearSectionHighlight = useStudentSyncStore((state) => state.clearSectionHighlight);
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const pwaInstall = usePwaInstall();
   const showPwaMenuItem = canOfferPwaInstall();
+  const [pwaInstallHelpOpen, setPwaInstallHelpOpen] = useState(false);
   const openPwaInstall = useCallback(() => {
     uiSounds.radioSelect();
     if (pwaInstall.canInstall) {
       void pwaInstall.promptInstall();
       return;
     }
-    navigate(paths.download);
-  }, [navigate, pwaInstall]);
+    setPwaInstallHelpOpen(true);
+  }, [pwaInstall]);
   const restoredPanel = readStudentPanel();
   const [studentSection, setStudentSection] = useState<StudentPanelSection>(
     restoredPanel?.section === "home" || restoredPanel?.section === "feed"
@@ -3198,6 +3199,23 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       }${isFeedFamilySection ? " is-feed" : ""}${coachSubscriptionOverlay ? " has-subscription-overlay" : ""}`}
     >
       {adminPreviewBanner}
+      {pwaInstallHelpOpen ? (
+        <div className="student-pwa-install-overlay">
+          <button
+            type="button"
+            className="student-pwa-install-overlay-backdrop"
+            aria-label="Fechar instruções de instalação"
+            onClick={() => setPwaInstallHelpOpen(false)}
+          />
+          <div className="student-pwa-install-overlay-dialog" role="dialog" aria-modal="true" aria-label="Instalar ATLLY no celular">
+            <InstallPwaInstructions
+              hints={pwaInstall}
+              onInstall={() => void pwaInstall.promptInstall()}
+              onClose={() => setPwaInstallHelpOpen(false)}
+            />
+          </div>
+        </div>
+      ) : null}
       {token && !hideStudentNav ? <StudentDailyMotivation /> : null}
       {!hideStudentHeader && (
       <section className="student-app-header">

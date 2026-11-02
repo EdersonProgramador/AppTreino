@@ -101,6 +101,10 @@ export function AppDownloadSoonView() {
               </>
             )}
           </p>
+          <p className="app-download-copy m-0 mx-auto max-w-xl text-sm leading-relaxed text-brand-silver sm:text-base">
+            No iPhone, use o <strong className="text-inherit">Safari</strong> e &quot;Adicionar à Tela de Início&quot;. Se
+            o link veio do Instagram ou WhatsApp, abra primeiro no Safari.
+          </p>
         </div>
 
         <InstallPwaSection />
