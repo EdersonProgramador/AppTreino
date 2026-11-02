@@ -27359,7 +27359,7 @@ html.is-mobile-student-layout .student-app-shell {
   padding-bottom: 0 !important;
 }
 
-/* Menu inferior: colado no fundo da tela; safe area só dentro do nav */
+/* Menu inferior: root cola no fundo e pinta a safe area; ícones ficam no nav acima */
 #atlly-student-nav-root {
   position: fixed !important;
   left: 0 !important;
@@ -27370,7 +27370,10 @@ html.is-mobile-student-layout .student-app-shell {
   width: 100% !important;
   max-width: 100% !important;
   margin: 0 !important;
-  padding: 0 !important;
+  padding-top: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-bottom: env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)) !important;
   transform: none !important;
   pointer-events: none;
   box-sizing: border-box;
@@ -27378,7 +27381,11 @@ html.is-mobile-student-layout .student-app-shell {
   flex-direction: column !important;
   justify-content: flex-end !important;
   align-items: stretch !important;
-  background: transparent !important;
+  background: var(--app-bg-soft) !important;
+}
+
+html.light #atlly-student-nav-root {
+  background: rgba(255, 255, 255, 0.98) !important;
 }
 
 #atlly-student-nav-root:empty {
@@ -27397,14 +27404,10 @@ nav.student-bottom-nav.student-bottom-nav--docked {
   margin-top: 0 !important;
   width: 100% !important;
   max-width: 100% !important;
-  min-height: calc(
-    var(--student-nav-bar, 64px) + var(--ios-safe-bottom-pad, env(safe-area-inset-bottom, 0px))
-  ) !important;
+  min-height: var(--student-nav-bar, 64px) !important;
   height: auto !important;
   max-height: none !important;
-  padding: 6px max(12px, var(--safe-right, 0px))
-    var(--ios-safe-bottom-pad, max(6px, env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px))))
-    max(12px, var(--safe-left, 0px)) !important;
+  padding: 6px max(12px, var(--safe-right, 0px)) 6px max(12px, var(--safe-left, 0px)) !important;
   border-radius: 18px 18px 0 0 !important;
   box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.12) !important;
   background:

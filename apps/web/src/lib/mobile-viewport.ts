@@ -140,6 +140,10 @@ function publishDockClearance(root: HTMLElement) {
 }
 
 function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
+  const html = document.documentElement;
+  const isLight = html.classList.contains("light");
+  const dockBg = isLight ? "rgba(255, 255, 255, 0.98)" : "var(--app-bg-soft, #0b101c)";
+
   root.style.setProperty("position", "fixed", "important");
   root.style.setProperty("left", "0", "important");
   root.style.setProperty("right", "0", "important");
@@ -154,8 +158,9 @@ function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
   root.style.setProperty("flex-direction", "column", "important");
   root.style.setProperty("justify-content", "flex-end", "important");
   root.style.setProperty("align-items", "stretch", "important");
-  root.style.setProperty("background", "transparent", "important");
-  root.style.setProperty("padding", "0", "important");
+  root.style.setProperty("background", dockBg, "important");
+  root.style.removeProperty("padding");
+  root.style.removeProperty("padding-bottom");
 
   navEl.style.removeProperty("position");
   navEl.style.setProperty("position", "relative", "important");
