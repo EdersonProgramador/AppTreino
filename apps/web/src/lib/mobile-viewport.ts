@@ -48,28 +48,6 @@ export function wireMobileStudentViewport() {
     return isIos ? 34 : 0;
   }
 
-  function syncStudentBottomNavDock(safeBottom: number) {
-    const dock = document.querySelector<HTMLElement>(".student-bottom-nav-dock");
-    if (!dock) return;
-
-    dock.style.setProperty("position", "fixed", "important");
-    dock.style.setProperty("left", "0", "important");
-    dock.style.setProperty("right", "0", "important");
-    dock.style.setProperty("width", "100%", "important");
-    dock.style.setProperty("margin", "0", "important");
-    dock.style.setProperty("z-index", "120", "important");
-    dock.style.setProperty("bottom", "0", "important");
-    dock.style.setProperty("padding-bottom", `${safeBottom}px`, "important");
-    dock.style.setProperty("transform", "none", "important");
-
-    const rect = dock.getBoundingClientRect();
-    const layoutBottom = window.innerHeight;
-    const gap = layoutBottom - rect.bottom;
-    if (gap > 0.5 && gap < 96) {
-      dock.style.setProperty("transform", `translateY(${gap}px)`, "important");
-    }
-  }
-
   function sync() {
     const mobile = isIos || window.matchMedia("(max-width: 900px)").matches;
     if (!mobile) {
@@ -80,20 +58,12 @@ export function wireMobileStudentViewport() {
     root.classList.add("is-mobile-student-layout");
 
     const safeBottom = readSafeAreaBottomPx();
-    if (safeBottom > 0) {
-      root.style.setProperty("--safe-bottom", `${safeBottom}px`);
-      root.style.setProperty("--expo-safe-bottom", `${safeBottom}px`);
-    }
+    root.style.setProperty("--safe-bottom", `${safeBottom}px`);
+    root.style.setProperty("--expo-safe-bottom", `${safeBottom}px`);
 
-    const vv = window.visualViewport?.height ?? 0;
-    const layoutH = window.innerHeight || root.clientHeight || 0;
-    const vh = Math.round(Math.max(layoutH, vv));
-    root.style.setProperty("--mobile-vh", `${vh}px`);
     const navBarPx = 64;
     root.style.setProperty("--student-nav-offset", `calc(var(--student-nav-bar, ${navBarPx}px) + ${safeBottom}px)`);
-    root.style.setProperty("--student-bottom-nav-dock-height", `${navBarPx + 10 + safeBottom}px`);
-
-    syncStudentBottomNavDock(safeBottom);
+    root.style.setProperty("--student-bottom-nav-dock-height", `${navBarPx + safeBottom}px`);
   }
 
   let syncRaf = 0;
