@@ -1,3 +1,17 @@
+export function shouldPinStudentBottomNavToViewport(): boolean {
+  if (typeof window === "undefined") return false;
+  const ios =
+    /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  const native =
+    /AppTreinoMobile/i.test(navigator.userAgent) ||
+    new URLSearchParams(window.location.search).get("app") === "mobile";
+  return ios || standalone || native || window.matchMedia("(max-width: 900px)").matches;
+}
+
 /** iPhone / mobile web: altura estável + safe-area quando env() falha no PWA. */
 export function wireMobileStudentViewport() {
   if (typeof window === "undefined" || typeof document === "undefined") return () => undefined;
@@ -11,7 +25,7 @@ export function wireMobileStudentViewport() {
     const probe = document.createElement("div");
     probe.setAttribute(
       "style",
-      "position:fixed;visibility:hidden;pointer-events:none;padding-bottom:env(safe-area-inset-bottom);padding-bottom:constant(safe-area-inset-bottom);"
+      "position:fixed;bottom:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;padding-bottom:env(safe-area-inset-bottom);padding-bottom:constant(safe-area-inset-bottom);"
     );
     document.body.appendChild(probe);
     const fromEnv = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
@@ -47,10 +61,9 @@ export function wireMobileStudentViewport() {
     const layoutH = window.innerHeight || root.clientHeight || 0;
     const vh = Math.round(Math.max(layoutH, vv));
     root.style.setProperty("--mobile-vh", `${vh}px`);
-    root.style.setProperty(
-      "--student-nav-offset",
-      `calc(var(--student-nav-bar, 70px) + ${safeBottom}px)`
-    );
+    const navBarPx = 64;
+    root.style.setProperty("--student-nav-offset", `calc(var(--student-nav-bar, ${navBarPx}px) + ${safeBottom}px)`);
+    root.style.setProperty("--student-bottom-nav-dock-height", `${navBarPx + 10 + safeBottom}px`);
   }
 
   sync();

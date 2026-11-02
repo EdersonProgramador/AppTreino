@@ -71,6 +71,7 @@ import { BRAZILIAN_STATES, CITIES_BY_STATE } from "../../brazil-data";
 import { levelLabel } from "../onboarding/onboarding.schema";
 import { calculateBodyFatEstimate } from "../../lib/body-composition";
 import { buildMonthCalendar, formatAssessmentDateTime, formatDateTimeLocalInputValue, monthLabel } from "../../lib/dates";
+import { shouldPinStudentBottomNavToViewport } from "../../lib/mobile-viewport";
 import { formatProgramDuration } from "../../lib/cms";
 import { assetUrl, mediaUrl } from "../../lib/urls";
 import {
@@ -189,7 +190,7 @@ const WorkoutPlayer = lazyWithChunkRetry(async () => {
 });
 
 export function UserView({ token, onLogout }: { token: string | null; onLogout: () => void }) {
-  const [pinBottomNavToBody, setPinBottomNavToBody] = useState(false);
+  const [pinBottomNavToBody, setPinBottomNavToBody] = useState(() => shouldPinStudentBottomNavToViewport());
 
   useEffect(() => {
     document.documentElement.classList.add("has-student-app-shell");
@@ -197,11 +198,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   }, []);
 
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 900px)");
-    const sync = () => setPinBottomNavToBody(mq.matches);
+    const sync = () => setPinBottomNavToBody(shouldPinStudentBottomNavToViewport());
     sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
+    window.addEventListener("resize", sync);
+    window.addEventListener("orientationchange", sync);
+    return () => {
+      window.removeEventListener("resize", sync);
+      window.removeEventListener("orientationchange", sync);
+    };
   }, []);
 
   const { user: authUser, exitAdminPreview } = useAuth();
@@ -3225,8 +3229,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const isTrainingSection =
     studentSection === "training" || studentSection === "player" || studentSection === "history";
 
-  const studentBottomNav = !hideStudentNav ? (
-    <nav className="student-bottom-nav student-bottom-nav--viewport-root" aria-label={brand.navAria}>
+  const studentBottomNavBar = !hideStudentNav ? (
+    <nav className="student-bottom-nav" aria-label={brand.navAria}>
       <button className={isFeedFamilySection ? "active" : ""} onClick={() => goToSection("feed")}>
         <Home size={22} />
         Timeline
@@ -3254,6 +3258,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       </button>
     </nav>
   ) : null;
+
+  const studentBottomNav =
+    studentBottomNavBar && pinBottomNavToBody ? (
+      <div className="student-bottom-nav-dock">{studentBottomNavBar}</div>
+    ) : (
+      studentBottomNavBar
+    );
 
   return (
     <main
