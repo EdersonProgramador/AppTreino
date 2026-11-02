@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "node ../../scripts/ensure-payment-assets.mjs && vite build",
+    "build": "node ../../scripts/ensure-payment-assets.mjs && node scripts/generate-pwa-icons.mjs && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test src/auth/session.test.ts src/lib/workout-runner-persist.test.ts src/lib/sandbox-checkout.test.ts src/lib/gps-filter.test.ts src/lib/activity-geo.test.ts src/lib/checkout-pending.test.ts src/lib/google-ads.test.ts src/stores/authStore.test.ts src/stores/musicPlayerStore.test.ts",
@@ -34,6 +34,7 @@
     "react-sounds": "^1.0.30",
     "socket.io-client": "^4.8.3",
     "vite": "^5.3.5",
+    "vite-plugin-pwa": "^2.0.0",
     "zod": "^3.25.76",
     "zustand": "^5.0.14"
   },

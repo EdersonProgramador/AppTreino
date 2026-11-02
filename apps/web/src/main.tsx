@@ -9,7 +9,13 @@ import { wireEventBusBroadcast } from "./lib/event-bus";
 import { wireNativeKeyboardViewport } from "./lib/native-keyboard";
 import { useUiPrefsStore } from "./stores/uiPrefsStore";
 import { isChunkLoadError, reloadForStaleChunk } from "./lib/lazy-retry";
+import { isPwaStandalone } from "./lib/pwa-install";
+import { registerSW } from "virtual:pwa-register";
 import "./index.css";
+
+if (import.meta.env.PROD) {
+  registerSW({ immediate: true });
+}
 
 wireStudentSyncBus();
 wireEventBusBroadcast();
@@ -33,6 +39,9 @@ if (typeof navigator !== "undefined") {
     new URLSearchParams(window.location.search).get("app") === "mobile";
   if (nativeApp) {
     document.documentElement.classList.add("is-native-app");
+    wireNativeKeyboardViewport();
+  } else if (isPwaStandalone()) {
+    document.documentElement.classList.add("is-pwa-standalone");
     wireNativeKeyboardViewport();
   }
 }

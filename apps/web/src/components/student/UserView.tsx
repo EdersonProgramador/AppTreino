@@ -38,6 +38,7 @@ import {
   Share2,
   ShieldCheck,
   ShoppingCart,
+  Smartphone,
   Sparkles,
   SquarePlus,
   Star,
@@ -61,7 +62,7 @@ import {
   useRef,
   useState
 } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { COACH_PRO_ANNUAL_PLAN_CODE, formatPriceInBRL } from "@app-treino/shared";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api";
@@ -91,6 +92,7 @@ import { type StoreTab } from "../../lib/store-commerce";
 import { StudentPeerProfileSection } from "./StudentPeerProfileSection";
 import { RunnerIcon } from "../shared/RunnerIcon";
 import { AnimatedList } from "../shared/AnimatedList";
+import { InstallPwaBanner } from "../shared/InstallPwaBanner";
 import { MediaImg } from "../shared/MediaImg";
 import {
   useStudentSyncStore,
@@ -171,6 +173,7 @@ import { useMusicPlayerStore } from "../../stores/musicPlayerStore";
 import { useFeedChromeStore } from "../../stores/feedChromeStore";
 import { useStaffSummary } from "../../hooks/useStaffSummary";
 import { isNativeAppShell } from "../../lib/native-bridge";
+import { canOfferPwaInstall, usePwaInstall } from "../../lib/pwa-install";
 import { readStudentPanel, writeStudentPanel } from "../../lib/student-panel-persist";
 import { clearWorkoutRunner } from "../../lib/workout-runner-persist";
 import { flushShellStateToNative } from "../../lib/shell-persist";
@@ -201,6 +204,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const markAllNotificationsRead = useStudentSyncStore((state) => state.markAllNotificationsRead);
   const clearSectionHighlight = useStudentSyncStore((state) => state.clearSectionHighlight);
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const pwaInstall = usePwaInstall();
+  const showPwaMenuItem = canOfferPwaInstall();
+  const openPwaInstall = useCallback(() => {
+    uiSounds.radioSelect();
+    if (pwaInstall.canInstall) {
+      void pwaInstall.promptInstall();
+      return;
+    }
+    navigate(paths.download);
+  }, [navigate, pwaInstall]);
   const restoredPanel = readStudentPanel();
   const [studentSection, setStudentSection] = useState<StudentPanelSection>(
     restoredPanel?.section === "home" || restoredPanel?.section === "feed"
@@ -3536,6 +3550,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           </div>
         )}
 
+        {showStudentFeedSection && !isNativeAppShell() ? <InstallPwaBanner /> : null}
+
         {showStudentFeedSection && (
           <StudentFeedSection
             token={token}
@@ -5479,6 +5495,16 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                 { group: "Comunidade", icon: MessageCircle, title: "Mensagens", action: () => goToSection("messages") },
                 { group: "Comunidade", icon: UserPlus, title: "Pedidos", action: () => goToSection("requests") },
                 { group: "Comunidade", icon: MapPin, title: "Unidades", action: () => goToSection("locations") },
+                ...(showPwaMenuItem
+                  ? [
+                      {
+                        group: "Ajuda",
+                        icon: Smartphone,
+                        title: "Instalar no celular",
+                        action: openPwaInstall
+                      } as const
+                    ]
+                  : []),
                 { group: "Ajuda", icon: Headphones, title: "Atendimento", action: () => goToSection("support") },
                 { group: "Ajuda", icon: QrCode, title: "QR Code", action: () => { openTrainingCatalog(); setShowStudentQr(true); } },
                 { group: "Conta", icon: CreditCard, title: "Meus Cartões", action: () => goToSection("payments"), moduleKey: "module_cards" },

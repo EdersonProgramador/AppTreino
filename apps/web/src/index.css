@@ -25643,6 +25643,91 @@ html.is-native-app.keyboard-open .login-shell {
   z-index: 2;
 }
 
+.student-pwa-install-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 12px 10px;
+  padding: 12px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(9, 9, 11, 0.92));
+  color: #f4f4f5;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+}
+
+.student-pwa-install-banner-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #34d399;
+}
+
+.student-pwa-install-banner-copy {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.student-pwa-install-banner-copy strong {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.student-pwa-install-banner-copy span {
+  color: rgba(244, 244, 245, 0.78);
+}
+
+.student-pwa-install-banner-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.student-pwa-install-banner-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  background: rgba(16, 185, 129, 0.22);
+  color: #ecfdf5;
+  white-space: nowrap;
+}
+
+.student-pwa-install-banner-dismiss {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: rgba(244, 244, 245, 0.55);
+  cursor: pointer;
+  padding: 2px;
+}
+
+html.light .student-pwa-install-banner {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(250, 250, 250, 0.98));
+  color: #18181b;
+  border-color: rgba(24, 24, 27, 0.08);
+}
+
+html.light .student-pwa-install-banner-copy span {
+  color: rgba(24, 24, 27, 0.65);
+}
+
+html.is-native-app .student-pwa-install-banner,
+html.is-pwa-standalone .student-pwa-install-banner {
+  display: none;
+}
+
 .student-activity-pick-banner {
   position: absolute;
   left: 12px;

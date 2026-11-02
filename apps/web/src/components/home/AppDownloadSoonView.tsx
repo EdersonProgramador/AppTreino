@@ -6,6 +6,7 @@ import { assetUrl } from "../../lib/urls";
 import { brand } from "../../lib/brand";
 import { paths } from "../../auth/paths";
 import { appStoreUrls, hasPublishedStoreListing } from "../../lib/app-store";
+import { InstallPwaSection } from "../shared/InstallPwaSection";
 
 function StoreListingCard({
   platform,
@@ -101,6 +102,8 @@ export function AppDownloadSoonView() {
             )}
           </p>
         </div>
+
+        <InstallPwaSection />
 
         <div className="grid w-full max-w-lg gap-3 sm:grid-cols-2">
           <StoreListingCard
