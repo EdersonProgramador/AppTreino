@@ -190,22 +190,9 @@ const WorkoutPlayer = lazyWithChunkRetry(async () => {
 });
 
 export function UserView({ token, onLogout }: { token: string | null; onLogout: () => void }) {
-  const [pinBottomNavToBody, setPinBottomNavToBody] = useState(() => shouldPinStudentBottomNavToViewport());
-
   useEffect(() => {
     document.documentElement.classList.add("has-student-app-shell");
     return () => document.documentElement.classList.remove("has-student-app-shell");
-  }, []);
-
-  useEffect(() => {
-    const sync = () => setPinBottomNavToBody(shouldPinStudentBottomNavToViewport());
-    sync();
-    window.addEventListener("resize", sync);
-    window.addEventListener("orientationchange", sync);
-    return () => {
-      window.removeEventListener("resize", sync);
-      window.removeEventListener("orientationchange", sync);
-    };
   }, []);
 
   const { user: authUser, exitAdminPreview } = useAuth();
@@ -2573,7 +2560,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
   useEffect(() => {
     const portalNav =
-      pinBottomNavToBody &&
+      shouldPinStudentBottomNavToViewport() &&
       !hideStudentNav &&
       accessReady &&
       !needsOnboarding &&
@@ -2581,7 +2568,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     document.documentElement.classList.toggle("has-portal-bottom-nav", portalNav);
     if (portalNav) refreshStudentBottomNavDock();
     return () => document.documentElement.classList.remove("has-portal-bottom-nav");
-  }, [pinBottomNavToBody, hideStudentNav, accessReady, needsOnboarding, hasStudentAreaAccess]);
+  }, [hideStudentNav, accessReady, needsOnboarding, hasStudentAreaAccess]);
 
   const closeCoachSubscriptionOverlay = () => {
     setCoachUpsellNotice(null);
@@ -3260,6 +3247,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     </nav>
   ) : null;
 
+  const pinBottomNavToBody = shouldPinStudentBottomNavToViewport();
   const studentBottomNav =
     studentBottomNavBar && pinBottomNavToBody ? (
       <div className="student-bottom-nav-dock">{studentBottomNavBar}</div>

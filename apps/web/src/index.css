@@ -21458,41 +21458,74 @@ html.is-native-app .student-app-shell.is-activity:not(.workout-immersive) .stude
   right: 0 !important;
 }
 
-/* ---- PWA iPhone (Add to Home Screen): nav colada no fundo + safe area ---- */
+/* ---- PWA (Add to Home Screen): ocupa 100% da tela do celular ---- */
 html.is-pwa-standalone,
-html.is-pwa-standalone body,
-html.is-pwa-standalone #root {
+html.is-pwa-standalone body {
   width: 100%;
-  height: 100%;
-  max-height: 100%;
+  margin: 0;
+  padding: 0;
   min-height: 100dvh;
+  min-height: -webkit-fill-available;
+  height: var(--pwa-vh, 100dvh);
   overflow: hidden;
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
+  background: var(--app-bg);
 }
 
 html.is-pwa-standalone #root {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 html.is-pwa-standalone .ui-shell,
+html.is-pwa-standalone .ui-shell.min-h-screen {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: none !important;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+}
+
 html.is-pwa-standalone .app-view-stage {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   width: 100%;
+  min-height: 0;
   height: 100%;
-  max-height: 100%;
-  min-height: 0 !important;
   overflow: hidden;
 }
 
-html.is-pwa-standalone .app-view-stage > .student-app-shell {
+html.is-pwa-standalone .app-view-stage > .student-app-shell,
+html.is-pwa-standalone .app-view-stage > .login-shell,
+html.is-pwa-standalone .app-view-stage > .admin-workspace-shell {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  width: 100%;
+}
+
+html.is-pwa-standalone .app-view-stage > .home-landing,
+html.is-pwa-standalone .app-view-stage > .app-download-soon {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 html.is-pwa-standalone .student-app-shell {
@@ -21501,9 +21534,8 @@ html.is-pwa-standalone .student-app-shell {
   width: 100%;
   max-width: 100%;
   height: 100%;
-  max-height: 100%;
   min-height: 0;
-  margin: 0;
+  margin: 0 auto;
   padding-left: max(0px, var(--safe-left));
   padding-right: max(0px, var(--safe-right));
   padding-bottom: 0;
@@ -21518,15 +21550,6 @@ html.is-pwa-standalone .student-app-scroll {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
-}
-
-html.is-pwa-standalone .student-app-shell:not(.workout-immersive) .student-bottom-nav {
-  position: fixed !important;
-  bottom: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  margin: 0 !important;
-  padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
 }
 
 html.is-native-app .student-music-mini,
@@ -27034,11 +27057,13 @@ html.light .student-activity-side {
 }
 
 /* Portal do aluno — web no celular (iPhone/Android): preencher a viewport inteira */
-html:has(.student-app-shell),
-body:has(.student-app-shell),
-body:has(.student-app-shell) #root {
+html:not(.is-pwa-standalone):has(.student-app-shell),
+html:not(.is-pwa-standalone):has(.student-app-shell) body,
+html.is-pwa-standalone.is-pwa-fullscreen:has(.student-app-shell) body,
+html.is-pwa-standalone.is-pwa-fullscreen:has(.student-app-shell) #root {
   min-height: 100dvh;
   min-height: -webkit-fill-available;
+  height: var(--pwa-vh, 100dvh);
   overflow: hidden;
   background: var(--app-bg);
 }
@@ -27168,8 +27193,14 @@ html.has-portal-bottom-nav .ui-shell.min-h-screen {
   flex: 1 1 auto;
   min-height: 100dvh !important;
   min-height: -webkit-fill-available !important;
+  height: 100% !important;
+  max-height: none !important;
   padding-bottom: 0 !important;
   margin-bottom: 0 !important;
+}
+
+html.is-pwa-standalone.has-portal-bottom-nav body > .student-bottom-nav-dock {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-bottom, 0px));
 }
 
 html.has-portal-bottom-nav #root {
@@ -32386,4 +32417,25 @@ html:not(.light) .coach-alert--success {
 
 .coach-studio-wrap .finance-hub-tabs {
   margin-bottom: 12px;
+}
+
+/* Menu inferior colado no fundo — mobile / PWA (prioridade máxima) */
+@media (max-width: 900px) {
+  html.has-portal-bottom-nav body > .student-bottom-nav-dock,
+  html.is-mobile-student-layout body > .student-bottom-nav-dock {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    transform: none !important;
+    z-index: 120 !important;
+    border-radius: 20px 20px 0 0;
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-bottom, 0px)) !important;
+  }
+
+  html.is-native-app body > .student-bottom-nav-dock .student-bottom-nav {
+    position: relative !important;
+    bottom: auto !important;
+  }
 }

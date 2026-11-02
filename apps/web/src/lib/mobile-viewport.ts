@@ -14,7 +14,29 @@ export function shouldPinStudentBottomNavToViewport(): boolean {
 
 let safeAreaProbe: HTMLDivElement | null = null;
 
-/** iPhone / mobile web: altura estável + safe-area quando env() falha no PWA. */
+function pinStudentBottomNavDockToViewport(safeBottom: number) {
+  const dock = document.querySelector<HTMLElement>(".student-bottom-nav-dock");
+  if (!dock) return;
+  dock.style.setProperty("position", "fixed", "important");
+  dock.style.setProperty("left", "0", "important");
+  dock.style.setProperty("right", "0", "important");
+  dock.style.setProperty("bottom", "0", "important");
+  dock.style.setProperty("width", "100%", "important");
+  dock.style.setProperty("margin", "0", "important");
+  dock.style.setProperty("transform", "none", "important");
+  dock.style.setProperty("z-index", "120", "important");
+  dock.style.setProperty("padding-bottom", `${safeBottom}px`, "important");
+}
+
+function isStandalonePwa() {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+}
+
+/** iPhone / mobile web / PWA: viewport cheia + safe-area. */
 export function wireMobileStudentViewport() {
   if (typeof window === "undefined" || typeof document === "undefined") return () => undefined;
 
@@ -31,12 +53,20 @@ export function wireMobileStudentViewport() {
       safeAreaProbe.setAttribute("aria-hidden", "true");
       safeAreaProbe.setAttribute(
         "style",
-        "position:fixed;bottom:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;padding-bottom:env(safe-area-inset-bottom);padding-bottom:constant(safe-area-inset-bottom);"
+        "position:fixed;bottom:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);"
       );
       document.body.appendChild(safeAreaProbe);
     }
 
-    const fromEnv = parseFloat(getComputedStyle(safeAreaProbe).paddingBottom) || 0;
+    const probeStyle = getComputedStyle(safeAreaProbe);
+    const safeTop = parseFloat(probeStyle.paddingTop) || 0;
+    const safeLeft = parseFloat(probeStyle.paddingLeft) || 0;
+    const safeRight = parseFloat(probeStyle.paddingRight) || 0;
+    if (safeTop > 0) root.style.setProperty("--safe-top", `${safeTop}px`);
+    if (safeLeft > 0) root.style.setProperty("--safe-left", `${safeLeft}px`);
+    if (safeRight > 0) root.style.setProperty("--safe-right", `${safeRight}px`);
+
+    const fromEnv = parseFloat(probeStyle.paddingBottom) || 0;
     if (fromEnv > 0) return fromEnv;
 
     const vv = window.visualViewport;
@@ -49,13 +79,21 @@ export function wireMobileStudentViewport() {
   }
 
   function sync() {
-    const mobile = isIos || window.matchMedia("(max-width: 900px)").matches;
+    const pwa = isStandalonePwa();
+    const mobile = pwa || isIos || window.matchMedia("(max-width: 900px)").matches;
     if (!mobile) {
       root.classList.remove("is-mobile-student-layout");
+      root.classList.remove("is-pwa-fullscreen");
       return;
     }
 
     root.classList.add("is-mobile-student-layout");
+    root.classList.toggle("is-pwa-fullscreen", pwa);
+
+    const vh = Math.round(window.innerHeight || document.documentElement.clientHeight || 0);
+    if (vh > 0) {
+      root.style.setProperty("--pwa-vh", `${vh}px`);
+    }
 
     const safeBottom = readSafeAreaBottomPx();
     root.style.setProperty("--safe-bottom", `${safeBottom}px`);
@@ -64,6 +102,8 @@ export function wireMobileStudentViewport() {
     const navBarPx = 64;
     root.style.setProperty("--student-nav-offset", `calc(var(--student-nav-bar, ${navBarPx}px) + ${safeBottom}px)`);
     root.style.setProperty("--student-bottom-nav-dock-height", `${navBarPx + safeBottom + 12}px`);
+
+    pinStudentBottomNavDockToViewport(safeBottom);
   }
 
   let syncRaf = 0;
@@ -121,5 +161,8 @@ export function wireMobileStudentViewport() {
 /** Re-sync após o menu inferior montar (portal). */
 export function refreshStudentBottomNavDock() {
   if (typeof window === "undefined") return;
+  pinStudentBottomNavDockToViewport(
+    parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--safe-bottom")) || 0
+  );
   window.dispatchEvent(new Event("atlly:refresh-bottom-nav"));
 }

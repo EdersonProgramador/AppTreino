@@ -3,7 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <script>
+      (function () {
+        try {
+          var standalone =
+            window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+          if (standalone) document.documentElement.classList.add("is-pwa-standalone");
+        } catch (e) {}
+      })();
+    </script>
     <style id="atlly-ios-nav-critical">
+      html.is-pwa-standalone,
+      html.is-pwa-standalone body {
+        width: 100%;
+        margin: 0;
+        min-height: 100dvh;
+        min-height: -webkit-fill-available;
+        height: var(--pwa-vh, 100dvh);
+        overflow: hidden;
+        background: #05070c;
+      }
+      html.is-pwa-standalone #root {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        width: 100%;
+        min-height: 0;
+        height: 100%;
+      }
       body > .student-bottom-nav-dock {
         position: fixed;
         left: 0;
@@ -11,6 +38,8 @@
         bottom: 0;
         z-index: 120;
         box-sizing: border-box;
+        margin: 0;
+        width: 100%;
         padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-bottom, 0px));
       }
     </style>
