@@ -39,6 +39,15 @@ function isIosDevice() {
   );
 }
 
+/** iOS: faixa entre layout viewport e visual viewport (PWA / Safari). */
+function iosVisualBottomGap() {
+  if (typeof window === "undefined" || !isIosDevice()) return 0;
+  const vv = window.visualViewport;
+  if (!vv) return 0;
+  const gap = window.innerHeight - (vv.offsetTop + vv.height);
+  return Math.max(0, Math.round(gap));
+}
+
 function readSafeAreaInsets() {
   if (typeof document === "undefined" || !document.body) {
     return { bottom: 0, top: 0, left: 0, right: 0 };
@@ -55,9 +64,10 @@ function readSafeAreaInsets() {
   }
 
   const s = getComputedStyle(safeAreaProbe);
+  const visualGap = iosVisualBottomGap();
   return {
     top: parseFloat(s.paddingTop) || 0,
-    bottom: parseFloat(s.paddingBottom) || 0,
+    bottom: Math.max(parseFloat(s.paddingBottom) || 0, visualGap),
     left: parseFloat(s.paddingLeft) || 0,
     right: parseFloat(s.paddingRight) || 0
   };
@@ -73,6 +83,7 @@ function applySafeAreaCssVars(insets: ReturnType<typeof readSafeAreaInsets>) {
   root.style.setProperty("--safe-right", `${insets.right}px`);
   root.style.setProperty("--safe-bottom", `${insets.bottom}px`);
   root.style.setProperty("--safe-left", `${insets.left}px`);
+  root.style.setProperty("--ios-visual-bottom-gap", `${iosVisualBottomGap()}px`);
 }
 
 /** Altura visível (PWA iOS); só expõe --app-vh — não trava height inline no body. */
@@ -82,6 +93,10 @@ function syncAppViewportHeight() {
   const vv = window.visualViewport;
   const height = Math.round(vv?.height ?? window.innerHeight);
   document.documentElement.style.setProperty("--app-vh", `${height}px`);
+  document.documentElement.style.setProperty(
+    "--app-vh-offset-top",
+    `${Math.round(vv?.offsetTop ?? 0)}px`
+  );
 }
 
 function dockedNavBackground(isLight: boolean) {
@@ -92,7 +107,6 @@ function applyDockedNavStyles(root: HTMLElement, navEl: HTMLElement, safeBottomP
   const html = document.documentElement;
   const isLight = html.classList.contains("light");
   const safeBottom = Math.max(0, Math.round(safeBottomPx));
-  const contentPadBottom = 6;
   const navBg = dockedNavBackground(isLight);
 
   root.style.setProperty("display", "flex", "important");
@@ -100,6 +114,9 @@ function applyDockedNavStyles(root: HTMLElement, navEl: HTMLElement, safeBottomP
   root.style.setProperty("justify-content", "flex-end", "important");
   root.style.setProperty("align-items", "stretch", "important");
   root.style.setProperty("background", navBg, "important");
+  root.style.setProperty("padding-top", "0", "important");
+  root.style.setProperty("padding-left", "0", "important");
+  root.style.setProperty("padding-right", "0", "important");
   root.style.setProperty("padding-bottom", `${safeBottom}px`, "important");
 
   navEl.style.setProperty("position", "relative", "important");
@@ -120,7 +137,7 @@ function applyDockedNavStyles(root: HTMLElement, navEl: HTMLElement, safeBottomP
   navEl.style.setProperty("display", "grid", "important");
   navEl.style.setProperty("grid-template-columns", "repeat(5, minmax(0, 1fr))", "important");
   navEl.style.setProperty("align-content", "end", "important");
-  navEl.style.setProperty("padding", `6px 12px ${contentPadBottom}px`, "important");
+  navEl.style.setProperty("padding", "6px 12px 6px", "important");
   navEl.style.setProperty("border-radius", "18px 18px 0 0", "important");
   navEl.style.setProperty("z-index", "120", "important");
   navEl.style.setProperty("pointer-events", "auto", "important");
@@ -134,7 +151,7 @@ function measureAndApplyDockClearance(root: HTMLElement, navEl: HTMLElement, saf
   const html = document.documentElement;
   const dockHeight = Math.ceil(root.getBoundingClientRect().height);
   const navBarPx = 64;
-  const minClearance = navBarPx + 6 + Math.max(0, Math.round(safeBottomPx));
+  const minClearance = navBarPx + 12 + Math.max(0, Math.round(safeBottomPx));
   const clearance = Math.max(dockHeight, minClearance);
   if (clearance > 0) {
     html.style.setProperty("--student-bottom-nav-dock-height", `${clearance}px`);
@@ -166,7 +183,6 @@ export function refreshStudentBottomNavDock() {
   root.style.setProperty("z-index", "120", "important");
   root.style.setProperty("width", "100%", "important");
   root.style.setProperty("margin", "0", "important");
-  root.style.setProperty("padding", "0", "important");
   root.style.setProperty("box-sizing", "border-box", "important");
   root.style.setProperty("pointer-events", "none", "important");
   root.style.setProperty("transform", "none", "important");
@@ -177,6 +193,7 @@ export function refreshStudentBottomNavDock() {
 
   const remeasure = () => {
     const latest = readSafeAreaInsets();
+    applySafeAreaCssVars(latest);
     measureAndApplyDockClearance(root, navEl, latest.bottom);
   };
 
@@ -208,6 +225,7 @@ function wireStudentBottomNavPinObserver() {
   window.addEventListener("resize", schedule);
   window.addEventListener("orientationchange", () => window.setTimeout(schedule, 120));
   window.visualViewport?.addEventListener("resize", schedule);
+  window.visualViewport?.addEventListener("scroll", schedule);
   schedule();
 }
 
@@ -222,20 +240,21 @@ export function wireMobileStudentViewport() {
     const pwa = isStandalonePwa();
     const mobile = pwa || isIos || window.matchMedia("(max-width: 900px)").matches;
     if (!mobile) {
-      root.classList.remove("is-mobile-student-layout");
+      root.classList.remove("is-mobile-student-layout", "is-ios-pwa");
       return;
     }
 
     root.classList.add("is-mobile-student-layout");
+    root.classList.toggle("is-ios-pwa", pwa && isIos);
+
     syncAppViewportHeight();
 
     const insets = readSafeAreaInsets();
     applySafeAreaCssVars(insets);
 
     const navBarPx = 64;
-    const navPadPx = 6;
     root.style.setProperty("--student-nav-bar", `${navBarPx}px`);
-    const dockPx = navBarPx + navPadPx + insets.bottom;
+    const dockPx = navBarPx + 12 + insets.bottom;
     root.style.setProperty("--student-nav-offset", `${dockPx}px`);
     if (!root.classList.contains("has-student-nav-pinned")) {
       root.style.setProperty("--student-bottom-nav-dock-height", `${dockPx}px`);
@@ -250,10 +269,12 @@ export function wireMobileStudentViewport() {
   window.addEventListener("resize", sync);
   window.addEventListener("orientationchange", () => window.setTimeout(sync, 100));
   window.visualViewport?.addEventListener("resize", sync);
+  window.visualViewport?.addEventListener("scroll", sync);
 
   return () => {
     window.removeEventListener("resize", sync);
     window.visualViewport?.removeEventListener("resize", sync);
+    window.visualViewport?.removeEventListener("scroll", sync);
     navPinObserver?.disconnect();
     navPinObserver = null;
     navPinWired = false;

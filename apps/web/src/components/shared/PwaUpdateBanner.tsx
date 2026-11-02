@@ -1,4 +1,6 @@
 import { RefreshCw, X } from "lucide-react";
+import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { usePwaUpdateStore } from "../../stores/pwaUpdateStore";
 
 export function PwaUpdateBanner() {
@@ -7,30 +9,50 @@ export function PwaUpdateBanner() {
   const runUpdate = usePwaUpdateStore((s) => s.runUpdate);
   const dismissForSession = usePwaUpdateStore((s) => s.dismissForSession);
 
-  if (!visible) return null;
+  useEffect(() => {
+    if (!visible || typeof document === "undefined") return;
+    document.documentElement.classList.add("has-pwa-update-prompt");
+    return () => {
+      document.documentElement.classList.remove("has-pwa-update-prompt");
+    };
+  }, [visible]);
 
-  return (
-    <div className="pwa-update-banner" role="alertdialog" aria-labelledby="pwa-update-title" aria-modal="false">
-      <div className="pwa-update-banner-inner">
-        <RefreshCw size={20} className="pwa-update-banner-icon" aria-hidden="true" />
-        <div className="pwa-update-banner-copy">
-          <strong id="pwa-update-title">Nova versão disponível</strong>
-          <span>Toque em atualizar para ver as últimas melhorias (menu, layout, correções).</span>
-        </div>
-        <div className="pwa-update-banner-actions">
-          <button type="button" className="pwa-update-banner-cta" disabled={applying} onClick={() => runUpdate()}>
-            {applying ? "Atualizando…" : "Atualizar agora"}
-          </button>
+  if (!visible || typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="pwa-update-banner" role="dialog" aria-labelledby="pwa-update-title" aria-modal="true">
+      <button
+        type="button"
+        className="pwa-update-banner-backdrop"
+        aria-label="Depois"
+        onClick={() => dismissForSession()}
+      />
+      <div className="pwa-update-banner-panel">
+        <div className="pwa-update-banner-inner">
+          <RefreshCw size={22} className="pwa-update-banner-icon" aria-hidden="true" />
+          <div className="pwa-update-banner-copy">
+            <strong id="pwa-update-title">Nova versão do ATLLY</strong>
+            <span>Atualize para aplicar correções de layout e do menu.</span>
+          </div>
           <button
             type="button"
             className="pwa-update-banner-dismiss"
-            aria-label="Depois"
+            aria-label="Fechar"
             onClick={() => dismissForSession()}
           >
-            <X size={18} />
+            <X size={20} />
+          </button>
+        </div>
+        <div className="pwa-update-banner-actions">
+          <button type="button" className="pwa-update-banner-secondary" onClick={() => dismissForSession()}>
+            Depois
+          </button>
+          <button type="button" className="pwa-update-banner-cta" disabled={applying} onClick={() => runUpdate()}>
+            {applying ? "Atualizando…" : "Atualizar agora"}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

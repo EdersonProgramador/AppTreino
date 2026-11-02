@@ -12,7 +12,7 @@
         z-index: 120;
         width: 100%;
         margin: 0;
-        padding: 0;
+        padding: 0 0 env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px));
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
@@ -22,9 +22,6 @@
       }
       #atlly-student-nav-root:empty {
         display: none;
-      }
-      #atlly-student-nav-root {
-        padding-bottom: env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px));
       }
       #atlly-student-nav-root > .student-bottom-nav,
       nav.student-bottom-nav.student-bottom-nav--docked {
@@ -65,20 +62,40 @@
           root.style.setProperty("--expo-safe-left", left + "px");
           root.style.setProperty("--safe-bottom", bottom + "px");
         }
+        function syncIosVisualGap() {
+          if (!window.visualViewport) return;
+          var gap = window.innerHeight - (window.visualViewport.offsetTop + window.visualViewport.height);
+          if (gap > 0.5) {
+            document.documentElement.style.setProperty("--ios-visual-bottom-gap", Math.round(gap) + "px");
+            var b = parseFloat(
+              getComputedStyle(document.documentElement).getPropertyValue("--expo-safe-bottom")
+            ) || 0;
+            if (gap > b) {
+              document.documentElement.style.setProperty("--expo-safe-bottom", Math.round(gap) + "px");
+              document.documentElement.style.setProperty("--safe-bottom", Math.round(gap) + "px");
+            }
+          }
+        }
         function syncVh() {
           var h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
           document.documentElement.style.setProperty("--app-vh", Math.round(h) + "px");
         }
         syncSafeArea();
+        syncIosVisualGap();
         syncVh();
         window.addEventListener("resize", function () {
           syncSafeArea();
+          syncIosVisualGap();
           syncVh();
         });
         if (window.visualViewport) {
           window.visualViewport.addEventListener("resize", function () {
             syncSafeArea();
+            syncIosVisualGap();
             syncVh();
+          });
+          window.visualViewport.addEventListener("scroll", function () {
+            syncIosVisualGap();
           });
         }
       })();

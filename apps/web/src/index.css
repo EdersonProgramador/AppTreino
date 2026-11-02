@@ -21477,9 +21477,9 @@ html.is-pwa-standalone body {
   margin: 0;
   padding: 0;
   padding-bottom: 0 !important;
-  min-height: var(--app-vh, 100dvh);
+  min-height: 100dvh;
   min-height: -webkit-fill-available;
-  height: var(--app-vh, 100%);
+  height: auto;
   max-height: none;
   overflow: hidden;
   overscroll-behavior: none;
@@ -21505,8 +21505,9 @@ html.is-pwa-standalone .ui-shell.min-h-screen {
   flex-direction: column;
   flex: 1 1 auto;
   width: 100%;
-  min-height: 0 !important;
-  height: var(--app-vh, 100%) !important;
+  min-height: 100dvh !important;
+  min-height: -webkit-fill-available !important;
+  height: auto !important;
   max-height: none !important;
   overflow: hidden;
   padding: 0;
@@ -21576,16 +21577,18 @@ html.is-pwa-standalone.is-mobile-student-layout {
 }
 
 html.is-pwa-standalone.has-portal-bottom-nav .student-app-shell:not(.workout-immersive) .student-app-scroll,
-html.is-pwa-standalone.has-student-nav-pinned .student-app-shell:not(.workout-immersive) .student-app-scroll {
-  padding-bottom: max(
-    var(--student-scroll-nav-clearance, 0px),
+html.is-pwa-standalone.has-student-nav-pinned .student-app-shell:not(.workout-immersive) .student-app-scroll,
+html.is-ios-pwa.has-portal-bottom-nav .student-app-shell:not(.workout-immersive) .student-app-scroll,
+html.is-ios-pwa.has-student-nav-pinned .student-app-shell:not(.workout-immersive) .student-app-scroll {
+  padding-bottom: var(
+    --student-scroll-nav-clearance,
     calc(
       var(--student-nav-bar, 64px) + 12px +
         env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px))
     )
   ) !important;
-  scroll-padding-bottom: max(
-    var(--student-scroll-nav-clearance, 0px),
+  scroll-padding-bottom: var(
+    --student-scroll-nav-clearance,
     calc(
       var(--student-nav-bar, 64px) + 12px +
         env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px))
@@ -21594,15 +21597,24 @@ html.is-pwa-standalone.has-student-nav-pinned .student-app-shell:not(.workout-im
 }
 
 html.is-pwa-standalone.has-portal-bottom-nav .student-app-shell.has-music-dock:not(.workout-immersive) .student-app-scroll,
-html.is-pwa-standalone.has-student-nav-pinned .student-app-shell.has-music-dock:not(.workout-immersive) .student-app-scroll {
+html.is-pwa-standalone.has-student-nav-pinned .student-app-shell.has-music-dock:not(.workout-immersive) .student-app-scroll,
+html.is-ios-pwa.has-portal-bottom-nav .student-app-shell.has-music-dock:not(.workout-immersive) .student-app-scroll,
+html.is-ios-pwa.has-student-nav-pinned .student-app-shell.has-music-dock:not(.workout-immersive) .student-app-scroll {
   padding-bottom: calc(
-    max(
-      var(--student-scroll-nav-clearance, 0px),
+    var(
+      --student-scroll-nav-clearance,
       calc(
         var(--student-nav-bar, 64px) + 12px +
           env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px))
       )
     ) + 60px
+  ) !important;
+}
+
+html.is-ios-pwa #atlly-student-nav-root:not(:empty) {
+  padding-bottom: max(
+    env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)),
+    var(--ios-visual-bottom-gap, 0px)
   ) !important;
 }
 
@@ -25942,26 +25954,52 @@ html.is-pwa-standalone .student-pwa-install-banner {
 
 .pwa-update-banner {
   position: fixed;
-  top: max(10px, env(safe-area-inset-top, 0px));
-  left: max(10px, env(safe-area-inset-left, 0px));
-  right: max(10px, env(safe-area-inset-right, 0px));
-  z-index: 250;
-  pointer-events: none;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 12px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)));
+  box-sizing: border-box;
+  pointer-events: auto;
+}
+
+html.has-portal-bottom-nav .pwa-update-banner,
+html.has-student-nav-pinned .pwa-update-banner {
+  padding-bottom: calc(var(--student-scroll-nav-clearance, 72px) + 10px);
+}
+
+.pwa-update-banner-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: rgba(5, 7, 12, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  cursor: pointer;
+}
+
+.pwa-update-banner-panel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 420px);
+  border-radius: 20px;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  background: linear-gradient(165deg, rgba(212, 175, 55, 0.12), rgba(9, 9, 11, 0.98));
+  color: #f4f4f5;
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
 }
 
 .pwa-update-banner-inner {
-  pointer-events: auto;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(212, 175, 55, 0.35);
-  background: linear-gradient(135deg, rgba(212, 175, 55, 0.18), rgba(9, 9, 11, 0.96));
-  color: #f4f4f5;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
-  max-width: min(100%, 520px);
-  margin: 0 auto;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 12px;
+  padding: 16px 16px 12px;
 }
 
 .pwa-update-banner-icon {
@@ -25971,17 +26009,17 @@ html.is-pwa-standalone .student-pwa-install-banner {
 }
 
 .pwa-update-banner-copy {
-  flex: 1;
   min-width: 0;
   display: grid;
-  gap: 4px;
-  font-size: 12px;
-  line-height: 1.35;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .pwa-update-banner-copy strong {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 800;
+  line-height: 1.25;
 }
 
 .pwa-update-banner-copy span {
@@ -25989,28 +26027,37 @@ html.is-pwa-standalone .student-pwa-install-banner {
 }
 
 .pwa-update-banner-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+
+.pwa-update-banner-cta,
+.pwa-update-banner-secondary {
+  border: 0;
+  border-radius: 12px;
+  min-height: 44px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .pwa-update-banner-cta {
-  border: 0;
-  border-radius: 999px;
-  padding: 8px 14px;
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
   background: linear-gradient(145deg, #d4af37, #b8922a);
   color: #0a0a0a;
-  white-space: nowrap;
 }
 
 .pwa-update-banner-cta:disabled {
   opacity: 0.7;
   cursor: wait;
+}
+
+.pwa-update-banner-secondary {
+  background: rgba(244, 244, 245, 0.08);
+  color: rgba(244, 244, 245, 0.92);
+  border: 1px solid rgba(244, 244, 245, 0.14);
 }
 
 .pwa-update-banner-dismiss {
@@ -26020,17 +26067,28 @@ html.is-pwa-standalone .student-pwa-install-banner {
   background: transparent;
   color: rgba(244, 244, 245, 0.55);
   cursor: pointer;
-  padding: 2px;
+  padding: 4px;
+  margin: -4px -4px 0 0;
 }
 
-html.light .pwa-update-banner-inner {
-  background: linear-gradient(135deg, rgba(212, 175, 55, 0.14), rgba(250, 250, 250, 0.98));
+html.light .pwa-update-banner-panel {
+  background: linear-gradient(165deg, rgba(212, 175, 55, 0.1), rgba(250, 250, 250, 0.99));
   color: #18181b;
   border-color: rgba(212, 175, 55, 0.4);
 }
 
 html.light .pwa-update-banner-copy span {
   color: rgba(24, 24, 27, 0.65);
+}
+
+html.light .pwa-update-banner-secondary {
+  background: rgba(24, 24, 27, 0.05);
+  color: #18181b;
+  border-color: rgba(24, 24, 27, 0.12);
+}
+
+html.has-pwa-update-prompt body {
+  overflow: hidden;
 }
 
 .student-pwa-install-banner.is-expanded {
@@ -27192,7 +27250,9 @@ html.is-mobile-student-layout .student-app-shell {
   width: 100% !important;
   max-width: 100% !important;
   margin: 0 !important;
-  padding: 0 !important;
+  padding-top: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
   padding-bottom: env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)) !important;
   transform: none !important;
   pointer-events: none;
