@@ -86,7 +86,8 @@ export function wireMobileStudentViewport() {
 
     const navBarPx = 64;
     const safeBottom = insets.bottom;
-    root.style.setProperty("--student-nav-offset", `calc(var(--student-nav-bar, ${navBarPx}px) + ${safeBottom}px)`);
+    root.style.setProperty("--student-nav-bar", `${navBarPx}px`);
+    root.style.setProperty("--student-nav-offset", `${navBarPx + safeBottom}px`);
     root.style.setProperty("--student-bottom-nav-dock-height", `${navBarPx + safeBottom}px`);
   }
 

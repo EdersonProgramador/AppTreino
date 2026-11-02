@@ -27204,12 +27204,34 @@ html.has-portal-bottom-nav body {
   background-color: var(--app-bg) !important;
 }
 
+html.has-portal-bottom-nav {
+  --student-scroll-nav-clearance: var(
+    --student-bottom-nav-dock-height,
+    calc(var(--student-nav-bar, 64px) + env(safe-area-inset-bottom, 0px))
+  );
+  --student-scroll-music-clearance: calc(var(--student-scroll-nav-clearance) + 60px);
+}
+
 html.has-portal-bottom-nav .student-app-shell:not(.workout-immersive) .student-app-scroll {
-  padding-bottom: calc(var(--student-bottom-nav-dock-height, 88px) + 12px) !important;
+  padding-bottom: var(--student-scroll-nav-clearance) !important;
+  scroll-padding-bottom: var(--student-scroll-nav-clearance) !important;
 }
 
 html.has-portal-bottom-nav .student-app-shell.has-music-dock:not(.workout-immersive) .student-app-scroll {
-  padding-bottom: calc(var(--student-bottom-nav-dock-height, 88px) + 56px) !important;
+  padding-bottom: var(--student-scroll-music-clearance) !important;
+  scroll-padding-bottom: var(--student-scroll-music-clearance) !important;
+}
+
+html.has-portal-bottom-nav .student-app-shell.has-music-dock .student-app-scroll {
+  padding-bottom: var(--student-scroll-music-clearance) !important;
+}
+
+html.has-portal-bottom-nav .student-app-scroll:has(> .student-agenda) {
+  padding-bottom: var(--student-scroll-nav-clearance) !important;
+}
+
+html.has-portal-bottom-nav .student-subscription-checkout {
+  padding-bottom: var(--student-scroll-nav-clearance) !important;
 }
 
 html.has-portal-bottom-nav #root {
