@@ -21464,6 +21464,7 @@ html.is-pwa-standalone body {
   width: 100%;
   margin: 0;
   padding: 0;
+  padding-bottom: 0 !important;
   min-height: 100dvh;
   min-height: -webkit-fill-available;
   height: 100%;
@@ -27127,7 +27128,7 @@ html.is-mobile-student-layout .student-app-shell {
   padding-bottom: 0 !important;
 }
 
-/* Menu inferior: root fixo no fundo; safe area = fundo do app (sem faixa branca) */
+/* Menu inferior colado no fundo — safe area dentro do nav (sem faixa abaixo) */
 #atlly-student-nav-root {
   position: fixed !important;
   left: 0 !important;
@@ -27139,32 +27140,31 @@ html.is-mobile-student-layout .student-app-shell {
   max-width: 100% !important;
   margin: 0 !important;
   padding: 0 !important;
-  padding-bottom: env(safe-area-inset-bottom, 0px) !important;
   transform: none !important;
   pointer-events: none;
   box-sizing: border-box;
-  background: var(--app-bg) !important;
+  background: transparent !important;
 }
 
 #atlly-student-nav-root:empty {
   display: none !important;
-  padding-bottom: 0 !important;
 }
 
 #atlly-student-nav-root > .student-bottom-nav {
-  position: relative !important;
-  bottom: auto !important;
-  left: auto !important;
-  right: auto !important;
+  position: fixed !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  top: auto !important;
   flex: none !important;
   margin: 0 !important;
   margin-top: 0 !important;
   width: 100% !important;
   max-width: 100% !important;
   min-height: var(--student-nav-bar, 64px) !important;
-  height: var(--student-nav-bar, 64px) !important;
-  max-height: var(--student-nav-bar, 64px) !important;
-  padding: 6px 12px 8px !important;
+  height: auto !important;
+  max-height: none !important;
+  padding: 6px 12px calc(6px + env(safe-area-inset-bottom, 0px)) !important;
   border-radius: 20px 20px 0 0 !important;
   box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.12) !important;
   background:
@@ -27173,6 +27173,7 @@ html.is-mobile-student-layout .student-app-shell {
   border-top: 1px solid rgba(212, 175, 55, 0.14) !important;
   transform: none !important;
   pointer-events: auto;
+  z-index: 120 !important;
 }
 
 html.light #atlly-student-nav-root > .student-bottom-nav {
@@ -32431,3 +32432,21 @@ html:not(.light) .coach-alert--success {
   margin-bottom: 12px;
 }
 
+/* PWA: scroll clearance quando menu está pinado (JS + portal) */
+html.has-student-nav-pinned .student-app-shell:not(.workout-immersive) .student-app-scroll,
+html.has-portal-bottom-nav .student-app-shell:not(.workout-immersive) .student-app-scroll {
+  padding-bottom: var(
+    --student-scroll-nav-clearance,
+    var(--student-bottom-nav-dock-height, calc(64px + env(safe-area-inset-bottom, 0px)))
+  ) !important;
+}
+
+html.has-student-nav-pinned .student-app-shell.has-music-dock:not(.workout-immersive) .student-app-scroll,
+html.has-portal-bottom-nav .student-app-shell.has-music-dock:not(.workout-immersive) .student-app-scroll {
+  padding-bottom: calc(
+    var(
+        --student-scroll-nav-clearance,
+        var(--student-bottom-nav-dock-height, calc(64px + env(safe-area-inset-bottom, 0px)))
+      ) + 60px
+  ) !important;
+}

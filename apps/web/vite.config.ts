@@ -72,8 +72,8 @@ export default defineConfig({
             urlPattern: ({ url }) => url.origin === self.location.origin && url.pathname.startsWith("/assets/"),
             handler: "StaleWhileRevalidate",
             options: {
-              cacheName: "atlly-static-assets-v2",
-              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 30 }
+              cacheName: "atlly-static-assets-v4",
+              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 7 }
             }
           }
         ]

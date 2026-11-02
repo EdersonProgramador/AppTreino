@@ -73,6 +73,7 @@ import { calculateBodyFatEstimate } from "../../lib/body-composition";
 import { buildMonthCalendar, formatAssessmentDateTime, formatDateTimeLocalInputValue, monthLabel } from "../../lib/dates";
 import {
   getStudentBottomNavPortalRoot,
+  refreshStudentBottomNavDock,
   shouldPinStudentBottomNavToViewport
 } from "../../lib/mobile-viewport";
 import { formatProgramDuration } from "../../lib/cms";
@@ -2561,16 +2562,21 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           : !profile.gender || !profile.objective || !profile.level)
     );
 
+  const portaledBottomNav =
+    shouldPinStudentBottomNavToViewport() &&
+    !hideStudentNav &&
+    accessReady &&
+    !needsOnboarding &&
+    hasStudentAreaAccess;
+
   useEffect(() => {
-    const portalNav =
-      shouldPinStudentBottomNavToViewport() &&
-      !hideStudentNav &&
-      accessReady &&
-      !needsOnboarding &&
-      hasStudentAreaAccess;
-    document.documentElement.classList.toggle("has-portal-bottom-nav", portalNav);
-    return () => document.documentElement.classList.remove("has-portal-bottom-nav");
-  }, [hideStudentNav, accessReady, needsOnboarding, hasStudentAreaAccess]);
+    document.documentElement.classList.toggle("has-portal-bottom-nav", portaledBottomNav);
+    refreshStudentBottomNavDock();
+    return () => {
+      document.documentElement.classList.remove("has-portal-bottom-nav");
+      refreshStudentBottomNavDock();
+    };
+  }, [portaledBottomNav, hideStudentNav]);
 
   const closeCoachSubscriptionOverlay = () => {
     setCoachUpsellNotice(null);
@@ -3218,8 +3224,6 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       : null;
   const isTrainingSection =
     studentSection === "training" || studentSection === "player" || studentSection === "history";
-
-  const pinBottomNavToBody = shouldPinStudentBottomNavToViewport();
 
   const studentBottomNavInner = !hideStudentNav ? (
     <nav className="student-bottom-nav" aria-label={brand.navAria}>
@@ -5877,7 +5881,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       {coachSubscriptionOverlay ? renderSubscriptionCheckout("training") : null}
 
       {studentBottomNavInner &&
-        (pinBottomNavToBody
+        (portaledBottomNav
           ? createPortal(studentBottomNavInner, getStudentBottomNavPortalRoot())
           : studentBottomNavInner)}
     </main>
