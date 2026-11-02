@@ -70,11 +70,6 @@ export function wireMobileStudentViewport() {
 
     root.classList.add("is-mobile-student-layout");
 
-    const layoutHeight = Math.round(window.visualViewport?.height ?? window.innerHeight ?? 0);
-    if (layoutHeight > 0) {
-      root.style.setProperty("--pwa-vh", `${layoutHeight}px`);
-    }
-
     const insets = readSafeAreaInsets();
     if (insets.top > 0) root.style.setProperty("--safe-top", `${insets.top}px`);
     if (insets.left > 0) root.style.setProperty("--safe-left", `${insets.left}px`);
