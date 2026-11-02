@@ -14,33 +14,73 @@
         margin: 0;
         padding: 0;
         box-sizing: border-box;
-        background: transparent;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        background: #0b101c;
         pointer-events: none;
       }
       #atlly-student-nav-root:empty {
         display: none;
       }
-      #atlly-student-nav-root > .student-bottom-nav {
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: 120;
-        pointer-events: auto;
-        min-height: 64px;
+      #atlly-student-nav-root {
+        padding-bottom: env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px));
+      }
+      #atlly-student-nav-root > .student-bottom-nav,
+      nav.student-bottom-nav.student-bottom-nav--docked {
+        position: relative;
         width: 100%;
         margin: 0;
-        padding: 6px 12px calc(6px + env(safe-area-inset-bottom, 0px));
+        min-height: 64px;
+        padding: 6px 12px 6px;
         box-sizing: border-box;
+        pointer-events: auto;
+        z-index: 120;
       }
     </style>
     <script>
       (function () {
+        var standalone = false;
         try {
-          var standalone =
+          standalone =
             window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
           if (standalone) document.documentElement.classList.add("is-pwa-standalone");
         } catch (e) {}
+        function syncSafeArea() {
+          var el = document.createElement("div");
+          el.setAttribute("aria-hidden", "true");
+          el.style.cssText =
+            "position:fixed;bottom:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);";
+          document.documentElement.appendChild(el);
+          var s = getComputedStyle(el);
+          var top = parseFloat(s.paddingTop) || 0;
+          var right = parseFloat(s.paddingRight) || 0;
+          var bottom = parseFloat(s.paddingBottom) || 0;
+          var left = parseFloat(s.paddingLeft) || 0;
+          el.remove();
+          var root = document.documentElement;
+          root.style.setProperty("--expo-safe-top", top + "px");
+          root.style.setProperty("--expo-safe-right", right + "px");
+          root.style.setProperty("--expo-safe-bottom", bottom + "px");
+          root.style.setProperty("--expo-safe-left", left + "px");
+          root.style.setProperty("--safe-bottom", bottom + "px");
+        }
+        function syncVh() {
+          var h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+          document.documentElement.style.setProperty("--app-vh", Math.round(h) + "px");
+        }
+        syncSafeArea();
+        syncVh();
+        window.addEventListener("resize", function () {
+          syncSafeArea();
+          syncVh();
+        });
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener("resize", function () {
+            syncSafeArea();
+            syncVh();
+          });
+        }
       })();
     </script>
     <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)" />

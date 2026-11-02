@@ -31,6 +31,14 @@ function isStandalonePwa() {
   );
 }
 
+function isIosDevice() {
+  if (typeof navigator === "undefined") return false;
+  return (
+    /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
 function readSafeAreaInsets() {
   if (typeof document === "undefined" || !document.body) {
     return { bottom: 0, top: 0, left: 0, right: 0 };
@@ -55,9 +63,90 @@ function readSafeAreaInsets() {
   };
 }
 
+function applySafeAreaCssVars(insets: ReturnType<typeof readSafeAreaInsets>) {
+  const root = document.documentElement;
+  root.style.setProperty("--expo-safe-top", `${insets.top}px`);
+  root.style.setProperty("--expo-safe-right", `${insets.right}px`);
+  root.style.setProperty("--expo-safe-bottom", `${insets.bottom}px`);
+  root.style.setProperty("--expo-safe-left", `${insets.left}px`);
+  root.style.setProperty("--safe-top", `${insets.top}px`);
+  root.style.setProperty("--safe-right", `${insets.right}px`);
+  root.style.setProperty("--safe-bottom", `${insets.bottom}px`);
+  root.style.setProperty("--safe-left", `${insets.left}px`);
+}
+
+/** Altura visível (PWA iOS); só expõe --app-vh — não trava height inline no body. */
+function syncAppViewportHeight() {
+  if (typeof document === "undefined" || typeof window === "undefined") return;
+
+  const vv = window.visualViewport;
+  const height = Math.round(vv?.height ?? window.innerHeight);
+  document.documentElement.style.setProperty("--app-vh", `${height}px`);
+}
+
+function dockedNavBackground(isLight: boolean) {
+  return isLight ? "rgba(255, 255, 255, 0.98)" : "var(--app-bg-soft, #0b101c)";
+}
+
+function applyDockedNavStyles(root: HTMLElement, navEl: HTMLElement, safeBottomPx: number) {
+  const html = document.documentElement;
+  const isLight = html.classList.contains("light");
+  const safeBottom = Math.max(0, Math.round(safeBottomPx));
+  const contentPadBottom = 6;
+  const navBg = dockedNavBackground(isLight);
+
+  root.style.setProperty("display", "flex", "important");
+  root.style.setProperty("flex-direction", "column", "important");
+  root.style.setProperty("justify-content", "flex-end", "important");
+  root.style.setProperty("align-items", "stretch", "important");
+  root.style.setProperty("background", navBg, "important");
+  root.style.setProperty("padding-bottom", `${safeBottom}px`, "important");
+
+  navEl.style.setProperty("position", "relative", "important");
+  navEl.style.setProperty("left", "auto", "important");
+  navEl.style.setProperty("right", "auto", "important");
+  navEl.style.setProperty("bottom", "auto", "important");
+  navEl.style.setProperty("top", "auto", "important");
+  navEl.style.setProperty("width", "100%", "important");
+  navEl.style.setProperty("max-width", "100%", "important");
+  navEl.style.setProperty("margin", "0", "important");
+  navEl.style.setProperty("margin-top", "0", "important");
+  navEl.style.setProperty("min-height", "var(--student-nav-bar, 64px)", "important");
+  navEl.style.setProperty("height", "auto", "important");
+  navEl.style.setProperty("max-height", "none", "important");
+  navEl.style.setProperty("flex", "none", "important");
+  navEl.style.setProperty("transform", "none", "important");
+  navEl.style.setProperty("box-sizing", "border-box", "important");
+  navEl.style.setProperty("display", "grid", "important");
+  navEl.style.setProperty("grid-template-columns", "repeat(5, minmax(0, 1fr))", "important");
+  navEl.style.setProperty("align-content", "end", "important");
+  navEl.style.setProperty("padding", `6px 12px ${contentPadBottom}px`, "important");
+  navEl.style.setProperty("border-radius", "18px 18px 0 0", "important");
+  navEl.style.setProperty("z-index", "120", "important");
+  navEl.style.setProperty("pointer-events", "auto", "important");
+  navEl.style.setProperty("background", navBg, "important");
+  navEl.style.setProperty("box-shadow", "0 -8px 24px rgba(0, 0, 0, 0.12)", "important");
+  navEl.style.setProperty("border-top", "1px solid rgba(212, 175, 55, 0.14)", "important");
+}
+
+function measureAndApplyDockClearance(root: HTMLElement, navEl: HTMLElement, safeBottomPx: number) {
+  applyDockedNavStyles(root, navEl, safeBottomPx);
+  const html = document.documentElement;
+  const dockHeight = Math.ceil(root.getBoundingClientRect().height);
+  const navBarPx = 64;
+  const minClearance = navBarPx + 6 + Math.max(0, Math.round(safeBottomPx));
+  const clearance = Math.max(dockHeight, minClearance);
+  if (clearance > 0) {
+    html.style.setProperty("--student-bottom-nav-dock-height", `${clearance}px`);
+    html.style.setProperty("--student-scroll-nav-clearance", `${clearance}px`);
+  }
+}
+
 /** Mede o nav portado e aplica pin inline (funciona mesmo com CSS/SW antigo). */
 export function refreshStudentBottomNavDock() {
   if (typeof document === "undefined") return;
+
+  syncAppViewportHeight();
 
   const root = document.getElementById("atlly-student-nav-root");
   const html = document.documentElement;
@@ -81,30 +170,23 @@ export function refreshStudentBottomNavDock() {
   root.style.setProperty("box-sizing", "border-box", "important");
   root.style.setProperty("pointer-events", "none", "important");
   root.style.setProperty("transform", "none", "important");
-  root.style.setProperty("background", "transparent", "important");
 
+  const insets = readSafeAreaInsets();
   const navEl = nav as HTMLElement;
-  navEl.style.setProperty("position", "fixed", "important");
-  navEl.style.setProperty("left", "0", "important");
-  navEl.style.setProperty("right", "0", "important");
-  navEl.style.setProperty("bottom", "0", "important");
-  navEl.style.setProperty("z-index", "120", "important");
-  navEl.style.setProperty("width", "100%", "important");
-  navEl.style.setProperty("margin", "0", "important");
-  navEl.style.setProperty("margin-top", "0", "important");
-  navEl.style.setProperty(
-    "padding",
-    "6px 12px calc(6px + env(safe-area-inset-bottom, 0px))",
-    "important"
-  );
-  navEl.style.setProperty("box-sizing", "border-box", "important");
-  navEl.style.setProperty("pointer-events", "auto", "important");
-  navEl.style.setProperty("transform", "none", "important");
+  measureAndApplyDockClearance(root, navEl, insets.bottom);
 
-  const dockHeight = Math.ceil(navEl.getBoundingClientRect().height);
-  if (dockHeight > 0) {
-    html.style.setProperty("--student-bottom-nav-dock-height", `${dockHeight}px`);
-    html.style.setProperty("--student-scroll-nav-clearance", `${dockHeight}px`);
+  const remeasure = () => {
+    const latest = readSafeAreaInsets();
+    measureAndApplyDockClearance(root, navEl, latest.bottom);
+  };
+
+  window.requestAnimationFrame(() => {
+    remeasure();
+    window.requestAnimationFrame(remeasure);
+  });
+  if (isIosDevice() || isStandalonePwa()) {
+    window.setTimeout(remeasure, 120);
+    window.setTimeout(remeasure, 400);
   }
 
   html.classList.add("has-student-nav-pinned");
@@ -134,9 +216,7 @@ export function wireMobileStudentViewport() {
   if (typeof window === "undefined" || typeof document === "undefined") return () => undefined;
 
   const root = document.documentElement;
-  const isIos =
-    /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isIos = isIosDevice();
 
   function sync() {
     const pwa = isStandalonePwa();
@@ -147,24 +227,19 @@ export function wireMobileStudentViewport() {
     }
 
     root.classList.add("is-mobile-student-layout");
+    syncAppViewportHeight();
 
     const insets = readSafeAreaInsets();
-    if (insets.top > 0) root.style.setProperty("--safe-top", `${insets.top}px`);
-    if (insets.left > 0) root.style.setProperty("--safe-left", `${insets.left}px`);
-    if (insets.right > 0) root.style.setProperty("--safe-right", `${insets.right}px`);
-    if (insets.bottom > 0) {
-      root.style.setProperty("--safe-bottom", `${insets.bottom}px`);
-      root.style.setProperty("--expo-safe-bottom", `${insets.bottom}px`);
-    }
+    applySafeAreaCssVars(insets);
 
     const navBarPx = 64;
-    const navPadPx = 8;
-    const safeBottom = insets.bottom;
+    const navPadPx = 6;
     root.style.setProperty("--student-nav-bar", `${navBarPx}px`);
-    const dockPx = navBarPx + navPadPx + safeBottom;
+    const dockPx = navBarPx + navPadPx + insets.bottom;
     root.style.setProperty("--student-nav-offset", `${dockPx}px`);
     if (!root.classList.contains("has-student-nav-pinned")) {
       root.style.setProperty("--student-bottom-nav-dock-height", `${dockPx}px`);
+      root.style.setProperty("--student-scroll-nav-clearance", `${dockPx}px`);
     }
 
     refreshStudentBottomNavDock();

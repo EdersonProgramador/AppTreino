@@ -58,6 +58,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState
@@ -2569,7 +2570,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     !needsOnboarding &&
     hasStudentAreaAccess;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.classList.toggle("has-portal-bottom-nav", portaledBottomNav);
     refreshStudentBottomNavDock();
     return () => {
@@ -3226,7 +3227,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     studentSection === "training" || studentSection === "player" || studentSection === "history";
 
   const studentBottomNavInner = !hideStudentNav ? (
-    <nav className="student-bottom-nav" aria-label={brand.navAria}>
+    <nav
+      className={`student-bottom-nav${portaledBottomNav ? " student-bottom-nav--docked" : ""}`}
+      aria-label={brand.navAria}
+    >
       <button className={isFeedFamilySection ? "active" : ""} onClick={() => goToSection("feed")}>
         <Home size={22} />
         Timeline
