@@ -21611,11 +21611,21 @@ html.is-ios-pwa.has-student-nav-pinned .student-app-shell.has-music-dock:not(.wo
   ) !important;
 }
 
-html.is-ios-pwa #atlly-student-nav-root:not(:empty) {
-  padding-bottom: max(
-    env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)),
-    var(--ios-visual-bottom-gap, 0px)
-  ) !important;
+/* iOS: pinta faixa do home indicator quando fixed bottom deixa gap */
+html.is-ios-pwa.is-pwa-standalone body::after {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px));
+  background: var(--app-bg-soft);
+  z-index: 119;
+  pointer-events: none;
+}
+
+html.light.is-ios-pwa.is-pwa-standalone body::after {
+  background: rgba(255, 255, 255, 0.98);
 }
 
 html.is-native-app .student-music-mini,
@@ -27297,10 +27307,6 @@ nav.student-bottom-nav.student-bottom-nav--docked {
   display: grid !important;
   grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
   box-sizing: border-box !important;
-}
-
-#atlly-student-nav-root:not(:empty) {
-  padding-bottom: env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)) !important;
 }
 
 html.light #atlly-student-nav-root > .student-bottom-nav,

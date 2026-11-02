@@ -21,6 +21,7 @@ export function shouldPinStudentBottomNavToViewport(): boolean {
 
 let safeAreaProbe: HTMLDivElement | null = null;
 let navPinObserver: MutationObserver | null = null;
+let navResizeObserver: ResizeObserver | null = null;
 let navPinWired = false;
 
 function isStandalonePwa() {
@@ -39,13 +40,17 @@ function isIosDevice() {
   );
 }
 
-/** iOS: faixa entre layout viewport e visual viewport (PWA / Safari). */
-function iosVisualBottomGap() {
-  if (typeof window === "undefined" || !isIosDevice()) return 0;
+function visualViewportBottom() {
+  if (typeof window === "undefined") return window.innerHeight;
   const vv = window.visualViewport;
-  if (!vv) return 0;
-  const gap = window.innerHeight - (vv.offsetTop + vv.height);
-  return Math.max(0, Math.round(gap));
+  if (!vv) return window.innerHeight;
+  return vv.offsetTop + vv.height;
+}
+
+/** iOS PWA: espaço abaixo do elemento fixed em relação à viewport visível. */
+function gapBelowElement(el: HTMLElement) {
+  const visualBottom = visualViewportBottom();
+  return Math.max(0, visualBottom - el.getBoundingClientRect().bottom);
 }
 
 function readSafeAreaInsets() {
@@ -58,105 +63,99 @@ function readSafeAreaInsets() {
     safeAreaProbe.setAttribute("aria-hidden", "true");
     safeAreaProbe.setAttribute(
       "style",
-      "position:fixed;bottom:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);"
+      "position:fixed;bottom:0;left:0;right:0;height:0;box-sizing:border-box;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);"
     );
     document.body.appendChild(safeAreaProbe);
   }
 
   const s = getComputedStyle(safeAreaProbe);
-  const visualGap = iosVisualBottomGap();
   return {
     top: parseFloat(s.paddingTop) || 0,
-    bottom: Math.max(parseFloat(s.paddingBottom) || 0, visualGap),
+    bottom: parseFloat(s.paddingBottom) || 0,
     left: parseFloat(s.paddingLeft) || 0,
     right: parseFloat(s.paddingRight) || 0
   };
 }
 
+/** Só grava px quando > 0 — zero quebra o fallback env() no CSS. */
 function applySafeAreaCssVars(insets: ReturnType<typeof readSafeAreaInsets>) {
   const root = document.documentElement;
-  root.style.setProperty("--expo-safe-top", `${insets.top}px`);
-  root.style.setProperty("--expo-safe-right", `${insets.right}px`);
-  root.style.setProperty("--expo-safe-bottom", `${insets.bottom}px`);
-  root.style.setProperty("--expo-safe-left", `${insets.left}px`);
-  root.style.setProperty("--safe-top", `${insets.top}px`);
-  root.style.setProperty("--safe-right", `${insets.right}px`);
-  root.style.setProperty("--safe-bottom", `${insets.bottom}px`);
-  root.style.setProperty("--safe-left", `${insets.left}px`);
-  root.style.setProperty("--ios-visual-bottom-gap", `${iosVisualBottomGap()}px`);
+  const pairs: Array<[string, number]> = [
+    ["--expo-safe-top", insets.top],
+    ["--expo-safe-right", insets.right],
+    ["--expo-safe-bottom", insets.bottom],
+    ["--expo-safe-left", insets.left],
+    ["--safe-top", insets.top],
+    ["--safe-right", insets.right],
+    ["--safe-bottom", insets.bottom],
+    ["--safe-left", insets.left]
+  ];
+  for (const [name, px] of pairs) {
+    if (px > 0) root.style.setProperty(name, `${px}px`);
+    else root.style.removeProperty(name);
+  }
 }
 
-/** Altura visível (PWA iOS); só expõe --app-vh — não trava height inline no body. */
 function syncAppViewportHeight() {
   if (typeof document === "undefined" || typeof window === "undefined") return;
-
   const vv = window.visualViewport;
   const height = Math.round(vv?.height ?? window.innerHeight);
   document.documentElement.style.setProperty("--app-vh", `${height}px`);
-  document.documentElement.style.setProperty(
-    "--app-vh-offset-top",
-    `${Math.round(vv?.offsetTop ?? 0)}px`
-  );
 }
 
-function dockedNavBackground(isLight: boolean) {
-  return isLight ? "rgba(255, 255, 255, 0.98)" : "var(--app-bg-soft, #0b101c)";
+function publishDockClearance(root: HTMLElement) {
+  const html = document.documentElement;
+  const dockHeight = Math.ceil(root.getBoundingClientRect().height);
+  if (dockHeight > 0) {
+    html.style.setProperty("--student-bottom-nav-dock-height", `${dockHeight}px`);
+    html.style.setProperty("--student-scroll-nav-clearance", `${dockHeight}px`);
+  }
 }
 
-function applyDockedNavStyles(root: HTMLElement, navEl: HTMLElement, safeBottomPx: number) {
+function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
   const html = document.documentElement;
   const isLight = html.classList.contains("light");
-  const safeBottom = Math.max(0, Math.round(safeBottomPx));
-  const navBg = dockedNavBackground(isLight);
+  const navBg = isLight ? "rgba(255, 255, 255, 0.98)" : "var(--app-bg-soft, #0b101c)";
 
+  root.style.setProperty("position", "fixed", "important");
+  root.style.setProperty("left", "0", "important");
+  root.style.setProperty("right", "0", "important");
+  root.style.setProperty("bottom", "0", "important");
+  root.style.setProperty("z-index", "120", "important");
+  root.style.setProperty("width", "100%", "important");
+  root.style.setProperty("margin", "0", "important");
+  root.style.setProperty("box-sizing", "border-box", "important");
+  root.style.setProperty("pointer-events", "none", "important");
+  root.style.setProperty("transform", "none", "important");
   root.style.setProperty("display", "flex", "important");
   root.style.setProperty("flex-direction", "column", "important");
   root.style.setProperty("justify-content", "flex-end", "important");
   root.style.setProperty("align-items", "stretch", "important");
   root.style.setProperty("background", navBg, "important");
-  root.style.setProperty("padding-top", "0", "important");
-  root.style.setProperty("padding-left", "0", "important");
-  root.style.setProperty("padding-right", "0", "important");
-  root.style.setProperty("padding-bottom", `${safeBottom}px`, "important");
+  /* safe-area: CSS env() — não sobrescrever com px inline */
+  root.style.removeProperty("padding-top");
+  root.style.removeProperty("padding-left");
+  root.style.removeProperty("padding-right");
+  root.style.removeProperty("padding-bottom");
+  root.style.removeProperty("padding");
 
+  const layoutGap = gapBelowElement(root);
+  if (layoutGap > 0.5) {
+    root.style.setProperty("bottom", `${-Math.round(layoutGap)}px`, "important");
+  } else {
+    root.style.setProperty("bottom", "0", "important");
+  }
+
+  navEl.style.removeProperty("position");
   navEl.style.setProperty("position", "relative", "important");
-  navEl.style.setProperty("left", "auto", "important");
-  navEl.style.setProperty("right", "auto", "important");
-  navEl.style.setProperty("bottom", "auto", "important");
-  navEl.style.setProperty("top", "auto", "important");
   navEl.style.setProperty("width", "100%", "important");
-  navEl.style.setProperty("max-width", "100%", "important");
   navEl.style.setProperty("margin", "0", "important");
-  navEl.style.setProperty("margin-top", "0", "important");
-  navEl.style.setProperty("min-height", "var(--student-nav-bar, 64px)", "important");
-  navEl.style.setProperty("height", "auto", "important");
-  navEl.style.setProperty("max-height", "none", "important");
   navEl.style.setProperty("flex", "none", "important");
   navEl.style.setProperty("transform", "none", "important");
-  navEl.style.setProperty("box-sizing", "border-box", "important");
-  navEl.style.setProperty("display", "grid", "important");
-  navEl.style.setProperty("grid-template-columns", "repeat(5, minmax(0, 1fr))", "important");
-  navEl.style.setProperty("align-content", "end", "important");
-  navEl.style.setProperty("padding", "6px 12px 6px", "important");
-  navEl.style.setProperty("border-radius", "18px 18px 0 0", "important");
-  navEl.style.setProperty("z-index", "120", "important");
   navEl.style.setProperty("pointer-events", "auto", "important");
-  navEl.style.setProperty("background", navBg, "important");
-  navEl.style.setProperty("box-shadow", "0 -8px 24px rgba(0, 0, 0, 0.12)", "important");
-  navEl.style.setProperty("border-top", "1px solid rgba(212, 175, 55, 0.14)", "important");
-}
-
-function measureAndApplyDockClearance(root: HTMLElement, navEl: HTMLElement, safeBottomPx: number) {
-  applyDockedNavStyles(root, navEl, safeBottomPx);
-  const html = document.documentElement;
-  const dockHeight = Math.ceil(root.getBoundingClientRect().height);
-  const navBarPx = 64;
-  const minClearance = navBarPx + 12 + Math.max(0, Math.round(safeBottomPx));
-  const clearance = Math.max(dockHeight, minClearance);
-  if (clearance > 0) {
-    html.style.setProperty("--student-bottom-nav-dock-height", `${clearance}px`);
-    html.style.setProperty("--student-scroll-nav-clearance", `${clearance}px`);
-  }
+  navEl.style.setProperty("box-sizing", "border-box", "important");
+  navEl.style.removeProperty("padding");
+  navEl.style.removeProperty("padding-bottom");
 }
 
 /** Mede o nav portado e aplica pin inline (funciona mesmo com CSS/SW antigo). */
@@ -176,35 +175,20 @@ export function refreshStudentBottomNavDock() {
     return;
   }
 
-  root.style.setProperty("position", "fixed", "important");
-  root.style.setProperty("left", "0", "important");
-  root.style.setProperty("right", "0", "important");
-  root.style.setProperty("bottom", "0", "important");
-  root.style.setProperty("z-index", "120", "important");
-  root.style.setProperty("width", "100%", "important");
-  root.style.setProperty("margin", "0", "important");
-  root.style.setProperty("box-sizing", "border-box", "important");
-  root.style.setProperty("pointer-events", "none", "important");
-  root.style.setProperty("transform", "none", "important");
-
-  const insets = readSafeAreaInsets();
   const navEl = nav as HTMLElement;
-  measureAndApplyDockClearance(root, navEl, insets.bottom);
+  applyDockPinStyles(root, navEl);
 
-  const remeasure = () => {
-    const latest = readSafeAreaInsets();
-    applySafeAreaCssVars(latest);
-    measureAndApplyDockClearance(root, navEl, latest.bottom);
+  const measure = () => {
+    applySafeAreaCssVars(readSafeAreaInsets());
+    applyDockPinStyles(root, navEl);
+    publishDockClearance(root);
   };
 
+  measure();
   window.requestAnimationFrame(() => {
-    remeasure();
-    window.requestAnimationFrame(remeasure);
+    measure();
+    window.requestAnimationFrame(measure);
   });
-  if (isIosDevice() || isStandalonePwa()) {
-    window.setTimeout(remeasure, 120);
-    window.setTimeout(remeasure, 400);
-  }
 
   html.classList.add("has-student-nav-pinned");
 }
@@ -222,8 +206,14 @@ function wireStudentBottomNavPinObserver() {
 
   navPinObserver = new MutationObserver(schedule);
   navPinObserver.observe(root, { childList: true, subtree: true });
+
+  if (typeof ResizeObserver !== "undefined") {
+    navResizeObserver = new ResizeObserver(schedule);
+    navResizeObserver.observe(root);
+  }
+
   window.addEventListener("resize", schedule);
-  window.addEventListener("orientationchange", () => window.setTimeout(schedule, 120));
+  window.addEventListener("orientationchange", () => window.setTimeout(schedule, 150));
   window.visualViewport?.addEventListener("resize", schedule);
   window.visualViewport?.addEventListener("scroll", schedule);
   schedule();
@@ -245,22 +235,12 @@ export function wireMobileStudentViewport() {
     }
 
     root.classList.add("is-mobile-student-layout");
-    root.classList.toggle("is-ios-pwa", pwa && isIos);
+    root.classList.toggle("is-ios-pwa", isIos);
 
     syncAppViewportHeight();
+    applySafeAreaCssVars(readSafeAreaInsets());
 
-    const insets = readSafeAreaInsets();
-    applySafeAreaCssVars(insets);
-
-    const navBarPx = 64;
-    root.style.setProperty("--student-nav-bar", `${navBarPx}px`);
-    const dockPx = navBarPx + 12 + insets.bottom;
-    root.style.setProperty("--student-nav-offset", `${dockPx}px`);
-    if (!root.classList.contains("has-student-nav-pinned")) {
-      root.style.setProperty("--student-bottom-nav-dock-height", `${dockPx}px`);
-      root.style.setProperty("--student-scroll-nav-clearance", `${dockPx}px`);
-    }
-
+    root.style.setProperty("--student-nav-bar", "64px");
     refreshStudentBottomNavDock();
   }
 
@@ -277,6 +257,8 @@ export function wireMobileStudentViewport() {
     window.visualViewport?.removeEventListener("scroll", sync);
     navPinObserver?.disconnect();
     navPinObserver = null;
+    navResizeObserver?.disconnect();
+    navResizeObserver = null;
     navPinWired = false;
   };
 }

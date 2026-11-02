@@ -2,7 +2,10 @@
 <html lang="pt-BR" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=overlays-content"
+    />
     <style id="atlly-student-nav-critical">
       #atlly-student-nav-root {
         position: fixed;
@@ -42,13 +45,16 @@
           standalone =
             window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
           if (standalone) document.documentElement.classList.add("is-pwa-standalone");
+          if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+            document.documentElement.classList.add("is-ios-pwa");
+          }
         } catch (e) {}
         function syncSafeArea() {
           var el = document.createElement("div");
           el.setAttribute("aria-hidden", "true");
           el.style.cssText =
-            "position:fixed;bottom:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);";
-          document.documentElement.appendChild(el);
+            "position:fixed;bottom:0;left:0;right:0;height:0;box-sizing:border-box;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);";
+          document.body.appendChild(el);
           var s = getComputedStyle(el);
           var top = parseFloat(s.paddingTop) || 0;
           var right = parseFloat(s.paddingRight) || 0;
@@ -56,46 +62,34 @@
           var left = parseFloat(s.paddingLeft) || 0;
           el.remove();
           var root = document.documentElement;
-          root.style.setProperty("--expo-safe-top", top + "px");
-          root.style.setProperty("--expo-safe-right", right + "px");
-          root.style.setProperty("--expo-safe-bottom", bottom + "px");
-          root.style.setProperty("--expo-safe-left", left + "px");
-          root.style.setProperty("--safe-bottom", bottom + "px");
-        }
-        function syncIosVisualGap() {
-          if (!window.visualViewport) return;
-          var gap = window.innerHeight - (window.visualViewport.offsetTop + window.visualViewport.height);
-          if (gap > 0.5) {
-            document.documentElement.style.setProperty("--ios-visual-bottom-gap", Math.round(gap) + "px");
-            var b = parseFloat(
-              getComputedStyle(document.documentElement).getPropertyValue("--expo-safe-bottom")
-            ) || 0;
-            if (gap > b) {
-              document.documentElement.style.setProperty("--expo-safe-bottom", Math.round(gap) + "px");
-              document.documentElement.style.setProperty("--safe-bottom", Math.round(gap) + "px");
-            }
+          if (top > 0) root.style.setProperty("--expo-safe-top", top + "px");
+          else root.style.removeProperty("--expo-safe-top");
+          if (right > 0) root.style.setProperty("--expo-safe-right", right + "px");
+          else root.style.removeProperty("--expo-safe-right");
+          if (bottom > 0) {
+            root.style.setProperty("--expo-safe-bottom", bottom + "px");
+            root.style.setProperty("--safe-bottom", bottom + "px");
+          } else {
+            root.style.removeProperty("--expo-safe-bottom");
+            root.style.removeProperty("--safe-bottom");
           }
+          if (left > 0) root.style.setProperty("--expo-safe-left", left + "px");
+          else root.style.removeProperty("--expo-safe-left");
         }
         function syncVh() {
           var h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
           document.documentElement.style.setProperty("--app-vh", Math.round(h) + "px");
         }
         syncSafeArea();
-        syncIosVisualGap();
         syncVh();
         window.addEventListener("resize", function () {
           syncSafeArea();
-          syncIosVisualGap();
           syncVh();
         });
         if (window.visualViewport) {
           window.visualViewport.addEventListener("resize", function () {
             syncSafeArea();
-            syncIosVisualGap();
             syncVh();
-          });
-          window.visualViewport.addEventListener("scroll", function () {
-            syncIosVisualGap();
           });
         }
       })();
