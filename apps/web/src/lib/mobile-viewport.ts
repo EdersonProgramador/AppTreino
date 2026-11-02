@@ -1,3 +1,10 @@
+export function getStudentBottomNavPortalRoot(): HTMLElement {
+  if (typeof document === "undefined") {
+    return null as unknown as HTMLElement;
+  }
+  return document.getElementById("atlly-student-nav-root") ?? document.body;
+}
+
 export function shouldPinStudentBottomNavToViewport(): boolean {
   if (typeof window === "undefined") return false;
   const ios =
@@ -14,27 +21,6 @@ export function shouldPinStudentBottomNavToViewport(): boolean {
 
 let safeAreaProbe: HTMLDivElement | null = null;
 
-export function getStudentBottomNavPortalRoot(): HTMLElement {
-  if (typeof document === "undefined") {
-    throw new Error("document unavailable");
-  }
-  return document.getElementById("atlly-bottom-nav-root") ?? document.body;
-}
-
-function pinStudentBottomNavDockToViewport(safeBottom: number) {
-  const dock = document.querySelector<HTMLElement>("#atlly-bottom-nav-root .student-bottom-nav-dock, .student-bottom-nav-dock");
-  if (!dock) return;
-  dock.style.setProperty("position", "fixed", "important");
-  dock.style.setProperty("left", "0", "important");
-  dock.style.setProperty("right", "0", "important");
-  dock.style.setProperty("bottom", "0", "important");
-  dock.style.setProperty("width", "100%", "important");
-  dock.style.setProperty("margin", "0", "important");
-  dock.style.setProperty("transform", "none", "important");
-  dock.style.setProperty("z-index", "120", "important");
-  dock.style.setProperty("padding-bottom", `${safeBottom}px`, "important");
-}
-
 function isStandalonePwa() {
   if (typeof window === "undefined") return false;
   return (
@@ -43,7 +29,7 @@ function isStandalonePwa() {
   );
 }
 
-/** iPhone / mobile web / PWA: viewport cheia + safe-area. */
+/** Mobile / PWA: expõe safe-area e altura útil via CSS vars (sem estilo inline no nav). */
 export function wireMobileStudentViewport() {
   if (typeof window === "undefined" || typeof document === "undefined") return () => undefined;
 
@@ -52,8 +38,8 @@ export function wireMobileStudentViewport() {
     /iPhone|iPad|iPod/.test(navigator.userAgent) ||
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
-  function readSafeAreaBottomPx() {
-    if (!document.body) return isIos ? 34 : 0;
+  function readSafeAreaInsets() {
+    if (!document.body) return { bottom: 0, top: 0, left: 0, right: 0 };
 
     if (!safeAreaProbe) {
       safeAreaProbe = document.createElement("div");
@@ -65,18 +51,13 @@ export function wireMobileStudentViewport() {
       document.body.appendChild(safeAreaProbe);
     }
 
-    const probeStyle = getComputedStyle(safeAreaProbe);
-    const safeTop = parseFloat(probeStyle.paddingTop) || 0;
-    const safeLeft = parseFloat(probeStyle.paddingLeft) || 0;
-    const safeRight = parseFloat(probeStyle.paddingRight) || 0;
-    if (safeTop > 0) root.style.setProperty("--safe-top", `${safeTop}px`);
-    if (safeLeft > 0) root.style.setProperty("--safe-left", `${safeLeft}px`);
-    if (safeRight > 0) root.style.setProperty("--safe-right", `${safeRight}px`);
-
-    const fromEnv = parseFloat(probeStyle.paddingBottom) || 0;
-    if (fromEnv > 0) return fromEnv;
-
-    return isIos ? 34 : 0;
+    const s = getComputedStyle(safeAreaProbe);
+    return {
+      top: parseFloat(s.paddingTop) || 0,
+      bottom: parseFloat(s.paddingBottom) || 0,
+      left: parseFloat(s.paddingLeft) || 0,
+      right: parseFloat(s.paddingRight) || 0
+    };
   }
 
   function sync() {
@@ -84,94 +65,42 @@ export function wireMobileStudentViewport() {
     const mobile = pwa || isIos || window.matchMedia("(max-width: 900px)").matches;
     if (!mobile) {
       root.classList.remove("is-mobile-student-layout");
-      root.classList.remove("is-pwa-fullscreen");
       return;
     }
 
     root.classList.add("is-mobile-student-layout");
-    root.classList.toggle("is-pwa-fullscreen", pwa);
 
-    const vh = Math.round(window.innerHeight || document.documentElement.clientHeight || 0);
-    if (vh > 0) {
-      root.style.setProperty("--pwa-vh", `${vh}px`);
+    const layoutHeight = Math.round(window.visualViewport?.height ?? window.innerHeight ?? 0);
+    if (layoutHeight > 0) {
+      root.style.setProperty("--pwa-vh", `${layoutHeight}px`);
     }
 
-    const safeBottom = readSafeAreaBottomPx();
-    root.style.setProperty("--safe-bottom", `${safeBottom}px`);
-    root.style.setProperty("--expo-safe-bottom", `${safeBottom}px`);
+    const insets = readSafeAreaInsets();
+    if (insets.top > 0) root.style.setProperty("--safe-top", `${insets.top}px`);
+    if (insets.left > 0) root.style.setProperty("--safe-left", `${insets.left}px`);
+    if (insets.right > 0) root.style.setProperty("--safe-right", `${insets.right}px`);
+    if (insets.bottom > 0) {
+      root.style.setProperty("--safe-bottom", `${insets.bottom}px`);
+      root.style.setProperty("--expo-safe-bottom", `${insets.bottom}px`);
+    }
 
     const navBarPx = 64;
+    const safeBottom = insets.bottom;
     root.style.setProperty("--student-nav-offset", `calc(var(--student-nav-bar, ${navBarPx}px) + ${safeBottom}px)`);
-    root.style.setProperty("--student-bottom-nav-dock-height", `${navBarPx + safeBottom + 12}px`);
-
-    pinStudentBottomNavDockToViewport(safeBottom);
+    root.style.setProperty("--student-bottom-nav-dock-height", `${navBarPx + safeBottom}px`);
   }
 
-  let syncRaf = 0;
-  const scheduleSync = () => {
-    if (syncRaf) return;
-    syncRaf = window.requestAnimationFrame(() => {
-      syncRaf = 0;
-      sync();
-    });
-  };
-
-  const start = () => {
-    scheduleSync();
-    window.setTimeout(scheduleSync, 300);
-  };
-
-  if (document.body) {
-    start();
-  } else {
-    document.addEventListener("DOMContentLoaded", start, { once: true });
-  }
-
-  const dockObserver = new MutationObserver((records) => {
-    for (const record of records) {
-      for (const node of record.addedNodes) {
-        if (!(node instanceof HTMLElement)) continue;
-        if (node.classList.contains("student-bottom-nav-dock") || node.querySelector(".student-bottom-nav-dock")) {
-          scheduleSync();
-          return;
-        }
-      }
-    }
-  });
-  const portalRoot = document.getElementById("atlly-bottom-nav-root");
-  if (portalRoot) {
-    dockObserver.observe(portalRoot, { childList: true, subtree: true });
-  }
-  if (document.body) {
-    dockObserver.observe(document.body, { childList: true, subtree: false });
-  }
-
-  window.visualViewport?.addEventListener("resize", scheduleSync);
-  window.visualViewport?.addEventListener("scroll", scheduleSync);
-  window.addEventListener("resize", scheduleSync);
-  window.addEventListener("orientationchange", () => window.setTimeout(scheduleSync, 150));
-  const onDockRefresh = () => scheduleSync();
-  window.addEventListener("atlly:refresh-bottom-nav", onDockRefresh);
+  sync();
+  window.addEventListener("resize", sync);
+  window.addEventListener("orientationchange", () => window.setTimeout(sync, 100));
+  window.visualViewport?.addEventListener("resize", sync);
 
   return () => {
-    dockObserver.disconnect();
-    if (syncRaf) window.cancelAnimationFrame(syncRaf);
-    window.visualViewport?.removeEventListener("resize", scheduleSync);
-    window.visualViewport?.removeEventListener("scroll", scheduleSync);
-    window.removeEventListener("resize", scheduleSync);
-    window.removeEventListener("atlly:refresh-bottom-nav", onDockRefresh);
+    window.removeEventListener("resize", sync);
+    window.visualViewport?.removeEventListener("resize", sync);
   };
-}
-
-/** Re-sync após o menu inferior montar (portal). */
-function readSafeBottomFromRoot(): number {
-  const raw = getComputedStyle(document.documentElement).getPropertyValue("--safe-bottom").trim();
-  const parsed = parseFloat(raw);
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export function refreshStudentBottomNavDock() {
-  if (typeof window === "undefined") return;
-  pinStudentBottomNavDockToViewport(readSafeBottomFromRoot());
-  window.dispatchEvent(new Event("atlly:refresh-bottom-nav"));
+  /* noop — layout do nav é 100% CSS */
 }

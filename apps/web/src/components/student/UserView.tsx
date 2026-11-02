@@ -58,7 +58,6 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState
@@ -74,7 +73,6 @@ import { calculateBodyFatEstimate } from "../../lib/body-composition";
 import { buildMonthCalendar, formatAssessmentDateTime, formatDateTimeLocalInputValue, monthLabel } from "../../lib/dates";
 import {
   getStudentBottomNavPortalRoot,
-  refreshStudentBottomNavDock,
   shouldPinStudentBottomNavToViewport
 } from "../../lib/mobile-viewport";
 import { formatProgramDuration } from "../../lib/cms";
@@ -2571,20 +2569,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       !needsOnboarding &&
       hasStudentAreaAccess;
     document.documentElement.classList.toggle("has-portal-bottom-nav", portalNav);
-    if (portalNav) refreshStudentBottomNavDock();
     return () => document.documentElement.classList.remove("has-portal-bottom-nav");
   }, [hideStudentNav, accessReady, needsOnboarding, hasStudentAreaAccess]);
-
-  useLayoutEffect(() => {
-    const portalNav =
-      shouldPinStudentBottomNavToViewport() &&
-      !hideStudentNav &&
-      accessReady &&
-      !needsOnboarding &&
-      hasStudentAreaAccess;
-    if (!portalNav) return;
-    refreshStudentBottomNavDock();
-  }, [hideStudentNav, accessReady, needsOnboarding, hasStudentAreaAccess, studentSection]);
 
   const closeCoachSubscriptionOverlay = () => {
     setCoachUpsellNotice(null);
@@ -3233,7 +3219,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const isTrainingSection =
     studentSection === "training" || studentSection === "player" || studentSection === "history";
 
-  const studentBottomNavBar = !hideStudentNav ? (
+  const pinBottomNavToBody = shouldPinStudentBottomNavToViewport();
+
+  const studentBottomNavInner = !hideStudentNav ? (
     <nav className="student-bottom-nav" aria-label={brand.navAria}>
       <button className={isFeedFamilySection ? "active" : ""} onClick={() => goToSection("feed")}>
         <Home size={22} />
@@ -3263,12 +3251,11 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     </nav>
   ) : null;
 
-  const pinBottomNavToBody = shouldPinStudentBottomNavToViewport();
-  const studentBottomNav =
-    studentBottomNavBar && pinBottomNavToBody ? (
-      <div className="student-bottom-nav-dock">{studentBottomNavBar}</div>
+  const studentBottomNavBar =
+    studentBottomNavInner && pinBottomNavToBody ? (
+      <div className="student-bottom-nav-host">{studentBottomNavInner}</div>
     ) : (
-      studentBottomNavBar
+      studentBottomNavInner
     );
 
   return (
@@ -5896,10 +5883,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       )}
       {coachSubscriptionOverlay ? renderSubscriptionCheckout("training") : null}
 
-      {studentBottomNav &&
+      {studentBottomNavBar &&
         (pinBottomNavToBody
-          ? createPortal(studentBottomNav, getStudentBottomNavPortalRoot())
-          : studentBottomNav)}
+          ? createPortal(studentBottomNavBar, getStudentBottomNavPortalRoot())
+          : studentBottomNavBar)}
     </main>
   );
 }

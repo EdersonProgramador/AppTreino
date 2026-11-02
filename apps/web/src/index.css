@@ -27122,67 +27122,81 @@ html.is-mobile-student-layout .student-app-shell {
   padding-bottom: 0 !important;
 }
 
-/* Dock no portal root / body: nav fixa no mobile — fundo preenche safe area iOS */
-#atlly-bottom-nav-root .student-bottom-nav-dock,
-body > .student-bottom-nav-dock {
+/* Mobile: menu preso ao fundo da viewport (fora de #root / overflow) */
+#atlly-student-nav-root {
   position: fixed !important;
-  bottom: 0 !important;
   left: 0 !important;
   right: 0 !important;
+  bottom: 0 !important;
+  top: auto !important;
+  z-index: 120 !important;
   width: 100% !important;
   max-width: 100% !important;
   margin: 0 !important;
+  padding: 0 !important;
   transform: none !important;
-  z-index: 120 !important;
+  pointer-events: none;
   box-sizing: border-box;
-  padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-bottom, 0px));
-  padding-left: max(env(safe-area-inset-left, 0px), var(--safe-left, 0px));
-  padding-right: max(env(safe-area-inset-right, 0px), var(--safe-right, 0px));
-  border-radius: 22px 22px 0 0;
+}
+
+body > .student-bottom-nav-host {
+  position: fixed !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  top: auto !important;
+  z-index: 120 !important;
+  transform: none !important;
+}
+
+#atlly-student-nav-root .student-bottom-nav-host {
+  position: relative !important;
+  bottom: auto !important;
+}
+
+#atlly-student-nav-root .student-bottom-nav-host,
+body > .student-bottom-nav-host {
+  margin: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  border-radius: 20px 20px 0 0;
   background:
     linear-gradient(180deg, rgba(212, 175, 55, 0.04), transparent 28%),
     var(--app-bg-soft);
-  box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.12);
+  border-top: 1px solid rgba(212, 175, 55, 0.14);
   pointer-events: auto;
 }
 
-html.light body > .student-bottom-nav-dock {
+html.light #atlly-student-nav-root .student-bottom-nav-host,
+html.light body > .student-bottom-nav-host {
   background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 -8px 28px rgba(45, 36, 24, 0.08);
 }
 
-html.is-native-app body > .student-bottom-nav-dock .student-bottom-nav,
-body > .student-bottom-nav-dock .student-bottom-nav {
+#atlly-student-nav-root .student-bottom-nav,
+body > .student-bottom-nav-host > .student-bottom-nav {
   position: relative !important;
   bottom: auto !important;
   left: auto !important;
   right: auto !important;
   flex: none !important;
+  margin: 0 !important;
+  margin-top: 0 !important;
   width: 100% !important;
   max-width: 100% !important;
-  margin: 0 !important;
   min-height: var(--student-nav-bar, 64px) !important;
   height: var(--student-nav-bar, 64px) !important;
-  padding: 6px 12px 0 !important;
+  max-height: var(--student-nav-bar, 64px) !important;
+  padding: 6px 12px 4px !important;
   border-radius: 0 !important;
   box-shadow: none !important;
   background: transparent !important;
-  border-top: 1px solid rgba(212, 175, 55, 0.14);
-}
-
-html.has-portal-bottom-nav .student-app-shell:not(.workout-immersive) .student-app-scroll {
-  padding-bottom: calc(
-    var(--student-bottom-nav-dock-height, var(--student-nav-offset, 88px)) + 28px +
-      env(safe-area-inset-bottom, 0px)
-  ) !important;
-  scroll-padding-bottom: calc(var(--student-bottom-nav-dock-height, 88px) + 24px) !important;
-}
-
-html.has-portal-bottom-nav .student-app-shell.has-music-dock:not(.workout-immersive) .student-app-scroll {
-  padding-bottom: calc(
-    var(--student-bottom-nav-dock-height, var(--student-nav-offset, 88px)) + 72px +
-      env(safe-area-inset-bottom, 0px)
-  ) !important;
+  transform: none !important;
 }
 
 html.has-portal-bottom-nav,
@@ -27190,18 +27204,12 @@ html.has-portal-bottom-nav body {
   background-color: var(--app-bg) !important;
 }
 
-html.has-portal-bottom-nav .ui-shell.min-h-screen {
-  flex: 1 1 auto;
-  min-height: 100dvh !important;
-  min-height: -webkit-fill-available !important;
-  height: 100% !important;
-  max-height: none !important;
-  padding-bottom: 0 !important;
-  margin-bottom: 0 !important;
+html.has-portal-bottom-nav .student-app-shell:not(.workout-immersive) .student-app-scroll {
+  padding-bottom: calc(var(--student-bottom-nav-dock-height, 88px) + 12px) !important;
 }
 
-html.is-pwa-standalone.has-portal-bottom-nav body > .student-bottom-nav-dock {
-  padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-bottom, 0px));
+html.has-portal-bottom-nav .student-app-shell.has-music-dock:not(.workout-immersive) .student-app-scroll {
+  padding-bottom: calc(var(--student-bottom-nav-dock-height, 88px) + 56px) !important;
 }
 
 html.has-portal-bottom-nav #root {
@@ -32420,41 +32428,3 @@ html:not(.light) .coach-alert--success {
   margin-bottom: 12px;
 }
 
-#atlly-bottom-nav-root {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 120;
-  width: 100%;
-  max-width: 100%;
-  margin: 0;
-  padding: 0;
-  pointer-events: none;
-}
-
-#atlly-bottom-nav-root .student-bottom-nav-dock {
-  pointer-events: auto;
-}
-
-/* Menu inferior colado no fundo — mobile / PWA (prioridade máxima) */
-@media (max-width: 900px) {
-  #atlly-bottom-nav-root .student-bottom-nav-dock,
-  html.has-portal-bottom-nav body > .student-bottom-nav-dock,
-  html.is-mobile-student-layout body > .student-bottom-nav-dock {
-    position: fixed !important;
-    inset: auto 0 0 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    transform: none !important;
-    z-index: 120 !important;
-    border-radius: 20px 20px 0 0;
-    padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-bottom, 0px)) !important;
-  }
-
-  html.is-native-app body > .student-bottom-nav-dock .student-bottom-nav {
-    position: relative !important;
-    bottom: auto !important;
-  }
-}
