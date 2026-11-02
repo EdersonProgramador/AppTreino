@@ -21534,14 +21534,21 @@ html.is-pwa-standalone .app-view-stage > .admin-workspace-shell {
   width: 100%;
 }
 
+html.is-pwa-standalone .app-view-stage > .login-shell {
+  min-height: 100%;
+  min-height: -webkit-fill-available;
+}
+
 html.is-pwa-standalone .app-view-stage > .home-landing,
 html.is-pwa-standalone .app-view-stage > .app-download-soon {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 100%;
+  min-height: -webkit-fill-available;
   width: 100%;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  background-color: var(--app-bg);
 }
 
 html.is-pwa-standalone .student-app-shell {
@@ -21611,21 +21618,64 @@ html.is-ios-pwa.has-student-nav-pinned .student-app-shell.has-music-dock:not(.wo
   ) !important;
 }
 
-/* iOS: pinta faixa do home indicator quando fixed bottom deixa gap */
-html.is-ios-pwa.is-pwa-standalone body::after {
+/* iOS: preenche safe area inferior (site, login, portal) + gaps da viewport */
+html.is-ios-pwa {
+  background-color: var(--app-bg);
+}
+
+html.is-ios-pwa:has(.home-landing.home-command) {
+  background-color: #05070c;
+  --ios-bottom-fill: #05070c;
+}
+
+html.is-ios-pwa:has(.login-shell),
+html.is-ios-pwa:has(.guest-chrome) {
+  --ios-bottom-fill: var(--app-bg);
+}
+
+html.is-ios-pwa body::after {
   content: "";
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
-  height: env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px));
-  background: var(--app-bg-soft);
+  height: max(
+    env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)),
+    var(--ios-viewport-bottom-fill, 0px)
+  );
+  background: var(--ios-bottom-fill, var(--app-bg));
   z-index: 119;
   pointer-events: none;
 }
 
-html.light.is-ios-pwa.is-pwa-standalone body::after {
+html.is-ios-pwa.has-portal-bottom-nav body::after,
+html.is-ios-pwa.has-student-nav-pinned body::after {
+  background: var(--app-bg-soft, var(--app-bg));
+}
+
+html.light.is-ios-pwa:not(:has(.home-landing.home-command)) body::after {
+  background: var(--ios-bottom-fill, var(--app-bg));
+}
+
+html.light.is-ios-pwa.has-portal-bottom-nav body::after,
+html.light.is-ios-pwa.has-student-nav-pinned body::after {
   background: rgba(255, 255, 255, 0.98);
+}
+
+html.is-ios-pwa .ui-shell.min-h-screen {
+  min-height: 100dvh !important;
+  min-height: -webkit-fill-available !important;
+}
+
+html.is-ios-pwa .login-shell {
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+}
+
+html.is-ios-pwa .home-landing {
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+  box-sizing: border-box;
 }
 
 html.is-native-app .student-music-mini,

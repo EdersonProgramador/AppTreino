@@ -103,6 +103,23 @@ function syncAppViewportHeight() {
   document.documentElement.style.setProperty("--app-vh", `${height}px`);
 }
 
+/** Faixa inferior visível (home indicator + gap iOS PWA/Safari). */
+function syncIosViewportBottomFill() {
+  if (typeof document === "undefined" || typeof window === "undefined") return;
+  if (!isIosDevice()) return;
+
+  const html = document.documentElement;
+  const insets = readSafeAreaInsets();
+  const visualBottom = visualViewportBottom();
+  const layoutGap = Math.max(0, window.innerHeight - visualBottom);
+  const navRoot = document.getElementById("atlly-student-nav-root");
+  const navGap = navRoot && navRoot.querySelector(".student-bottom-nav") ? gapBelowElement(navRoot) : 0;
+  const fill = Math.max(insets.bottom, layoutGap, navGap);
+
+  if (fill > 0.5) html.style.setProperty("--ios-viewport-bottom-fill", `${Math.round(fill)}px`);
+  else html.style.removeProperty("--ios-viewport-bottom-fill");
+}
+
 function publishDockClearance(root: HTMLElement) {
   const html = document.documentElement;
   const dockHeight = Math.ceil(root.getBoundingClientRect().height);
@@ -132,11 +149,10 @@ function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
   root.style.setProperty("justify-content", "flex-end", "important");
   root.style.setProperty("align-items", "stretch", "important");
   root.style.setProperty("background", navBg, "important");
-  /* safe-area: CSS env() — não sobrescrever com px inline */
+  /* safe-area inferior: CSS env() no #atlly-student-nav-root (não zerar padding-bottom) */
   root.style.removeProperty("padding-top");
   root.style.removeProperty("padding-left");
   root.style.removeProperty("padding-right");
-  root.style.removeProperty("padding-bottom");
   root.style.removeProperty("padding");
 
   const layoutGap = gapBelowElement(root);
@@ -185,9 +201,14 @@ export function refreshStudentBottomNavDock() {
   };
 
   measure();
+  syncIosViewportBottomFill();
   window.requestAnimationFrame(() => {
     measure();
-    window.requestAnimationFrame(measure);
+    syncIosViewportBottomFill();
+    window.requestAnimationFrame(() => {
+      measure();
+      syncIosViewportBottomFill();
+    });
   });
 
   html.classList.add("has-student-nav-pinned");
@@ -227,18 +248,25 @@ export function wireMobileStudentViewport() {
   const isIos = isIosDevice();
 
   function sync() {
+    root.classList.toggle("is-ios-pwa", isIos);
+
     const pwa = isStandalonePwa();
     const mobile = pwa || isIos || window.matchMedia("(max-width: 900px)").matches;
     if (!mobile) {
-      root.classList.remove("is-mobile-student-layout", "is-ios-pwa");
+      root.classList.remove("is-mobile-student-layout");
+      syncAppViewportHeight();
+      if (isIos) {
+        applySafeAreaCssVars(readSafeAreaInsets());
+        syncIosViewportBottomFill();
+      }
       return;
     }
 
     root.classList.add("is-mobile-student-layout");
-    root.classList.toggle("is-ios-pwa", isIos);
 
     syncAppViewportHeight();
     applySafeAreaCssVars(readSafeAreaInsets());
+    syncIosViewportBottomFill();
 
     root.style.setProperty("--student-nav-bar", "64px");
     refreshStudentBottomNavDock();

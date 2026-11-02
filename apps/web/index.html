@@ -7,6 +7,20 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=overlays-content"
     />
     <style id="atlly-student-nav-critical">
+      html.is-ios-pwa {
+        background-color: #05070c;
+      }
+      html.is-ios-pwa body::after {
+        content: "";
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px));
+        background: #05070c;
+        z-index: 119;
+        pointer-events: none;
+      }
       #atlly-student-nav-root {
         position: fixed;
         left: 0;
@@ -80,8 +94,12 @@
           var h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
           document.documentElement.style.setProperty("--app-vh", Math.round(h) + "px");
         }
-        syncSafeArea();
-        syncVh();
+        function boot() {
+          syncSafeArea();
+          syncVh();
+        }
+        if (document.body) boot();
+        else document.addEventListener("DOMContentLoaded", boot);
         window.addEventListener("resize", function () {
           syncSafeArea();
           syncVh();
