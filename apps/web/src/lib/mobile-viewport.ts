@@ -47,12 +47,6 @@ function visualViewportBottom() {
   return vv.offsetTop + vv.height;
 }
 
-/** iOS PWA: espaço abaixo do elemento fixed em relação à viewport visível. */
-function gapBelowElement(el: HTMLElement) {
-  const visualBottom = visualViewportBottom();
-  return Math.max(0, visualBottom - el.getBoundingClientRect().bottom);
-}
-
 function readSafeAreaInsets() {
   if (typeof document === "undefined" || !document.body) {
     return { bottom: 0, top: 0, left: 0, right: 0 };
@@ -103,8 +97,8 @@ function syncAppViewportHeight() {
   document.documentElement.style.setProperty("--app-vh", `${height}px`);
 }
 
-/** Faixa inferior visível (home indicator + gap iOS PWA/Safari). */
-function syncIosViewportBottomFill() {
+/** iOS: home indicator, gap da layout viewport e padding único do menu inferior. */
+function syncIosLayoutMetrics() {
   if (typeof document === "undefined" || typeof window === "undefined") return;
   if (!isIosDevice()) return;
 
@@ -112,10 +106,12 @@ function syncIosViewportBottomFill() {
   const insets = readSafeAreaInsets();
   const visualBottom = visualViewportBottom();
   const layoutGap = Math.max(0, window.innerHeight - visualBottom);
-  const navRoot = document.getElementById("atlly-student-nav-root");
-  const navGap = navRoot && navRoot.querySelector(".student-bottom-nav") ? gapBelowElement(navRoot) : 0;
-  const fill = Math.max(insets.bottom, layoutGap, navGap);
+  const safeBottomPad = Math.max(insets.bottom, 6);
 
+  html.style.setProperty("--ios-layout-viewport-gap", `${Math.round(layoutGap)}px`);
+  html.style.setProperty("--ios-safe-bottom-pad", `${Math.round(safeBottomPad)}px`);
+
+  const fill = Math.max(insets.bottom, layoutGap);
   if (fill > 0.5) html.style.setProperty("--ios-viewport-bottom-fill", `${Math.round(fill)}px`);
   else html.style.removeProperty("--ios-viewport-bottom-fill");
 }
@@ -130,14 +126,10 @@ function publishDockClearance(root: HTMLElement) {
 }
 
 function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
-  const html = document.documentElement;
-  const isLight = html.classList.contains("light");
-  const navBg = isLight ? "rgba(255, 255, 255, 0.98)" : "var(--app-bg-soft, #0b101c)";
-
   root.style.setProperty("position", "fixed", "important");
   root.style.setProperty("left", "0", "important");
   root.style.setProperty("right", "0", "important");
-  root.style.setProperty("bottom", "0", "important");
+  root.style.setProperty("bottom", "calc(-1 * var(--ios-layout-viewport-gap, 0px))", "important");
   root.style.setProperty("z-index", "120", "important");
   root.style.setProperty("width", "100%", "important");
   root.style.setProperty("margin", "0", "important");
@@ -148,19 +140,8 @@ function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
   root.style.setProperty("flex-direction", "column", "important");
   root.style.setProperty("justify-content", "flex-end", "important");
   root.style.setProperty("align-items", "stretch", "important");
-  root.style.setProperty("background", navBg, "important");
-  /* safe-area inferior: CSS env() no #atlly-student-nav-root (não zerar padding-bottom) */
-  root.style.removeProperty("padding-top");
-  root.style.removeProperty("padding-left");
-  root.style.removeProperty("padding-right");
-  root.style.removeProperty("padding");
-
-  const layoutGap = gapBelowElement(root);
-  if (layoutGap > 0.5) {
-    root.style.setProperty("bottom", `${-Math.round(layoutGap)}px`, "important");
-  } else {
-    root.style.setProperty("bottom", "0", "important");
-  }
+  root.style.setProperty("background", "transparent", "important");
+  root.style.setProperty("padding", "0", "important");
 
   navEl.style.removeProperty("position");
   navEl.style.setProperty("position", "relative", "important");
@@ -170,8 +151,6 @@ function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
   navEl.style.setProperty("transform", "none", "important");
   navEl.style.setProperty("pointer-events", "auto", "important");
   navEl.style.setProperty("box-sizing", "border-box", "important");
-  navEl.style.removeProperty("padding");
-  navEl.style.removeProperty("padding-bottom");
 }
 
 /** Mede o nav portado e aplica pin inline (funciona mesmo com CSS/SW antigo). */
@@ -200,14 +179,14 @@ export function refreshStudentBottomNavDock() {
     publishDockClearance(root);
   };
 
+  syncIosLayoutMetrics();
   measure();
-  syncIosViewportBottomFill();
   window.requestAnimationFrame(() => {
+    syncIosLayoutMetrics();
     measure();
-    syncIosViewportBottomFill();
     window.requestAnimationFrame(() => {
+      syncIosLayoutMetrics();
       measure();
-      syncIosViewportBottomFill();
     });
   });
 
@@ -257,7 +236,7 @@ export function wireMobileStudentViewport() {
       syncAppViewportHeight();
       if (isIos) {
         applySafeAreaCssVars(readSafeAreaInsets());
-        syncIosViewportBottomFill();
+        syncIosLayoutMetrics();
       }
       return;
     }
@@ -266,7 +245,7 @@ export function wireMobileStudentViewport() {
 
     syncAppViewportHeight();
     applySafeAreaCssVars(readSafeAreaInsets());
-    syncIosViewportBottomFill();
+    syncIosLayoutMetrics();
 
     root.style.setProperty("--student-nav-bar", "64px");
     refreshStudentBottomNavDock();

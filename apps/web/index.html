@@ -25,17 +25,22 @@
         position: fixed;
         left: 0;
         right: 0;
-        bottom: 0;
+        bottom: calc(-1 * var(--ios-layout-viewport-gap, 0px));
         z-index: 120;
         width: 100%;
         margin: 0;
-        padding: 0 0 env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px));
+        padding: 0;
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
         justify-content: flex-end;
-        background: #0b101c;
+        background: transparent;
         pointer-events: none;
+      }
+      #atlly-student-nav-root > .student-bottom-nav,
+      nav.student-bottom-nav.student-bottom-nav--docked {
+        padding-bottom: max(6px, env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)));
+        background: #0b101c;
       }
       #atlly-student-nav-root:empty {
         display: none;
@@ -94,20 +99,33 @@
           var h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
           document.documentElement.style.setProperty("--app-vh", Math.round(h) + "px");
         }
+        function syncIosGap() {
+          if (!/iPhone|iPad|iPod/.test(navigator.userAgent)) return;
+          var vv = window.visualViewport;
+          var visualBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+          var layoutGap = Math.max(0, window.innerHeight - visualBottom);
+          var root = document.documentElement;
+          root.style.setProperty("--ios-layout-viewport-gap", Math.round(layoutGap) + "px");
+          var bottom = parseFloat(getComputedStyle(root).getPropertyValue("--expo-safe-bottom")) || 0;
+          root.style.setProperty("--ios-safe-bottom-pad", Math.round(Math.max(bottom, 6)) + "px");
+        }
         function boot() {
           syncSafeArea();
           syncVh();
+          syncIosGap();
         }
         if (document.body) boot();
         else document.addEventListener("DOMContentLoaded", boot);
         window.addEventListener("resize", function () {
           syncSafeArea();
           syncVh();
+          syncIosGap();
         });
         if (window.visualViewport) {
           window.visualViewport.addEventListener("resize", function () {
             syncSafeArea();
             syncVh();
+            syncIosGap();
           });
         }
       })();
