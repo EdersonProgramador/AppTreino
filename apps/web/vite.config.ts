@@ -70,9 +70,9 @@ export default defineConfig({
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.origin === self.location.origin && url.pathname.startsWith("/assets/"),
-            handler: "CacheFirst",
+            handler: "StaleWhileRevalidate",
             options: {
-              cacheName: "atlly-static-assets",
+              cacheName: "atlly-static-assets-v2",
               expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 30 }
             }
           }

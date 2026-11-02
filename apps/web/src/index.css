@@ -27163,6 +27163,20 @@ html.has-portal-bottom-nav .student-app-shell:not(.workout-immersive) .student-a
   padding-bottom: calc(var(--student-bottom-nav-dock-height, var(--student-nav-offset, 88px)) + 12px) !important;
 }
 
+html.has-portal-bottom-nav,
+html.has-portal-bottom-nav body {
+  background-color: var(--app-bg) !important;
+}
+
+html.has-portal-bottom-nav .ui-shell.min-h-screen {
+  min-height: 100dvh !important;
+  min-height: -webkit-fill-available !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  padding-bottom: 0 !important;
+  margin-bottom: 0 !important;
+}
+
 .student-app-shell {
   max-width: 100%;
   min-width: 0;

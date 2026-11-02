@@ -42,6 +42,28 @@ export function wireMobileStudentViewport() {
     return isIos ? 34 : 0;
   }
 
+  function syncStudentBottomNavDock(safeBottom: number) {
+    const dock = document.querySelector<HTMLElement>(".student-bottom-nav-dock");
+    if (!dock) return;
+
+    dock.style.setProperty("position", "fixed", "important");
+    dock.style.setProperty("left", "0", "important");
+    dock.style.setProperty("right", "0", "important");
+    dock.style.setProperty("width", "100%", "important");
+    dock.style.setProperty("margin", "0", "important");
+    dock.style.setProperty("z-index", "120", "important");
+    dock.style.setProperty("bottom", "0", "important");
+    dock.style.setProperty("padding-bottom", `${safeBottom}px`, "important");
+    dock.style.setProperty("transform", "none", "important");
+
+    const rect = dock.getBoundingClientRect();
+    const layoutBottom = window.innerHeight;
+    const gap = layoutBottom - rect.bottom;
+    if (gap > 0.5 && gap < 96) {
+      dock.style.setProperty("transform", `translateY(${gap}px)`, "important");
+    }
+  }
+
   function sync() {
     const mobile = isIos || window.matchMedia("(max-width: 900px)").matches;
     if (!mobile) {
@@ -64,15 +86,26 @@ export function wireMobileStudentViewport() {
     const navBarPx = 64;
     root.style.setProperty("--student-nav-offset", `calc(var(--student-nav-bar, ${navBarPx}px) + ${safeBottom}px)`);
     root.style.setProperty("--student-bottom-nav-dock-height", `${navBarPx + 10 + safeBottom}px`);
+
+    syncStudentBottomNavDock(safeBottom);
   }
 
   sync();
+
+  const dockObserver = new MutationObserver(() => sync());
+  if (document.body) {
+    dockObserver.observe(document.body, { childList: true, subtree: true });
+  }
+
   window.visualViewport?.addEventListener("resize", sync);
   window.visualViewport?.addEventListener("scroll", sync);
   window.addEventListener("resize", sync);
   window.addEventListener("orientationchange", () => window.setTimeout(sync, 150));
+  window.requestAnimationFrame(() => sync());
+  window.setTimeout(sync, 300);
 
   return () => {
+    dockObserver.disconnect();
     window.visualViewport?.removeEventListener("resize", sync);
     window.visualViewport?.removeEventListener("scroll", sync);
     window.removeEventListener("resize", sync);
