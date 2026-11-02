@@ -3251,13 +3251,6 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     </nav>
   ) : null;
 
-  const studentBottomNavBar =
-    studentBottomNavInner && pinBottomNavToBody ? (
-      <div className="student-bottom-nav-host">{studentBottomNavInner}</div>
-    ) : (
-      studentBottomNavInner
-    );
-
   return (
     <main
       className={`student-app-shell${hideStudentNav ? " workout-immersive" : ""}${
@@ -5883,10 +5876,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       )}
       {coachSubscriptionOverlay ? renderSubscriptionCheckout("training") : null}
 
-      {studentBottomNavBar &&
+      {studentBottomNavInner &&
         (pinBottomNavToBody
-          ? createPortal(studentBottomNavBar, getStudentBottomNavPortalRoot())
-          : studentBottomNavBar)}
+          ? createPortal(studentBottomNavInner, getStudentBottomNavPortalRoot())
+          : studentBottomNavInner)}
     </main>
   );
 }

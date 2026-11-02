@@ -27127,7 +27127,7 @@ html.is-mobile-student-layout .student-app-shell {
   padding-bottom: 0 !important;
 }
 
-/* Mobile: menu preso ao fundo da viewport (fora de #root / overflow) */
+/* Menu inferior: root fixo no fundo; safe area = fundo do app (sem faixa branca) */
 #atlly-student-nav-root {
   position: fixed !important;
   left: 0 !important;
@@ -27139,41 +27139,19 @@ html.is-mobile-student-layout .student-app-shell {
   max-width: 100% !important;
   margin: 0 !important;
   padding: 0 !important;
+  padding-bottom: env(safe-area-inset-bottom, 0px) !important;
   transform: none !important;
   pointer-events: none;
   box-sizing: border-box;
+  background: var(--app-bg) !important;
 }
 
-body > .student-bottom-nav-host {
-  position: fixed !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  top: auto !important;
-  z-index: 120 !important;
-  transform: none !important;
+#atlly-student-nav-root:empty {
+  display: none !important;
+  padding-bottom: 0 !important;
 }
 
-#atlly-student-nav-root .student-bottom-nav-host {
-  position: relative !important;
-  bottom: auto !important;
-}
-
-#atlly-student-nav-root .student-bottom-nav-host,
-body > .student-bottom-nav-host {
-  margin: 0 !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  box-sizing: border-box;
-  padding: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  border: 0 !important;
-  pointer-events: auto;
-}
-
-#atlly-student-nav-root .student-bottom-nav,
-body > .student-bottom-nav-host > .student-bottom-nav {
+#atlly-student-nav-root > .student-bottom-nav {
   position: relative !important;
   bottom: auto !important;
   left: auto !important;
@@ -27184,10 +27162,9 @@ body > .student-bottom-nav-host > .student-bottom-nav {
   width: 100% !important;
   max-width: 100% !important;
   min-height: var(--student-nav-bar, 64px) !important;
-  height: auto !important;
-  max-height: none !important;
-  padding: 6px max(12px, env(safe-area-inset-right, 0px))
-    calc(6px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)) !important;
+  height: var(--student-nav-bar, 64px) !important;
+  max-height: var(--student-nav-bar, 64px) !important;
+  padding: 6px 12px 8px !important;
   border-radius: 20px 20px 0 0 !important;
   box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.12) !important;
   background:
@@ -27195,10 +27172,10 @@ body > .student-bottom-nav-host > .student-bottom-nav {
     var(--app-bg-soft) !important;
   border-top: 1px solid rgba(212, 175, 55, 0.14) !important;
   transform: none !important;
+  pointer-events: auto;
 }
 
-html.light #atlly-student-nav-root .student-bottom-nav,
-html.light body > .student-bottom-nav-host > .student-bottom-nav {
+html.light #atlly-student-nav-root > .student-bottom-nav {
   background: rgba(255, 255, 255, 0.98) !important;
   box-shadow: 0 -8px 28px rgba(45, 36, 24, 0.08) !important;
 }
@@ -27211,7 +27188,7 @@ html.has-portal-bottom-nav body {
 html.has-portal-bottom-nav {
   --student-scroll-nav-clearance: var(
     --student-bottom-nav-dock-height,
-    calc(var(--student-nav-bar, 64px) + env(safe-area-inset-bottom, 0px))
+    calc(var(--student-nav-bar, 64px) + 8px + env(safe-area-inset-bottom, 0px))
   );
   --student-scroll-music-clearance: calc(var(--student-scroll-nav-clearance) + 60px);
 }
