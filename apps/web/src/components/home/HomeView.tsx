@@ -101,9 +101,9 @@ export function HomeView({
 
       {/* Header */}
       <header className="home-header sticky top-0 z-40 border-b border-white/10 bg-black/80 backdrop-blur-xl">
-        <div className="mx-auto flex min-h-[64px] max-w-6xl items-center justify-between gap-3 px-4 sm:min-h-[72px] sm:px-8">
-          <a href="#topo" className="flex min-w-0 flex-col no-underline" aria-label={brand.name}>
-            <AtllyLogo className="h-8 w-auto max-w-[140px] sm:h-9 sm:max-w-[160px]" />
+        <div className="mx-auto flex min-h-[64px] w-full max-w-6xl min-w-0 items-center justify-between gap-2 px-3 sm:min-h-[72px] sm:gap-3 sm:px-8">
+          <a href="#topo" className="flex min-w-0 max-w-[42%] shrink flex-col no-underline sm:max-w-none" aria-label={brand.name}>
+            <AtllyLogo className="h-8 w-auto max-w-full sm:h-9 sm:max-w-[160px]" />
             <span className="mt-0.5 truncate text-[9px] font-bold uppercase tracking-[0.16em] text-brand-silver sm:tracking-[0.22em]">
               {brand.category}
             </span>
@@ -119,9 +119,14 @@ export function HomeView({
             <button type="button" className="hidden text-sm font-bold text-brand-silver transition hover:text-brand-gold sm:inline-flex" onClick={onLogin}>
               Entrar
             </button>
-            <button type="button" className="ui-btn-primary !min-h-10 !px-3 !text-xs sm:!min-h-11 sm:!px-5 sm:!text-sm" onClick={() => onStart()}>
-              {PRIMARY_CTA}
-              <ArrowRight size={16} />
+            <button
+              type="button"
+              className="ui-btn-primary !min-h-10 !px-2.5 !text-[11px] sm:!min-h-11 sm:!px-5 sm:!text-sm"
+              onClick={() => onStart()}
+            >
+              <span className="max-[380px]:hidden">{PRIMARY_CTA}</span>
+              <span className="hidden max-[380px]:inline">Ativar</span>
+              <ArrowRight className="max-[380px]:hidden" size={16} />
             </button>
             <button
               type="button"

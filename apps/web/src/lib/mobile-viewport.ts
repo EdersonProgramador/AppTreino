@@ -63,7 +63,7 @@ export function wireMobileStudentViewport() {
 
     const navBarPx = 64;
     root.style.setProperty("--student-nav-offset", `calc(var(--student-nav-bar, ${navBarPx}px) + ${safeBottom}px)`);
-    root.style.setProperty("--student-bottom-nav-dock-height", `${navBarPx + safeBottom}px`);
+    root.style.setProperty("--student-bottom-nav-dock-height", `${navBarPx + safeBottom + 12}px`);
   }
 
   let syncRaf = 0;
