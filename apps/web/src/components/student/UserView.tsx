@@ -189,6 +189,11 @@ const WorkoutPlayer = lazyWithChunkRetry(async () => {
 });
 
 export function UserView({ token, onLogout }: { token: string | null; onLogout: () => void }) {
+  useEffect(() => {
+    document.documentElement.classList.add("has-student-app-shell");
+    return () => document.documentElement.classList.remove("has-student-app-shell");
+  }, []);
+
   const { user: authUser, exitAdminPreview } = useAuth();
   const isAdminPreview = Boolean(authUser?.previewMode && authUser?.canReturnToAdmin);
   const [previewExiting, setPreviewExiting] = useState(false);
