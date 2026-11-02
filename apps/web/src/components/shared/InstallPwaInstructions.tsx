@@ -119,7 +119,7 @@ export function InstallPwaInstructions({ hints, onInstall, onClose, compact, sho
           onClick={() => onInstall?.()}
         >
           <Download size={18} aria-hidden="true" />
-          {installing ? "Abrindo instalação…" : "Instalar ATLLY"}
+          {installing ? "Abrindo instalação…" : "Baixar app"}
         </button>
       ) : null}
 

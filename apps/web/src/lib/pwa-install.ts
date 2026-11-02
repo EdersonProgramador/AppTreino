@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-
-const PWA_BANNER_DISMISS_KEY = "atlly-pwa-banner-dismissed";
+import { useCallback } from "react";
+import { isPwaMarkedInstalled, usePwaInstallStore, wirePwaInstallPrompt } from "../stores/pwaInstallStore";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -19,7 +18,6 @@ export function isIosSafari(): boolean {
   return /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|Chrome/i.test(ua);
 }
 
-/** Instagram, WhatsApp, Facebook e outros webviews onde não dá para instalar direto. */
 export function isIosInAppBrowser(): boolean {
   if (!isIosDevice()) return false;
   const ua = navigator.userAgent;
@@ -47,86 +45,43 @@ export function isNativeAppShell(): boolean {
   );
 }
 
-/** App aberto pela tela inicial (PWA) ou equivalente no iOS. */
 export function isPwaStandalone(): boolean {
   if (typeof window === "undefined") return false;
   const nav = navigator as Navigator & { standalone?: boolean };
   return window.matchMedia("(display-mode: standalone)").matches || nav.standalone === true;
 }
 
-/** Mostrar textos e passo a passo (menu, /baixar-app, configurações). */
 export function canShowPwaInstallHelp(): boolean {
   if (typeof window === "undefined") return false;
-  if (isPwaStandalone()) return false;
+  if (isPwaStandalone() || isPwaMarkedInstalled()) return false;
   if (!window.isSecureContext && !import.meta.env.DEV) return false;
   return true;
 }
 
-/** Prompt nativo de instalação (Android) — não dentro do WebView do app Expo. */
 export function canOfferPwaInstall(): boolean {
   if (!canShowPwaInstallHelp()) return false;
   if (isNativeAppShell()) return false;
   return true;
 }
 
-export function isPwaBannerDismissed(): boolean {
-  try {
-    return localStorage.getItem(PWA_BANNER_DISMISS_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-export function dismissPwaBanner(): void {
-  try {
-    localStorage.setItem(PWA_BANNER_DISMISS_KEY, "1");
-  } catch {
-    /* ignore */
-  }
+export function shouldShowPwaInstallBanner(): boolean {
+  return canOfferPwaInstall() && canShowPwaInstallHelp();
 }
 
 export function usePwaInstall() {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [installing, setInstalling] = useState(false);
-  const [iosDevice] = useState(() => isIosDevice());
-  const [iosInApp] = useState(() => isIosInAppBrowser());
-  const [iosSafari] = useState(() => isIosSafari());
+  wirePwaInstallPrompt();
 
-  useEffect(() => {
-    if (!canOfferPwaInstall()) return;
+  const deferredPrompt = usePwaInstallStore((s) => s.deferredPrompt);
+  const installing = usePwaInstallStore((s) => s.installing);
+  const promptInstallStore = usePwaInstallStore((s) => s.promptInstall);
 
-    function onBeforeInstallPrompt(event: Event) {
-      event.preventDefault();
-      setDeferredPrompt(event as BeforeInstallPromptEvent);
-    }
-
-    function onInstalled() {
-      setDeferredPrompt(null);
-    }
-
-    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-    window.addEventListener("appinstalled", onInstalled);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-      window.removeEventListener("appinstalled", onInstalled);
-    };
-  }, []);
+  const iosDevice = isIosDevice();
+  const iosInApp = isIosInAppBrowser();
+  const iosSafari = isIosSafari();
 
   const promptInstall = useCallback(async () => {
-    if (!deferredPrompt) return false;
-    setInstalling(true);
-    try {
-      await deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === "accepted") {
-        setDeferredPrompt(null);
-        return true;
-      }
-      return false;
-    } finally {
-      setInstalling(false);
-    }
-  }, [deferredPrompt]);
+    return promptInstallStore();
+  }, [promptInstallStore]);
 
   const hints: PwaInstallHints = {
     canInstall: Boolean(deferredPrompt),
@@ -138,9 +93,10 @@ export function usePwaInstall() {
 
   return {
     ...hints,
-    /** @deprecated use iosDevice */
     iosHint: iosSafari,
     promptInstall,
-    showSection: canOfferPwaInstall() && (Boolean(deferredPrompt) || iosDevice)
+    showSection: canShowPwaInstallHelp()
   };
 }
+
+export type { BeforeInstallPromptEvent };

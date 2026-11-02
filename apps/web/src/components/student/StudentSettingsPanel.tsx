@@ -135,9 +135,9 @@ export const StudentSettingsPanel = ({ token, onBack, onOpenPwaInstall }: Studen
       {canShowPwaInstallHelp() && onOpenPwaInstall ? (
         <div className="grid gap-3 rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-panel)] p-4 sm:p-6">
           <div className="grid gap-1 px-1">
-            <h3 className="m-0 text-lg font-extrabold text-sand">Instalar no celular (PWA)</h3>
+            <h3 className="m-0 text-lg font-extrabold text-sand">Baixar app (PWA)</h3>
             <p className="m-0 text-sm text-sand-faint">
-              iPhone: Safari → Compartilhar → Adicionar à Tela de Início. Android: Instalar app no Chrome.
+              Android: instalação automática no Chrome. iPhone: passo a passo no Safari.
             </p>
           </div>
           <button
@@ -149,7 +149,7 @@ export const StudentSettingsPanel = ({ token, onBack, onOpenPwaInstall }: Studen
             }}
           >
             <Smartphone size={18} aria-hidden="true" />
-            Ver passo a passo
+            Baixar app
           </button>
         </div>
       ) : null}

@@ -208,10 +208,10 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   const pwaInstall = usePwaInstall();
   const showPwaMenuItem = canShowPwaInstallHelp();
   const [pwaInstallHelpOpen, setPwaInstallHelpOpen] = useState(false);
-  const openPwaInstall = useCallback(() => {
+  const openPwaInstall = useCallback(async () => {
     uiSounds.radioSelect();
     if (pwaInstall.canInstall) {
-      void pwaInstall.promptInstall();
+      await pwaInstall.promptInstall();
       return;
     }
     setPwaInstallHelpOpen(true);
@@ -3219,7 +3219,13 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           <div className="student-pwa-install-overlay-dialog" role="dialog" aria-modal="true" aria-label="Instalar ATLLY no celular">
             <InstallPwaInstructions
               hints={pwaInstall}
-              onInstall={() => void pwaInstall.promptInstall()}
+              onInstall={async () => {
+                if (pwaInstall.canInstall) {
+                  await pwaInstall.promptInstall();
+                  setPwaInstallHelpOpen(false);
+                  return;
+                }
+              }}
               onClose={() => setPwaInstallHelpOpen(false)}
             />
           </div>
@@ -3577,7 +3583,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           </div>
         )}
 
-        {showPwaInstallBanner ? <InstallPwaBanner /> : null}
+        {showPwaInstallBanner ? <InstallPwaBanner resetKey={studentSection} /> : null}
 
         {showStudentFeedSection && (
           <StudentFeedSection
@@ -5527,8 +5533,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
                       {
                         group: "Ajuda",
                         icon: Smartphone,
-                        title: "Instalar no celular",
-                        action: openPwaInstall
+                        title: "Baixar app",
+                        action: () => void openPwaInstall()
                       } as const
                     ]
                   : []),
@@ -5619,7 +5625,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           <StudentSettingsPanel
             token={token}
             onBack={() => goToSection("menu")}
-            onOpenPwaInstall={() => setPwaInstallHelpOpen(true)}
+            onOpenPwaInstall={() => void openPwaInstall()}
           />
         )}
 

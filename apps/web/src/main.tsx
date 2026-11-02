@@ -10,7 +10,10 @@ import { wireNativeKeyboardViewport } from "./lib/native-keyboard";
 import { useUiPrefsStore } from "./stores/uiPrefsStore";
 import { isChunkLoadError, reloadForStaleChunk } from "./lib/lazy-retry";
 import { isPwaStandalone } from "./lib/pwa-install";
+import { markPwaInstallComplete, wirePwaInstallPrompt } from "./stores/pwaInstallStore";
 import { registerSW } from "virtual:pwa-register";
+
+wirePwaInstallPrompt();
 import "./index.css";
 
 if (import.meta.env.PROD) {
@@ -44,6 +47,10 @@ if (typeof navigator !== "undefined") {
     document.documentElement.classList.add("is-pwa-standalone");
     wireNativeKeyboardViewport();
   }
+}
+
+if (isPwaStandalone()) {
+  markPwaInstallComplete();
 }
 
 if (typeof window !== "undefined") {

@@ -25644,6 +25644,7 @@ html.is-native-app.keyboard-open .login-shell {
 }
 
 .student-pwa-install-banner {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -25654,6 +25655,32 @@ html.is-native-app.keyboard-open .login-shell {
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(9, 9, 11, 0.92));
   color: #f4f4f5;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+  touch-action: pan-y;
+  user-select: none;
+  will-change: transform;
+}
+
+.student-pwa-install-banner.is-dragging {
+  cursor: grabbing;
+}
+
+.student-pwa-install-banner-swipe,
+.student-pwa-install-banner-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(244, 244, 245, 0.45);
+}
+
+.student-pwa-install-banner-hint {
+  margin: 10px 0 0;
+  text-align: center;
+  text-transform: none;
+  font-size: 12px;
+  letter-spacing: 0;
 }
 
 .student-pwa-install-banner-icon {
@@ -25703,16 +25730,6 @@ html.is-native-app.keyboard-open .login-shell {
   white-space: nowrap;
 }
 
-.student-pwa-install-banner-dismiss {
-  display: grid;
-  place-items: center;
-  border: 0;
-  background: transparent;
-  color: rgba(244, 244, 245, 0.55);
-  cursor: pointer;
-  padding: 2px;
-}
-
 html.light .student-pwa-install-banner {
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(250, 250, 250, 0.98));
   color: #18181b;
@@ -25732,18 +25749,6 @@ html.is-pwa-standalone .student-pwa-install-banner {
   flex-direction: column;
   align-items: stretch;
   margin-bottom: 12px;
-}
-
-.student-pwa-install-banner-dismiss-expanded {
-  margin-top: 8px;
-  border: 0;
-  background: transparent;
-  color: rgba(244, 244, 245, 0.55);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  text-align: center;
-  padding: 4px;
 }
 
 .student-pwa-install-overlay {
