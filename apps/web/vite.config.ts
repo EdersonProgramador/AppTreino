@@ -24,7 +24,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: "prompt",
       injectRegister: false,
       includeAssets: ["assets/atlly-mark.png", "pwa/apple-touch-icon.png"],
       manifest: {

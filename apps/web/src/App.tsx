@@ -23,6 +23,7 @@ import { applyDocumentTheme, useUiPrefsStore } from "./stores/uiPrefsStore";
 import { ALL_UI_SOUND_PRELOAD } from "./lib/ui-sounds";
 import { installShellStateFlush } from "./lib/shell-persist";
 import { MarketingTracker } from "./components/marketing/MarketingTracker";
+import { PwaUpdateBanner } from "./components/shared/PwaUpdateBanner";
 
 const AppRoutes = () => (
   <SessionGate>
@@ -84,6 +85,7 @@ export const App = () => {
       <SoundLibrarySync enabled={soundEnabled} />
       <AuthProvider>
         <div className={`ui-shell min-h-screen ${theme === "dark" ? "theme-dark" : "theme-light"}`}>
+          <PwaUpdateBanner />
           <AppRoutes />
         </div>
       </AuthProvider>

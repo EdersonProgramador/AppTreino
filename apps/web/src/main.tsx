@@ -11,14 +11,12 @@ import { useUiPrefsStore } from "./stores/uiPrefsStore";
 import { isChunkLoadError, reloadForStaleChunk } from "./lib/lazy-retry";
 import { isPwaStandalone } from "./lib/pwa-install";
 import { markPwaInstallComplete, wirePwaInstallPrompt } from "./stores/pwaInstallStore";
-import { registerSW } from "virtual:pwa-register";
+import { startPwaUpdateWatcher } from "./lib/pwa-update";
 
 wirePwaInstallPrompt();
 import "./index.css";
 
-if (import.meta.env.PROD) {
-  registerSW({ immediate: true });
-}
+startPwaUpdateWatcher();
 
 wireStudentSyncBus();
 wireEventBusBroadcast();
