@@ -15,11 +15,18 @@
         position: fixed;
         left: 0;
         right: 0;
-        bottom: 0;
-        height: env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px));
+        bottom: calc(-1 * var(--ios-layout-viewport-gap, 0px));
+        height: max(
+          env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)),
+          var(--ios-viewport-bottom-fill, 0px)
+        );
         background: #05070c;
         z-index: 119;
         pointer-events: none;
+      }
+      html.is-ios-pwa.has-portal-bottom-nav body::after,
+      html.is-ios-pwa.has-student-nav-pinned body::after {
+        display: none;
       }
       #atlly-student-nav-root {
         position: fixed;
@@ -37,11 +44,6 @@
         background: transparent;
         pointer-events: none;
       }
-      #atlly-student-nav-root > .student-bottom-nav,
-      nav.student-bottom-nav.student-bottom-nav--docked {
-        padding-bottom: max(6px, env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)));
-        background: #0b101c;
-      }
       #atlly-student-nav-root:empty {
         display: none;
       }
@@ -50,11 +52,12 @@
         position: relative;
         width: 100%;
         margin: 0;
-        min-height: 64px;
-        padding: 6px 12px 6px;
+        min-height: calc(64px + env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)));
+        padding: 6px 12px max(6px, env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)));
         box-sizing: border-box;
         pointer-events: auto;
         z-index: 120;
+        background: #0b101c;
       }
     </style>
     <script>
@@ -64,7 +67,10 @@
           standalone =
             window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
           if (standalone) document.documentElement.classList.add("is-pwa-standalone");
-          if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+          if (
+            /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+            (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+          ) {
             document.documentElement.classList.add("is-ios-pwa");
           }
         } catch (e) {}
@@ -100,14 +106,21 @@
           document.documentElement.style.setProperty("--app-vh", Math.round(h) + "px");
         }
         function syncIosGap() {
-          if (!/iPhone|iPad|iPod/.test(navigator.userAgent)) return;
+          var appleTouch =
+            /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+            (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+          if (!appleTouch) return;
           var vv = window.visualViewport;
           var visualBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
           var layoutGap = Math.max(0, window.innerHeight - visualBottom);
           var root = document.documentElement;
           root.style.setProperty("--ios-layout-viewport-gap", Math.round(layoutGap) + "px");
           var bottom = parseFloat(getComputedStyle(root).getPropertyValue("--expo-safe-bottom")) || 0;
-          root.style.setProperty("--ios-safe-bottom-pad", Math.round(Math.max(bottom, 6)) + "px");
+          var fill = Math.max(bottom, layoutGap);
+          if (fill > 0) root.style.setProperty("--ios-viewport-bottom-fill", Math.round(fill) + "px");
+          else root.style.removeProperty("--ios-viewport-bottom-fill");
+          if (bottom > 0) root.style.setProperty("--ios-safe-bottom-pad", Math.round(Math.max(bottom, 6)) + "px");
+          else root.style.removeProperty("--ios-safe-bottom-pad");
         }
         function boot() {
           syncSafeArea();

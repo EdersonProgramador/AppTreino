@@ -21638,7 +21638,7 @@ html.is-ios-pwa body::after {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: calc(-1 * var(--ios-layout-viewport-gap, 0px));
   height: max(
     env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)),
     var(--ios-viewport-bottom-fill, 0px)
@@ -21666,12 +21666,63 @@ html.is-ios-pwa .ui-shell.min-h-screen {
 html.is-ios-pwa .login-shell {
   min-height: 100dvh;
   min-height: -webkit-fill-available;
+  /* Safe area inferior: login-page + body::after (evita faixa dupla no shell) */
+  padding-bottom: 0 !important;
+}
+
+html.is-ios-pwa .login-shell > .login-page {
+  padding-bottom: calc(28px + var(--ios-safe-bottom-pad, env(safe-area-inset-bottom, 0px))) !important;
+}
+
+html.is-ios-pwa.keyboard-open .login-shell,
+html.is-pwa-standalone.keyboard-open .login-shell {
+  padding-bottom: 0 !important;
+}
+
+html.is-ios-pwa.keyboard-open .login-shell > .login-page,
+html.is-pwa-standalone.keyboard-open .login-shell > .login-page {
+  padding-bottom: calc(24px + var(--keyboard-height, var(--keyboard-inset, 0px))) !important;
+}
+
+html.is-ios-pwa.keyboard-open body::after,
+html.is-pwa-standalone.keyboard-open body::after {
+  display: none;
 }
 
 html.is-ios-pwa .home-landing {
   min-height: 100dvh;
   min-height: -webkit-fill-available;
   box-sizing: border-box;
+  /* Sticky CTA já inclui safe area; evita padding duplicado no fim da página */
+  padding-bottom: 5rem !important;
+}
+
+/* Login / ativação (activate-page) — mesmo fluxo de safe area que login-shell */
+html.is-ios-pwa:has(.activate-page) {
+  background-color: #05070c;
+  --ios-bottom-fill: #05070c;
+}
+
+html.is-ios-pwa .activate-page,
+html.is-ios-pwa .activate-page-shell {
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+}
+
+html.is-ios-pwa .activate-page-shell {
+  padding-bottom: var(--ios-safe-bottom-pad, env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+}
+
+html.is-ios-pwa .activate-page-header {
+  padding-top: max(1rem, var(--safe-top, env(safe-area-inset-top, 0px)));
+  padding-left: max(1.25rem, var(--safe-left, env(safe-area-inset-left, 0px)));
+  padding-right: max(1.25rem, var(--safe-right, env(safe-area-inset-right, 0px)));
+}
+
+html.is-ios-pwa.keyboard-open .activate-page-shell,
+html.is-pwa-standalone.keyboard-open .activate-page-shell {
+  padding-bottom: max(12px, var(--keyboard-height, var(--keyboard-inset, 0px)));
 }
 
 html.is-native-app .student-music-mini,
@@ -22332,7 +22383,13 @@ html.is-ios-pwa .home-landing .home-sticky-cta {
   background-image: var(--shell-bg);
 }
 
-html.is-native-app.keyboard-open .login-shell {
+html.is-ios-pwa .login-shell {
+  padding-bottom: 0 !important;
+}
+
+html.is-native-app.keyboard-open .login-shell,
+html.is-ios-pwa.keyboard-open .login-shell,
+html.is-pwa-standalone.keyboard-open .login-shell {
   padding-bottom: 0 !important;
 }
 

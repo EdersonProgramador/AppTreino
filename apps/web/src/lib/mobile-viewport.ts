@@ -32,12 +32,16 @@ function isStandalonePwa() {
   );
 }
 
-function isIosDevice() {
+export function isAppleTouchDevice() {
   if (typeof navigator === "undefined") return false;
   return (
     /iPhone|iPad|iPod/.test(navigator.userAgent) ||
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
   );
+}
+
+function isIosDevice() {
+  return isAppleTouchDevice();
 }
 
 function visualViewportBottom() {
@@ -106,14 +110,22 @@ function syncIosLayoutMetrics() {
   const insets = readSafeAreaInsets();
   const visualBottom = visualViewportBottom();
   const layoutGap = Math.max(0, window.innerHeight - visualBottom);
-  const safeBottomPad = Math.max(insets.bottom, 6);
-
   html.style.setProperty("--ios-layout-viewport-gap", `${Math.round(layoutGap)}px`);
-  html.style.setProperty("--ios-safe-bottom-pad", `${Math.round(safeBottomPad)}px`);
+  if (insets.bottom > 0) {
+    html.style.setProperty("--ios-safe-bottom-pad", `${Math.round(Math.max(insets.bottom, 6))}px`);
+  } else {
+    html.style.removeProperty("--ios-safe-bottom-pad");
+  }
 
   const fill = Math.max(insets.bottom, layoutGap);
   if (fill > 0.5) html.style.setProperty("--ios-viewport-bottom-fill", `${Math.round(fill)}px`);
   else html.style.removeProperty("--ios-viewport-bottom-fill");
+}
+
+function clearDockClearance() {
+  const html = document.documentElement;
+  html.style.removeProperty("--student-bottom-nav-dock-height");
+  html.style.removeProperty("--student-scroll-nav-clearance");
 }
 
 function publishDockClearance(root: HTMLElement) {
@@ -122,6 +134,8 @@ function publishDockClearance(root: HTMLElement) {
   if (dockHeight > 0) {
     html.style.setProperty("--student-bottom-nav-dock-height", `${dockHeight}px`);
     html.style.setProperty("--student-scroll-nav-clearance", `${dockHeight}px`);
+  } else {
+    clearDockClearance();
   }
 }
 
@@ -167,6 +181,8 @@ export function refreshStudentBottomNavDock() {
   if (!nav) {
     root.style.cssText = "";
     html.classList.remove("has-student-nav-pinned");
+    clearDockClearance();
+    syncIosLayoutMetrics();
     return;
   }
 

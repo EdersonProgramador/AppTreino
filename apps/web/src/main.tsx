@@ -12,7 +12,7 @@ import { isChunkLoadError, reloadForStaleChunk } from "./lib/lazy-retry";
 import { isPwaStandalone } from "./lib/pwa-install";
 import { markPwaInstallComplete, wirePwaInstallPrompt } from "./stores/pwaInstallStore";
 import { startPwaUpdateWatcher } from "./lib/pwa-update";
-import { wireMobileStudentViewport } from "./lib/mobile-viewport";
+import { isAppleTouchDevice, wireMobileStudentViewport } from "./lib/mobile-viewport";
 
 wirePwaInstallPrompt();
 import "./index.css";
@@ -47,9 +47,13 @@ if (typeof navigator !== "undefined") {
   if (nativeApp) {
     document.documentElement.classList.add("is-native-app");
     wireNativeKeyboardViewport();
-  } else if (isPwaStandalone()) {
-    document.documentElement.classList.add("is-pwa-standalone");
-    wireNativeKeyboardViewport();
+  } else {
+    if (isPwaStandalone()) {
+      document.documentElement.classList.add("is-pwa-standalone");
+    }
+    if (isPwaStandalone() || isAppleTouchDevice()) {
+      wireNativeKeyboardViewport();
+    }
   }
 }
 
