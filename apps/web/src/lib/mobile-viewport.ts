@@ -14,8 +14,15 @@ export function shouldPinStudentBottomNavToViewport(): boolean {
 
 let safeAreaProbe: HTMLDivElement | null = null;
 
+export function getStudentBottomNavPortalRoot(): HTMLElement {
+  if (typeof document === "undefined") {
+    throw new Error("document unavailable");
+  }
+  return document.getElementById("atlly-bottom-nav-root") ?? document.body;
+}
+
 function pinStudentBottomNavDockToViewport(safeBottom: number) {
-  const dock = document.querySelector<HTMLElement>(".student-bottom-nav-dock");
+  const dock = document.querySelector<HTMLElement>("#atlly-bottom-nav-root .student-bottom-nav-dock, .student-bottom-nav-dock");
   if (!dock) return;
   dock.style.setProperty("position", "fixed", "important");
   dock.style.setProperty("left", "0", "important");
@@ -68,12 +75,6 @@ export function wireMobileStudentViewport() {
 
     const fromEnv = parseFloat(probeStyle.paddingBottom) || 0;
     if (fromEnv > 0) return fromEnv;
-
-    const vv = window.visualViewport;
-    if (vv) {
-      const gap = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      if (gap > 0) return gap;
-    }
 
     return isIos ? 34 : 0;
   }
@@ -137,6 +138,10 @@ export function wireMobileStudentViewport() {
       }
     }
   });
+  const portalRoot = document.getElementById("atlly-bottom-nav-root");
+  if (portalRoot) {
+    dockObserver.observe(portalRoot, { childList: true, subtree: true });
+  }
   if (document.body) {
     dockObserver.observe(document.body, { childList: true, subtree: false });
   }
@@ -159,10 +164,14 @@ export function wireMobileStudentViewport() {
 }
 
 /** Re-sync após o menu inferior montar (portal). */
+function readSafeBottomFromRoot(): number {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue("--safe-bottom").trim();
+  const parsed = parseFloat(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 export function refreshStudentBottomNavDock() {
   if (typeof window === "undefined") return;
-  pinStudentBottomNavDockToViewport(
-    parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--safe-bottom")) || 0
-  );
+  pinStudentBottomNavDockToViewport(readSafeBottomFromRoot());
   window.dispatchEvent(new Event("atlly:refresh-bottom-nav"));
 }

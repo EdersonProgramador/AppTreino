@@ -58,6 +58,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState
@@ -71,7 +72,11 @@ import { BRAZILIAN_STATES, CITIES_BY_STATE } from "../../brazil-data";
 import { levelLabel } from "../onboarding/onboarding.schema";
 import { calculateBodyFatEstimate } from "../../lib/body-composition";
 import { buildMonthCalendar, formatAssessmentDateTime, formatDateTimeLocalInputValue, monthLabel } from "../../lib/dates";
-import { refreshStudentBottomNavDock, shouldPinStudentBottomNavToViewport } from "../../lib/mobile-viewport";
+import {
+  getStudentBottomNavPortalRoot,
+  refreshStudentBottomNavDock,
+  shouldPinStudentBottomNavToViewport
+} from "../../lib/mobile-viewport";
 import { formatProgramDuration } from "../../lib/cms";
 import { assetUrl, mediaUrl } from "../../lib/urls";
 import {
@@ -2569,6 +2574,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     if (portalNav) refreshStudentBottomNavDock();
     return () => document.documentElement.classList.remove("has-portal-bottom-nav");
   }, [hideStudentNav, accessReady, needsOnboarding, hasStudentAreaAccess]);
+
+  useLayoutEffect(() => {
+    const portalNav =
+      shouldPinStudentBottomNavToViewport() &&
+      !hideStudentNav &&
+      accessReady &&
+      !needsOnboarding &&
+      hasStudentAreaAccess;
+    if (!portalNav) return;
+    refreshStudentBottomNavDock();
+  }, [hideStudentNav, accessReady, needsOnboarding, hasStudentAreaAccess, studentSection]);
 
   const closeCoachSubscriptionOverlay = () => {
     setCoachUpsellNotice(null);
@@ -5881,7 +5897,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       {coachSubscriptionOverlay ? renderSubscriptionCheckout("training") : null}
 
       {studentBottomNav &&
-        (pinBottomNavToBody ? createPortal(studentBottomNav, document.body) : studentBottomNav)}
+        (pinBottomNavToBody
+          ? createPortal(studentBottomNav, getStudentBottomNavPortalRoot())
+          : studentBottomNav)}
     </main>
   );
 }

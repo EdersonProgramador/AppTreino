@@ -21430,7 +21430,7 @@ html.is-native-app .student-app-scroll {
   touch-action: pan-y;
 }
 
-html.is-native-app .student-bottom-nav,
+html.is-native-app .student-app-shell .student-bottom-nav,
 html.is-native-app .student-app-shell.is-play .student-bottom-nav {
   position: relative !important;
   bottom: auto !important;
@@ -27122,7 +27122,8 @@ html.is-mobile-student-layout .student-app-shell {
   padding-bottom: 0 !important;
 }
 
-/* Dock no body (portal): única nav fixa no mobile — fundo preenche safe area iOS */
+/* Dock no portal root / body: nav fixa no mobile — fundo preenche safe area iOS */
+#atlly-bottom-nav-root .student-bottom-nav-dock,
 body > .student-bottom-nav-dock {
   position: fixed !important;
   bottom: 0 !important;
@@ -32419,8 +32420,26 @@ html:not(.light) .coach-alert--success {
   margin-bottom: 12px;
 }
 
+#atlly-bottom-nav-root {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 120;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  pointer-events: none;
+}
+
+#atlly-bottom-nav-root .student-bottom-nav-dock {
+  pointer-events: auto;
+}
+
 /* Menu inferior colado no fundo — mobile / PWA (prioridade máxima) */
 @media (max-width: 900px) {
+  #atlly-bottom-nav-root .student-bottom-nav-dock,
   html.has-portal-bottom-nav body > .student-bottom-nav-dock,
   html.is-mobile-student-layout body > .student-bottom-nav-dock {
     position: fixed !important;

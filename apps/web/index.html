@@ -31,15 +31,20 @@
         min-height: 0;
         height: 100%;
       }
-      body > .student-bottom-nav-dock {
+      #atlly-bottom-nav-root {
         position: fixed;
         left: 0;
         right: 0;
         bottom: 0;
         z-index: 120;
-        box-sizing: border-box;
-        margin: 0;
         width: 100%;
+        margin: 0;
+        padding: 0;
+        pointer-events: none;
+      }
+      #atlly-bottom-nav-root .student-bottom-nav-dock {
+        pointer-events: auto;
+        box-sizing: border-box;
         padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-bottom, 0px));
       }
     </style>
@@ -84,6 +89,7 @@
   </head>
   <body class="antialiased">
     <div id="root"></div>
+    <div id="atlly-bottom-nav-root" aria-hidden="true"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
