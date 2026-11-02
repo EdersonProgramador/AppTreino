@@ -27364,7 +27364,7 @@ html.is-mobile-student-layout .student-app-shell {
   position: fixed !important;
   left: 0 !important;
   right: 0 !important;
-  bottom: calc(-1 * var(--ios-layout-viewport-gap, 0px)) !important;
+  bottom: 0 !important;
   top: auto !important;
   z-index: 120 !important;
   width: 100% !important;
@@ -27373,7 +27373,10 @@ html.is-mobile-student-layout .student-app-shell {
   padding-top: 0 !important;
   padding-left: 0 !important;
   padding-right: 0 !important;
-  padding-bottom: env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)) !important;
+  padding-bottom: var(
+    --student-nav-dock-padding-bottom,
+    env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px))
+  ) !important;
   transform: none !important;
   pointer-events: none;
   box-sizing: border-box;
@@ -27386,6 +27389,11 @@ html.is-mobile-student-layout .student-app-shell {
 
 html.light #atlly-student-nav-root {
   background: rgba(255, 255, 255, 0.98) !important;
+}
+
+html.has-student-nav-pinned.light body,
+html.has-portal-bottom-nav.light body {
+  background-color: var(--app-bg) !important;
 }
 
 #atlly-student-nav-root:empty {

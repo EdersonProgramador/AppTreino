@@ -139,6 +139,31 @@ function publishDockClearance(root: HTMLElement) {
   }
 }
 
+/** Cola o dock na borda inferior real (PWA iOS often leaves a gap with env() alone). */
+function sealStudentNavDockToScreenBottom(root: HTMLElement, attempt = 0) {
+  const html = document.documentElement;
+  const insets = readSafeAreaInsets();
+  const rect = root.getBoundingClientRect();
+  const layoutGap = Math.max(0, window.innerHeight - rect.bottom);
+  const safePad = Math.max(insets.bottom, 0);
+  const totalPad = Math.round(safePad + layoutGap);
+
+  if (totalPad > 0) {
+    root.style.setProperty("padding-bottom", `${totalPad}px`, "important");
+    html.style.setProperty("--student-nav-dock-padding-bottom", `${totalPad}px`);
+  } else {
+    root.style.removeProperty("padding-bottom");
+    html.style.removeProperty("--student-nav-dock-padding-bottom");
+  }
+
+  if (attempt < 4) {
+    window.requestAnimationFrame(() => {
+      const nextGap = Math.max(0, window.innerHeight - root.getBoundingClientRect().bottom);
+      if (nextGap > 0.75) sealStudentNavDockToScreenBottom(root, attempt + 1);
+    });
+  }
+}
+
 function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
   const html = document.documentElement;
   const isLight = html.classList.contains("light");
@@ -147,7 +172,7 @@ function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
   root.style.setProperty("position", "fixed", "important");
   root.style.setProperty("left", "0", "important");
   root.style.setProperty("right", "0", "important");
-  root.style.setProperty("bottom", "calc(-1 * var(--ios-layout-viewport-gap, 0px))", "important");
+  root.style.setProperty("bottom", "0", "important");
   root.style.setProperty("z-index", "120", "important");
   root.style.setProperty("width", "100%", "important");
   root.style.setProperty("margin", "0", "important");
@@ -159,8 +184,9 @@ function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
   root.style.setProperty("justify-content", "flex-end", "important");
   root.style.setProperty("align-items", "stretch", "important");
   root.style.setProperty("background", dockBg, "important");
-  root.style.removeProperty("padding");
-  root.style.removeProperty("padding-bottom");
+  root.style.setProperty("padding-top", "0", "important");
+  root.style.setProperty("padding-left", "0", "important");
+  root.style.setProperty("padding-right", "0", "important");
 
   navEl.style.removeProperty("position");
   navEl.style.setProperty("position", "relative", "important");
@@ -170,6 +196,10 @@ function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
   navEl.style.setProperty("transform", "none", "important");
   navEl.style.setProperty("pointer-events", "auto", "important");
   navEl.style.setProperty("box-sizing", "border-box", "important");
+  navEl.style.setProperty("padding-bottom", "6px", "important");
+  navEl.style.setProperty("margin-bottom", "0", "important");
+
+  sealStudentNavDockToScreenBottom(root);
 }
 
 /** Mede o nav portado e aplica pin inline (funciona mesmo com CSS/SW antigo). */
@@ -186,6 +216,7 @@ export function refreshStudentBottomNavDock() {
   if (!nav) {
     root.style.cssText = "";
     html.classList.remove("has-student-nav-pinned");
+    html.style.removeProperty("--student-nav-dock-padding-bottom");
     clearDockClearance();
     syncIosLayoutMetrics();
     return;
