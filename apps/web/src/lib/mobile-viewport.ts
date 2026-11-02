@@ -43,8 +43,14 @@ export function wireMobileStudentViewport() {
       root.style.setProperty("--expo-safe-bottom", `${safeBottom}px`);
     }
 
-    const vh = Math.round(window.visualViewport?.height ?? window.innerHeight);
+    const vv = window.visualViewport?.height ?? 0;
+    const layoutH = window.innerHeight || root.clientHeight || 0;
+    const vh = Math.round(Math.max(layoutH, vv));
     root.style.setProperty("--mobile-vh", `${vh}px`);
+    root.style.setProperty(
+      "--student-nav-offset",
+      `calc(var(--student-nav-bar, 70px) + ${safeBottom}px)`
+    );
   }
 
   sync();

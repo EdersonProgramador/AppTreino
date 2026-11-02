@@ -189,9 +189,19 @@ const WorkoutPlayer = lazyWithChunkRetry(async () => {
 });
 
 export function UserView({ token, onLogout }: { token: string | null; onLogout: () => void }) {
+  const [pinBottomNavToBody, setPinBottomNavToBody] = useState(false);
+
   useEffect(() => {
     document.documentElement.classList.add("has-student-app-shell");
     return () => document.documentElement.classList.remove("has-student-app-shell");
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 900px)");
+    const sync = () => setPinBottomNavToBody(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
   }, []);
 
   const { user: authUser, exitAdminPreview } = useAuth();
@@ -2557,6 +2567,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           : !profile.gender || !profile.objective || !profile.level)
     );
 
+  useEffect(() => {
+    const portalNav =
+      pinBottomNavToBody &&
+      !hideStudentNav &&
+      accessReady &&
+      !needsOnboarding &&
+      hasStudentAreaAccess;
+    document.documentElement.classList.toggle("has-portal-bottom-nav", portalNav);
+    return () => document.documentElement.classList.remove("has-portal-bottom-nav");
+  }, [pinBottomNavToBody, hideStudentNav, accessReady, needsOnboarding, hasStudentAreaAccess]);
+
   const closeCoachSubscriptionOverlay = () => {
     setCoachUpsellNotice(null);
     setCoachSubscriptionFunnelOpen(false);
@@ -3203,6 +3224,36 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       : null;
   const isTrainingSection =
     studentSection === "training" || studentSection === "player" || studentSection === "history";
+
+  const studentBottomNav = !hideStudentNav ? (
+    <nav className="student-bottom-nav student-bottom-nav--viewport-root" aria-label={brand.navAria}>
+      <button className={isFeedFamilySection ? "active" : ""} onClick={() => goToSection("feed")}>
+        <Home size={22} />
+        Timeline
+      </button>
+      <button className={studentSection === "activity" ? "active" : ""} onClick={() => openCorrida()}>
+        <CorridaNavIcon size={22} />
+        Corrida
+      </button>
+      <button
+        className={
+          studentSection === "training" || studentSection === "player" || studentSection === "history" ? "active" : ""
+        }
+        onClick={() => openTrainingCatalog()}
+      >
+        <Dumbbell size={22} />
+        Treino
+      </button>
+      <button className={studentSection === "club" ? "active" : ""} onClick={() => goToSection("club")}>
+        <Trophy size={22} />
+        Desafios
+      </button>
+      <button className={studentSection === "menu" ? "active" : ""} onClick={() => goToSection("menu")}>
+        <Menu size={22} />
+        Menu
+      </button>
+    </nav>
+  ) : null;
 
   return (
     <main
@@ -5829,15 +5880,8 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       )}
       {coachSubscriptionOverlay ? renderSubscriptionCheckout("training") : null}
 
-      {!hideStudentNav && (
-      <nav className="student-bottom-nav" aria-label={brand.navAria}>
-        <button className={isFeedFamilySection ? "active" : ""} onClick={() => goToSection("feed")}><Home size={22} />Timeline</button>
-        <button className={studentSection === "activity" ? "active" : ""} onClick={() => openCorrida()}><CorridaNavIcon size={22} />Corrida</button>
-        <button className={studentSection === "training" || studentSection === "player" || studentSection === "history" ? "active" : ""} onClick={() => openTrainingCatalog()}><Dumbbell size={22} />Treino</button>
-        <button className={studentSection === "club" ? "active" : ""} onClick={() => goToSection("club")}><Trophy size={22} />Desafios</button>
-        <button className={studentSection === "menu" ? "active" : ""} onClick={() => goToSection("menu")}><Menu size={22} />Menu</button>
-      </nav>
-      )}
+      {studentBottomNav &&
+        (pinBottomNavToBody ? createPortal(studentBottomNav, document.body) : studentBottomNav)}
     </main>
   );
 }
