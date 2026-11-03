@@ -21470,7 +21470,10 @@ html.is-native-app .student-app-shell.is-activity:not(.workout-immersive) .stude
   right: 0 !important;
 }
 
-/* ---- PWA (Add to Home Screen): ocupa 100% da tela do celular ---- */
+/* ---- PWA (Add to Home Screen): ocupa 100% da tela do celular ----
+   Não travar html/body em height:100dvh + overflow:hidden.
+   No iOS isso vira o containing block do position:fixed e o menu
+   para acima do Home Indicator, deixando a faixa branca. */
 html.is-pwa-standalone,
 html.is-pwa-standalone body {
   width: 100%;
@@ -21479,9 +21482,9 @@ html.is-pwa-standalone body {
   padding-bottom: 0 !important;
   min-height: 100dvh;
   min-height: -webkit-fill-available;
-  height: 100dvh;
+  height: auto;
   max-height: none;
-  overflow: hidden;
+  overflow: visible;
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
   touch-action: manipulation;
