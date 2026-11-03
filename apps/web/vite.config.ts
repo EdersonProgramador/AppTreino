@@ -72,7 +72,7 @@ export default defineConfig({
             urlPattern: ({ url }) => url.origin === self.location.origin && url.pathname.startsWith("/assets/"),
             handler: "StaleWhileRevalidate",
             options: {
-              cacheName: "atlly-static-assets-v14",
+              cacheName: "atlly-static-assets-v15",
               expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 7 }
             }
           },
@@ -80,7 +80,7 @@ export default defineConfig({
             urlPattern: ({ request }) => request.mode === "navigate",
             handler: "NetworkFirst",
             options: {
-              cacheName: "atlly-html-v2",
+              cacheName: "atlly-html-v3",
               networkTimeoutSeconds: 4
             }
           }

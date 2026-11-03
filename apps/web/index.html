@@ -10,25 +10,9 @@
       html.light.is-ios-pwa {
         background-color: #ffffff;
       }
-      html.is-ios-pwa body::after {
-        content: "";
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: calc(-1 * var(--ios-layout-viewport-gap, 0px));
-        height: max(
-          env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)),
-          var(--ios-viewport-bottom-fill, 0px)
-        );
-        background: #05070c;
-        z-index: 119;
-        pointer-events: none;
-      }
-      html.light.is-ios-pwa body::after {
-        background: #ffffff;
-      }
-      html.is-ios-pwa.has-portal-bottom-nav body::after,
-      html.is-ios-pwa.has-student-nav-pinned body::after {
+      html.is-ios-pwa body::after,
+      html.is-pwa-standalone body::after {
+        content: none;
         display: none;
       }
       #atlly-student-nav-root {
@@ -69,6 +53,12 @@
         background: #0b101c;
         border-radius: 0;
         border-top: 1px solid rgba(212, 175, 55, 0.14);
+      }
+      html.is-pwa-standalone.is-ios-pwa {
+        --safe-bottom: max(34px, env(safe-area-inset-bottom, 0px));
+      }
+      html.is-pwa-standalone #atlly-student-nav-root {
+        bottom: calc(-1 * var(--pwa-bottom-gap, 0px));
       }
       html.is-pwa-standalone #atlly-student-nav-root > .student-bottom-nav,
       html.is-pwa-standalone nav.student-bottom-nav.student-bottom-nav--docked {
@@ -116,16 +106,29 @@
           if (bottom > 0) {
             root.style.setProperty("--expo-safe-bottom", bottom + "px");
             root.style.setProperty("--safe-bottom", bottom + "px");
+          } else if (root.classList.contains("is-pwa-standalone") && root.classList.contains("is-ios-pwa")) {
+            root.style.setProperty("--safe-bottom", "34px");
+            root.style.setProperty("--standalone-nav-safe-bottom", "34px");
+            root.style.removeProperty("--expo-safe-bottom");
           } else {
             root.style.removeProperty("--expo-safe-bottom");
             root.style.removeProperty("--safe-bottom");
+            root.style.removeProperty("--standalone-nav-safe-bottom");
           }
           if (left > 0) root.style.setProperty("--expo-safe-left", left + "px");
           else root.style.removeProperty("--expo-safe-left");
         }
         function syncVh() {
-          var h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-          document.documentElement.style.setProperty("--app-vh", Math.round(h) + "px");
+          var vv = window.visualViewport;
+          var visualBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+          var root = document.documentElement;
+          root.style.setProperty("--app-vh", Math.round(visualBottom) + "px");
+          if (!root.classList.contains("is-pwa-standalone")) {
+            root.style.removeProperty("--pwa-bottom-gap");
+            return;
+          }
+          var gap = Math.max(0, Math.round(visualBottom - window.innerHeight));
+          root.style.setProperty("--pwa-bottom-gap", Math.min(gap, 120) + "px");
         }
         function syncIosGap() {
           var appleTouch =

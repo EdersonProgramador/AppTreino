@@ -76,16 +76,13 @@ function readSafeAreaInsets() {
 }
 
 /**
- * iOS standalone often reports env(safe-area-inset-bottom) = 0 even with a home indicator.
- * Only fall back when the top inset is also missing (viewport-fit not applied) or a notch is present.
+ * Safari já fica acima da barra do browser: não inventar 34px lá.
+ * Na Tela de Início o env() costuma vir 0 mesmo com Home Indicator.
  */
 function resolveIosBottomInset(insets: { top: number; bottom: number }) {
   if (insets.bottom > 0) return insets.bottom;
-  if (!/iPhone/.test(navigator.userAgent)) return 0;
-  const standalone = isStandalonePwa();
-  if (insets.top >= 44) return 34;
-  if (standalone && insets.top === 0) return 34;
-  return 0;
+  if (!isStandalonePwa() || !isAppleTouchDevice()) return 0;
+  return 34;
 }
 
 function readSafeAreaInsetsResolved() {
@@ -161,81 +158,75 @@ function publishDockClearance(root: HTMLElement) {
   }
 }
 
-/** Safe area inferior fica no CSS (`env(safe-area-inset-bottom)`), não em px inline. */
-function releaseDockSafeAreaToCss(root: HTMLElement) {
-  root.style.removeProperty("padding-bottom");
+const DOCK_INLINE_PROPS = [
+  "position",
+  "left",
+  "right",
+  "bottom",
+  "top",
+  "width",
+  "margin",
+  "padding",
+  "padding-top",
+  "padding-right",
+  "padding-bottom",
+  "padding-left",
+  "transform",
+  "height",
+  "min-height",
+  "max-height",
+  "background",
+  "display",
+  "flex-direction",
+  "justify-content",
+  "align-items",
+  "z-index",
+  "box-sizing",
+  "flex",
+  "pointer-events"
+];
+
+/** O CSS é a fonte do encaixe. Inline !important antigo impedia o env() de valer. */
+function clearDockInlineGeometry(root: HTMLElement, navEl: HTMLElement | null) {
+  for (const prop of DOCK_INLINE_PROPS) {
+    root.style.removeProperty(prop);
+    navEl?.style.removeProperty(prop);
+  }
   document.documentElement.style.removeProperty("--student-nav-dock-padding-bottom");
   document.documentElement.classList.remove("is-ios-home-indicator");
 }
 
 /**
- * Safari: o menu do browser ocupa a base, então bottom:0 já fica acima dele.
- * Tela inicial: essa barra some e o iOS deixa o layout na altura antiga.
- * Desce o dock até o fundo visível e reserva só o Home Indicator.
+ * Safari: bottom:0 já fica acima do menu do browser.
+ * Tela inicial: se a layout viewport continuar na altura antiga, --pwa-bottom-gap
+ * desce as barras fixas até o vidro. O padding da safe area fica no CSS.
  */
-function pinStandaloneDock(root: HTMLElement, navEl: HTMLElement) {
+function syncStandaloneViewport() {
   const html = document.documentElement;
   const vv = window.visualViewport;
-  const viewportBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
-  root.style.setProperty("bottom", "0px", "important");
-  root.style.setProperty("padding", "0px", "important");
+  const visualBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+  html.style.setProperty("--app-vh", `${Math.round(visualBottom)}px`);
 
-  const envBottom = readSafeAreaInsets().bottom;
-  const pad = Math.max(34, envBottom > 0 ? Math.round(envBottom) : 0);
-  navEl.style.setProperty("padding-bottom", `${pad}px`, "important");
+  if (!isStandalonePwa()) {
+    html.style.removeProperty("--pwa-bottom-gap");
+    html.style.removeProperty("--standalone-nav-safe-bottom");
+    return;
+  }
+
+  const gap = Math.max(0, Math.round(visualBottom - window.innerHeight));
+  html.style.setProperty("--pwa-bottom-gap", `${Math.min(gap, 120)}px`);
+
+  if (!isAppleTouchDevice()) return;
+  const pad = Math.max(34, Math.round(readSafeAreaInsets().bottom));
+  html.style.setProperty("--safe-bottom", `${pad}px`);
   html.style.setProperty("--standalone-nav-safe-bottom", `${pad}px`);
-  html.style.setProperty("--app-vh", `${Math.round(viewportBottom)}px`);
-
-  const gap = Math.max(0, Math.round(viewportBottom - root.getBoundingClientRect().bottom));
-  const shift = Math.min(gap, 120);
-  if (shift > 1) root.style.setProperty("bottom", `${-shift}px`, "important");
 }
 
-function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
-  const html = document.documentElement;
-  const isLight = html.classList.contains("light");
-  const dockBg = isLight ? "rgba(255, 255, 255, 0.98)" : "var(--app-bg-soft, #0b101c)";
-
-  root.style.setProperty("position", "fixed", "important");
-  root.style.setProperty("left", "0", "important");
-  root.style.setProperty("right", "0", "important");
-  root.style.setProperty("bottom", "0", "important");
-  root.style.setProperty("z-index", "120", "important");
-  root.style.setProperty("width", "100%", "important");
-  root.style.setProperty("margin", "0", "important");
-  root.style.setProperty("box-sizing", "border-box", "important");
-  root.style.setProperty("pointer-events", "none", "important");
-  root.style.setProperty("transform", "none", "important");
-  root.style.setProperty("display", "flex", "important");
-  root.style.setProperty("flex-direction", "column", "important");
-  root.style.setProperty("justify-content", "flex-end", "important");
-  root.style.setProperty("align-items", "stretch", "important");
-  root.style.setProperty("background", dockBg, "important");
-  root.style.setProperty("padding-top", "0", "important");
-  root.style.setProperty("padding-left", "0", "important");
-  root.style.setProperty("padding-right", "0", "important");
-  if (isStandalonePwa()) pinStandaloneDock(root, navEl);
-  else releaseDockSafeAreaToCss(root);
-
-  navEl.style.removeProperty("position");
-  navEl.style.setProperty("position", "relative", "important");
-  navEl.style.setProperty("width", "100%", "important");
-  navEl.style.setProperty("margin", "0", "important");
-  navEl.style.setProperty("flex", "none", "important");
-  navEl.style.setProperty("transform", "none", "important");
-  navEl.style.setProperty("pointer-events", "auto", "important");
-  navEl.style.setProperty("box-sizing", "border-box", "important");
-  if (!isStandalonePwa()) navEl.style.removeProperty("padding-bottom");
-  navEl.style.setProperty("min-height", "0", "important");
-  navEl.style.setProperty("height", "auto", "important");
-  navEl.style.setProperty("margin-bottom", "0", "important");
-}
-
-/** Mede o nav portado e aplica pin inline (funciona mesmo com CSS/SW antigo). */
+/** Mede o nav portado. O encaixe visual fica no CSS, não em estilo inline. */
 export function refreshStudentBottomNavDock() {
   if (typeof document === "undefined") return;
 
-  syncAppViewportHeight();
+  syncStandaloneViewport();
 
   const root = document.getElementById("atlly-student-nav-root");
   const html = document.documentElement;
@@ -251,12 +242,11 @@ export function refreshStudentBottomNavDock() {
     return;
   }
 
-  const navEl = nav as HTMLElement;
-  applyDockPinStyles(root, navEl);
+  clearDockInlineGeometry(root, nav as HTMLElement);
 
   const measure = () => {
     applySafeAreaCssVars();
-    applyDockPinStyles(root, navEl);
+    syncStandaloneViewport();
     publishDockClearance(root);
   };
 
@@ -315,6 +305,7 @@ export function wireMobileStudentViewport() {
     if (!mobile) {
       root.classList.remove("is-mobile-student-layout");
       syncAppViewportHeight();
+      syncStandaloneViewport();
       if (isIos) {
         applySafeAreaCssVars();
         syncIosLayoutMetrics();
@@ -324,8 +315,8 @@ export function wireMobileStudentViewport() {
 
     root.classList.add("is-mobile-student-layout");
 
-    syncAppViewportHeight();
     applySafeAreaCssVars();
+    syncStandaloneViewport();
     syncIosLayoutMetrics();
 
     root.style.setProperty("--student-nav-bar", "64px");

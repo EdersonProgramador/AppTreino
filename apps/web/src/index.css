@@ -21480,8 +21480,8 @@ html.is-pwa-standalone body {
   margin: 0;
   padding: 0;
   padding-bottom: 0 !important;
-  min-height: 100dvh;
-  min-height: -webkit-fill-available;
+  min-height: var(--app-vh, 100dvh);
+  min-height: var(--app-vh, -webkit-fill-available);
   height: auto;
   max-height: none;
   overflow: visible;
@@ -21490,6 +21490,12 @@ html.is-pwa-standalone body {
   touch-action: manipulation;
   background: var(--app-bg) !important;
   background-image: none !important;
+}
+
+/* Tela de Início no iPhone: o env() inferior costuma vir 0. Reserva o Home Indicator. */
+html.is-pwa-standalone.is-ios-pwa {
+  --safe-bottom: max(34px, env(safe-area-inset-bottom, 0px));
+  --standalone-nav-safe-bottom: max(34px, env(safe-area-inset-bottom, 0px));
 }
 
 html.is-pwa-standalone #root {
@@ -21579,11 +21585,8 @@ html.is-pwa-standalone .student-app-scroll {
 }
 
 /* iOS PWA: conteúdo respeita home indicator + dock portada */
-html.is-pwa-standalone.is-mobile-student-layout {
-  --safe-bottom: var(
-    --expo-safe-bottom,
-    env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px))
-  );
+html.is-pwa-standalone.is-ios-pwa.is-mobile-student-layout {
+  --safe-bottom: max(34px, env(safe-area-inset-bottom, 0px));
 }
 
 html.is-pwa-standalone.has-portal-bottom-nav .student-app-shell:not(.workout-immersive) .student-app-scroll,
@@ -21636,19 +21639,10 @@ html.is-ios-pwa:has(.guest-chrome) {
   --ios-bottom-fill: var(--app-bg);
 }
 
-html.is-ios-pwa body::after {
-  content: "";
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: calc(-1 * var(--ios-layout-viewport-gap, 0px));
-  height: max(
-    env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)),
-    var(--ios-viewport-bottom-fill, 0px)
-  );
-  background: var(--ios-bottom-fill, var(--app-bg));
-  z-index: 119;
-  pointer-events: none;
+html.is-ios-pwa body::after,
+html.is-pwa-standalone body::after {
+  content: none;
+  display: none !important;
 }
 
 html.is-ios-pwa.has-portal-bottom-nav body::after,
@@ -21700,6 +21694,19 @@ html.is-ios-pwa .home-landing {
   padding-bottom: 5rem !important;
 }
 
+html.is-pwa-standalone .home-landing {
+  min-height: var(--app-vh, 100dvh);
+  padding-bottom: calc(5rem + max(34px, var(--safe-bottom, env(safe-area-inset-bottom, 0px)))) !important;
+}
+
+html.is-pwa-standalone:has(.home-landing.home-command),
+html.is-pwa-standalone:has(.home-landing.home-command) body,
+html.is-pwa-standalone:has(.activate-page),
+html.is-pwa-standalone:has(.activate-page) body {
+  background-color: #05070c !important;
+  background-image: none !important;
+}
+
 /* Login / ativação (activate-page) — mesmo fluxo de safe area que login-shell */
 html.is-ios-pwa:has(.activate-page) {
   background-color: #05070c;
@@ -21715,6 +21722,21 @@ html.is-ios-pwa .activate-page-shell {
 html.is-ios-pwa .activate-page-shell {
   padding-bottom: var(--ios-safe-bottom-pad, env(safe-area-inset-bottom, 0px));
   box-sizing: border-box;
+}
+
+html.is-pwa-standalone .login-shell,
+html.is-pwa-standalone .activate-page,
+html.is-pwa-standalone .activate-page-shell {
+  min-height: var(--app-vh, 100dvh);
+  box-sizing: border-box;
+}
+
+html.is-pwa-standalone .login-shell > .login-page {
+  padding-bottom: calc(28px + max(34px, var(--safe-bottom, env(safe-area-inset-bottom, 0px)))) !important;
+}
+
+html.is-pwa-standalone .activate-page-shell {
+  padding-bottom: max(34px, var(--safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
 }
 
 html.is-ios-pwa .activate-page-header {
@@ -22369,11 +22391,17 @@ html.is-native-app .workspace-content {
   padding-right: max(1rem, var(--safe-right, 0px)) !important;
 }
 
-html.is-ios-pwa .home-landing .home-sticky-cta {
+html.is-ios-pwa:not(.is-pwa-standalone) .home-landing .home-sticky-cta {
   bottom: 0 !important;
-  padding-bottom: calc(12px + constant(safe-area-inset-bottom)) !important;
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
   background: rgba(5, 7, 12, 0.96) !important;
+  box-sizing: border-box;
+}
+
+html.is-pwa-standalone .home-landing .home-sticky-cta {
+  bottom: calc(-1 * var(--pwa-bottom-gap, 0px)) !important;
+  padding-bottom: calc(12px + max(34px, var(--safe-bottom, env(safe-area-inset-bottom, 0px)))) !important;
+  background: rgba(5, 7, 12, 0.98) !important;
   box-sizing: border-box;
 }
 
@@ -27416,7 +27444,7 @@ nav.student-bottom-nav.student-bottom-nav--docked {
   margin-bottom: 0 !important;
   padding-top: 8px !important;
   padding-right: max(8px, var(--safe-right, 0px)) !important;
-  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)) !important;
+  padding-bottom: max(16px, var(--safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
   padding-left: max(8px, var(--safe-left, 0px)) !important;
   border-radius: 0 !important;
   box-shadow: none !important;
@@ -27439,7 +27467,7 @@ html.light nav.student-bottom-nav.student-bottom-nav--docked {
 
 /* Tela inicial: a caixa do menu inclui o Home Indicator e encosta na borda. */
 html.is-pwa-standalone #atlly-student-nav-root {
-  bottom: 0 !important;
+  bottom: calc(-1 * var(--pwa-bottom-gap, 0px)) !important;
   padding: 0 !important;
   background: var(--app-bg-soft) !important;
 }
@@ -27450,7 +27478,7 @@ html.light.is-pwa-standalone #atlly-student-nav-root {
 
 html.is-pwa-standalone #atlly-student-nav-root > .student-bottom-nav,
 html.is-pwa-standalone nav.student-bottom-nav.student-bottom-nav--docked {
-  padding-bottom: var(--standalone-nav-safe-bottom, max(34px, env(safe-area-inset-bottom, 0px))) !important;
+  padding-bottom: max(34px, var(--safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
   background: inherit !important;
 }
 
