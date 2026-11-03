@@ -168,6 +168,28 @@ function releaseDockSafeAreaToCss(root: HTMLElement) {
   document.documentElement.classList.remove("is-ios-home-indicator");
 }
 
+/**
+ * Safari: o menu do browser ocupa a base, então bottom:0 já fica acima dele.
+ * Tela inicial: essa barra some e o iOS deixa o layout na altura antiga.
+ * Desce o dock até o fundo visível e reserva só o Home Indicator.
+ */
+function pinStandaloneDock(root: HTMLElement, navEl: HTMLElement) {
+  const html = document.documentElement;
+  const vv = window.visualViewport;
+  const viewportBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+  root.style.setProperty("bottom", "0px", "important");
+
+  const gap = Math.max(0, Math.round(viewportBottom - root.getBoundingClientRect().bottom));
+  const shift = Math.min(gap, 120);
+  if (shift > 1) root.style.setProperty("bottom", `${-shift}px`, "important");
+
+  const envBottom = readSafeAreaInsets().bottom;
+  const pad = envBottom > 0 ? Math.round(envBottom) : 34;
+  navEl.style.setProperty("padding-bottom", `${pad}px`, "important");
+  html.style.setProperty("--standalone-nav-safe-bottom", `${pad}px`);
+  html.style.setProperty("--app-vh", `${Math.round(viewportBottom)}px`);
+}
+
 function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
   const html = document.documentElement;
   const isLight = html.classList.contains("light");
@@ -191,7 +213,8 @@ function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
   root.style.setProperty("padding-top", "0", "important");
   root.style.setProperty("padding-left", "0", "important");
   root.style.setProperty("padding-right", "0", "important");
-  releaseDockSafeAreaToCss(root);
+  if (isStandalonePwa()) pinStandaloneDock(root, navEl);
+  else releaseDockSafeAreaToCss(root);
 
   navEl.style.removeProperty("position");
   navEl.style.setProperty("position", "relative", "important");
@@ -201,7 +224,7 @@ function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
   navEl.style.setProperty("transform", "none", "important");
   navEl.style.setProperty("pointer-events", "auto", "important");
   navEl.style.setProperty("box-sizing", "border-box", "important");
-  navEl.style.removeProperty("padding-bottom");
+  if (!isStandalonePwa()) navEl.style.removeProperty("padding-bottom");
   navEl.style.setProperty("min-height", "0", "important");
   navEl.style.setProperty("height", "auto", "important");
   navEl.style.setProperty("margin-bottom", "0", "important");

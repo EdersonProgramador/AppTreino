@@ -70,6 +70,10 @@
         border-radius: 0;
         border-top: 1px solid rgba(212, 175, 55, 0.14);
       }
+      html.is-pwa-standalone #atlly-student-nav-root > .student-bottom-nav,
+      html.is-pwa-standalone nav.student-bottom-nav.student-bottom-nav--docked {
+        padding-bottom: max(34px, env(safe-area-inset-bottom, 0px));
+      }
     </style>
     <script>
       (function () {
@@ -77,7 +81,13 @@
         try {
           standalone =
             window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
-          if (standalone) document.documentElement.classList.add("is-pwa-standalone");
+          if (standalone) {
+            document.documentElement.classList.add("is-pwa-standalone");
+            var standH = window.innerHeight;
+            if (window.visualViewport) standH = Math.max(standH, window.visualViewport.height);
+            document.documentElement.style.setProperty("--app-vh", Math.round(standH) + "px");
+            document.documentElement.style.setProperty("--standalone-nav-safe-bottom", "34px");
+          }
           if (
             /iPhone|iPad|iPod/.test(navigator.userAgent) ||
             (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)

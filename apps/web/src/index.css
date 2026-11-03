@@ -21508,9 +21508,9 @@ html.is-pwa-standalone .ui-shell.min-h-dvh {
   flex-direction: column;
   flex: 1 1 auto;
   width: 100%;
-  min-height: 100dvh !important;
+  min-height: var(--app-vh, 100dvh) !important;
   min-height: -webkit-fill-available !important;
-  height: 100dvh !important;
+  height: var(--app-vh, 100dvh) !important;
   max-height: none !important;
   overflow: hidden;
   padding: 0;
@@ -27432,6 +27432,15 @@ html.light #atlly-student-nav-root > .student-bottom-nav,
 html.light nav.student-bottom-nav.student-bottom-nav--docked {
   background: rgba(255, 255, 255, 0.98) !important;
   border-top-color: var(--app-border) !important;
+}
+
+/* Tela inicial: sem a barra do Safari. Ícones sobem só o Home Indicator. */
+html.is-pwa-standalone #atlly-student-nav-root > .student-bottom-nav,
+html.is-pwa-standalone nav.student-bottom-nav.student-bottom-nav--docked {
+  padding-bottom: var(
+    --standalone-nav-safe-bottom,
+    max(34px, env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)))
+  ) !important;
 }
 
 html.has-portal-bottom-nav,
