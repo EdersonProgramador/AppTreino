@@ -21541,6 +21541,34 @@ html.is-pwa-standalone.has-student-app-shell #root {
   min-height: 0;
 }
 
+/* Faixa abaixo da tab: pintar como a barra e estender o padding até o vidro. */
+html.is-pwa-standalone.has-student-app-shell,
+html.is-pwa-standalone.has-student-app-shell body {
+  background: var(--app-bg-soft) !important;
+  background-image: none !important;
+}
+
+html.light.is-pwa-standalone.has-student-app-shell,
+html.light.is-pwa-standalone.has-student-app-shell body {
+  background: #ffffff !important;
+}
+
+html.is-pwa-standalone.has-student-app-shell .student-app-shell .student-bottom-nav,
+html.is-pwa-standalone.has-student-app-shell .student-app-shell.is-play .student-bottom-nav {
+  min-height: calc(
+    var(--student-nav-bar) + var(--safe-bottom, env(safe-area-inset-bottom, 0px)) +
+      var(--pwa-bottom-gap, 0px)
+  ) !important;
+  padding-bottom: calc(
+    max(10px, var(--safe-bottom, env(safe-area-inset-bottom, 0px))) + var(--pwa-bottom-gap, 0px)
+  ) !important;
+  background: var(--app-bg-soft) !important;
+}
+
+html.light.is-pwa-standalone.has-student-app-shell .student-app-shell .student-bottom-nav {
+  background: rgba(255, 255, 255, 0.98) !important;
+}
+
 html.is-pwa-standalone.has-student-app-shell .student-app-shell.is-activity:not(.workout-immersive)
   .student-app-scroll {
   padding-bottom: var(

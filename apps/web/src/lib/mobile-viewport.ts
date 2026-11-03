@@ -224,8 +224,11 @@ function syncStandaloneViewport() {
 
   let gap = Math.max(0, Math.round(visualBottom - window.innerHeight));
   const navRoot = document.getElementById("atlly-student-nav-root");
+  const inFlowNav = document.querySelector(
+    ".student-app-shell:not(.workout-immersive) .student-bottom-nav"
+  );
   const stickyCta = document.querySelector(".home-landing .home-sticky-cta");
-  for (const el of [navRoot, stickyCta]) {
+  for (const el of [navRoot, inFlowNav, stickyCta]) {
     if (!el || !(el as HTMLElement).getBoundingClientRect) continue;
     const rect = (el as HTMLElement).getBoundingClientRect();
     if (rect.height <= 0 && rect.width <= 0) continue;

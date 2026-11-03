@@ -2573,11 +2573,14 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
   useLayoutEffect(() => {
     document.documentElement.classList.toggle("has-portal-bottom-nav", portaledBottomNav);
     refreshStudentBottomNavDock();
+    const remeasure = () => refreshStudentBottomNavDock();
+    window.requestAnimationFrame(remeasure);
+    window.requestAnimationFrame(() => window.requestAnimationFrame(remeasure));
     return () => {
       document.documentElement.classList.remove("has-portal-bottom-nav");
       refreshStudentBottomNavDock();
     };
-  }, [portaledBottomNav, hideStudentNav]);
+  }, [portaledBottomNav, hideStudentNav, accessReady, hasStudentAreaAccess]);
 
   const closeCoachSubscriptionOverlay = () => {
     setCoachUpsellNotice(null);
