@@ -948,6 +948,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
     const scroller = document.querySelector(".student-app-scroll");
     if (scroller instanceof HTMLElement) {
       scroller.scrollTop = 0;
+      return;
     }
     window.scrollTo(0, 0);
   }, []);

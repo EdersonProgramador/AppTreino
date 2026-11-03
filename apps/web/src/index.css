@@ -27610,6 +27610,9 @@ html:has(.student-app-shell) body {
 html:has(.student-app-shell) #root {
   min-height: 0;
   flex: 1 1 auto;
+  height: 100%;
+  max-height: 100dvh;
+  max-height: -webkit-fill-available;
 }
 
 body:has(.student-app-shell) #root {
@@ -27797,6 +27800,10 @@ html.has-portal-bottom-nav {
     calc(var(--student-nav-bar, 64px) + 12px + env(safe-area-inset-bottom, 16px))
   );
   --student-scroll-music-clearance: calc(var(--student-scroll-nav-clearance) + 60px);
+}
+
+html.has-portal-bottom-nav .student-app-shell {
+  touch-action: pan-y;
 }
 
 html.has-portal-bottom-nav

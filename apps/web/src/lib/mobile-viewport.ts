@@ -471,7 +471,7 @@ export function wireMobileStudentViewport() {
   const root = document.documentElement;
   const isIos = isIosDevice();
 
-  function sync() {
+  function syncViewportMetricsOnly() {
     root.classList.toggle("is-ios-pwa", isIos);
 
     const mobile = isMobileViewport();
@@ -488,22 +488,28 @@ export function wireMobileStudentViewport() {
     applySafeAreaCssVars(layoutGap);
     syncStandaloneViewport();
     syncMobileLayoutMetrics();
+  }
 
+  function syncWithDockMeasure() {
+    syncViewportMetricsOnly();
     root.style.setProperty("--student-nav-bar", "64px");
     refreshStudentBottomNavDock();
   }
 
+  const onOrientationChange = () => window.setTimeout(syncWithDockMeasure, 100);
+
   wireStudentBottomNavPinObserver();
-  sync();
-  window.addEventListener("resize", sync);
-  window.addEventListener("orientationchange", () => window.setTimeout(sync, 100));
-  window.visualViewport?.addEventListener("resize", sync);
-  window.visualViewport?.addEventListener("scroll", sync);
+  syncWithDockMeasure();
+  window.addEventListener("resize", syncWithDockMeasure);
+  window.addEventListener("orientationchange", onOrientationChange);
+  window.visualViewport?.addEventListener("resize", syncWithDockMeasure);
+  window.visualViewport?.addEventListener("scroll", syncViewportMetricsOnly);
 
   return () => {
-    window.removeEventListener("resize", sync);
-    window.visualViewport?.removeEventListener("resize", sync);
-    window.visualViewport?.removeEventListener("scroll", sync);
+    window.removeEventListener("resize", syncWithDockMeasure);
+    window.removeEventListener("orientationchange", onOrientationChange);
+    window.visualViewport?.removeEventListener("resize", syncWithDockMeasure);
+    window.visualViewport?.removeEventListener("scroll", syncViewportMetricsOnly);
     navPinObserver?.disconnect();
     navPinObserver = null;
     navResizeObserver?.disconnect();
