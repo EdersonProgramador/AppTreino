@@ -46,7 +46,9 @@ export async function applySubscriptionPaymentConfirmation(
 ): Promise<SubscriptionPaymentSyncResult> {
   const nextStatus = asaasStatusToPaymentStatus(input.status);
   const wasConfirmed = payment.status === "CONFIRMED";
-  const shouldExtendMembership = shouldActivateMembership(nextStatus) && !wasConfirmed;
+  const shouldActivate = shouldActivateMembership(nextStatus);
+  const membershipNeedsActivation = payment.membership.status !== "ACTIVE";
+  const shouldExtendMembership = shouldActivate && (!wasConfirmed || membershipNeedsActivation);
 
   if (
     shouldExtendMembership &&
@@ -75,7 +77,7 @@ export async function applySubscriptionPaymentConfirmation(
     }
   });
 
-  if (shouldExtendMembership && payment.couponId) {
+  if (shouldExtendMembership && !wasConfirmed && payment.couponId) {
     await prisma.coupon.update({
       where: { id: payment.couponId },
       data: { usedCount: { increment: 1 } }
@@ -115,7 +117,7 @@ export async function applySubscriptionPaymentConfirmation(
     await ensureCoachReferralLink(membership.userId);
   }
 
-  if (shouldExtendMembership) {
+  if (shouldExtendMembership && !wasConfirmed) {
     notifySubscriptionActivated({
       userId: membership.userId,
       planName: membership.plan.name,
@@ -220,6 +222,86 @@ export async function syncSubscriptionPaymentFromAsaas(
     ...result,
     syncedFromAsaas: true
   };
+}
+
+let lastAdminPanelPaymentSyncAt = 0;
+const ADMIN_PANEL_PAYMENT_SYNC_MIN_INTERVAL_MS = 15_000;
+
+/** Sincroniza cobranças recentes com o Asaas antes do painel admin ler a base. */
+export async function syncSubscriptionPaymentsForAdminPanel() {
+  if (!env.ASAAS_API_KEY) {
+    return;
+  }
+
+  const nowMs = Date.now();
+  if (nowMs - lastAdminPanelPaymentSyncAt < ADMIN_PANEL_PAYMENT_SYNC_MIN_INTERVAL_MS) {
+    return;
+  }
+  lastAdminPanelPaymentSyncAt = nowMs;
+
+  const since = new Date();
+  since.setDate(since.getDate() - 14);
+
+  const pendingPayments = await prisma.payment.findMany({
+    where: {
+      status: { in: ["PENDING", "OVERDUE"] },
+      deletedAt: null,
+      OR: [{ createdAt: { gte: since } }, { dueDate: { gte: since } }]
+    },
+    include: {
+      membership: {
+        include: {
+          plan: true
+        }
+      }
+    },
+    orderBy: {
+      createdAt: "desc"
+    },
+    take: 30
+  });
+
+  for (const payment of pendingPayments) {
+    try {
+      await syncSubscriptionPaymentFromAsaas(payment);
+    } catch {
+      // Não interrompe a listagem do admin.
+    }
+  }
+
+  const confirmedWithoutActiveMembership = await prisma.payment.findMany({
+    where: {
+      status: "CONFIRMED",
+      deletedAt: null,
+      createdAt: { gte: since },
+      membership: {
+        deletedAt: null,
+        status: { not: "ACTIVE" }
+      }
+    },
+    include: {
+      membership: {
+        include: {
+          plan: true
+        }
+      }
+    },
+    orderBy: {
+      createdAt: "desc"
+    },
+    take: 20
+  });
+
+  for (const payment of confirmedWithoutActiveMembership) {
+    try {
+      await applySubscriptionPaymentConfirmation(payment, {
+        status: "CONFIRMED",
+        paidAt: payment.paidAt ?? new Date()
+      });
+    } catch {
+      // Reparo best-effort para cadastros confirmados sem matrícula ACTIVE.
+    }
+  }
 }
 
 export async function syncPendingSubscriptionPaymentsForUser(userId: string) {

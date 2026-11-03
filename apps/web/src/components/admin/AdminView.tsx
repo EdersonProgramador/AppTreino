@@ -1094,9 +1094,13 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
   }, [cmsModalityImageJustSaved]);
 
   useEffect(() => {
-    if (adminSection !== "overview") return;
+    if (adminSection !== "overview" && adminSection !== "finance") return;
 
     const interval = window.setInterval(() => {
+      if (adminSection === "finance") {
+        void loadAdminData(["summary", "payments", "memberships", "users"]);
+        return;
+      }
       void loadAdminData(["summary"]);
     }, 60000);
 

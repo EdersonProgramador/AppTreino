@@ -91,14 +91,6 @@ const asaasWebhookSchema = z
       : checkoutStatusToPaymentStatus(checkout?.status);
 
     if (shouldActivateMembership(status)) {
-      if (payment && (payment.value == null || payment.value === "")) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["payment", "value"],
-          message: "Valor do pagamento é obrigatório para confirmação."
-        });
-      }
-
       const externalReference = payment?.externalReference ?? checkout?.externalReference;
       const asaasId = payment?.id ?? checkout?.id;
 
@@ -340,13 +332,8 @@ export async function registerAsaasRoutes(app: FastifyInstance) {
     if (shouldActivateMembership(status) && amountInCents != null && amountInCents !== payment.amountInCents) {
       request.log.warn(
         { paymentId: payment.id, expected: payment.amountInCents, received: amountInCents },
-        "Asaas webhook payment value mismatch ignored"
+        "Asaas webhook payment value mismatch — syncing with local amount"
       );
-      return reply.code(200).send({
-        received: true,
-        ignored: true,
-        reason: "value_mismatch"
-      });
     }
 
     try {
@@ -356,8 +343,7 @@ export async function registerAsaasRoutes(app: FastifyInstance) {
         paymentUrl: asaasPayment?.invoiceUrl ?? asaasPayment?.bankSlipUrl ?? checkout?.link ?? payment.paymentUrl,
         paidAt: shouldActivateMembership(status)
           ? new Date(asaasPayment?.paymentDate ?? asaasPayment?.confirmedDate ?? Date.now())
-          : undefined,
-        amountInCents
+          : undefined
       });
 
       return reply.code(200).send({

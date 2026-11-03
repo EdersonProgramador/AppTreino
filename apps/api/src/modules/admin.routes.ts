@@ -54,7 +54,10 @@ import {
 } from "./commerce.utils.js";
 import { fanOutStudentNotifications, notifyStudent } from "./notification.utils.js";
 import { createAsaasCheckout } from "./asaas.client.js";
-import { applySubscriptionPaymentConfirmation } from "./asaas-payment-sync.js";
+import {
+  applySubscriptionPaymentConfirmation,
+  syncSubscriptionPaymentsForAdminPanel
+} from "./asaas-payment-sync.js";
 import { asaasStatusToPaymentStatus, shouldActivateMembership } from "./asaas.routes.js";
 import { asaasCheckoutItemDescription, asaasCheckoutItemName } from "./checkout.utils.js";
 
@@ -1378,6 +1381,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
   app.get("/admin/summary", async () => {
     requireDatabase();
+    await syncSubscriptionPaymentsForAdminPanel();
     const today = toDateOnly();
     const tomorrow = new Date(today);
     tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
@@ -1441,6 +1445,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
   app.get("/admin/users", async (request) => {
     requireDatabase();
+    await syncSubscriptionPaymentsForAdminPanel();
     const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
     const where = { deletedAt: null };
     const [users, total] = await Promise.all([
@@ -4348,6 +4353,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
   app.get("/admin/memberships", async (request) => {
     requireDatabase();
+    await syncSubscriptionPaymentsForAdminPanel();
     const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
     const where = { deletedAt: null };
     const [memberships, total] = await Promise.all([
@@ -4435,6 +4441,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
   app.get("/admin/payments", async (request) => {
     requireDatabase();
+    await syncSubscriptionPaymentsForAdminPanel();
     const { page, perPage, skip, take } = parsePagination(request.query as Record<string, unknown>);
     const where = { deletedAt: null };
     const [payments, total] = await Promise.all([
@@ -4448,9 +4455,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
             }
           }
         },
-        orderBy: {
-          dueDate: "desc"
-        },
+        orderBy: [{ dueDate: "desc" }, { createdAt: "desc" }],
         skip,
         take
       }),

@@ -17,6 +17,16 @@ const apiProxy: ProxyOptions = {
       const range = req.headers.range;
       if (range) proxyReq.setHeader("range", range);
     });
+    proxy.on("error", (_err, _req, res) => {
+      if ("writeHead" in res && typeof res.writeHead === "function") {
+        res.writeHead(503, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            message: "API indisponível. Inicie com npm run dev na raiz do projeto (porta 3333)."
+          })
+        );
+      }
+    });
   }
 };
 
