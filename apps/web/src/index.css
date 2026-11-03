@@ -6047,7 +6047,7 @@ html.light .finance-hub-tabs button {
   margin: 0 auto;
   padding: 0;
   overflow: hidden;
-  touch-action: manipulation;
+  touch-action: auto;
   background:
     radial-gradient(circle at 78% 0%, rgba(212, 175, 55, 0.1), transparent 26rem),
     var(--app-bg);
@@ -21380,7 +21380,7 @@ html.is-pwa-standalone.is-ios-pwa.has-student-app-shell:has(.student-app-shell) 
   background-color: #08090b;
 }
 
-html.is-pwa-standalone.is-ios-pwa.has-student-app-shell {
+html.is-pwa-standalone.is-ios-pwa.has-student-app-shell:has(.student-app-shell) {
   width: 100%;
   height: 100dvh;
   height: -webkit-fill-available;
@@ -21389,7 +21389,6 @@ html.is-pwa-standalone.is-ios-pwa.has-student-app-shell {
   overflow: hidden;
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
-  touch-action: manipulation;
 }
 
 html.light.is-pwa-standalone.is-ios-pwa.has-student-app-shell,
@@ -21606,9 +21605,35 @@ html.is-pwa-standalone:not(.is-ios-pwa) body {
   background-image: none !important;
 }
 
-html.is-pwa-standalone.is-ios-pwa,
-html.is-pwa-standalone.is-ios-pwa body,
-html.is-pwa-standalone.is-ios-pwa #root {
+html.is-pwa-standalone.is-ios-pwa {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+  -webkit-text-size-adjust: 100%;
+  background: var(--app-bg) !important;
+  background-image: none !important;
+}
+
+html.is-pwa-standalone.is-ios-pwa:not(.has-student-app-shell) body,
+html.is-pwa-standalone.is-ios-pwa:not(.has-student-app-shell) #root {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  overscroll-behavior: auto;
+  touch-action: auto;
+  background: var(--app-bg) !important;
+  background-image: none !important;
+}
+
+html.is-pwa-standalone.is-ios-pwa.has-student-app-shell:has(.student-app-shell) body,
+html.is-pwa-standalone.is-ios-pwa.has-student-app-shell:has(.student-app-shell) #root {
   width: 100%;
   margin: 0;
   padding: 0;
@@ -21623,7 +21648,7 @@ html.is-pwa-standalone.is-ios-pwa #root {
   overflow: hidden;
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
-  touch-action: manipulation;
+  touch-action: auto;
   background: var(--app-bg) !important;
   background-image: none !important;
 }
@@ -21735,8 +21760,20 @@ html.is-pwa-standalone #root {
   flex: 1 1 auto;
   width: 100%;
   min-height: 0;
+}
+
+html.is-pwa-standalone.has-student-app-shell:has(.student-app-shell) #root {
   height: 100%;
   overflow: hidden;
+}
+
+html.is-pwa-standalone:not(.has-student-app-shell) #root,
+html.is-pwa-standalone.has-student-app-shell:not(:has(.student-app-shell)) #root {
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+  height: auto;
+  max-height: none;
+  overflow: visible;
 }
 
 html.is-pwa-standalone.is-ios-pwa #root {
@@ -21753,11 +21790,26 @@ html.is-pwa-standalone .ui-shell.min-h-dvh {
   flex: 1 1 auto;
   width: 100%;
   min-height: 0 !important;
+  padding: 0;
+  margin: 0;
+}
+
+html.is-pwa-standalone.has-student-app-shell:has(.student-app-shell) .ui-shell,
+html.is-pwa-standalone.has-student-app-shell:has(.student-app-shell) .ui-shell.min-h-dvh {
   height: 100% !important;
   max-height: 100% !important;
   overflow: hidden;
-  padding: 0;
-  margin: 0;
+}
+
+html.is-pwa-standalone:not(.has-student-app-shell) .ui-shell,
+html.is-pwa-standalone:not(.has-student-app-shell) .ui-shell.min-h-dvh,
+html.is-pwa-standalone.has-student-app-shell:not(:has(.student-app-shell)) .ui-shell,
+html.is-pwa-standalone.has-student-app-shell:not(:has(.student-app-shell)) .ui-shell.min-h-dvh {
+  min-height: 100dvh !important;
+  min-height: -webkit-fill-available !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible;
 }
 
 html.is-pwa-standalone.is-ios-pwa .ui-shell,
@@ -21773,8 +21825,18 @@ html.is-pwa-standalone .app-view-stage {
   flex: 1 1 auto;
   width: 100%;
   min-height: 0;
+}
+
+html.is-pwa-standalone.has-student-app-shell:has(.student-app-shell) .app-view-stage {
   height: 100%;
   overflow: hidden;
+}
+
+html.is-pwa-standalone:not(.has-student-app-shell) .app-view-stage,
+html.is-pwa-standalone.has-student-app-shell:not(:has(.student-app-shell)) .app-view-stage {
+  min-height: 0;
+  height: auto;
+  overflow: visible;
 }
 
 html.is-pwa-standalone .app-view-stage > .student-app-shell,
@@ -21793,15 +21855,30 @@ html.is-pwa-standalone .app-view-stage > .login-shell {
 }
 
 html.is-pwa-standalone .app-view-stage > .home-landing,
-html.is-pwa-standalone .app-view-stage > .app-download-soon {
+html.is-pwa-standalone .app-view-stage > .app-download-soon,
+html.is-pwa-standalone .app-view-stage > .login-shell,
+html.is-pwa-standalone .app-view-stage > .auth-layout,
+html.is-pwa-standalone .app-view-stage > .admin-preview-shell-wrap,
+html.is-pwa-standalone .app-view-stage > .app-boot-screen,
+html.is-mobile-student-layout .app-view-stage > .home-landing,
+html.is-mobile-student-layout .app-view-stage > .login-shell,
+html.is-mobile-student-layout .app-view-stage > .auth-layout,
+html.is-mobile-student-layout .app-view-stage > .admin-preview-shell-wrap {
   flex: 1 1 auto;
-  min-height: 100%;
-  min-height: -webkit-fill-available;
+  min-height: 0;
   width: 100%;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
   background-color: var(--app-bg);
+}
+
+html.is-pwa-standalone .app-view-stage > .home-landing,
+html.is-pwa-standalone .app-view-stage > .app-download-soon {
+  min-height: min(100dvh, 100%);
+  min-height: min(-webkit-fill-available, 100%);
 }
 
 html.is-pwa-standalone.has-portal-bottom-nav
@@ -27674,11 +27751,13 @@ html.is-mobile-student-layout .student-app-shell {
   touch-action: pan-y;
 }
 
-html.is-mobile-student-layout .student-app-shell:not(.is-activity) .student-app-scroll {
+html.is-mobile-student-layout .student-app-shell:not(.is-activity):not(.workout-immersive) .student-app-scroll {
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  touch-action: pan-y !important;
+  overscroll-behavior-y: contain;
 }
 
 html.is-mobile-student-layout .student-app-shell.is-activity .student-app-scroll {
