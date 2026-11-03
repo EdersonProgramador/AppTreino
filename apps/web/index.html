@@ -3,10 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <!-- viewport-fit=cover: estende o layout até as bordas físicas; habilita env(safe-area-inset-*). -->
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <style id="atlly-student-nav-critical">
       html,
       body,
@@ -105,8 +102,7 @@
           if (standalone) {
             document.documentElement.classList.add("is-pwa-standalone");
             var vv0 = window.visualViewport;
-            var standBottom = vv0 ? vv0.offsetTop + vv0.height : window.innerHeight;
-            document.documentElement.style.setProperty("--app-vh", Math.round(standBottom) + "px");
+            document.documentElement.style.setProperty("--app-vh", Math.round(window.innerHeight) + "px");
           }
           if (
             /iPhone|iPad|iPod/.test(navigator.userAgent) ||
@@ -176,8 +172,12 @@
           var vv = window.visualViewport;
           var visualBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
           var root = document.documentElement;
-          root.style.setProperty("--app-vh", Math.round(visualBottom) + "px");
-          var layoutGap = Math.max(0, Math.round(window.innerHeight - visualBottom));
+          var layoutHeight = window.innerHeight;
+          root.style.setProperty(
+            "--app-vh",
+            Math.round(root.classList.contains("is-pwa-standalone") ? layoutHeight : visualBottom) + "px"
+          );
+          var layoutGap = Math.max(0, Math.round(layoutHeight - visualBottom));
           if (!root.classList.contains("is-pwa-standalone")) {
             var appleTouch =
               /iPhone|iPad|iPod/.test(navigator.userAgent) ||

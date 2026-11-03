@@ -21548,8 +21548,8 @@ html.is-pwa-standalone body {
   margin: 0;
   padding: 0;
   padding-bottom: 0 !important;
-  min-height: var(--app-vh, 100dvh);
-  min-height: var(--app-vh, -webkit-fill-available);
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
   height: auto;
   max-height: none;
   overflow: visible;
@@ -21558,6 +21558,15 @@ html.is-pwa-standalone body {
   touch-action: manipulation;
   background: var(--app-bg) !important;
   background-image: none !important;
+}
+
+html.is-pwa-standalone.is-ios-pwa,
+html.is-pwa-standalone.is-ios-pwa body,
+html.is-pwa-standalone.is-ios-pwa #root {
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+  height: 100dvh;
+  height: -webkit-fill-available;
 }
 
 /* Portal aluno: tab bar no flex — trava a viewport como no app nativo (evita scroll do body + faixa inferior). */
@@ -21640,6 +21649,15 @@ html.is-pwa-standalone.has-student-app-shell .student-app-shell.is-activity:not(
   ) !important;
 }
 
+html.is-pwa-standalone.has-student-app-shell
+  .student-app-shell.is-activity:not(.workout-immersive)
+  .student-bottom-nav {
+  position: relative !important;
+  bottom: auto !important;
+  left: auto !important;
+  right: auto !important;
+}
+
 /* iOS PWA: mesmas variáveis de inset que o Expo (SafeAreaProvider). */
 html.is-pwa-standalone.is-ios-pwa {
   --safe-top: var(--expo-safe-top, env(safe-area-inset-top, 0px));
@@ -21661,19 +21679,32 @@ html.is-pwa-standalone #root {
   overflow: hidden;
 }
 
+html.is-pwa-standalone.is-ios-pwa #root {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+}
+
 html.is-pwa-standalone .ui-shell,
 html.is-pwa-standalone .ui-shell.min-h-dvh {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   width: 100%;
-  min-height: var(--app-vh, 100dvh) !important;
-  min-height: -webkit-fill-available !important;
-  height: var(--app-vh, 100dvh) !important;
-  max-height: none !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100% !important;
   overflow: hidden;
   padding: 0;
   margin: 0;
+}
+
+html.is-pwa-standalone.is-ios-pwa .ui-shell,
+html.is-pwa-standalone.is-ios-pwa .ui-shell.min-h-dvh {
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100% !important;
 }
 
 html.is-pwa-standalone .app-view-stage {
@@ -21792,21 +21823,10 @@ html.is-pwa-standalone:has(.home-landing.home-command):not(.keyboard-open) body:
   background: #05070c;
 }
 
-/* Aluno in-flow: conteúdo em --app-vh; pinta só a faixa abaixo da tab (mesma cor da barra). */
 html.is-pwa-standalone.has-student-app-shell:not(.keyboard-open) body::after {
-  z-index: 50;
-  height: max(
-    var(--pwa-bottom-gap, 0px),
-    var(--pwa-chrome-gap, 0px),
-    var(--ios-viewport-bottom-fill, 0px),
-    env(safe-area-inset-bottom, 16px)
-  ) !important;
-  background: var(--app-bg-soft, var(--app-bg)) !important;
-}
-
-html.light.is-pwa-standalone.has-student-app-shell:not(.keyboard-open) body::after,
-html.light.is-ios-pwa.has-student-app-shell:not(.keyboard-open) body::after {
-  background: rgba(255, 255, 255, 0.98) !important;
+  display: none !important;
+  content: none !important;
+  height: 0 !important;
 }
 
 

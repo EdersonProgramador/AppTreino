@@ -101,6 +101,12 @@ function visualViewportBottom() {
   return readVisualViewportMetrics().visualBottom;
 }
 
+/** PWA instalado: altura da layout viewport (tela inteira). Safari no browser: borda visual. */
+function resolveAppViewportHeightPx() {
+  const { visualBottom, layoutHeight } = readVisualViewportMetrics();
+  return isStandalonePwa() ? layoutHeight : visualBottom;
+}
+
 function readSafeAreaInsets() {
   if (typeof document === "undefined" || !document.body) {
     return { bottom: 0, top: 0, left: 0, right: 0 };
@@ -180,8 +186,7 @@ function applySafeAreaCssVars(layoutGap = readVisualViewportMetrics().layoutGap)
 
 function syncAppViewportHeight() {
   if (typeof document === "undefined" || typeof window === "undefined") return;
-  const { visualBottom } = readVisualViewportMetrics();
-  document.documentElement.style.setProperty("--app-vh", `${visualBottom}px`);
+  document.documentElement.style.setProperty("--app-vh", `${resolveAppViewportHeightPx()}px`);
 }
 
 /** Mobile: home indicator, gap da layout viewport e padding único do menu inferior. */
@@ -292,14 +297,14 @@ function shouldPaintIosBottomChrome() {
 function syncStandaloneViewport() {
   const html = document.documentElement;
   const { visualBottom, layoutGap, layoutHeight, offsetTop } = readVisualViewportMetrics();
-  html.style.setProperty("--app-vh", `${visualBottom}px`);
+  html.style.setProperty("--app-vh", `${resolveAppViewportHeightPx()}px`);
   html.style.setProperty("--vv-offset-top", `${offsetTop}px`);
 
   const inFlowPwaStudent = usesInFlowPwaStudentNav();
   let gap = 0;
   if (shouldPaintIosBottomChrome()) {
     gap = Math.max(layoutGap, 0);
-    if (isStandalonePwa()) {
+    if (isStandalonePwa() && !inFlowPwaStudent) {
       gap = Math.max(gap, Math.round(visualBottom - layoutHeight));
     }
     const navRoot = document.getElementById("atlly-student-nav-root");
@@ -316,8 +321,7 @@ function syncStandaloneViewport() {
     const gapPx = gap > 0.5 ? `${Math.min(Math.round(gap), 120)}px` : null;
     if (inFlowPwaStudent) {
       html.style.removeProperty("--pwa-bottom-gap");
-      if (gapPx) html.style.setProperty("--pwa-chrome-gap", gapPx);
-      else html.style.removeProperty("--pwa-chrome-gap");
+      html.style.removeProperty("--pwa-chrome-gap");
     } else if (gapPx) {
       html.style.setProperty("--pwa-bottom-gap", gapPx);
       html.style.setProperty("--pwa-chrome-gap", gapPx);
