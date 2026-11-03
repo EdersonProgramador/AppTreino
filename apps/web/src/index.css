@@ -21557,7 +21557,22 @@ html.is-pwa-standalone.has-student-app-shell #root {
   min-height: 0;
 }
 
-/* Faixa abaixo da tab: pintar layout viewport; conteúdo fica em --app-vh (bloco acima). */
+/* Aluno in-flow: ui-shell encosta no fundo do #root (100dvh); safe area só na tab bar. */
+html.is-pwa-standalone.has-student-app-shell .ui-shell,
+html.is-pwa-standalone.has-student-app-shell .ui-shell.min-h-dvh {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100% !important;
+}
+
+html.is-pwa-standalone.has-student-app-shell .app-view-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+}
+
 html.is-pwa-standalone.has-student-app-shell,
 html.is-ios-pwa.has-student-app-shell {
   background: var(--app-bg-soft) !important;
