@@ -75,39 +75,33 @@ function readSafeAreaInsets() {
   };
 }
 
-/**
- * Safari já fica acima da barra do browser: não inventar 34px lá.
- * Na Tela de Início o env() costuma vir 0 mesmo com Home Indicator.
- */
-function resolveIosBottomInset(insets: { top: number; bottom: number }) {
-  if (insets.bottom > 0) return insets.bottom;
-  if (!isStandalonePwa() || !isAppleTouchDevice()) return 0;
-  return 34;
-}
-
-function readSafeAreaInsetsResolved() {
-  const insets = readSafeAreaInsets();
-  const bottom = resolveIosBottomInset(insets);
-  return { ...insets, bottom };
+function iphoneStandaloneBottomPad(rawBottom: number) {
+  if (!isStandalonePwa() || !/iPhone/.test(navigator.userAgent)) return rawBottom;
+  return Math.max(34, Math.round(rawBottom));
 }
 
 /** Só grava px quando > 0 — zero quebra o fallback env() no CSS. */
 function applySafeAreaCssVars() {
   const root = document.documentElement;
-  const resolved = isAppleTouchDevice()
-    ? readSafeAreaInsetsResolved()
-    : readSafeAreaInsets();
-  const resolvedPairs: Array<[string, number]> = [
-    ["--expo-safe-top", resolved.top],
-    ["--expo-safe-right", resolved.right],
-    ["--expo-safe-bottom", resolved.bottom],
-    ["--expo-safe-left", resolved.left],
-    ["--safe-top", resolved.top],
-    ["--safe-right", resolved.right],
-    ["--safe-bottom", resolved.bottom],
-    ["--safe-left", resolved.left]
+  const insets = readSafeAreaInsets();
+  const expoPairs: Array<[string, number]> = [
+    ["--expo-safe-top", insets.top],
+    ["--expo-safe-right", insets.right],
+    ["--expo-safe-bottom", insets.bottom],
+    ["--expo-safe-left", insets.left]
   ];
-  for (const [name, px] of resolvedPairs) {
+  for (const [name, px] of expoPairs) {
+    if (px > 0) root.style.setProperty(name, `${px}px`);
+    else root.style.removeProperty(name);
+  }
+
+  const safePairs: Array<[string, number]> = [
+    ["--safe-top", insets.top],
+    ["--safe-right", insets.right],
+    ["--safe-left", insets.left],
+    ["--safe-bottom", iphoneStandaloneBottomPad(insets.bottom)]
+  ];
+  for (const [name, px] of safePairs) {
     if (px > 0) root.style.setProperty(name, `${px}px`);
     else root.style.removeProperty(name);
   }
@@ -126,17 +120,25 @@ function syncIosLayoutMetrics() {
   if (!isIosDevice()) return;
 
   const html = document.documentElement;
-  const insets = readSafeAreaInsetsResolved();
+  const raw = readSafeAreaInsets();
   const visualBottom = visualViewportBottom();
   const layoutGap = Math.max(0, window.innerHeight - visualBottom);
   html.style.setProperty("--ios-layout-viewport-gap", `${Math.round(layoutGap)}px`);
-  if (insets.bottom > 0) {
-    html.style.setProperty("--ios-safe-bottom-pad", `${Math.round(Math.max(insets.bottom, 6))}px`);
+
+  let bottomPad = iphoneStandaloneBottomPad(raw.bottom);
+  if (bottomPad <= 0) {
+    bottomPad =
+      parseFloat(getComputedStyle(html).getPropertyValue("--safe-bottom")) ||
+      parseFloat(getComputedStyle(html).getPropertyValue("--expo-safe-bottom")) ||
+      0;
+  }
+  if (bottomPad > 0) {
+    html.style.setProperty("--ios-safe-bottom-pad", `${Math.round(Math.max(bottomPad, 6))}px`);
   } else {
     html.style.removeProperty("--ios-safe-bottom-pad");
   }
 
-  const fill = Math.max(insets.bottom, layoutGap);
+  const fill = Math.max(bottomPad, layoutGap);
   if (fill > 0.5) html.style.setProperty("--ios-viewport-bottom-fill", `${Math.round(fill)}px`);
   else html.style.removeProperty("--ios-viewport-bottom-fill");
 }
@@ -213,13 +215,22 @@ function syncStandaloneViewport() {
     return;
   }
 
-  const gap = Math.max(0, Math.round(visualBottom - window.innerHeight));
+  let gap = Math.max(0, Math.round(visualBottom - window.innerHeight));
+  const navRoot = document.getElementById("atlly-student-nav-root");
+  const stickyCta = document.querySelector(".home-landing .home-sticky-cta");
+  for (const el of [navRoot, stickyCta]) {
+    if (!el || !(el as HTMLElement).getBoundingClientRect) continue;
+    const rect = (el as HTMLElement).getBoundingClientRect();
+    if (rect.height <= 0 && rect.width <= 0) continue;
+    gap = Math.max(gap, Math.round(visualBottom - rect.bottom));
+  }
   html.style.setProperty("--pwa-bottom-gap", `${Math.min(gap, 120)}px`);
 
-  if (!isAppleTouchDevice()) return;
-  const pad = Math.max(34, Math.round(readSafeAreaInsets().bottom));
-  html.style.setProperty("--safe-bottom", `${pad}px`);
-  html.style.setProperty("--standalone-nav-safe-bottom", `${pad}px`);
+  if (/iPhone/.test(navigator.userAgent)) {
+    const pad = iphoneStandaloneBottomPad(readSafeAreaInsets().bottom);
+    html.style.setProperty("--safe-bottom", `${pad}px`);
+    html.style.setProperty("--standalone-nav-safe-bottom", `${pad}px`);
+  }
 }
 
 /** Mede o nav portado. O encaixe visual fica no CSS, não em estilo inline. */

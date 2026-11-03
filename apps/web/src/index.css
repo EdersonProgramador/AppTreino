@@ -27444,7 +27444,7 @@ nav.student-bottom-nav.student-bottom-nav--docked {
   margin-bottom: 0 !important;
   padding-top: 8px !important;
   padding-right: max(8px, var(--safe-right, 0px)) !important;
-  padding-bottom: max(16px, var(--safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
+  padding-bottom: env(safe-area-inset-bottom, 16px) !important;
   padding-left: max(8px, var(--safe-left, 0px)) !important;
   border-radius: 0 !important;
   box-shadow: none !important;
@@ -27478,7 +27478,8 @@ html.light.is-pwa-standalone #atlly-student-nav-root {
 
 html.is-pwa-standalone #atlly-student-nav-root > .student-bottom-nav,
 html.is-pwa-standalone nav.student-bottom-nav.student-bottom-nav--docked {
-  padding-bottom: max(34px, var(--safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
+  padding-top: 8px !important;
+  padding-bottom: max(34px, env(safe-area-inset-bottom, 0px)) !important;
   background: inherit !important;
 }
 
