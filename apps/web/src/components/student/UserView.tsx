@@ -3368,12 +3368,17 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
             </Link>
           ) : null}
           {!isFeedFamilySection && (
-          <button className="student-streak-button" aria-label={`Ofensiva de ${currentStreak} dias`} onClick={() => {
-            uiSounds.popupOpen();
-            setStreakCalendarOpen(true);
-          }}>
-            <Flame size={18} />
-            <span>Ofensiva</span>
+          <button
+            type="button"
+            className="student-streak-button"
+            aria-label={`Ofensiva de ${currentStreak} dias`}
+            onClick={() => {
+              uiSounds.popupOpen();
+              setStreakCalendarOpen(true);
+            }}
+          >
+            <Flame size={18} aria-hidden />
+            <span className="student-streak-button__label">Ofensiva</span>
             <strong>{currentStreak}</strong>
           </button>
           )}

@@ -6546,7 +6546,7 @@ html.is-pwa-standalone.has-student-app-shell .student-app-shell.workout-immersiv
 }
 
 .student-app-header .student-header-brand span,
-.student-app-header .student-streak-button span {
+.student-app-header .student-streak-button__label {
   display: block;
   margin-top: 2px;
   font-size: var(--st-sm);
@@ -6787,7 +6787,7 @@ html.is-pwa-standalone.has-student-app-shell .student-app-shell.workout-immersiv
   color: var(--brand-gold);
 }
 
-.student-streak-button span {
+.student-streak-button__label {
   margin: 0;
   color: #fff;
   font-size: 11px;
@@ -14300,6 +14300,18 @@ html.light .admin-workspace-shell .workspace-logout svg {
     padding: 0 7px;
   }
 
+  .student-streak-button {
+    grid-template-columns: auto auto;
+    gap: 4px;
+    padding: 0 6px;
+    min-width: 44px;
+    justify-content: center;
+  }
+
+  .student-streak-button__label {
+    display: none;
+  }
+
   .student-hero-card,
   .student-sheet {
     margin: 12px;
@@ -14361,10 +14373,6 @@ html.light .admin-workspace-shell .workspace-logout svg {
   .student-history-metrics,
   .student-metric-grid {
     grid-template-columns: 1fr;
-  }
-
-  .student-streak-button span {
-    display: none;
   }
 }
 
@@ -19820,7 +19828,7 @@ html.light article.student-info-card input {
 }
 
 .student-app-shell .student-app-header .student-brand-copy span,
-.student-app-shell .student-app-header .student-streak-button span,
+.student-app-shell .student-app-header .student-streak-button__label,
 .student-app-shell .student-bottom-nav button,
 .student-app-shell .student-payment-card-body span,
 .student-app-shell .student-calendar-weekdays span {
