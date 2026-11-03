@@ -2580,7 +2580,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
       document.documentElement.classList.remove("has-portal-bottom-nav");
       refreshStudentBottomNavDock();
     };
-  }, [portaledBottomNav, hideStudentNav, accessReady, hasStudentAreaAccess]);
+  }, [portaledBottomNav, hideStudentNav, accessReady, hasStudentAreaAccess, studentSection, activityLiveChrome]);
 
   const closeCoachSubscriptionOverlay = () => {
     setCoachUpsellNotice(null);

@@ -21691,7 +21691,8 @@ html.light.is-pwa-standalone.is-ios-pwa.has-student-app-shell
   background: #ffffff !important;
 }
 
-html.is-pwa-standalone.has-student-app-shell .student-app-shell.is-activity:not(.workout-immersive)
+html.is-pwa-standalone.has-student-app-shell:not(.has-portal-bottom-nav)
+  .student-app-shell.is-activity:not(.workout-immersive)
   .student-app-scroll {
   padding-bottom: var(
     --student-nav-offset,
@@ -21785,10 +21786,18 @@ html.is-pwa-standalone .app-view-stage > .app-download-soon {
   background-color: var(--app-bg);
 }
 
-html.is-pwa-standalone.has-portal-bottom-nav .student-app-shell:not(.workout-immersive) .student-app-scroll,
-html.is-pwa-standalone.has-student-nav-pinned .student-app-shell:not(.workout-immersive) .student-app-scroll,
-html.is-ios-pwa.has-portal-bottom-nav .student-app-shell:not(.workout-immersive) .student-app-scroll,
-html.is-ios-pwa.has-student-nav-pinned .student-app-shell:not(.workout-immersive) .student-app-scroll {
+html.is-pwa-standalone.has-portal-bottom-nav
+  .student-app-shell:not(.workout-immersive):not(.is-activity)
+  .student-app-scroll,
+html.is-pwa-standalone.has-student-nav-pinned
+  .student-app-shell:not(.workout-immersive):not(.is-activity)
+  .student-app-scroll,
+html.is-ios-pwa.has-portal-bottom-nav
+  .student-app-shell:not(.workout-immersive):not(.is-activity)
+  .student-app-scroll,
+html.is-ios-pwa.has-student-nav-pinned
+  .student-app-shell:not(.workout-immersive):not(.is-activity)
+  .student-app-scroll {
   padding-bottom: var(
     --student-scroll-nav-clearance,
     calc(
@@ -21805,10 +21814,18 @@ html.is-ios-pwa.has-student-nav-pinned .student-app-shell:not(.workout-immersive
   ) !important;
 }
 
-html.is-pwa-standalone.has-portal-bottom-nav .student-app-shell.has-music-dock:not(.workout-immersive) .student-app-scroll,
-html.is-pwa-standalone.has-student-nav-pinned .student-app-shell.has-music-dock:not(.workout-immersive) .student-app-scroll,
-html.is-ios-pwa.has-portal-bottom-nav .student-app-shell.has-music-dock:not(.workout-immersive) .student-app-scroll,
-html.is-ios-pwa.has-student-nav-pinned .student-app-shell.has-music-dock:not(.workout-immersive) .student-app-scroll {
+html.is-pwa-standalone.has-portal-bottom-nav
+  .student-app-shell.has-music-dock:not(.workout-immersive):not(.is-activity)
+  .student-app-scroll,
+html.is-pwa-standalone.has-student-nav-pinned
+  .student-app-shell.has-music-dock:not(.workout-immersive):not(.is-activity)
+  .student-app-scroll,
+html.is-ios-pwa.has-portal-bottom-nav
+  .student-app-shell.has-music-dock:not(.workout-immersive):not(.is-activity)
+  .student-app-scroll,
+html.is-ios-pwa.has-student-nav-pinned
+  .student-app-shell.has-music-dock:not(.workout-immersive):not(.is-activity)
+  .student-app-scroll {
   padding-bottom: calc(
     var(
       --student-scroll-nav-clearance,
@@ -27768,17 +27785,51 @@ html.has-portal-bottom-nav {
   --student-scroll-music-clearance: calc(var(--student-scroll-nav-clearance) + 60px);
 }
 
-html.has-portal-bottom-nav .student-app-shell:not(.workout-immersive) .student-app-scroll {
+html.has-portal-bottom-nav
+  .student-app-shell:not(.workout-immersive):not(.is-activity)
+  .student-app-scroll {
   padding-bottom: var(--student-scroll-nav-clearance) !important;
   scroll-padding-bottom: var(--student-scroll-nav-clearance) !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior-y: contain !important;
+  touch-action: pan-y !important;
 }
 
-html.has-portal-bottom-nav .student-app-shell.has-music-dock:not(.workout-immersive) .student-app-scroll {
+html.has-portal-bottom-nav
+  .student-app-shell.has-music-dock:not(.workout-immersive):not(.is-activity)
+  .student-app-scroll {
   padding-bottom: var(--student-scroll-music-clearance) !important;
   scroll-padding-bottom: var(--student-scroll-music-clearance) !important;
 }
 
-html.has-portal-bottom-nav .student-app-shell.has-music-dock .student-app-scroll {
+html.has-portal-bottom-nav
+  .student-app-shell.is-activity:not(.workout-immersive)
+  .student-app-scroll {
+  padding-bottom: 0 !important;
+  scroll-padding-bottom: 0 !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+html.has-portal-bottom-nav
+  .student-app-shell.is-activity:not(.workout-immersive)
+  .student-activity-dock,
+html.has-portal-bottom-nav
+  .student-app-shell.is-activity:not(.workout-immersive)
+  .student-activity-sheet {
+  bottom: var(
+    --student-scroll-nav-clearance,
+    var(--student-bottom-nav-dock-height, var(--student-nav-offset, 76px))
+  );
+}
+
+html.has-portal-bottom-nav
+  .student-app-shell.has-music-dock:not(.is-activity)
+  .student-app-scroll {
   padding-bottom: var(--student-scroll-music-clearance) !important;
 }
 
@@ -33013,16 +33064,24 @@ html:not(.light) .coach-alert--success {
 }
 
 /* PWA: scroll clearance quando menu está pinado (JS + portal) */
-html.has-student-nav-pinned .student-app-shell:not(.workout-immersive) .student-app-scroll,
-html.has-portal-bottom-nav .student-app-shell:not(.workout-immersive) .student-app-scroll {
+html.has-student-nav-pinned
+  .student-app-shell:not(.workout-immersive):not(.is-activity)
+  .student-app-scroll,
+html.has-portal-bottom-nav
+  .student-app-shell:not(.workout-immersive):not(.is-activity)
+  .student-app-scroll {
   padding-bottom: var(
     --student-scroll-nav-clearance,
     var(--student-bottom-nav-dock-height, calc(64px + env(safe-area-inset-bottom, 0px)))
   ) !important;
 }
 
-html.has-student-nav-pinned .student-app-shell.has-music-dock:not(.workout-immersive) .student-app-scroll,
-html.has-portal-bottom-nav .student-app-shell.has-music-dock:not(.workout-immersive) .student-app-scroll {
+html.has-student-nav-pinned
+  .student-app-shell.has-music-dock:not(.workout-immersive):not(.is-activity)
+  .student-app-scroll,
+html.has-portal-bottom-nav
+  .student-app-shell.has-music-dock:not(.workout-immersive):not(.is-activity)
+  .student-app-scroll {
   padding-bottom: calc(
     var(
         --student-scroll-nav-clearance,
