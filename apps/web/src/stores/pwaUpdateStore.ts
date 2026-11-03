@@ -52,6 +52,6 @@ export const usePwaUpdateStore = create<PwaUpdateState>((set, get) => ({
     } catch {
       /* ignore */
     }
-    set({ visible: false, applying: false });
+    set({ visible: false, applying: false, applyUpdate: null });
   }
 }));

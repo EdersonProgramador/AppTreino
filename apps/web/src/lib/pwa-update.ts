@@ -25,13 +25,6 @@ export function startPwaUpdateWatcher() {
         void updateSW(true);
       };
       usePwaUpdateStore.getState().notifyUpdateAvailable(apply);
-      usePwaUpdateStore.setState({ applying: true, applyUpdate: apply });
-      try {
-        sessionStorage.removeItem("atlly-pwa-update-snooze");
-      } catch {
-        /* ignore */
-      }
-      apply();
     },
     onRegistered(registration) {
       if (!registration) return;

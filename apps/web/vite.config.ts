@@ -3,6 +3,8 @@ import { defineConfig, type ProxyOptions } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 const pwaBase = process.env.GITHUB_PAGES === "true" ? "/AppTreino/" : "/";
+const pwaPathPrefix = pwaBase.replace(/\/$/, "");
+const pwaAssetsPrefix = `${pwaPathPrefix}/assets/`.replace(/\/+/g, "/");
 
 const apiProxy: ProxyOptions = {
   target: "http://127.0.0.1:3333",
@@ -65,11 +67,12 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: `${pwaBase}index.html`,
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: [/^\/api\//, new RegExp(`^${pwaPathPrefix || ""}/api/`)],
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.origin === self.location.origin && url.pathname.startsWith("/assets/"),
+            urlPattern: ({ url }) =>
+              url.origin === self.location.origin && url.pathname.startsWith(pwaAssetsPrefix),
             handler: "StaleWhileRevalidate",
             options: {
               cacheName: "atlly-static-assets-v21",
