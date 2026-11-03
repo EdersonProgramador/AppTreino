@@ -125,16 +125,16 @@ function readSafeAreaInsets() {
   };
 }
 
-/** Inset medido + fallback dinâmico quando env() zera (PWA iOS) ou há gap de viewport. */
+/** Inset medido + fallback dinâmico quando env() zera (PWA iOS). Layout gap fica em --pwa-chrome-gap. */
 function resolveMobileSafeInsets(
   insets: { top: number; right: number; bottom: number; left: number },
   layoutGap: number
 ) {
   let bottom = insets.bottom;
   if (bottom <= 0) {
-    bottom = estimateBottomSafeInset(layoutGap);
-  } else if (layoutGap > bottom) {
-    bottom = Math.max(bottom, Math.round(layoutGap));
+    bottom = isStandalonePwa()
+      ? estimateBottomSafeInset(0)
+      : estimateBottomSafeInset(layoutGap);
   }
   return {
     top: Math.round(insets.top),
@@ -204,9 +204,20 @@ function syncMobileLayoutMetrics() {
     html.style.removeProperty("--ios-safe-bottom-pad");
   }
 
+  if (usesInFlowPwaStudentNav()) {
+    html.style.removeProperty("--ios-viewport-bottom-fill");
+    return;
+  }
+
   const fill = Math.max(bottomPad, layoutGap);
   if (fill > 0.5) html.style.setProperty("--ios-viewport-bottom-fill", `${Math.round(fill)}px`);
   else html.style.removeProperty("--ios-viewport-bottom-fill");
+}
+
+function usesInFlowPwaStudentNav() {
+  if (typeof document === "undefined" || !isStandalonePwa()) return false;
+  const html = document.documentElement;
+  return html.classList.contains("has-student-app-shell") && !html.classList.contains("has-portal-bottom-nav");
 }
 
 function clearDockClearance() {
@@ -264,6 +275,16 @@ function clearDockInlineGeometry(root: HTMLElement, navEl: HTMLElement | null) {
   document.documentElement.classList.remove("is-ios-home-indicator");
 }
 
+function shouldPaintIosBottomChrome() {
+  const html = document.documentElement;
+  return (
+    isStandalonePwa() ||
+    (isAppleTouchDevice() &&
+      (html.classList.contains("has-portal-bottom-nav") ||
+        html.classList.contains("has-student-app-shell")))
+  );
+}
+
 /**
  * Safari: bottom:0 já fica acima do menu do browser.
  * Tela inicial: se a layout viewport continuar na altura antiga, --pwa-bottom-gap
@@ -275,25 +296,49 @@ function syncStandaloneViewport() {
   html.style.setProperty("--app-vh", `${visualBottom}px`);
   html.style.setProperty("--vv-offset-top", `${offsetTop}px`);
 
-  if (!isStandalonePwa()) {
+  const inFlowPwaStudent = usesInFlowPwaStudentNav();
+  let gap = 0;
+  if (shouldPaintIosBottomChrome()) {
+    gap = Math.max(layoutGap, 0);
+    if (isStandalonePwa()) {
+      gap = Math.max(gap, Math.round(visualBottom - layoutHeight));
+    }
+    const navRoot = document.getElementById("atlly-student-nav-root");
+    const inFlowNav = inFlowPwaStudent
+      ? null
+      : document.querySelector(".student-app-shell:not(.workout-immersive) .student-bottom-nav");
+    const stickyCta = document.querySelector(".home-landing .home-sticky-cta");
+    for (const el of [navRoot, inFlowNav, stickyCta]) {
+      if (!el || !(el as HTMLElement).getBoundingClientRect) continue;
+      const rect = (el as HTMLElement).getBoundingClientRect();
+      if (rect.height <= 0 && rect.width <= 0) continue;
+      gap = Math.max(gap, Math.round(visualBottom - rect.bottom));
+    }
+    const gapPx = gap > 0.5 ? `${Math.min(Math.round(gap), 120)}px` : null;
+    if (inFlowPwaStudent) {
+      html.style.removeProperty("--pwa-bottom-gap");
+      if (gapPx) html.style.setProperty("--pwa-chrome-gap", gapPx);
+      else html.style.removeProperty("--pwa-chrome-gap");
+    } else if (gapPx) {
+      html.style.setProperty("--pwa-bottom-gap", gapPx);
+      html.style.setProperty("--pwa-chrome-gap", gapPx);
+    } else {
+      html.style.removeProperty("--pwa-bottom-gap");
+      html.style.removeProperty("--pwa-chrome-gap");
+    }
+  } else {
     html.style.removeProperty("--pwa-bottom-gap");
-    html.style.removeProperty("--standalone-nav-safe-bottom");
-    return;
+    html.style.removeProperty("--pwa-chrome-gap");
   }
 
-  let gap = Math.max(layoutGap, Math.round(visualBottom - layoutHeight));
-  const navRoot = document.getElementById("atlly-student-nav-root");
-  const inFlowNav = document.querySelector(
-    ".student-app-shell:not(.workout-immersive) .student-bottom-nav"
-  );
-  const stickyCta = document.querySelector(".home-landing .home-sticky-cta");
-  for (const el of [navRoot, inFlowNav, stickyCta]) {
-    if (!el || !(el as HTMLElement).getBoundingClientRect) continue;
-    const rect = (el as HTMLElement).getBoundingClientRect();
-    if (rect.height <= 0 && rect.width <= 0) continue;
-    gap = Math.max(gap, Math.round(visualBottom - rect.bottom));
+  if (!isStandalonePwa()) {
+    html.style.removeProperty("--standalone-nav-safe-bottom");
+  } else if (gap > 0) {
+    const resolved = resolveMobileSafeInsets(readSafeAreaInsets(), gap);
+    if (resolved.bottom > 0) {
+      html.style.setProperty("--standalone-nav-safe-bottom", `${resolved.bottom}px`);
+    }
   }
-  html.style.setProperty("--pwa-bottom-gap", `${Math.min(gap, 120)}px`);
 
   if (!isMobileViewport()) return;
   const resolved = resolveMobileSafeInsets(readSafeAreaInsets(), gap);
@@ -302,7 +347,9 @@ function syncStandaloneViewport() {
   if (resolved.left > 0) html.style.setProperty("--safe-left", `${resolved.left}px`);
   if (resolved.bottom > 0) {
     html.style.setProperty("--safe-bottom", `${resolved.bottom}px`);
-    html.style.setProperty("--standalone-nav-safe-bottom", `${resolved.bottom}px`);
+    if (isStandalonePwa()) {
+      html.style.setProperty("--standalone-nav-safe-bottom", `${resolved.bottom}px`);
+    }
   }
 }
 

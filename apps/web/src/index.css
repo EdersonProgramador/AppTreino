@@ -21495,7 +21495,7 @@ html.is-pwa-standalone .student-app-shell.is-play .student-bottom-nav {
 html.is-native-app .student-app-shell.is-activity:not(.workout-immersive) .student-bottom-nav,
 html.is-pwa-standalone .student-app-shell.is-activity:not(.workout-immersive) .student-bottom-nav {
   position: absolute !important;
-  bottom: calc(-1 * var(--pwa-bottom-gap, 0px)) !important;
+  bottom: calc(-1 * var(--pwa-chrome-gap, var(--pwa-bottom-gap, 0px))) !important;
   left: 0 !important;
   right: 0 !important;
 }
@@ -21541,27 +21541,34 @@ html.is-pwa-standalone.has-student-app-shell #root {
   min-height: 0;
 }
 
-/* Faixa abaixo da tab: pintar como a barra e estender o padding até o vidro. */
+/* Faixa abaixo da tab: pintar layout viewport; conteúdo fica em --app-vh (bloco acima). */
 html.is-pwa-standalone.has-student-app-shell,
-html.is-pwa-standalone.has-student-app-shell body {
+html.is-ios-pwa.has-student-app-shell {
+  background: var(--app-bg-soft) !important;
+  background-image: none !important;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+}
+
+html.is-pwa-standalone.has-student-app-shell body,
+html.is-ios-pwa.has-student-app-shell body {
   background: var(--app-bg-soft) !important;
   background-image: none !important;
 }
 
 html.light.is-pwa-standalone.has-student-app-shell,
-html.light.is-pwa-standalone.has-student-app-shell body {
-  background: #ffffff !important;
+html.light.is-pwa-standalone.has-student-app-shell body,
+html.light.is-ios-pwa.has-student-app-shell,
+html.light.is-ios-pwa.has-student-app-shell body {
+  background: rgba(255, 255, 255, 0.98) !important;
 }
 
 html.is-pwa-standalone.has-student-app-shell .student-app-shell .student-bottom-nav,
 html.is-pwa-standalone.has-student-app-shell .student-app-shell.is-play .student-bottom-nav {
   min-height: calc(
-    var(--student-nav-bar) + var(--safe-bottom, env(safe-area-inset-bottom, 0px)) +
-      var(--pwa-bottom-gap, 0px)
+    var(--student-nav-bar) + var(--safe-bottom, env(safe-area-inset-bottom, 0px))
   ) !important;
-  padding-bottom: calc(
-    max(10px, var(--safe-bottom, env(safe-area-inset-bottom, 0px))) + var(--pwa-bottom-gap, 0px)
-  ) !important;
+  padding-bottom: max(10px, var(--safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
   background: var(--app-bg-soft) !important;
 }
 
@@ -21700,19 +21707,35 @@ html.is-ios-pwa:has(.guest-chrome) {
   --ios-bottom-fill: var(--app-bg);
 }
 
-html.is-ios-pwa body::after,
-html.is-pwa-standalone body::after {
-  content: none;
+/* Faixa entre layout viewport e visual (Safari/PWA): mesma cor da tab bar, não branco. */
+html.is-ios-pwa:not(.keyboard-open) body::after,
+html.is-pwa-standalone:not(.keyboard-open) body::after {
+  content: "";
+  display: block !important;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: max(var(--pwa-bottom-gap, 0px), var(--ios-viewport-bottom-fill, 0px));
+  pointer-events: none;
+  z-index: 110;
+  background: var(--app-bg-soft, var(--app-bg));
+}
+
+html.light.is-ios-pwa:not(.keyboard-open) body::after,
+html.light.is-pwa-standalone:not(.keyboard-open) body::after {
+  background: rgba(255, 255, 255, 0.98);
+}
+
+html.is-ios-pwa:has(.home-landing.home-command):not(.keyboard-open) body::after,
+html.is-pwa-standalone:has(.home-landing.home-command):not(.keyboard-open) body::after {
+  background: #05070c;
+}
+
+html.is-pwa-standalone.has-student-app-shell:not(.keyboard-open) body::after {
   display: none !important;
-}
-
-html.is-ios-pwa.has-portal-bottom-nav body::after,
-html.is-ios-pwa.has-student-nav-pinned body::after {
-  display: none;
-}
-
-html.light.is-ios-pwa:not(:has(.home-landing.home-command)) body::after {
-  background: var(--ios-bottom-fill, var(--app-bg));
+  content: none !important;
+  height: 0 !important;
 }
 
 
@@ -22486,7 +22509,7 @@ html.is-ios-pwa:not(.is-pwa-standalone) .home-landing .home-sticky-cta {
 }
 
 html.is-pwa-standalone.is-ios-pwa .home-landing .home-sticky-cta {
-  bottom: calc(-1 * var(--pwa-bottom-gap, 0px)) !important;
+  bottom: calc(-1 * var(--pwa-chrome-gap, var(--pwa-bottom-gap, 0px))) !important;
   padding-bottom: max(12px, var(--safe-bottom, 0px)) !important;
   padding-left: max(16px, var(--safe-left, 0px)) !important;
   padding-right: max(16px, var(--safe-right, 0px)) !important;
@@ -27567,14 +27590,16 @@ html.light nav.student-bottom-nav.student-bottom-nav--docked {
 }
 
 /* Tela inicial: a caixa do menu inclui o Home Indicator e encosta na borda. */
-html.is-pwa-standalone #atlly-student-nav-root {
+html.is-pwa-standalone #atlly-student-nav-root,
+html.is-ios-pwa.has-portal-bottom-nav #atlly-student-nav-root {
   bottom: calc(-1 * var(--pwa-bottom-gap, 0px)) !important;
   padding: 0 !important;
   background: var(--app-bg-soft) !important;
 }
 
-html.light.is-pwa-standalone #atlly-student-nav-root {
-  background: #ffffff !important;
+html.light.is-pwa-standalone #atlly-student-nav-root,
+html.light.is-ios-pwa.has-portal-bottom-nav #atlly-student-nav-root {
+  background: rgba(255, 255, 255, 0.98) !important;
 }
 
 html.is-pwa-standalone.is-ios-pwa #atlly-student-nav-root > .student-bottom-nav,
