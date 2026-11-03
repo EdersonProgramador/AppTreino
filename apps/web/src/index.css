@@ -32707,3 +32707,10 @@ html.has-portal-bottom-nav .student-app-shell.has-music-dock:not(.workout-immers
       ) + 60px
   ) !important;
 }
+
+html.is-ios-pwa.is-pwa-standalone #atlly-student-nav-root:not(:empty) {
+  padding-bottom: var(
+    --student-nav-dock-padding-bottom,
+    max(34px, env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)))
+  ) !important;
+}
