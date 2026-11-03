@@ -58,7 +58,7 @@
         --safe-top: var(--expo-safe-top, env(safe-area-inset-top, 0px));
         --safe-right: var(--expo-safe-right, env(safe-area-inset-right, 0px));
         --safe-left: var(--expo-safe-left, env(safe-area-inset-left, 0px));
-        --safe-bottom: max(34px, var(--expo-safe-bottom, env(safe-area-inset-bottom, 0px)));
+        --safe-bottom: var(--expo-safe-bottom, env(safe-area-inset-bottom, 0px));
       }
       html.is-pwa-standalone #atlly-student-nav-root {
         bottom: calc(-1 * var(--pwa-bottom-gap, 0px));
@@ -81,7 +81,6 @@
             var vv0 = window.visualViewport;
             var standBottom = vv0 ? vv0.offsetTop + vv0.height : window.innerHeight;
             document.documentElement.style.setProperty("--app-vh", Math.round(standBottom) + "px");
-            document.documentElement.style.setProperty("--standalone-nav-safe-bottom", "34px");
           }
           if (
             /iPhone|iPad|iPod/.test(navigator.userAgent) ||
@@ -90,6 +89,21 @@
             document.documentElement.classList.add("is-ios-pwa");
           }
         } catch (e) {}
+        function estimateBottomSafeInset(layoutGap) {
+          if (layoutGap >= 4) return Math.round(layoutGap);
+          var ua = navigator.userAgent;
+          var iphone = /iPhone/.test(ua) && !/iPad/.test(ua);
+          var rootEl = document.documentElement;
+          var standalone =
+            rootEl.classList.contains("is-pwa-standalone") ||
+            window.matchMedia("(display-mode: standalone)").matches ||
+            window.navigator.standalone === true;
+          if (standalone && iphone) {
+            var shortSide = Math.min(window.screen.width, window.screen.height);
+            return Math.min(34, Math.max(20, Math.round(shortSide * 0.042)));
+          }
+          return layoutGap >= 1 ? Math.round(layoutGap) : 0;
+        }
         function syncSafeArea() {
           var el = document.createElement("div");
           el.setAttribute("aria-hidden", "true");
@@ -103,24 +117,34 @@
           var left = parseFloat(s.paddingLeft) || 0;
           el.remove();
           var root = document.documentElement;
+          var vv = window.visualViewport;
+          var layoutHeight = window.innerHeight;
+          var visualBottom = vv ? vv.offsetTop + vv.height : layoutHeight;
+          var layoutGap = Math.max(0, Math.round(layoutHeight - visualBottom));
           if (top > 0) root.style.setProperty("--expo-safe-top", top + "px");
           else root.style.removeProperty("--expo-safe-top");
           if (right > 0) root.style.setProperty("--expo-safe-right", right + "px");
           else root.style.removeProperty("--expo-safe-right");
-          if (bottom > 0) {
-            root.style.setProperty("--expo-safe-bottom", bottom + "px");
-            root.style.setProperty("--safe-bottom", bottom + "px");
-          } else if (root.classList.contains("is-pwa-standalone") && root.classList.contains("is-ios-pwa")) {
-            root.style.setProperty("--safe-bottom", "34px");
-            root.style.setProperty("--standalone-nav-safe-bottom", "34px");
-            root.style.removeProperty("--expo-safe-bottom");
+          if (bottom > 0) root.style.setProperty("--expo-safe-bottom", bottom + "px");
+          else root.style.removeProperty("--expo-safe-bottom");
+          if (left > 0) root.style.setProperty("--expo-safe-left", left + "px");
+          else root.style.removeProperty("--expo-safe-left");
+          var resolvedBottom = bottom > 0 ? Math.round(bottom) : estimateBottomSafeInset(layoutGap);
+          if (resolvedBottom > 0) {
+            root.style.setProperty("--safe-bottom", resolvedBottom + "px");
+            if (root.classList.contains("is-pwa-standalone")) {
+              root.style.setProperty("--standalone-nav-safe-bottom", resolvedBottom + "px");
+            }
           } else {
-            root.style.removeProperty("--expo-safe-bottom");
             root.style.removeProperty("--safe-bottom");
             root.style.removeProperty("--standalone-nav-safe-bottom");
           }
-          if (left > 0) root.style.setProperty("--expo-safe-left", left + "px");
-          else root.style.removeProperty("--expo-safe-left");
+          if (top > 0) root.style.setProperty("--safe-top", Math.round(top) + "px");
+          else root.style.removeProperty("--safe-top");
+          if (right > 0) root.style.setProperty("--safe-right", Math.round(right) + "px");
+          else root.style.removeProperty("--safe-right");
+          if (left > 0) root.style.setProperty("--safe-left", Math.round(left) + "px");
+          else root.style.removeProperty("--safe-left");
         }
         function syncVh() {
           var vv = window.visualViewport;
@@ -150,12 +174,8 @@
           else root.style.removeProperty("--ios-viewport-bottom-fill");
           var safeBottom =
             parseFloat(getComputedStyle(root).getPropertyValue("--safe-bottom")) || bottom;
-          if (
-            safeBottom <= 0 &&
-            root.classList.contains("is-pwa-standalone") &&
-            /iPhone/.test(navigator.userAgent)
-          ) {
-            safeBottom = 34;
+          if (safeBottom <= 0) {
+            safeBottom = estimateBottomSafeInset(layoutGap);
           }
           if (safeBottom > 0) root.style.setProperty("--ios-safe-bottom-pad", Math.round(safeBottom) + "px");
           else root.style.removeProperty("--ios-safe-bottom-pad");

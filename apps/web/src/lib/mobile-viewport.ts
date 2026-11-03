@@ -43,11 +43,62 @@ function isIosDevice() {
   return isAppleTouchDevice();
 }
 
-function visualViewportBottom() {
-  if (typeof window === "undefined") return window.innerHeight;
+function isIphoneDevice() {
+  if (typeof navigator === "undefined") return false;
+  return /iPhone/.test(navigator.userAgent) && !/iPad/.test(navigator.userAgent);
+}
+
+function isMobileViewport() {
+  if (typeof window === "undefined") return false;
+  return (
+    isStandalonePwa() ||
+    isAppleTouchDevice() ||
+    window.matchMedia("(max-width: 900px)").matches
+  );
+}
+
+/** Bottom edge of the visual viewport in layout coordinates + layout/viewport gap. */
+export function readVisualViewportMetrics() {
+  if (typeof window === "undefined") {
+    return {
+      visualBottom: 0,
+      layoutHeight: 0,
+      layoutGap: 0,
+      offsetTop: 0,
+      visualHeight: 0
+    };
+  }
   const vv = window.visualViewport;
-  if (!vv) return window.innerHeight;
-  return vv.offsetTop + vv.height;
+  const layoutHeight = window.innerHeight;
+  const offsetTop = vv?.offsetTop ?? 0;
+  const visualHeight = vv?.height ?? layoutHeight;
+  const visualBottom = offsetTop + visualHeight;
+  return {
+    visualBottom: Math.round(visualBottom),
+    layoutHeight,
+    layoutGap: Math.round(Math.max(0, layoutHeight - visualBottom)),
+    offsetTop: Math.round(offsetTop),
+    visualHeight: Math.round(visualHeight)
+  };
+}
+
+/** When env(safe-area-inset-bottom) is 0 (comum no PWA iOS), estima pelo gap ou tamanho da tela. */
+export function estimateBottomSafeInset(layoutGap: number): number {
+  if (layoutGap >= 4) return Math.round(layoutGap);
+  if (typeof window === "undefined") return 0;
+
+  if (isStandalonePwa() && isIphoneDevice()) {
+    const shortSide = Math.min(window.screen.width, window.screen.height);
+    return Math.min(34, Math.max(20, Math.round(shortSide * 0.042)));
+  }
+  if (isStandalonePwa() && isAppleTouchDevice()) {
+    return Math.min(20, Math.max(0, Math.round(layoutGap)));
+  }
+  return layoutGap >= 1 ? Math.round(layoutGap) : 0;
+}
+
+function visualViewportBottom() {
+  return readVisualViewportMetrics().visualBottom;
 }
 
 function readSafeAreaInsets() {
@@ -74,20 +125,30 @@ function readSafeAreaInsets() {
   };
 }
 
-/** Mesmo critério do SafeAreaProvider no Expo: inset real; iPhone PWA costuma zerar o bottom. */
-function resolveMobileSafeInsets(insets: { top: number; right: number; bottom: number; left: number }) {
-  const bottom =
-    isStandalonePwa() && /iPhone/.test(navigator.userAgent)
-      ? Math.max(34, Math.round(insets.bottom))
-      : insets.bottom;
-  return { ...insets, bottom };
+/** Inset medido + fallback dinâmico quando env() zera (PWA iOS) ou há gap de viewport. */
+function resolveMobileSafeInsets(
+  insets: { top: number; right: number; bottom: number; left: number },
+  layoutGap: number
+) {
+  let bottom = insets.bottom;
+  if (bottom <= 0) {
+    bottom = estimateBottomSafeInset(layoutGap);
+  } else if (layoutGap > bottom) {
+    bottom = Math.max(bottom, Math.round(layoutGap));
+  }
+  return {
+    top: Math.round(insets.top),
+    right: Math.round(insets.right),
+    left: Math.round(insets.left),
+    bottom: Math.round(bottom)
+  };
 }
 
 /** Só grava px quando > 0 — zero quebra o fallback env() no CSS. */
-function applySafeAreaCssVars() {
+function applySafeAreaCssVars(layoutGap = readVisualViewportMetrics().layoutGap) {
   const root = document.documentElement;
   const raw = readSafeAreaInsets();
-  const resolved = resolveMobileSafeInsets(raw);
+  const resolved = resolveMobileSafeInsets(raw, layoutGap);
   const expoPairs: Array<[string, number]> = [
     ["--expo-safe-top", raw.top],
     ["--expo-safe-right", raw.right],
@@ -99,7 +160,7 @@ function applySafeAreaCssVars() {
     else root.style.removeProperty(name);
   }
 
-  if (!isAppleTouchDevice()) return;
+  if (!isMobileViewport()) return;
 
   const safePairs: Array<[string, number]> = [
     ["--safe-top", resolved.top],
@@ -115,23 +176,21 @@ function applySafeAreaCssVars() {
 
 function syncAppViewportHeight() {
   if (typeof document === "undefined" || typeof window === "undefined") return;
-  const vv = window.visualViewport;
-  const height = Math.round(vv?.height ?? window.innerHeight);
-  document.documentElement.style.setProperty("--app-vh", `${height}px`);
+  const { visualBottom } = readVisualViewportMetrics();
+  document.documentElement.style.setProperty("--app-vh", `${visualBottom}px`);
 }
 
-/** iOS: home indicator, gap da layout viewport e padding único do menu inferior. */
-function syncIosLayoutMetrics() {
+/** Mobile: home indicator, gap da layout viewport e padding único do menu inferior. */
+function syncMobileLayoutMetrics() {
   if (typeof document === "undefined" || typeof window === "undefined") return;
-  if (!isIosDevice()) return;
+  if (!isMobileViewport()) return;
 
   const html = document.documentElement;
   const raw = readSafeAreaInsets();
-  const visualBottom = visualViewportBottom();
-  const layoutGap = Math.max(0, window.innerHeight - visualBottom);
-  html.style.setProperty("--ios-layout-viewport-gap", `${Math.round(layoutGap)}px`);
+  const { layoutGap } = readVisualViewportMetrics();
+  html.style.setProperty("--ios-layout-viewport-gap", `${layoutGap}px`);
 
-  const resolved = resolveMobileSafeInsets(raw);
+  const resolved = resolveMobileSafeInsets(raw, layoutGap);
   let bottomPad = resolved.bottom;
   if (bottomPad <= 0) {
     bottomPad =
@@ -212,9 +271,9 @@ function clearDockInlineGeometry(root: HTMLElement, navEl: HTMLElement | null) {
  */
 function syncStandaloneViewport() {
   const html = document.documentElement;
-  const vv = window.visualViewport;
-  const visualBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
-  html.style.setProperty("--app-vh", `${Math.round(visualBottom)}px`);
+  const { visualBottom, layoutGap, layoutHeight, offsetTop } = readVisualViewportMetrics();
+  html.style.setProperty("--app-vh", `${visualBottom}px`);
+  html.style.setProperty("--vv-offset-top", `${offsetTop}px`);
 
   if (!isStandalonePwa()) {
     html.style.removeProperty("--pwa-bottom-gap");
@@ -222,7 +281,7 @@ function syncStandaloneViewport() {
     return;
   }
 
-  let gap = Math.max(0, Math.round(visualBottom - window.innerHeight));
+  let gap = Math.max(layoutGap, Math.round(visualBottom - layoutHeight));
   const navRoot = document.getElementById("atlly-student-nav-root");
   const inFlowNav = document.querySelector(
     ".student-app-shell:not(.workout-immersive) .student-bottom-nav"
@@ -236,17 +295,14 @@ function syncStandaloneViewport() {
   }
   html.style.setProperty("--pwa-bottom-gap", `${Math.min(gap, 120)}px`);
 
-  if (!isAppleTouchDevice()) return;
-  const resolved = resolveMobileSafeInsets(readSafeAreaInsets());
-  if (resolved.top > 0) html.style.setProperty("--safe-top", `${Math.round(resolved.top)}px`);
-  if (resolved.right > 0) html.style.setProperty("--safe-right", `${Math.round(resolved.right)}px`);
-  if (resolved.left > 0) html.style.setProperty("--safe-left", `${Math.round(resolved.left)}px`);
+  if (!isMobileViewport()) return;
+  const resolved = resolveMobileSafeInsets(readSafeAreaInsets(), gap);
+  if (resolved.top > 0) html.style.setProperty("--safe-top", `${resolved.top}px`);
+  if (resolved.right > 0) html.style.setProperty("--safe-right", `${resolved.right}px`);
+  if (resolved.left > 0) html.style.setProperty("--safe-left", `${resolved.left}px`);
   if (resolved.bottom > 0) {
-    html.style.setProperty("--safe-bottom", `${Math.round(resolved.bottom)}px`);
-    html.style.setProperty("--standalone-nav-safe-bottom", `${Math.round(resolved.bottom)}px`);
-  } else if (isStandalonePwa() && /iPhone/.test(navigator.userAgent)) {
-    html.style.setProperty("--safe-bottom", "34px");
-    html.style.setProperty("--standalone-nav-safe-bottom", "34px");
+    html.style.setProperty("--safe-bottom", `${resolved.bottom}px`);
+    html.style.setProperty("--standalone-nav-safe-bottom", `${resolved.bottom}px`);
   }
 }
 
@@ -266,25 +322,26 @@ export function refreshStudentBottomNavDock() {
     html.classList.remove("has-student-nav-pinned");
     html.style.removeProperty("--student-nav-dock-padding-bottom");
     clearDockClearance();
-    syncIosLayoutMetrics();
+    syncMobileLayoutMetrics();
     return;
   }
 
   clearDockInlineGeometry(root, nav as HTMLElement);
 
   const measure = () => {
-    applySafeAreaCssVars();
+    const { layoutGap } = readVisualViewportMetrics();
+    applySafeAreaCssVars(layoutGap);
     syncStandaloneViewport();
     publishDockClearance(root);
   };
 
-  syncIosLayoutMetrics();
+  syncMobileLayoutMetrics();
   measure();
   window.requestAnimationFrame(() => {
-    syncIosLayoutMetrics();
+    syncMobileLayoutMetrics();
     measure();
     window.requestAnimationFrame(() => {
-      syncIosLayoutMetrics();
+      syncMobileLayoutMetrics();
       measure();
     });
   });
@@ -328,24 +385,20 @@ export function wireMobileStudentViewport() {
   function sync() {
     root.classList.toggle("is-ios-pwa", isIos);
 
-    const pwa = isStandalonePwa();
-    const mobile = pwa || isIos || window.matchMedia("(max-width: 900px)").matches;
+    const mobile = isMobileViewport();
     if (!mobile) {
       root.classList.remove("is-mobile-student-layout");
       syncAppViewportHeight();
       syncStandaloneViewport();
-      if (isIos) {
-        applySafeAreaCssVars();
-        syncIosLayoutMetrics();
-      }
       return;
     }
 
     root.classList.add("is-mobile-student-layout");
 
-    applySafeAreaCssVars();
+    const { layoutGap } = readVisualViewportMetrics();
+    applySafeAreaCssVars(layoutGap);
     syncStandaloneViewport();
-    syncIosLayoutMetrics();
+    syncMobileLayoutMetrics();
 
     root.style.setProperty("--student-nav-bar", "64px");
     refreshStudentBottomNavDock();
