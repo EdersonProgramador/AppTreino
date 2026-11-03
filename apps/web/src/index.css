@@ -27,7 +27,8 @@
   #root {
     margin: 0;
     padding: 0;
-    min-height: 100vh;
+    height: 100vh;
+    height: 100dvh;
     min-height: 100dvh;
     min-height: -webkit-fill-available;
   }
@@ -36,6 +37,14 @@
   html.light body,
   html.light #root {
     background-color: #ffffff;
+  }
+
+  html.light.is-pwa-standalone.is-ios-pwa,
+  html.light.is-pwa-standalone.is-ios-pwa body,
+  html.light.is-pwa-standalone.is-ios-pwa #root {
+    background-color: #ffffff !important;
+    background-image: none !important;
+    overflow: hidden;
   }
 
   html.dark,
@@ -21490,7 +21499,7 @@ html.is-pwa-standalone .student-app-scroll {
   touch-action: pan-y;
 }
 
-html.is-pwa-standalone:not(.has-portal-bottom-nav)
+html.is-pwa-standalone:not(.has-portal-bottom-nav):not(.is-ios-pwa)
   .student-app-shell:not(.workout-immersive):not(.is-activity)
   .student-app-scroll {
   padding-bottom: 0 !important;
@@ -21499,8 +21508,8 @@ html.is-pwa-standalone:not(.has-portal-bottom-nav)
 
 html.is-native-app .student-app-shell .student-bottom-nav,
 html.is-native-app .student-app-shell.is-play .student-bottom-nav,
-html.is-pwa-standalone .student-app-shell .student-bottom-nav,
-html.is-pwa-standalone .student-app-shell.is-play .student-bottom-nav {
+html.is-pwa-standalone:not(.is-ios-pwa) .student-app-shell .student-bottom-nav,
+html.is-pwa-standalone:not(.is-ios-pwa) .student-app-shell.is-play .student-bottom-nav {
   position: relative !important;
   bottom: auto !important;
   left: auto !important;
@@ -21531,19 +21540,18 @@ html.is-pwa-standalone .student-app-shell.is-play .student-bottom-nav {
 }
 
 html.is-native-app .student-app-shell.is-activity:not(.workout-immersive) .student-bottom-nav,
-html.is-pwa-standalone .student-app-shell.is-activity:not(.workout-immersive) .student-bottom-nav {
+html.is-pwa-standalone:not(.is-ios-pwa)
+  .student-app-shell.is-activity:not(.workout-immersive)
+  .student-bottom-nav {
   position: absolute !important;
   bottom: calc(-1 * var(--pwa-chrome-gap, var(--pwa-bottom-gap, 0px))) !important;
   left: 0 !important;
   right: 0 !important;
 }
 
-/* ---- PWA (Add to Home Screen): ocupa 100% da tela do celular ----
-   Não travar html/body em height:100dvh + overflow:hidden.
-   No iOS isso vira o containing block do position:fixed e o menu
-   para acima do Home Indicator, deixando a faixa branca. */
-html.is-pwa-standalone,
-html.is-pwa-standalone body {
+/* ---- PWA (Add to Home Screen) ---- */
+html.is-pwa-standalone:not(.is-ios-pwa),
+html.is-pwa-standalone:not(.is-ios-pwa) body {
   width: 100%;
   margin: 0;
   padding: 0;
@@ -21563,10 +21571,23 @@ html.is-pwa-standalone body {
 html.is-pwa-standalone.is-ios-pwa,
 html.is-pwa-standalone.is-ios-pwa body,
 html.is-pwa-standalone.is-ios-pwa #root {
-  min-height: 100dvh;
-  min-height: -webkit-fill-available;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  padding-bottom: 0 !important;
+  height: 100vh;
   height: 100dvh;
   height: -webkit-fill-available;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+  max-height: 100dvh;
+  max-height: -webkit-fill-available;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
+  background: var(--app-bg) !important;
+  background-image: none !important;
 }
 
 /* Portal aluno: tab bar no flex — trava a viewport como no app nativo (evita scroll do body + faixa inferior). */
@@ -21619,9 +21640,33 @@ html.is-ios-pwa.has-student-app-shell body {
 
 html.light.is-pwa-standalone.has-student-app-shell,
 html.light.is-pwa-standalone.has-student-app-shell body,
+html.light.is-pwa-standalone.has-student-app-shell #root,
 html.light.is-ios-pwa.has-student-app-shell,
-html.light.is-ios-pwa.has-student-app-shell body {
-  background: rgba(255, 255, 255, 0.98) !important;
+html.light.is-ios-pwa.has-student-app-shell body,
+html.light.is-ios-pwa.has-student-app-shell #root {
+  background-color: #ffffff !important;
+  background-image: none !important;
+}
+
+html.is-pwa-standalone.is-ios-pwa.has-student-app-shell .student-app-shell:not(.workout-immersive) {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 100dvh !important;
+  min-height: -webkit-fill-available !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  box-sizing: border-box !important;
+}
+
+html.is-pwa-standalone.is-ios-pwa.has-student-app-shell
+  .student-app-shell:not(.workout-immersive)
+  .student-app-scroll {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  padding-bottom: calc(
+    var(--student-nav-bar, 64px) + env(safe-area-inset-bottom, 16px) + 12px
+  ) !important;
 }
 
 html.is-pwa-standalone.has-student-app-shell .student-app-shell .student-bottom-nav,
@@ -21637,8 +21682,30 @@ html.is-pwa-standalone.has-student-app-shell .student-app-shell.is-play .student
   background: var(--app-bg-soft) !important;
 }
 
-html.light.is-pwa-standalone.has-student-app-shell .student-app-shell .student-bottom-nav {
-  background: rgba(255, 255, 255, 0.98) !important;
+html.is-pwa-standalone.is-ios-pwa.has-student-app-shell
+  .student-app-shell:not(.workout-immersive)
+  .student-bottom-nav {
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 120 !important;
+  flex: none !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  padding-top: 8px !important;
+  padding-bottom: calc(env(safe-area-inset-bottom, 16px) + 12px) !important;
+  min-height: calc(
+    var(--student-nav-bar, 64px) + env(safe-area-inset-bottom, 16px) + 12px
+  ) !important;
+  background: var(--app-bg-soft) !important;
+  border-top: 0.5px solid rgba(212, 175, 55, 0.14);
+}
+
+html.light.is-pwa-standalone.is-ios-pwa.has-student-app-shell
+  .student-app-shell:not(.workout-immersive)
+  .student-bottom-nav {
+  background: #ffffff !important;
 }
 
 html.is-pwa-standalone.has-student-app-shell .student-app-shell.is-activity:not(.workout-immersive)
@@ -21647,15 +21714,6 @@ html.is-pwa-standalone.has-student-app-shell .student-app-shell.is-activity:not(
     --student-nav-offset,
     calc(var(--student-nav-bar, 64px) + env(safe-area-inset-bottom, 0px))
   ) !important;
-}
-
-html.is-pwa-standalone.has-student-app-shell
-  .student-app-shell.is-activity:not(.workout-immersive)
-  .student-bottom-nav {
-  position: relative !important;
-  bottom: auto !important;
-  left: auto !important;
-  right: auto !important;
 }
 
 /* iOS PWA: mesmas variáveis de inset que o Expo (SafeAreaProvider). */
