@@ -6000,14 +6000,11 @@ html.light .finance-hub-tabs button {
   --st-weight-body: 600;
   --st-weight-title: 800;
   --st-weight-label: 700;
-  --safe-top: var(--expo-safe-top, env(safe-area-inset-top, 0px));
-  --safe-bottom: var(--expo-safe-bottom, env(safe-area-inset-bottom, 0px));
-  --safe-left: var(--expo-safe-left, env(safe-area-inset-left, 0px));
-  --safe-right: var(--expo-safe-right, env(safe-area-inset-right, 0px));
+  /* Safe area vem de html (:root + mobile-viewport); não redefinir aqui — no PWA iOS env() zera e anulava o inset medido. */
   --student-max: min(100%, 768px);
   --student-nav-bar: 70px;
-  --student-header-offset: calc(86px + var(--safe-top));
-  --student-nav-offset: calc(var(--student-nav-bar) + var(--safe-bottom));
+  --student-header-offset: calc(86px + var(--safe-top, env(safe-area-inset-top, 0px)));
+  --student-nav-offset: calc(var(--student-nav-bar) + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
 
   position: relative;
   display: flex;
@@ -21507,6 +21504,8 @@ html.is-pwa-standalone .student-app-shell.is-play .student-bottom-nav {
   border-radius: 0;
   box-shadow: none;
   border-top: 0.5px solid rgba(212, 175, 55, 0.14);
+  padding-bottom: var(--safe-bottom, env(safe-area-inset-bottom, 34px));
+  min-height: calc(var(--student-nav-bar) + var(--safe-bottom, env(safe-area-inset-bottom, 34px)));
 }
 
 html.is-native-app .student-app-shell.is-activity:not(.workout-immersive) .student-bottom-nav,
@@ -21543,12 +21542,12 @@ html.is-pwa-standalone body {
 html.is-pwa-standalone.has-student-app-shell,
 html.is-pwa-standalone.has-student-app-shell body,
 html.is-pwa-standalone.has-student-app-shell #root {
-  height: var(--app-vh, 100dvh);
-  height: var(--app-vh, -webkit-fill-available);
-  max-height: var(--app-vh, 100dvh);
-  max-height: var(--app-vh, -webkit-fill-available);
-  min-height: var(--app-vh, 100dvh);
-  min-height: var(--app-vh, -webkit-fill-available);
+  height: 100dvh;
+  height: -webkit-fill-available;
+  max-height: 100dvh;
+  max-height: -webkit-fill-available;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
   overflow: hidden;
 }
 
@@ -21582,10 +21581,14 @@ html.light.is-ios-pwa.has-student-app-shell body {
 
 html.is-pwa-standalone.has-student-app-shell .student-app-shell .student-bottom-nav,
 html.is-pwa-standalone.has-student-app-shell .student-app-shell.is-play .student-bottom-nav {
+  flex: 0 0 auto !important;
+  margin-top: auto !important;
+  align-self: stretch !important;
+  box-sizing: border-box !important;
   min-height: calc(
-    var(--student-nav-bar) + var(--safe-bottom, env(safe-area-inset-bottom, 0px))
+    var(--student-nav-bar) + var(--safe-bottom, env(safe-area-inset-bottom, 34px))
   ) !important;
-  padding-bottom: var(--safe-bottom, env(safe-area-inset-bottom, 0px)) !important;
+  padding-bottom: var(--safe-bottom, env(safe-area-inset-bottom, 34px)) !important;
   background: var(--app-bg-soft) !important;
 }
 
@@ -21606,7 +21609,7 @@ html.is-pwa-standalone.is-ios-pwa {
   --safe-top: var(--expo-safe-top, env(safe-area-inset-top, 0px));
   --safe-right: var(--expo-safe-right, env(safe-area-inset-right, 0px));
   --safe-left: var(--expo-safe-left, env(safe-area-inset-left, 0px));
-  --safe-bottom: var(--expo-safe-bottom, env(safe-area-inset-bottom, 0px));
+  --safe-bottom: var(--expo-safe-bottom, env(safe-area-inset-bottom, 34px));
   --standalone-nav-safe-bottom: var(--safe-bottom);
   --student-nav-bar: 64px;
   --student-nav-offset: calc(var(--student-nav-bar) + var(--safe-bottom));

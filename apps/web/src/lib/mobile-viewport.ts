@@ -172,6 +172,10 @@ function applySafeAreaCssVars(layoutGap = readVisualViewportMetrics().layoutGap)
     if (px > 0) root.style.setProperty(name, `${px}px`);
     else root.style.removeProperty(name);
   }
+
+  if (isStandalonePwa() && isAppleTouchDevice() && resolved.bottom > 0) {
+    root.style.setProperty("--expo-safe-bottom", `${resolved.bottom}px`);
+  }
 }
 
 function syncAppViewportHeight() {
