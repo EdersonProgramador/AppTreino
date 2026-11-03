@@ -75,18 +75,22 @@ function readSafeAreaInsets() {
   };
 }
 
-/** iOS PWA/Safari often reports 0 from env() — fallback for home indicator. */
-function resolveIosBottomInset(measuredBottom: number) {
-  if (measuredBottom > 0) return measuredBottom;
-  if (!isAppleTouchDevice()) return 0;
-  if (/iPhone/.test(navigator.userAgent)) return 34;
-  if (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) return 20;
+/**
+ * iOS standalone often reports env(safe-area-inset-bottom) = 0 even with a home indicator.
+ * Only fall back when the top inset is also missing (viewport-fit not applied) or a notch is present.
+ */
+function resolveIosBottomInset(insets: { top: number; bottom: number }) {
+  if (insets.bottom > 0) return insets.bottom;
+  if (!/iPhone/.test(navigator.userAgent)) return 0;
+  const standalone = isStandalonePwa();
+  if (insets.top >= 44) return 34;
+  if (standalone && insets.top === 0) return 34;
   return 0;
 }
 
 function readSafeAreaInsetsResolved() {
   const insets = readSafeAreaInsets();
-  const bottom = resolveIosBottomInset(insets.bottom);
+  const bottom = resolveIosBottomInset(insets);
   return { ...insets, bottom };
 }
 
@@ -166,10 +170,12 @@ function sealStudentNavDockToScreenBottom(root: HTMLElement, attempt = 0) {
   const layoutGap = Math.max(0, window.innerHeight - rect.bottom);
   const viewportGap = Math.max(0, window.innerHeight - visualBottom);
   const safePad = insets.bottom;
-  const totalPad = Math.round(Math.max(safePad + layoutGap, safePad + viewportGap, safePad));
+  const totalPad = Math.round(Math.max(safePad, safePad + layoutGap, safePad + viewportGap));
 
+  html.classList.toggle("is-ios-home-indicator", safePad >= 20);
   root.style.setProperty("padding-bottom", `${totalPad}px`, "important");
-  html.style.setProperty("--student-nav-dock-padding-bottom", `${totalPad}px`);
+  if (totalPad > 0) html.style.setProperty("--student-nav-dock-padding-bottom", `${totalPad}px`);
+  else html.style.removeProperty("--student-nav-dock-padding-bottom");
 
   if (attempt < 5) {
     window.requestAnimationFrame(() => {

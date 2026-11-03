@@ -10,6 +10,9 @@
       html.is-ios-pwa {
         background-color: #05070c;
       }
+      html.light.is-ios-pwa {
+        background-color: #ffffff;
+      }
       html.is-ios-pwa body::after {
         content: "";
         position: fixed;
@@ -23,6 +26,9 @@
         background: #05070c;
         z-index: 119;
         pointer-events: none;
+      }
+      html.light.is-ios-pwa body::after {
+        background: #ffffff;
       }
       html.is-ios-pwa.has-portal-bottom-nav body::after,
       html.is-ios-pwa.has-student-nav-pinned body::after {
@@ -43,6 +49,13 @@
         justify-content: flex-end;
         background: #0b101c;
         pointer-events: none;
+      }
+      html.is-ios-pwa.is-pwa-standalone #atlly-student-nav-root:not(:empty) {
+        padding-bottom: max(34px, env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)));
+      }
+      html.light #atlly-student-nav-root,
+      html.light #atlly-student-nav-root > .student-bottom-nav {
+        background: #ffffff;
       }
       #atlly-student-nav-root:empty {
         display: none;

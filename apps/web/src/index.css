@@ -32708,9 +32708,19 @@ html.has-portal-bottom-nav .student-app-shell.has-music-dock:not(.workout-immers
   ) !important;
 }
 
-html.is-ios-pwa.is-pwa-standalone #atlly-student-nav-root:not(:empty) {
-  padding-bottom: var(
-    --student-nav-dock-padding-bottom,
-    max(34px, env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)))
+html.is-ios-pwa.is-pwa-standalone #atlly-student-nav-root:not(:empty),
+html.is-ios-home-indicator #atlly-student-nav-root:not(:empty) {
+  padding-bottom: max(
+    34px,
+    env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)),
+    var(--student-nav-dock-padding-bottom, 0px)
   ) !important;
+}
+
+html.light.is-pwa-standalone.has-student-nav-pinned,
+html.light.is-pwa-standalone.has-student-nav-pinned body,
+html.light.is-pwa-standalone.has-portal-bottom-nav,
+html.light.is-pwa-standalone.has-portal-bottom-nav body {
+  background-color: #ffffff !important;
+  background-image: none !important;
 }
