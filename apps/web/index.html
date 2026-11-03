@@ -51,7 +51,7 @@
         pointer-events: none;
       }
       html.is-ios-pwa.is-pwa-standalone #atlly-student-nav-root:not(:empty) {
-        padding-bottom: max(34px, env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)));
+        padding-bottom: 10px;
       }
       html.light #atlly-student-nav-root,
       html.light #atlly-student-nav-root > .student-bottom-nav {
@@ -65,8 +65,8 @@
         position: relative;
         width: 100%;
         margin: 0;
-        min-height: 64px;
-        padding: 8px 12px 8px;
+        min-height: 0;
+        padding: 6px 8px 4px;
         box-sizing: border-box;
         pointer-events: auto;
         z-index: 120;
@@ -134,13 +134,9 @@
           var fill = Math.max(bottom, layoutGap);
           if (fill > 0) root.style.setProperty("--ios-viewport-bottom-fill", Math.round(fill) + "px");
           else root.style.removeProperty("--ios-viewport-bottom-fill");
-          var safeBottom = bottom;
-          if (!safeBottom && /iPhone/.test(navigator.userAgent)) safeBottom = 34;
-          if (safeBottom > 0) root.style.setProperty("--ios-safe-bottom-pad", Math.round(Math.max(safeBottom, 6)) + "px");
+          if (bottom > 0) root.style.setProperty("--ios-safe-bottom-pad", Math.round(bottom) + "px");
           else root.style.removeProperty("--ios-safe-bottom-pad");
-          if (/iPhone/.test(navigator.userAgent)) {
-            root.style.setProperty("--student-nav-dock-padding-bottom", Math.round(Math.max(safeBottom, 34)) + "px");
-          }
+          root.style.setProperty("--student-nav-dock-padding-bottom", "10px");
         }
         function boot() {
           syncSafeArea();

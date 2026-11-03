@@ -161,29 +161,26 @@ function publishDockClearance(root: HTMLElement) {
   }
 }
 
-/** Cola o dock na borda inferior real (PWA iOS often leaves a gap with env() alone). */
+/** Folga curta sob os rótulos. O home indicator fica sobre essa faixa, sem bloco vazio. */
+const NAV_BOTTOM_CUSHION_PX = 10;
+
+/**
+ * Mede o vão real abaixo do dock (com padding zerado) e só preenche esse vão.
+ * Não soma de novo os 34px do safe-area — isso empurrava Timeline…Menu para cima.
+ */
 function sealStudentNavDockToScreenBottom(root: HTMLElement, attempt = 0) {
   const html = document.documentElement;
-  const insets = readSafeAreaInsetsResolved();
+  root.style.setProperty("padding-bottom", "0px", "important");
   const rect = root.getBoundingClientRect();
-  const visualBottom = visualViewportBottom();
-  const layoutGap = Math.max(0, window.innerHeight - rect.bottom);
-  const viewportGap = Math.max(0, window.innerHeight - visualBottom);
-  const safePad = insets.bottom;
-  const totalPad = Math.round(Math.max(safePad, safePad + layoutGap, safePad + viewportGap));
+  const gap = Math.max(0, Math.round(window.innerHeight - rect.bottom));
+  const pad = gap + NAV_BOTTOM_CUSHION_PX;
 
-  html.classList.toggle("is-ios-home-indicator", safePad >= 20);
-  root.style.setProperty("padding-bottom", `${totalPad}px`, "important");
-  if (totalPad > 0) html.style.setProperty("--student-nav-dock-padding-bottom", `${totalPad}px`);
-  else html.style.removeProperty("--student-nav-dock-padding-bottom");
+  html.classList.remove("is-ios-home-indicator");
+  root.style.setProperty("padding-bottom", `${pad}px`, "important");
+  html.style.setProperty("--student-nav-dock-padding-bottom", `${pad}px`);
 
-  if (attempt < 5) {
-    window.requestAnimationFrame(() => {
-      const nextGap = Math.max(0, window.innerHeight - root.getBoundingClientRect().bottom);
-      if (nextGap > 0.75 || (isAppleTouchDevice() && totalPad < 20)) {
-        sealStudentNavDockToScreenBottom(root, attempt + 1);
-      }
-    });
+  if (attempt < 3 && gap > 1) {
+    window.requestAnimationFrame(() => sealStudentNavDockToScreenBottom(root, attempt + 1));
   }
 }
 
@@ -219,7 +216,9 @@ function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
   navEl.style.setProperty("transform", "none", "important");
   navEl.style.setProperty("pointer-events", "auto", "important");
   navEl.style.setProperty("box-sizing", "border-box", "important");
-  navEl.style.setProperty("padding-bottom", "6px", "important");
+  navEl.style.setProperty("padding-bottom", "4px", "important");
+  navEl.style.setProperty("min-height", "0", "important");
+  navEl.style.setProperty("height", "auto", "important");
   navEl.style.setProperty("margin-bottom", "0", "important");
 
   sealStudentNavDockToScreenBottom(root);

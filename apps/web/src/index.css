@@ -27412,10 +27412,10 @@ nav.student-bottom-nav.student-bottom-nav--docked {
   margin-top: 0 !important;
   width: 100% !important;
   max-width: 100% !important;
-  min-height: var(--student-nav-bar, 64px) !important;
+  min-height: 0 !important;
   height: auto !important;
   max-height: none !important;
-  padding: 8px max(12px, var(--safe-right, 0px)) 8px max(12px, var(--safe-left, 0px)) !important;
+  padding: 6px max(8px, var(--safe-right, 0px)) 4px max(8px, var(--safe-left, 0px)) !important;
   border-radius: 0 !important;
   box-shadow: none !important;
   border-top: 1px solid rgba(212, 175, 55, 0.14) !important;
@@ -32708,13 +32708,8 @@ html.has-portal-bottom-nav .student-app-shell.has-music-dock:not(.workout-immers
   ) !important;
 }
 
-html.is-ios-pwa.is-pwa-standalone #atlly-student-nav-root:not(:empty),
-html.is-ios-home-indicator #atlly-student-nav-root:not(:empty) {
-  padding-bottom: max(
-    34px,
-    env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)),
-    var(--student-nav-dock-padding-bottom, 0px)
-  ) !important;
+html.is-ios-pwa.is-pwa-standalone #atlly-student-nav-root:not(:empty) {
+  padding-bottom: var(--student-nav-dock-padding-bottom, 10px) !important;
 }
 
 html.light.is-pwa-standalone.has-student-nav-pinned,
