@@ -3,7 +3,11 @@ import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
-import { parseOrderExternalReference, parsePurchaseExternalReference } from "./asaas.client.js";
+import {
+  parseOrderExternalReference,
+  parsePurchaseExternalReference,
+  resolveAsaasNetAmounts
+} from "./asaas.client.js";
 import { applySubscriptionPaymentConfirmation } from "./asaas-payment-sync.js";
 import { notifyOrderStatusChange } from "../email-notifications.js";
 import {
@@ -71,7 +75,8 @@ const asaasWebhookSchema = z
         bankSlipUrl: z.string().optional(),
         paymentDate: z.string().optional(),
         confirmedDate: z.string().optional(),
-        value: z.union([z.number(), z.string()]).optional()
+        value: z.union([z.number(), z.string()]).optional(),
+        netValue: z.union([z.number(), z.string()]).optional()
       })
       .optional(),
     checkout: z
@@ -336,6 +341,12 @@ export async function registerAsaasRoutes(app: FastifyInstance) {
       );
     }
 
+    const asaasAmounts = resolveAsaasNetAmounts({
+      value: asaasPayment?.value,
+      netValue: asaasPayment?.netValue,
+      fallbackGrossInCents: payment.amountInCents
+    });
+
     try {
       const result = await applySubscriptionPaymentConfirmation(payment, {
         status: asaasPayment?.status ?? checkout?.status ?? payment.status,
@@ -343,7 +354,13 @@ export async function registerAsaasRoutes(app: FastifyInstance) {
         paymentUrl: asaasPayment?.invoiceUrl ?? asaasPayment?.bankSlipUrl ?? checkout?.link ?? payment.paymentUrl,
         paidAt: shouldActivateMembership(status)
           ? new Date(asaasPayment?.paymentDate ?? asaasPayment?.confirmedDate ?? Date.now())
-          : undefined
+          : undefined,
+        ...(shouldActivateMembership(status)
+          ? {
+              netAmountInCents: asaasAmounts.netCents,
+              providerFeeInCents: asaasAmounts.feeCents
+            }
+          : {})
       });
 
       return reply.code(200).send({

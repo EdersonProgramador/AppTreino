@@ -59,13 +59,29 @@ export function labelMembershipStatus(status: string) {
   return membershipStatusLabel[status as MembershipStatusCode] ?? status;
 }
 
+function isMembershipValidNowClient(membership: {
+  status: string;
+  startsAt?: string | Date;
+  endsAt?: string | Date | null;
+}) {
+  if (membership.status !== "ACTIVE") return false;
+  const now = Date.now();
+  const startsAt = new Date(membership.startsAt ?? 0).getTime();
+  if (!Number.isFinite(startsAt) || startsAt > now) return false;
+  if (membership.endsAt) {
+    const endsAt = new Date(membership.endsAt).getTime();
+    if (Number.isFinite(endsAt) && endsAt < now) return false;
+  }
+  return true;
+}
+
 /** Status efetivo exibido na lista de usuários (matrícula real > liberação admin). */
 export function labelUserEnrollmentColumn(user: {
   enrollmentStatus: string;
-  memberships?: Array<{ status: string }> | null;
+  memberships?: Array<{ status: string; startsAt?: string | Date; endsAt?: string | Date | null }> | null;
 }) {
   const memberships = user.memberships ?? [];
-  const activeMembership = memberships.find((item) => item.status === "ACTIVE");
+  const activeMembership = memberships.find((item) => isMembershipValidNowClient(item));
   if (activeMembership) {
     return labelMembershipStatus("ACTIVE");
   }
@@ -83,6 +99,36 @@ export function labelUserEnrollmentColumn(user: {
 
 export function labelPaymentStatus(status: string) {
   return paymentStatusLabel[status as PaymentStatusCode] ?? status;
+}
+
+/** Valor exibido no admin: líquido Asaas quando confirmado. */
+export function paymentAdminDisplayAmountCents(payment: {
+  amountInCents: number;
+  netAmountInCents?: number | null;
+  status: string;
+}) {
+  if (payment.status === "CONFIRMED" && payment.netAmountInCents != null) {
+    return payment.netAmountInCents;
+  }
+  return payment.amountInCents;
+}
+
+export function paymentAdminFeeLabel(payment: {
+  amountInCents: number;
+  netAmountInCents?: number | null;
+  providerFeeInCents?: number | null;
+  status: string;
+}) {
+  if (payment.status !== "CONFIRMED" || payment.netAmountInCents == null) {
+    return null;
+  }
+  const fee =
+    payment.providerFeeInCents ??
+    Math.max(0, payment.amountInCents - payment.netAmountInCents);
+  if (fee <= 0) {
+    return null;
+  }
+  return fee;
 }
 
 export function labelBillingType(type: string) {

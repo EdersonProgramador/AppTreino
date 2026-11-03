@@ -262,6 +262,19 @@ export const assessmentPhotoFields = [
 export interface AdminStudentOverview {
   student: AdminUser;
   activeMembership: MembershipRow | null;
+  studentAccess: {
+    hasPortalAccess: boolean;
+    label: string;
+    enrollmentStatus: string;
+  };
+  latestConfirmedPayment: {
+    id: string;
+    paidAt: string | null;
+    amountInCents: number;
+    netAmountInCents?: number | null;
+    providerFeeInCents?: number | null;
+    status: PaymentRow["status"];
+  } | null;
   coachEligibility: {
     hasCoachRole: boolean;
     hasActiveSubscription: boolean;

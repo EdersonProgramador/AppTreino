@@ -84,6 +84,8 @@ import {
   labelPaymentStatus,
   labelUserEnrollmentColumn,
   membershipStatusLabel,
+  paymentAdminDisplayAmountCents,
+  paymentAdminFeeLabel,
   paymentStatusLabel
 } from "../../lib/finance";
 import {
@@ -362,7 +364,13 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       return;
     }
     setAdminSection(section === "favorites" ? "ratings" : section);
-    if (section === "finance") setFinanceTab("payments");
+    if (section === "finance") {
+      setFinanceTab("payments");
+      void loadAdminData(["summary", "payments", "memberships", "users"]);
+    }
+    if (section === "users") {
+      void loadAdminData(["users", "memberships", "payments", "summary"]);
+    }
     setAdminNavOpen(false);
   };
 
@@ -3075,7 +3083,7 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
       const date = new Date(payment.paidAt ?? payment.dueDate);
       return `${date.getFullYear()}-${date.getMonth()}` === currentMonthForStats;
     })
-    .reduce((sum, payment) => sum + payment.amountInCents, 0);
+    .reduce((sum, payment) => sum + paymentAdminDisplayAmountCents(payment), 0);
   const purchasesThisMonth = purchases.filter((purchase) => {
     const date = new Date(purchase.createdAt);
     return `${date.getFullYear()}-${date.getMonth()}` === currentMonthForStats;
@@ -3822,7 +3830,34 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
             </article>
 
             <div className="admin-student-summary-grid">
-              <span><UserRound size={18} /><strong>{selectedAdminStudent.student.status === "ACTIVE" ? "Ativo" : "Inativo"}</strong><small>Status</small></span>
+              <span><UserRound size={18} /><strong>{selectedAdminStudent.student.status === "ACTIVE" ? "Ativo" : "Inativo"}</strong><small>Conta</small></span>
+              <span>
+                <ShieldCheck size={18} />
+                <strong>
+                  {selectedAdminStudent.activeMembership
+                    ? labelMembershipStatus(selectedAdminStudent.activeMembership.status)
+                    : labelMembershipStatus("PENDING")}
+                </strong>
+                <small>Matrícula vigente</small>
+              </span>
+              <span>
+                <Activity size={18} />
+                <strong>{selectedAdminStudent.studentAccess?.hasPortalAccess ? "Liberado" : "Bloqueado"}</strong>
+                <small>{selectedAdminStudent.studentAccess?.label ?? "Acesso ao app"}</small>
+              </span>
+              <span>
+                <CreditCard size={18} />
+                <strong>
+                  {selectedAdminStudent.latestConfirmedPayment
+                    ? formatPriceInBRL(paymentAdminDisplayAmountCents(selectedAdminStudent.latestConfirmedPayment))
+                    : "—"}
+                </strong>
+                <small>
+                  {selectedAdminStudent.latestConfirmedPayment?.paidAt
+                    ? `Pago em ${new Date(selectedAdminStudent.latestConfirmedPayment.paidAt).toLocaleDateString("pt-BR")} (líquido Asaas)`
+                    : "Último pagamento confirmado"}
+                </small>
+              </span>
               <span><Dumbbell size={18} /><strong>{selectedAdminStudent.summary.completedWorkoutSessions}</strong><small>Treinos concluídos</small></span>
               <span><CalendarDays size={18} /><strong>{selectedAdminStudent.summary.attendanceThisMonth}</strong><small>Frequência no mês</small></span>
               <span><CreditCard size={18} /><strong>{selectedAdminStudent.summary.pendingPayments}</strong><small>Pagamentos pendentes</small></span>
@@ -3987,10 +4022,16 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 {selectedAdminStudent.payments.slice(0, 5).map((payment) => (
                   <div className={dataRowClass} key={payment.id}>
                     <span>
-                      <strong>{formatPriceInBRL(payment.amountInCents)}</strong>
+                      <strong>{formatPriceInBRL(paymentAdminDisplayAmountCents(payment))}</strong>
                       <small>
-                        {new Date(payment.dueDate).toLocaleDateString("pt-BR")} ·{" "}
-                        <em className={financeStatusBadgeClass(payment.status)}>{labelPaymentStatus(payment.status)}</em>
+                        Venc. {new Date(payment.dueDate).toLocaleDateString("pt-BR")}
+                        {payment.status === "CONFIRMED" && payment.paidAt
+                          ? ` · Pago em ${new Date(payment.paidAt).toLocaleDateString("pt-BR")}`
+                          : ""}
+                        {paymentAdminFeeLabel(payment) != null
+                          ? ` · Taxa Asaas ${formatPriceInBRL(paymentAdminFeeLabel(payment)!)}`
+                          : ""}{" "}
+                        · <em className={financeStatusBadgeClass(payment.status)}>{labelPaymentStatus(payment.status)}</em>
                       </small>
                     </span>
                     <select
@@ -5984,7 +6025,9 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                 <div>
                   <strong>
                     {formatPriceInBRL(
-                      payments.filter((item) => item.status === "CONFIRMED").reduce((sum, item) => sum + item.amountInCents, 0)
+                      payments
+                        .filter((item) => item.status === "CONFIRMED")
+                        .reduce((sum, item) => sum + paymentAdminDisplayAmountCents(item), 0)
                     )}
                   </strong>
                   <span>Recebido</span>
@@ -6227,8 +6270,14 @@ export function AdminView({ token, onLogout }: { token: string | null; onLogout:
                   <div className={`${dataRowClass} finance-row finance-row--payments`} key={item.id}>
                     <span>
                       <strong>{item.membership?.user?.name ?? "Aluno"}</strong>
-                      <small className="finance-money">{formatPriceInBRL(item.amountInCents)}</small>
+                      <small className="finance-money">{formatPriceInBRL(paymentAdminDisplayAmountCents(item))}</small>
                       <small>{item.membership?.plan?.name ?? "Plano"}</small>
+                      {item.status === "CONFIRMED" && item.paidAt ? (
+                        <small>Pago em {new Date(item.paidAt).toLocaleDateString("pt-BR")}</small>
+                      ) : null}
+                      {paymentAdminFeeLabel(item) != null ? (
+                        <small>Taxa Asaas {formatPriceInBRL(paymentAdminFeeLabel(item)!)}</small>
+                      ) : null}
                     </span>
                     <small>{new Date(item.dueDate).toLocaleDateString("pt-BR")}</small>
                     <div className="finance-status-cell">

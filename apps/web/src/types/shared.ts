@@ -62,6 +62,8 @@ export interface PaymentRow {
   id: string;
   membershipId: string;
   amountInCents: number;
+  netAmountInCents?: number | null;
+  providerFeeInCents?: number | null;
   status: "PENDING" | "CONFIRMED" | "OVERDUE" | "REFUNDED" | "CANCELED";
   dueDate: string;
   paidAt?: string | null;

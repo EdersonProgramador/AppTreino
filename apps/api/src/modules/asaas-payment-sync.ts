@@ -6,7 +6,11 @@ import {
 } from "../email-notifications.js";
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
-import { getAsaasPayment, findAsaasPaymentByExternalReference } from "./asaas.client.js";
+import {
+  findAsaasPaymentByExternalReference,
+  getAsaasPayment,
+  resolveAsaasNetAmounts
+} from "./asaas.client.js";
 import { addCycleDate, asaasStatusToPaymentStatus, shouldActivateMembership } from "./asaas.routes.js";
 import {
   accrueCoachCommissionForPayment,
@@ -42,6 +46,8 @@ export async function applySubscriptionPaymentConfirmation(
     paymentUrl?: string | null;
     paidAt?: Date;
     amountInCents?: number | null;
+    netAmountInCents?: number | null;
+    providerFeeInCents?: number | null;
   }
 ): Promise<SubscriptionPaymentSyncResult> {
   const nextStatus = asaasStatusToPaymentStatus(input.status);
@@ -66,7 +72,13 @@ export async function applySubscriptionPaymentConfirmation(
       paymentUrl: input.paymentUrl ?? payment.paymentUrl,
       paidAt: shouldActivateMembership(nextStatus)
         ? input.paidAt ?? payment.paidAt ?? new Date()
-        : payment.paidAt
+        : payment.paidAt,
+      ...(input.netAmountInCents != null
+        ? {
+            netAmountInCents: input.netAmountInCents,
+            providerFeeInCents: input.providerFeeInCents ?? 0
+          }
+        : {})
     },
     include: {
       membership: {
@@ -195,7 +207,16 @@ export async function syncSubscriptionPaymentFromAsaas(
 
   const remoteStatus = asaasStatusToPaymentStatus(remote.status);
 
+  const asaasAmounts = resolveAsaasNetAmounts({
+    value: remote.value,
+    netValue: remote.netValue,
+    fallbackGrossInCents: payment.amountInCents
+  });
+
   if (remoteStatus === payment.status) {
+    if (payment.status === "CONFIRMED" && payment.netAmountInCents == null) {
+      await backfillPaymentNetFromAsaas(payment);
+    }
     return {
       payment,
       membership: payment.membership,
@@ -215,13 +236,46 @@ export async function syncSubscriptionPaymentFromAsaas(
         })
       : undefined,
     // Confia no status consultado diretamente no Asaas (evita falso negativo no polling).
-    amountInCents: null
+    amountInCents: null,
+    ...(shouldActivateMembership(remoteStatus)
+      ? {
+          netAmountInCents: asaasAmounts.netCents,
+          providerFeeInCents: asaasAmounts.feeCents
+        }
+      : {})
   });
 
   return {
     ...result,
     syncedFromAsaas: true
   };
+}
+
+export async function backfillPaymentNetFromAsaas(
+  payment: Pick<Payment, "id" | "asaasPaymentId" | "amountInCents" | "netAmountInCents">
+) {
+  if (!env.ASAAS_API_KEY || !payment.asaasPaymentId || payment.netAmountInCents != null) {
+    return;
+  }
+
+  const remote = await getAsaasPayment(payment.asaasPaymentId);
+  if (!remote?.id) {
+    return;
+  }
+
+  const { netCents, feeCents } = resolveAsaasNetAmounts({
+    value: remote.value,
+    netValue: remote.netValue,
+    fallbackGrossInCents: payment.amountInCents
+  });
+
+  await prisma.payment.update({
+    where: { id: payment.id },
+    data: {
+      netAmountInCents: netCents,
+      providerFeeInCents: feeCents
+    }
+  });
 }
 
 let lastAdminPanelPaymentSyncAt = 0;
@@ -300,6 +354,34 @@ export async function syncSubscriptionPaymentsForAdminPanel() {
       });
     } catch {
       // Reparo best-effort para cadastros confirmados sem matrícula ACTIVE.
+    }
+  }
+
+  const confirmedMissingNet = await prisma.payment.findMany({
+    where: {
+      status: "CONFIRMED",
+      deletedAt: null,
+      netAmountInCents: null,
+      asaasPaymentId: { not: null },
+      createdAt: { gte: since }
+    },
+    select: {
+      id: true,
+      asaasPaymentId: true,
+      amountInCents: true,
+      netAmountInCents: true
+    },
+    orderBy: {
+      createdAt: "desc"
+    },
+    take: 40
+  });
+
+  for (const payment of confirmedMissingNet) {
+    try {
+      await backfillPaymentNetFromAsaas(payment);
+    } catch {
+      // Best-effort para alinhar valor líquido com o painel Asaas.
     }
   }
 }

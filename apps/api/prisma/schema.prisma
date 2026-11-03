@@ -238,6 +238,8 @@ model Payment {
   membershipId          String        @map("membership_id")
   membership            Membership    @relation(fields: [membershipId], references: [id])
   amountInCents         Int           @map("amount_in_cents")
+  netAmountInCents      Int?          @map("net_amount_in_cents")
+  providerFeeInCents    Int?          @map("provider_fee_in_cents")
   originalAmountInCents Int?          @map("original_amount_in_cents")
   discountInCents       Int           @default(0) @map("discount_in_cents")
   couponId              String?       @map("coupon_id")

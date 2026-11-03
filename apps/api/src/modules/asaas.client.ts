@@ -350,11 +350,31 @@ export type AsaasPaymentRecord = {
   id: string;
   status?: string;
   value?: number | string;
+  netValue?: number | string;
   paymentDate?: string | null;
   confirmedDate?: string | null;
   invoiceUrl?: string | null;
   bankSlipUrl?: string | null;
 };
+
+export function parseAsaasMoneyToCents(value: number | string | null | undefined) {
+  if (value == null || value === "") return null;
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return null;
+  return Math.round(amount * 100);
+}
+
+/** Valor bruto, líquido (após taxa Asaas) e taxa estimada em centavos. */
+export function resolveAsaasNetAmounts(input: {
+  value?: number | string | null;
+  netValue?: number | string | null;
+  fallbackGrossInCents: number;
+}) {
+  const grossCents = parseAsaasMoneyToCents(input.value) ?? input.fallbackGrossInCents;
+  const netCents = parseAsaasMoneyToCents(input.netValue) ?? grossCents;
+  const feeCents = Math.max(0, grossCents - netCents);
+  return { grossCents, netCents, feeCents };
+}
 
 export async function createAsaasPayment(input: {
   customerId: string;

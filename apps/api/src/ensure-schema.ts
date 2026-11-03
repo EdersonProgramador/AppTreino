@@ -264,4 +264,11 @@ export async function ensureSchemaCompatibility() {
   await prisma.$executeRawUnsafe(`
     ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "student_access_profile" "student_access_profile" NOT NULL DEFAULT 'PLATFORM_FULL';
   `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "net_amount_in_cents" INTEGER;
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "provider_fee_in_cents" INTEGER;
+  `);
 }

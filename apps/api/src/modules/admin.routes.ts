@@ -40,7 +40,12 @@ import {
   parseRepetitionRange
 } from "./workout-program.utils.js";
 import { buildProgramPublishReadiness, studentMatchesProgramTargetGender } from "./cms-publication.utils.js";
-import { syncUserEnrollmentFromMemberships, validActiveMembershipWhere } from "./membership.utils.js";
+import {
+  isMembershipValidNow,
+  resolveStudentPortalAccess,
+  syncUserEnrollmentFromMemberships,
+  validActiveMembershipWhere
+} from "./membership.utils.js";
 import {
   activateSystemModules,
   assertModuleEnabled,
@@ -56,6 +61,7 @@ import { fanOutStudentNotifications, notifyStudent } from "./notification.utils.
 import { createAsaasCheckout } from "./asaas.client.js";
 import {
   applySubscriptionPaymentConfirmation,
+  syncPendingSubscriptionPaymentsForUser,
   syncSubscriptionPaymentsForAdminPanel
 } from "./asaas-payment-sync.js";
 import { asaasStatusToPaymentStatus, shouldActivateMembership } from "./asaas.routes.js";
@@ -1479,6 +1485,8 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get("/admin/students/:id/overview", async (request) => {
     requireDatabase();
     const { id } = idParamSchema.parse(request.params);
+    await syncSubscriptionPaymentsForAdminPanel();
+    await syncPendingSubscriptionPaymentsForUser(id);
     const today = toDateOnly();
     const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
     const monthEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1));
@@ -1601,18 +1609,32 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     const completedWorkoutSessions = workoutSessions.filter((session) => session.status === "COMPLETED");
     const now = new Date();
     const activeMembership =
-      student.memberships.find((membership) => {
-        if (membership.status !== "ACTIVE" || membership.deletedAt) return false;
-        if (membership.startsAt > now) return false;
-        if (membership.endsAt && membership.endsAt < now) return false;
-        return true;
-      }) ?? null;
+      student.memberships.find((membership) => isMembershipValidNow(membership, now)) ?? null;
+
+    const studentAccess = resolveStudentPortalAccess(student, activeMembership ?? student.memberships[0] ?? null, now);
+    const latestConfirmedPayment =
+      payments.find((payment) => payment.status === "CONFIRMED" && !payment.deletedAt) ?? null;
 
     const coachEligibility = await getCoachEligibility(id);
 
     return {
       student,
       activeMembership,
+      studentAccess: {
+        hasPortalAccess: studentAccess.hasPortalAccess,
+        label: studentAccess.label,
+        enrollmentStatus: student.enrollmentStatus
+      },
+      latestConfirmedPayment: latestConfirmedPayment
+        ? {
+            id: latestConfirmedPayment.id,
+            paidAt: latestConfirmedPayment.paidAt,
+            amountInCents: latestConfirmedPayment.amountInCents,
+            netAmountInCents: latestConfirmedPayment.netAmountInCents,
+            providerFeeInCents: latestConfirmedPayment.providerFeeInCents,
+            status: latestConfirmedPayment.status
+          }
+        : null,
       coachEligibility: {
         hasCoachRole: coachEligibility.hasCoachRole,
         hasActiveSubscription: coachEligibility.hasActiveSubscription,

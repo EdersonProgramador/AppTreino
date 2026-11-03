@@ -1,5 +1,6 @@
-import type { Prisma } from "@prisma/client";
+import type { Membership, Prisma, User } from "@prisma/client";
 import type { AppPrismaClient } from "../prisma.js";
+import { readStudentAccessProfile } from "./student-access.utils.js";
 
 /** Matrícula ACTIVE e dentro da vigência (startsAt/endsAt). */
 export function validActiveMembershipWhere(now = new Date()): Prisma.MembershipWhereInput {
@@ -8,6 +9,50 @@ export function validActiveMembershipWhere(now = new Date()): Prisma.MembershipW
     deletedAt: null,
     startsAt: { lte: now },
     OR: [{ endsAt: null }, { endsAt: { gte: now } }]
+  };
+}
+
+export function isMembershipValidNow(
+  membership: Pick<Membership, "status" | "startsAt" | "endsAt" | "deletedAt">,
+  now = new Date()
+) {
+  if (membership.status !== "ACTIVE" || membership.deletedAt) return false;
+  if (membership.startsAt > now) return false;
+  if (membership.endsAt && membership.endsAt < now) return false;
+  return true;
+}
+
+/** Mesma regra do portal do aluno (`apps/web/src/lib/student-access.ts`). */
+export function resolveStudentPortalAccess(
+  user: Pick<User, "enrollmentStatus" | "studentAccessProfile">,
+  membership: Pick<Membership, "status" | "startsAt" | "endsAt" | "deletedAt"> | null,
+  now = new Date()
+) {
+  if (membership && isMembershipValidNow(membership, now)) {
+    return {
+      hasPortalAccess: true,
+      label: "Liberado (assinatura ativa)"
+    };
+  }
+
+  const profile = readStudentAccessProfile(user);
+  if (profile === "COACH_MANAGED" && user.enrollmentStatus === "ACTIVE") {
+    return {
+      hasPortalAccess: true,
+      label: "Liberado (vínculo coach)"
+    };
+  }
+
+  if (user.enrollmentStatus === "ACTIVE" && profile !== "COACH_MANAGED") {
+    return {
+      hasPortalAccess: true,
+      label: "Liberado (cadastro)"
+    };
+  }
+
+  return {
+    hasPortalAccess: false,
+    label: "Bloqueado — aguardando pagamento ou matrícula"
   };
 }
 
