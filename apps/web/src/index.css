@@ -14301,15 +14301,25 @@ html.light .admin-workspace-shell .workspace-logout svg {
   }
 
   .student-streak-button {
-    grid-template-columns: auto auto;
-    gap: 4px;
-    padding: 0 6px;
+    display: inline-grid;
+    grid-template-columns: 1fr;
+    place-items: center;
+    gap: 0;
+    width: 44px;
     min-width: 44px;
-    justify-content: center;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
   }
 
-  .student-streak-button__label {
-    display: none;
+  .student-streak-button__label,
+  .student-streak-button strong {
+    display: none !important;
+  }
+
+  .student-streak-button svg {
+    width: 22px;
+    height: 22px;
   }
 
   .student-hero-card,
