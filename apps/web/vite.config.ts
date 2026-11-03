@@ -75,7 +75,7 @@ export default defineConfig({
               url.origin === self.location.origin && url.pathname.startsWith(pwaAssetsPrefix),
             handler: "StaleWhileRevalidate",
             options: {
-              cacheName: "atlly-static-assets-v21",
+              cacheName: "atlly-static-assets-v22",
               expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 7 }
             }
           },

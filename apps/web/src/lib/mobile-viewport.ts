@@ -10,7 +10,7 @@ export function shouldPinStudentBottomNavToViewport(): boolean {
   const native =
     /AppTreinoMobile/i.test(navigator.userAgent) ||
     new URLSearchParams(window.location.search).get("app") === "mobile";
-  // Expo: tab bar no fluxo do flex (header | scroll | nav), não portal fixo.
+  // Expo + PWA iOS instalado: tab bar in-flow (header | scroll | nav), como SafeAreaProvider + bottom tabs.
   if (native || isStandalonePwa()) return false;
   const ios =
     /iPhone|iPad|iPod/.test(navigator.userAgent) ||

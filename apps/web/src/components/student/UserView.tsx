@@ -3231,9 +3231,9 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
   const studentBottomNavInner = !hideStudentNav ? (
     <nav
-      className={`student-bottom-nav box-border h-auto pt-2 !pb-[calc(env(safe-area-inset-bottom,16px)+12px)] light:bg-white dark:bg-[var(--app-bg-soft)]${
+      className={`student-bottom-nav box-border h-auto pt-2 light:bg-white dark:bg-[var(--app-bg-soft)]${
         portaledBottomNav
-          ? " student-bottom-nav--docked fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--app-border)]"
+          ? " student-bottom-nav--docked fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--app-border)] !pb-[calc(env(safe-area-inset-bottom,16px)+12px)]"
           : ""
       }`}
       aria-label={brand.navAria}
