@@ -25,6 +25,7 @@ let safeAreaProbe: HTMLDivElement | null = null;
 let navPinObserver: MutationObserver | null = null;
 let navResizeObserver: ResizeObserver | null = null;
 let navPinWired = false;
+let dockRefreshScheduled = false;
 
 function isStandalonePwa() {
   if (typeof window === "undefined") return false;
@@ -386,8 +387,7 @@ function syncStandaloneViewport() {
   }
 }
 
-/** Mede o nav portado. O encaixe visual fica no CSS, não em estilo inline. */
-export function refreshStudentBottomNavDock() {
+function refreshStudentBottomNavDockNow() {
   if (typeof document === "undefined") return;
 
   syncStandaloneViewport();
@@ -409,25 +409,24 @@ export function refreshStudentBottomNavDock() {
 
   clearDockInlineGeometry(root, nav as HTMLElement);
 
-  const measure = () => {
-    const { layoutGap } = readVisualViewportMetrics();
-    applySafeAreaCssVars(layoutGap);
-    syncStandaloneViewport();
-    publishDockClearance(root);
-  };
-
+  const { layoutGap } = readVisualViewportMetrics();
+  applySafeAreaCssVars(layoutGap);
+  syncStandaloneViewport();
   syncMobileLayoutMetrics();
-  measure();
-  window.requestAnimationFrame(() => {
-    syncMobileLayoutMetrics();
-    measure();
-    window.requestAnimationFrame(() => {
-      syncMobileLayoutMetrics();
-      measure();
-    });
-  });
+  publishDockClearance(root);
 
   html.classList.add("has-student-nav-pinned");
+}
+
+/** Mede o nav portado. O encaixe visual fica no CSS, não em estilo inline. */
+export function refreshStudentBottomNavDock() {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  if (dockRefreshScheduled) return;
+  dockRefreshScheduled = true;
+  window.requestAnimationFrame(() => {
+    dockRefreshScheduled = false;
+    refreshStudentBottomNavDockNow();
+  });
 }
 
 function wireStudentBottomNavPinObserver() {
@@ -454,7 +453,6 @@ function wireStudentBottomNavPinObserver() {
     window.addEventListener("resize", schedule);
     window.addEventListener("orientationchange", () => window.setTimeout(schedule, 150));
     window.visualViewport?.addEventListener("resize", schedule);
-    window.visualViewport?.addEventListener("scroll", schedule);
     schedule();
   };
 

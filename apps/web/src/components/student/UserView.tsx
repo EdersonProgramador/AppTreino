@@ -195,11 +195,6 @@ const WorkoutPlayer = lazyWithChunkRetry(async () => {
 });
 
 export function UserView({ token, onLogout }: { token: string | null; onLogout: () => void }) {
-  useEffect(() => {
-    document.documentElement.classList.add("has-student-app-shell");
-    return () => document.documentElement.classList.remove("has-student-app-shell");
-  }, []);
-
   const { user: authUser, exitAdminPreview } = useAuth();
   const isAdminPreview = Boolean(authUser?.previewMode && authUser?.canReturnToAdmin);
   const [previewExiting, setPreviewExiting] = useState(false);
@@ -2564,24 +2559,32 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
           : !profile.gender || !profile.objective || !profile.level)
     );
 
+  const showMainStudentShell = accessReady && !needsOnboarding && hasStudentAreaAccess;
+
   const portaledBottomNav =
-    shouldPinStudentBottomNavToViewport() &&
-    !hideStudentNav &&
-    accessReady &&
-    !needsOnboarding &&
-    hasStudentAreaAccess;
+    shouldPinStudentBottomNavToViewport() && !hideStudentNav && showMainStudentShell;
+
+  useLayoutEffect(() => {
+    document.documentElement.classList.toggle("has-student-app-shell", showMainStudentShell);
+    return () => {
+      document.documentElement.classList.remove("has-student-app-shell");
+    };
+  }, [showMainStudentShell]);
 
   useLayoutEffect(() => {
     document.documentElement.classList.toggle("has-portal-bottom-nav", portaledBottomNav);
-    refreshStudentBottomNavDock();
-    const remeasure = () => refreshStudentBottomNavDock();
-    window.requestAnimationFrame(remeasure);
-    window.requestAnimationFrame(() => window.requestAnimationFrame(remeasure));
+    if (portaledBottomNav) {
+      refreshStudentBottomNavDock();
+      window.requestAnimationFrame(() => refreshStudentBottomNavDock());
+    } else {
+      document.documentElement.classList.remove("has-student-nav-pinned");
+      refreshStudentBottomNavDock();
+    }
     return () => {
       document.documentElement.classList.remove("has-portal-bottom-nav");
       refreshStudentBottomNavDock();
     };
-  }, [portaledBottomNav, hideStudentNav, accessReady, hasStudentAreaAccess, studentSection, activityLiveChrome]);
+  }, [portaledBottomNav, hideStudentNav, showMainStudentShell, studentSection, activityLiveChrome]);
 
   const closeCoachSubscriptionOverlay = () => {
     setCoachUpsellNotice(null);
