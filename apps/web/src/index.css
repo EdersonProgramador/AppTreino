@@ -22367,8 +22367,9 @@ html.is-native-app .workspace-content {
 }
 
 html.is-ios-pwa .home-landing .home-sticky-cta {
-  bottom: calc(-1 * var(--ios-layout-viewport-gap, 0px)) !important;
-  padding-bottom: max(12px, var(--ios-safe-bottom-pad, env(safe-area-inset-bottom, 0px))) !important;
+  bottom: 0 !important;
+  padding-bottom: calc(12px + constant(safe-area-inset-bottom)) !important;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
   background: rgba(5, 7, 12, 0.96) !important;
   box-sizing: border-box;
 }
@@ -27373,10 +27374,8 @@ html.is-mobile-student-layout .student-app-shell {
   padding-top: 0 !important;
   padding-left: 0 !important;
   padding-right: 0 !important;
-  padding-bottom: var(
-    --student-nav-dock-padding-bottom,
-    env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px))
-  ) !important;
+  padding-bottom: constant(safe-area-inset-bottom) !important;
+  padding-bottom: env(safe-area-inset-bottom, 0px) !important;
   transform: none !important;
   pointer-events: none;
   box-sizing: border-box;
@@ -32706,10 +32705,6 @@ html.has-portal-bottom-nav .student-app-shell.has-music-dock:not(.workout-immers
         var(--student-bottom-nav-dock-height, calc(64px + env(safe-area-inset-bottom, 0px)))
       ) + 60px
   ) !important;
-}
-
-html.is-ios-pwa.is-pwa-standalone #atlly-student-nav-root:not(:empty) {
-  padding-bottom: var(--student-nav-dock-padding-bottom, 10px) !important;
 }
 
 html.light.is-pwa-standalone.has-student-nav-pinned,

@@ -161,27 +161,11 @@ function publishDockClearance(root: HTMLElement) {
   }
 }
 
-/** Folga curta sob os rótulos. O home indicator fica sobre essa faixa, sem bloco vazio. */
-const NAV_BOTTOM_CUSHION_PX = 10;
-
-/**
- * Mede o vão real abaixo do dock (com padding zerado) e só preenche esse vão.
- * Não soma de novo os 34px do safe-area — isso empurrava Timeline…Menu para cima.
- */
-function sealStudentNavDockToScreenBottom(root: HTMLElement, attempt = 0) {
-  const html = document.documentElement;
-  root.style.setProperty("padding-bottom", "0px", "important");
-  const rect = root.getBoundingClientRect();
-  const gap = Math.max(0, Math.round(window.innerHeight - rect.bottom));
-  const pad = gap + NAV_BOTTOM_CUSHION_PX;
-
-  html.classList.remove("is-ios-home-indicator");
-  root.style.setProperty("padding-bottom", `${pad}px`, "important");
-  html.style.setProperty("--student-nav-dock-padding-bottom", `${pad}px`);
-
-  if (attempt < 3 && gap > 1) {
-    window.requestAnimationFrame(() => sealStudentNavDockToScreenBottom(root, attempt + 1));
-  }
+/** Safe area inferior fica no CSS (`env(safe-area-inset-bottom)`), não em px inline. */
+function releaseDockSafeAreaToCss(root: HTMLElement) {
+  root.style.removeProperty("padding-bottom");
+  document.documentElement.style.removeProperty("--student-nav-dock-padding-bottom");
+  document.documentElement.classList.remove("is-ios-home-indicator");
 }
 
 function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
@@ -207,6 +191,7 @@ function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
   root.style.setProperty("padding-top", "0", "important");
   root.style.setProperty("padding-left", "0", "important");
   root.style.setProperty("padding-right", "0", "important");
+  releaseDockSafeAreaToCss(root);
 
   navEl.style.removeProperty("position");
   navEl.style.setProperty("position", "relative", "important");
@@ -216,12 +201,10 @@ function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
   navEl.style.setProperty("transform", "none", "important");
   navEl.style.setProperty("pointer-events", "auto", "important");
   navEl.style.setProperty("box-sizing", "border-box", "important");
-  navEl.style.setProperty("padding-bottom", "4px", "important");
+  navEl.style.removeProperty("padding-bottom");
   navEl.style.setProperty("min-height", "0", "important");
   navEl.style.setProperty("height", "auto", "important");
   navEl.style.setProperty("margin-bottom", "0", "important");
-
-  sealStudentNavDockToScreenBottom(root);
 }
 
 /** Mede o nav portado e aplica pin inline (funciona mesmo com CSS/SW antigo). */
