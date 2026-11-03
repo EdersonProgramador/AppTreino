@@ -21557,22 +21557,6 @@ html.is-pwa-standalone.has-student-app-shell #root {
   min-height: 0;
 }
 
-/* Aluno in-flow: ui-shell encosta no fundo do #root (100dvh); safe area só na tab bar. */
-html.is-pwa-standalone.has-student-app-shell .ui-shell,
-html.is-pwa-standalone.has-student-app-shell .ui-shell.min-h-dvh {
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
-  height: 100% !important;
-  max-height: 100% !important;
-}
-
-html.is-pwa-standalone.has-student-app-shell .app-view-stage {
-  flex: 1 1 auto;
-  min-height: 0;
-  height: 100%;
-  max-height: 100%;
-}
-
 html.is-pwa-standalone.has-student-app-shell,
 html.is-ios-pwa.has-student-app-shell {
   background: var(--app-bg-soft) !important;
@@ -21751,7 +21735,11 @@ html.is-pwa-standalone:not(.keyboard-open) body::after {
   left: 0;
   right: 0;
   bottom: 0;
-  height: max(var(--pwa-bottom-gap, 0px), var(--ios-viewport-bottom-fill, 0px));
+  height: max(
+    var(--pwa-bottom-gap, 0px),
+    var(--pwa-chrome-gap, 0px),
+    var(--ios-viewport-bottom-fill, 0px)
+  );
   pointer-events: none;
   z-index: 110;
   background: var(--app-bg-soft, var(--app-bg));
@@ -21767,10 +21755,21 @@ html.is-pwa-standalone:has(.home-landing.home-command):not(.keyboard-open) body:
   background: #05070c;
 }
 
+/* Aluno in-flow: conteúdo em --app-vh; pinta só a faixa abaixo da tab (mesma cor da barra). */
 html.is-pwa-standalone.has-student-app-shell:not(.keyboard-open) body::after {
-  display: none !important;
-  content: none !important;
-  height: 0 !important;
+  z-index: 50;
+  height: max(
+    var(--pwa-bottom-gap, 0px),
+    var(--pwa-chrome-gap, 0px),
+    var(--ios-viewport-bottom-fill, 0px),
+    env(safe-area-inset-bottom, 34px)
+  ) !important;
+  background: var(--app-bg-soft, var(--app-bg)) !important;
+}
+
+html.light.is-pwa-standalone.has-student-app-shell:not(.keyboard-open) body::after,
+html.light.is-ios-pwa.has-student-app-shell:not(.keyboard-open) body::after {
+  background: rgba(255, 255, 255, 0.98) !important;
 }
 
 

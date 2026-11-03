@@ -208,11 +208,6 @@ function syncMobileLayoutMetrics() {
     html.style.removeProperty("--ios-safe-bottom-pad");
   }
 
-  if (usesInFlowPwaStudentNav()) {
-    html.style.removeProperty("--ios-viewport-bottom-fill");
-    return;
-  }
-
   const fill = Math.max(bottomPad, layoutGap);
   if (fill > 0.5) html.style.setProperty("--ios-viewport-bottom-fill", `${Math.round(fill)}px`);
   else html.style.removeProperty("--ios-viewport-bottom-fill");
