@@ -5,12 +5,13 @@ require("react-native-gesture-handler");
 
 const { registerRootComponent } = require("expo");
 const Constants = require("expo-constants").default;
+const { Platform } = require("react-native");
 
 // Task GPS em background (TaskManager) — registrar antes do App montar.
 require("./src/tracking/location/trackingLocationTask");
 
 // Headless service ANTES de importar o App (setupPlayer roda no construtor de musicPlayback).
-if (Constants.appOwnership !== "expo") {
+if (Constants.appOwnership !== "expo" && Platform.OS !== "web") {
   try {
     const TrackPlayer = require("react-native-track-player");
     TrackPlayer.registerPlaybackService(() => require("./playbackService"));

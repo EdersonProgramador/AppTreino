@@ -1,5 +1,6 @@
 const path = require("path");
 const { getDefaultConfig } = require("expo/metro-config");
+const { resolve: resolveRequest } = require("metro-resolver");
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const projectRoot = __dirname;
@@ -16,10 +17,34 @@ config.resolver.nodeModulesPaths = [
 ];
 // Nested deps (e.g. abort-controller → event-target-shim@5) are not visible with
 // hierarchical lookup disabled — pin event-target-shim@5 as a direct dependency.
-config.resolver.disableHierarchicalLookup = true;
+// Hierarchical lookup is required for react-native-web (dist/modules/*) on web.
+config.resolver.disableHierarchicalLookup = false;
 config.resolver.extraNodeModules = {
   ...(config.resolver.extraNodeModules || {}),
-  "event-target-shim": path.resolve(projectRoot, "node_modules/event-target-shim")
+  "event-target-shim": path.resolve(projectRoot, "node_modules/event-target-shim"),
+  "react-native-web": path.resolve(projectRoot, "node_modules/react-native-web"),
+  "react-dom": path.resolve(projectRoot, "node_modules/react-dom")
+};
+
+const webShims = {
+  "react-native-track-player": "src/shims/react-native-track-player.web.js",
+  "react-native-webrtc": "src/shims/react-native-webrtc.web.js",
+  "react-native-maps": "src/shims/react-native-maps.web.js"
+};
+
+const upstreamResolveRequest = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  const activePlatform = platform ?? context.platform;
+  if (activePlatform === "web" && webShims[moduleName]) {
+    return {
+      filePath: path.resolve(projectRoot, webShims[moduleName]),
+      type: "sourceFile"
+    };
+  }
+  if (upstreamResolveRequest) {
+    return upstreamResolveRequest(context, moduleName, platform);
+  }
+  return resolveRequest(context, moduleName, platform);
 };
 
 module.exports = config;
