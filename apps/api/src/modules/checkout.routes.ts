@@ -23,7 +23,8 @@ import {
   resolveCheckoutCardInstallment,
   resolveSubscriptionCheckoutPricing
 } from "./checkout.utils.js";
-import { syncSubscriptionPaymentFromAsaas } from "./asaas-payment-sync.js";
+import { applySubscriptionPaymentConfirmation, syncSubscriptionPaymentFromAsaas } from "./asaas-payment-sync.js";
+import { asaasStatusToPaymentStatus, shouldActivateMembership } from "./asaas.routes.js";
 import { applyReferralAttributionForUser } from "./coach-affiliate.service.js";
 import {
   marketingAttributionBodySchema,
@@ -581,31 +582,32 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       installmentCount: installmentResolution.installmentCount
     });
 
-    if (cardResult.payment.status === "CONFIRMED" && cardResult.payment.couponId) {
-      await incrementSubscriptionCouponUsage(cardResult.payment.couponId);
-    }
+    const remoteConfirmed =
+      cardResult.remoteAsaasStatus != null &&
+      shouldActivateMembership(asaasStatusToPaymentStatus(cardResult.remoteAsaasStatus));
 
-    if (cardResult.payment.status === "CONFIRMED") {
-      const membership = await prisma.membership.update({
-        where: { id: payment.membershipId },
-        data: {
-          status: "ACTIVE",
-          user: {
-            update: {
-              enrollmentStatus: "ACTIVE"
+    if (remoteConfirmed || cardResult.payment.status === "CONFIRMED") {
+      const loaded = await prisma.payment.findUniqueOrThrow({
+        where: { id: payment.id },
+        include: {
+          membership: {
+            include: {
+              plan: true
             }
           }
-        },
-        include: {
-          plan: true
         }
+      });
+      const sync = await applySubscriptionPaymentConfirmation(loaded, {
+        status: cardResult.remoteAsaasStatus ?? "CONFIRMED",
+        asaasPaymentId: loaded.asaasPaymentId,
+        paidAt: new Date()
       });
 
       return reply.send(
         buildNativeCheckoutResponse({
-          membership,
-          payment: cardResult.payment,
-          alreadyActive: true,
+          membership: sync.membership,
+          payment: sync.payment,
+          alreadyActive: sync.activated || sync.membership.status === "ACTIVE",
           paymentProviderError: cardResult.providerError
         })
       );
@@ -658,40 +660,38 @@ export async function registerCheckoutRoutes(app: FastifyInstance) {
       });
     }
 
-    const confirmedPayment = await prisma.payment.update({
-      where: {
-        id: payment.id
-      },
-      data: {
-        status: "CONFIRMED",
-        paidAt: new Date()
-      }
-    });
-
-    if (payment.status !== "CONFIRMED" && confirmedPayment.couponId) {
-      await incrementSubscriptionCouponUsage(confirmedPayment.couponId);
+    if (payment.status === "CONFIRMED") {
+      const membership = await prisma.membership.findUniqueOrThrow({
+        where: { id: payment.membershipId },
+        include: { plan: true }
+      });
+      return reply.send({ membership, payment });
     }
 
-    const membership = await prisma.membership.update({
+    const loaded = await prisma.payment.findFirstOrThrow({
       where: {
-        id: confirmedPayment.membershipId
-      },
-      data: {
-        status: "ACTIVE",
-        user: {
-          update: {
-            enrollmentStatus: "ACTIVE"
-          }
+        id: payment.id,
+        membership: {
+          userId: authUser.id
         }
       },
       include: {
-        plan: true
+        membership: {
+          include: {
+            plan: true
+          }
+        }
       }
     });
 
+    const sync = await applySubscriptionPaymentConfirmation(loaded, {
+      status: "CONFIRMED",
+      paidAt: new Date()
+    });
+
     return reply.send({
-      membership,
-      payment: confirmedPayment
+      membership: sync.membership,
+      payment: sync.payment
     });
   });
 

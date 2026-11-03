@@ -15,7 +15,6 @@ import { hashPassword, requirePathRole, requireRole } from "../auth.js";
 import { env } from "../env.js";
 import {
   notifyMembershipCanceled,
-  notifyPaymentRefundOrCancel,
   notifySupportReply
 } from "../email-notifications.js";
 import { prisma } from "../prisma.js";
@@ -55,7 +54,8 @@ import {
 } from "./commerce.utils.js";
 import { fanOutStudentNotifications, notifyStudent } from "./notification.utils.js";
 import { createAsaasCheckout } from "./asaas.client.js";
-import { asaasStatusToPaymentStatus } from "./asaas.routes.js";
+import { applySubscriptionPaymentConfirmation } from "./asaas-payment-sync.js";
+import { asaasStatusToPaymentStatus, shouldActivateMembership } from "./asaas.routes.js";
 import { asaasCheckoutItemDescription, asaasCheckoutItemName } from "./checkout.utils.js";
 
 const uploadGroups = ["lessons", "materials", "images", "audio"] as const;
@@ -4512,20 +4512,55 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         }
       }
     });
-    const payment = await prisma.payment.update({
-      where: { id },
-      data: body
-    });
 
-    if (body.status && body.status !== current.status) {
-      if (body.status === "REFUNDED" || body.status === "CANCELED") {
-        notifyPaymentRefundOrCancel({
-          userId: current.membership.userId,
-          planName: current.membership.plan.name,
-          kind: body.status
+    const statusChanging = body.status != null && body.status !== current.status;
+
+    if (statusChanging) {
+      const result = await applySubscriptionPaymentConfirmation(current, {
+        status: body.status!,
+        paidAt:
+          body.paidAt ??
+          (shouldActivateMembership(body.status!) ? new Date() : undefined),
+        amountInCents: body.amountInCents ?? current.amountInCents
+      });
+
+      if (!shouldActivateMembership(body.status!)) {
+        await syncUserEnrollmentFromMemberships(prisma, current.membership.userId);
+      }
+
+      const patch: { amountInCents?: number; dueDate?: Date } = {};
+      if (body.amountInCents != null && body.amountInCents !== result.payment.amountInCents) {
+        patch.amountInCents = body.amountInCents;
+      }
+      if (body.dueDate != null) {
+        patch.dueDate = body.dueDate;
+      }
+
+      let payment = result.payment;
+      if (Object.keys(patch).length > 0) {
+        payment = await prisma.payment.update({
+          where: { id },
+          data: patch,
+          include: {
+            membership: {
+              include: { plan: true }
+            }
+          }
         });
       }
+
+      return { payment, membership: result.membership };
     }
+
+    const payment = await prisma.payment.update({
+      where: { id },
+      data: body,
+      include: {
+        membership: {
+          include: { plan: true }
+        }
+      }
+    });
 
     return { payment };
   });

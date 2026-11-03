@@ -309,18 +309,24 @@ export async function payNativeSubscriptionWithCard(input: {
     };
   }
 
+  const remoteStatus = asaasStatusToPaymentStatus(asaasPayment.status);
   const updatedPayment = await prisma.payment.update({
     where: { id: input.payment.id },
     data: {
       asaasPaymentId: asaasPayment.id,
       paymentUrl: null,
-      status: asaasStatusToPaymentStatus(asaasPayment.status),
-      paidAt: asaasStatusToPaymentStatus(asaasPayment.status) === "CONFIRMED" ? new Date() : null
+      ...(remoteStatus !== "CONFIRMED"
+        ? {
+            status: remoteStatus,
+            paidAt: null
+          }
+        : {})
     }
   });
 
   return {
     payment: updatedPayment,
+    remoteAsaasStatus: asaasPayment.status,
     providerError: providerError ?? undefined
   };
 }
