@@ -22,6 +22,28 @@
     );
   }
 
+  html,
+  body,
+  #root {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
+  }
+
+  html.light,
+  html.light body,
+  html.light #root {
+    background-color: #ffffff;
+  }
+
+  html.dark,
+  html.dark body,
+  html.dark #root {
+    background-color: var(--app-bg);
+  }
+
   :root,
   html.dark {
     color-scheme: dark;
@@ -21504,8 +21526,8 @@ html.is-pwa-standalone .student-app-shell.is-play .student-bottom-nav {
   border-radius: 0;
   box-shadow: none;
   border-top: 0.5px solid rgba(212, 175, 55, 0.14);
-  padding-bottom: var(--safe-bottom, env(safe-area-inset-bottom, 34px));
-  min-height: calc(var(--student-nav-bar) + var(--safe-bottom, env(safe-area-inset-bottom, 34px)));
+  padding-bottom: var(--safe-bottom, env(safe-area-inset-bottom, 16px));
+  min-height: calc(var(--student-nav-bar) + var(--safe-bottom, env(safe-area-inset-bottom, 16px)));
 }
 
 html.is-native-app .student-app-shell.is-activity:not(.workout-immersive) .student-bottom-nav,
@@ -21557,6 +21579,21 @@ html.is-pwa-standalone.has-student-app-shell #root {
   min-height: 0;
 }
 
+html.is-pwa-standalone.has-student-app-shell .ui-shell,
+html.is-pwa-standalone.has-student-app-shell .ui-shell.min-h-dvh {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100% !important;
+}
+
+html.is-pwa-standalone.has-student-app-shell .app-view-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+}
+
 html.is-pwa-standalone.has-student-app-shell,
 html.is-ios-pwa.has-student-app-shell {
   background: var(--app-bg-soft) !important;
@@ -21585,9 +21622,9 @@ html.is-pwa-standalone.has-student-app-shell .student-app-shell.is-play .student
   align-self: stretch !important;
   box-sizing: border-box !important;
   min-height: calc(
-    var(--student-nav-bar) + var(--safe-bottom, env(safe-area-inset-bottom, 34px))
+    var(--student-nav-bar) + var(--safe-bottom, env(safe-area-inset-bottom, 16px))
   ) !important;
-  padding-bottom: var(--safe-bottom, env(safe-area-inset-bottom, 34px)) !important;
+  padding-bottom: var(--safe-bottom, env(safe-area-inset-bottom, 16px)) !important;
   background: var(--app-bg-soft) !important;
 }
 
@@ -21608,7 +21645,7 @@ html.is-pwa-standalone.is-ios-pwa {
   --safe-top: var(--expo-safe-top, env(safe-area-inset-top, 0px));
   --safe-right: var(--expo-safe-right, env(safe-area-inset-right, 0px));
   --safe-left: var(--expo-safe-left, env(safe-area-inset-left, 0px));
-  --safe-bottom: var(--expo-safe-bottom, env(safe-area-inset-bottom, 34px));
+  --safe-bottom: var(--expo-safe-bottom, env(safe-area-inset-bottom, 16px));
   --standalone-nav-safe-bottom: var(--safe-bottom);
   --student-nav-bar: 64px;
   --student-nav-offset: calc(var(--student-nav-bar) + var(--safe-bottom));
@@ -21762,7 +21799,7 @@ html.is-pwa-standalone.has-student-app-shell:not(.keyboard-open) body::after {
     var(--pwa-bottom-gap, 0px),
     var(--pwa-chrome-gap, 0px),
     var(--ios-viewport-bottom-fill, 0px),
-    env(safe-area-inset-bottom, 34px)
+    env(safe-area-inset-bottom, 16px)
   ) !important;
   background: var(--app-bg-soft, var(--app-bg)) !important;
 }

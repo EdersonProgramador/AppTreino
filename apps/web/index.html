@@ -3,12 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <!-- viewport-fit=cover: estende o layout até as bordas físicas; habilita env(safe-area-inset-*). -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <style id="atlly-student-nav-critical">
       html,
-      body {
+      body,
+      #root {
         margin: 0;
         padding: 0;
+        min-height: 100vh;
+        min-height: 100dvh;
+        min-height: -webkit-fill-available;
       }
       html {
         background-color: #05070c;
@@ -26,6 +33,8 @@
         background-color: #05070c;
       }
       html.light,
+      html.light body,
+      html.light #root,
       html.light.is-ios-pwa,
       html.light.is-pwa-standalone {
         background-color: #ffffff;
@@ -61,7 +70,7 @@
         min-height: 0;
         height: auto;
         margin-bottom: 0;
-        padding: 8px 8px env(safe-area-inset-bottom, 0px);
+        padding: 8px 8px env(safe-area-inset-bottom, 16px);
         box-sizing: border-box;
         pointer-events: auto;
         z-index: 120;
@@ -73,7 +82,7 @@
         --safe-top: var(--expo-safe-top, env(safe-area-inset-top, 0px));
         --safe-right: var(--expo-safe-right, env(safe-area-inset-right, 0px));
         --safe-left: var(--expo-safe-left, env(safe-area-inset-left, 0px));
-        --safe-bottom: var(--expo-safe-bottom, env(safe-area-inset-bottom, 34px));
+        --safe-bottom: var(--expo-safe-bottom, env(safe-area-inset-bottom, 16px));
       }
       html.is-pwa-standalone #atlly-student-nav-root,
       html.is-ios-pwa.has-portal-bottom-nav #atlly-student-nav-root {
@@ -82,7 +91,7 @@
       html.is-pwa-standalone.is-ios-pwa #atlly-student-nav-root > .student-bottom-nav,
       html.is-pwa-standalone.is-ios-pwa nav.student-bottom-nav.student-bottom-nav--docked {
         padding: 8px max(10px, var(--safe-right, env(safe-area-inset-right, 0px)))
-          var(--safe-bottom, env(safe-area-inset-bottom, 34px))
+          var(--safe-bottom, env(safe-area-inset-bottom, 16px))
           max(10px, var(--safe-left, env(safe-area-inset-left, 0px)));
         background: inherit;
       }
