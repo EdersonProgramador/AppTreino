@@ -27414,7 +27414,10 @@ nav.student-bottom-nav.student-bottom-nav--docked {
   height: auto !important;
   max-height: none !important;
   margin-bottom: 0 !important;
-  padding: 8px max(8px, var(--safe-right, 0px)) env(safe-area-inset-bottom, 16px) max(8px, var(--safe-left, 0px)) !important;
+  padding-top: 8px !important;
+  padding-right: max(8px, var(--safe-right, 0px)) !important;
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)) !important;
+  padding-left: max(8px, var(--safe-left, 0px)) !important;
   border-radius: 0 !important;
   box-shadow: none !important;
   border-top: 1px solid rgba(212, 175, 55, 0.14) !important;
@@ -27434,13 +27437,21 @@ html.light nav.student-bottom-nav.student-bottom-nav--docked {
   border-top-color: var(--app-border) !important;
 }
 
-/* Tela inicial: sem a barra do Safari. Ícones sobem só o Home Indicator. */
+/* Tela inicial: a caixa do menu inclui o Home Indicator e encosta na borda. */
+html.is-pwa-standalone #atlly-student-nav-root {
+  bottom: 0 !important;
+  padding: 0 !important;
+  background: var(--app-bg-soft) !important;
+}
+
+html.light.is-pwa-standalone #atlly-student-nav-root {
+  background: #ffffff !important;
+}
+
 html.is-pwa-standalone #atlly-student-nav-root > .student-bottom-nav,
 html.is-pwa-standalone nav.student-bottom-nav.student-bottom-nav--docked {
-  padding-bottom: var(
-    --standalone-nav-safe-bottom,
-    max(34px, env(safe-area-inset-bottom, constant(safe-area-inset-bottom, 0px)))
-  ) !important;
+  padding-bottom: var(--standalone-nav-safe-bottom, max(34px, env(safe-area-inset-bottom, 0px))) !important;
+  background: inherit !important;
 }
 
 html.has-portal-bottom-nav,

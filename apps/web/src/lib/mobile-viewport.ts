@@ -178,16 +178,17 @@ function pinStandaloneDock(root: HTMLElement, navEl: HTMLElement) {
   const vv = window.visualViewport;
   const viewportBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
   root.style.setProperty("bottom", "0px", "important");
+  root.style.setProperty("padding", "0px", "important");
+
+  const envBottom = readSafeAreaInsets().bottom;
+  const pad = Math.max(34, envBottom > 0 ? Math.round(envBottom) : 0);
+  navEl.style.setProperty("padding-bottom", `${pad}px`, "important");
+  html.style.setProperty("--standalone-nav-safe-bottom", `${pad}px`);
+  html.style.setProperty("--app-vh", `${Math.round(viewportBottom)}px`);
 
   const gap = Math.max(0, Math.round(viewportBottom - root.getBoundingClientRect().bottom));
   const shift = Math.min(gap, 120);
   if (shift > 1) root.style.setProperty("bottom", `${-shift}px`, "important");
-
-  const envBottom = readSafeAreaInsets().bottom;
-  const pad = envBottom > 0 ? Math.round(envBottom) : 34;
-  navEl.style.setProperty("padding-bottom", `${pad}px`, "important");
-  html.style.setProperty("--standalone-nav-safe-bottom", `${pad}px`);
-  html.style.setProperty("--app-vh", `${Math.round(viewportBottom)}px`);
 }
 
 function applyDockPinStyles(root: HTMLElement, navEl: HTMLElement) {
