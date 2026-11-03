@@ -21495,7 +21495,7 @@ html.is-pwa-standalone .student-app-shell.is-play .student-bottom-nav {
 html.is-native-app .student-app-shell.is-activity:not(.workout-immersive) .student-bottom-nav,
 html.is-pwa-standalone .student-app-shell.is-activity:not(.workout-immersive) .student-bottom-nav {
   position: absolute !important;
-  bottom: 0 !important;
+  bottom: calc(-1 * var(--pwa-bottom-gap, 0px)) !important;
   left: 0 !important;
   right: 0 !important;
 }
