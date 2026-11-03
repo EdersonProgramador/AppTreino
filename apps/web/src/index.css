@@ -21492,10 +21492,15 @@ html.is-pwa-standalone body {
   background-image: none !important;
 }
 
-/* Tela de Início no iPhone: o env() inferior costuma vir 0. Reserva o Home Indicator. */
+/* iOS PWA: mesmas variáveis de inset que o Expo (SafeAreaProvider). */
 html.is-pwa-standalone.is-ios-pwa {
-  --safe-bottom: max(34px, env(safe-area-inset-bottom, 0px));
-  --standalone-nav-safe-bottom: max(34px, env(safe-area-inset-bottom, 0px));
+  --safe-top: var(--expo-safe-top, env(safe-area-inset-top, 0px));
+  --safe-right: var(--expo-safe-right, env(safe-area-inset-right, 0px));
+  --safe-left: var(--expo-safe-left, env(safe-area-inset-left, 0px));
+  --safe-bottom: max(34px, var(--expo-safe-bottom, env(safe-area-inset-bottom, 0px)));
+  --standalone-nav-safe-bottom: var(--safe-bottom);
+  --student-nav-bar: 64px;
+  --student-nav-offset: calc(var(--student-nav-bar) + var(--safe-bottom));
 }
 
 html.is-pwa-standalone #root {
@@ -21696,7 +21701,33 @@ html.is-ios-pwa .home-landing {
 
 html.is-pwa-standalone .home-landing {
   min-height: var(--app-vh, 100dvh);
-  padding-bottom: calc(5rem + max(34px, var(--safe-bottom, env(safe-area-inset-bottom, 0px)))) !important;
+}
+
+html.is-pwa-standalone.is-ios-pwa .app-view-stage > .home-landing,
+html.is-pwa-standalone.is-ios-pwa .app-view-stage > .app-download-soon {
+  display: block;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  padding-top: 0;
+  padding-bottom: calc(5rem + var(--safe-bottom, 0px));
+  padding-left: 0;
+  padding-right: 0;
+  box-sizing: border-box;
+}
+
+html.is-pwa-standalone.is-ios-pwa .home-landing .home-topbar {
+  padding-top: max(10px, var(--safe-top, 0px));
+  padding-left: max(16px, var(--safe-left, 0px));
+  padding-right: max(16px, var(--safe-right, 0px));
+}
+
+html.is-pwa-standalone.is-ios-pwa .home-landing .home-header {
+  top: 0;
+  padding-left: var(--safe-left, 0px);
+  padding-right: var(--safe-right, 0px);
 }
 
 html.is-pwa-standalone:has(.home-landing.home-command),
@@ -21731,12 +21762,12 @@ html.is-pwa-standalone .activate-page-shell {
   box-sizing: border-box;
 }
 
-html.is-pwa-standalone .login-shell > .login-page {
-  padding-bottom: calc(28px + max(34px, var(--safe-bottom, env(safe-area-inset-bottom, 0px)))) !important;
+html.is-pwa-standalone.is-ios-pwa .login-shell > .login-page {
+  padding-bottom: calc(28px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
 }
 
-html.is-pwa-standalone .activate-page-shell {
-  padding-bottom: max(34px, var(--safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
+html.is-pwa-standalone.is-ios-pwa .activate-page-shell {
+  padding-bottom: max(12px, var(--safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
 }
 
 html.is-ios-pwa .activate-page-header {
@@ -22398,9 +22429,11 @@ html.is-ios-pwa:not(.is-pwa-standalone) .home-landing .home-sticky-cta {
   box-sizing: border-box;
 }
 
-html.is-pwa-standalone .home-landing .home-sticky-cta {
+html.is-pwa-standalone.is-ios-pwa .home-landing .home-sticky-cta {
   bottom: calc(-1 * var(--pwa-bottom-gap, 0px)) !important;
-  padding-bottom: calc(12px + max(34px, var(--safe-bottom, env(safe-area-inset-bottom, 0px)))) !important;
+  padding-bottom: max(12px, var(--safe-bottom, 0px)) !important;
+  padding-left: max(16px, var(--safe-left, 0px)) !important;
+  padding-right: max(16px, var(--safe-right, 0px)) !important;
   background: rgba(5, 7, 12, 0.98) !important;
   box-sizing: border-box;
 }
@@ -27476,10 +27509,13 @@ html.light.is-pwa-standalone #atlly-student-nav-root {
   background: #ffffff !important;
 }
 
-html.is-pwa-standalone #atlly-student-nav-root > .student-bottom-nav,
-html.is-pwa-standalone nav.student-bottom-nav.student-bottom-nav--docked {
+html.is-pwa-standalone.is-ios-pwa #atlly-student-nav-root > .student-bottom-nav,
+html.is-pwa-standalone.is-ios-pwa nav.student-bottom-nav.student-bottom-nav--docked {
   padding-top: 8px !important;
-  padding-bottom: max(34px, env(safe-area-inset-bottom, 0px)) !important;
+  padding-right: max(10px, var(--safe-right, 0px)) !important;
+  padding-bottom: max(10px, var(--safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
+  padding-left: max(10px, var(--safe-left, 0px)) !important;
+  min-height: calc(var(--student-nav-bar, 64px) + var(--safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
   background: inherit !important;
 }
 

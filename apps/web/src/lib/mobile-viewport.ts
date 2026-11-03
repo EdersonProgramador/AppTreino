@@ -75,31 +75,38 @@ function readSafeAreaInsets() {
   };
 }
 
-function iphoneStandaloneBottomPad(rawBottom: number) {
-  if (!isStandalonePwa() || !/iPhone/.test(navigator.userAgent)) return rawBottom;
-  return Math.max(34, Math.round(rawBottom));
+/** Mesmo critério do SafeAreaProvider no Expo: inset real; iPhone PWA costuma zerar o bottom. */
+function resolveMobileSafeInsets(insets: { top: number; right: number; bottom: number; left: number }) {
+  const bottom =
+    isStandalonePwa() && /iPhone/.test(navigator.userAgent)
+      ? Math.max(34, Math.round(insets.bottom))
+      : insets.bottom;
+  return { ...insets, bottom };
 }
 
 /** Só grava px quando > 0 — zero quebra o fallback env() no CSS. */
 function applySafeAreaCssVars() {
   const root = document.documentElement;
-  const insets = readSafeAreaInsets();
+  const raw = readSafeAreaInsets();
+  const resolved = resolveMobileSafeInsets(raw);
   const expoPairs: Array<[string, number]> = [
-    ["--expo-safe-top", insets.top],
-    ["--expo-safe-right", insets.right],
-    ["--expo-safe-bottom", insets.bottom],
-    ["--expo-safe-left", insets.left]
+    ["--expo-safe-top", raw.top],
+    ["--expo-safe-right", raw.right],
+    ["--expo-safe-bottom", raw.bottom],
+    ["--expo-safe-left", raw.left]
   ];
   for (const [name, px] of expoPairs) {
     if (px > 0) root.style.setProperty(name, `${px}px`);
     else root.style.removeProperty(name);
   }
 
+  if (!isAppleTouchDevice()) return;
+
   const safePairs: Array<[string, number]> = [
-    ["--safe-top", insets.top],
-    ["--safe-right", insets.right],
-    ["--safe-left", insets.left],
-    ["--safe-bottom", iphoneStandaloneBottomPad(insets.bottom)]
+    ["--safe-top", resolved.top],
+    ["--safe-right", resolved.right],
+    ["--safe-left", resolved.left],
+    ["--safe-bottom", resolved.bottom]
   ];
   for (const [name, px] of safePairs) {
     if (px > 0) root.style.setProperty(name, `${px}px`);
@@ -125,7 +132,8 @@ function syncIosLayoutMetrics() {
   const layoutGap = Math.max(0, window.innerHeight - visualBottom);
   html.style.setProperty("--ios-layout-viewport-gap", `${Math.round(layoutGap)}px`);
 
-  let bottomPad = iphoneStandaloneBottomPad(raw.bottom);
+  const resolved = resolveMobileSafeInsets(raw);
+  let bottomPad = resolved.bottom;
   if (bottomPad <= 0) {
     bottomPad =
       parseFloat(getComputedStyle(html).getPropertyValue("--safe-bottom")) ||
@@ -226,10 +234,14 @@ function syncStandaloneViewport() {
   }
   html.style.setProperty("--pwa-bottom-gap", `${Math.min(gap, 120)}px`);
 
-  if (/iPhone/.test(navigator.userAgent)) {
-    const pad = iphoneStandaloneBottomPad(readSafeAreaInsets().bottom);
-    html.style.setProperty("--safe-bottom", `${pad}px`);
-    html.style.setProperty("--standalone-nav-safe-bottom", `${pad}px`);
+  if (!isAppleTouchDevice()) return;
+  const resolved = resolveMobileSafeInsets(readSafeAreaInsets());
+  if (resolved.top > 0) html.style.setProperty("--safe-top", `${Math.round(resolved.top)}px`);
+  if (resolved.right > 0) html.style.setProperty("--safe-right", `${Math.round(resolved.right)}px`);
+  if (resolved.left > 0) html.style.setProperty("--safe-left", `${Math.round(resolved.left)}px`);
+  if (resolved.bottom > 0) {
+    html.style.setProperty("--safe-bottom", `${Math.round(resolved.bottom)}px`);
+    html.style.setProperty("--standalone-nav-safe-bottom", `${Math.round(resolved.bottom)}px`);
   }
 }
 
