@@ -21522,6 +21522,33 @@ html.is-pwa-standalone body {
   background-image: none !important;
 }
 
+/* Portal aluno: tab bar no flex — trava a viewport como no app nativo (evita scroll do body + faixa inferior). */
+html.is-pwa-standalone.has-student-app-shell,
+html.is-pwa-standalone.has-student-app-shell body,
+html.is-pwa-standalone.has-student-app-shell #root {
+  height: var(--app-vh, 100dvh);
+  height: var(--app-vh, -webkit-fill-available);
+  max-height: var(--app-vh, 100dvh);
+  max-height: var(--app-vh, -webkit-fill-available);
+  min-height: var(--app-vh, 100dvh);
+  min-height: var(--app-vh, -webkit-fill-available);
+  overflow: hidden;
+}
+
+html.is-pwa-standalone.has-student-app-shell #root {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+html.is-pwa-standalone.has-student-app-shell .student-app-shell.is-activity:not(.workout-immersive)
+  .student-app-scroll {
+  padding-bottom: var(
+    --student-nav-offset,
+    calc(var(--student-nav-bar, 64px) + env(safe-area-inset-bottom, 0px))
+  ) !important;
+}
+
 /* iOS PWA: mesmas variáveis de inset que o Expo (SafeAreaProvider). */
 html.is-pwa-standalone.is-ios-pwa {
   --safe-top: var(--expo-safe-top, env(safe-area-inset-top, 0px));

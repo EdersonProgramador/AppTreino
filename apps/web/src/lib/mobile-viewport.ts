@@ -241,6 +241,9 @@ function syncStandaloneViewport() {
   if (resolved.bottom > 0) {
     html.style.setProperty("--safe-bottom", `${Math.round(resolved.bottom)}px`);
     html.style.setProperty("--standalone-nav-safe-bottom", `${Math.round(resolved.bottom)}px`);
+  } else if (isStandalonePwa() && /iPhone/.test(navigator.userAgent)) {
+    html.style.setProperty("--safe-bottom", "34px");
+    html.style.setProperty("--standalone-nav-safe-bottom", "34px");
   }
 }
 
