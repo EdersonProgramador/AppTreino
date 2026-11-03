@@ -7,16 +7,15 @@ export function getStudentBottomNavPortalRoot(): HTMLElement {
 
 export function shouldPinStudentBottomNavToViewport(): boolean {
   if (typeof window === "undefined") return false;
-  const ios =
-    /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  const standalone =
-    window.matchMedia("(display-mode: standalone)").matches ||
-    (navigator as Navigator & { standalone?: boolean }).standalone === true;
   const native =
     /AppTreinoMobile/i.test(navigator.userAgent) ||
     new URLSearchParams(window.location.search).get("app") === "mobile";
-  return ios || standalone || native || window.matchMedia("(max-width: 900px)").matches;
+  // Expo: tab bar no fluxo do flex (header | scroll | nav), não portal fixo.
+  if (native || isStandalonePwa()) return false;
+  const ios =
+    /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  return ios || window.matchMedia("(max-width: 900px)").matches;
 }
 
 let safeAreaProbe: HTMLDivElement | null = null;
