@@ -10,12 +10,13 @@ export function shouldPinStudentBottomNavToViewport(): boolean {
   const native =
     /AppTreinoMobile/i.test(navigator.userAgent) ||
     new URLSearchParams(window.location.search).get("app") === "mobile";
-  // Expo + PWA iOS instalado: tab bar in-flow (header | scroll | nav), como SafeAreaProvider + bottom tabs.
-  if (native || isStandalonePwa()) return false;
-  const ios =
-    /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  return ios || window.matchMedia("(max-width: 900px)").matches;
+  // WebView Expo: tab bar in-flow (header | scroll | nav).
+  if (native) return false;
+  const ios = isAppleTouchDevice();
+  const mobile = ios || window.matchMedia("(max-width: 900px)").matches;
+  if (!mobile) return false;
+  // Safari, WhatsApp, Instagram e PWA instalado: menu fixo no portal; conteúdo rola atrás (estilo WhatsApp).
+  return true;
 }
 
 let safeAreaProbe: HTMLDivElement | null = null;
