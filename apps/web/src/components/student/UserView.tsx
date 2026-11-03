@@ -3228,7 +3228,7 @@ export function UserView({ token, onLogout }: { token: string | null; onLogout: 
 
   const studentBottomNavInner = !hideStudentNav ? (
     <nav
-      className={`student-bottom-nav${portaledBottomNav ? " student-bottom-nav--docked" : ""}`}
+      className={`student-bottom-nav h-auto pb-[env(safe-area-inset-bottom,16px)]${portaledBottomNav ? " student-bottom-nav--docked" : ""}`}
       aria-label={brand.navAria}
     >
       <button className={isFeedFamilySection ? "active" : ""} onClick={() => goToSection("feed")}>

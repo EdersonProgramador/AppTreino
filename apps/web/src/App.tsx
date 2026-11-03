@@ -84,7 +84,7 @@ export const App = () => {
     <SoundProvider initialEnabled={soundEnabled} preload={ALL_UI_SOUND_PRELOAD}>
       <SoundLibrarySync enabled={soundEnabled} />
       <AuthProvider>
-        <div className={`ui-shell min-h-screen ${theme === "dark" ? "theme-dark" : "theme-light"}`}>
+        <div className={`ui-shell h-dvh min-h-dvh ${theme === "dark" ? "theme-dark" : "theme-light"}`}>
           <PwaUpdateBanner />
           <AppRoutes />
         </div>
