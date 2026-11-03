@@ -6033,7 +6033,7 @@ html.light .finance-hub-tabs button {
   --st-weight-label: 700;
   /* Safe area vem de html (:root + mobile-viewport); não redefinir aqui — no PWA iOS env() zera e anulava o inset medido. */
   --student-max: min(100%, 768px);
-  --student-nav-bar: 70px;
+  --student-nav-bar: 64px;
   --student-header-offset: calc(86px + var(--safe-top, env(safe-area-inset-top, 0px)));
   --student-nav-offset: calc(var(--student-nav-bar) + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
 
@@ -6064,6 +6064,12 @@ html.light .finance-hub-tabs button {
   min-height: 100svh;
   height: 100svh;
   height: 100dvh;
+}
+
+html.is-pwa-standalone.has-student-app-shell .student-app-shell.workout-immersive {
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
 }
 
 .student-app-shell.workout-immersive .student-bottom-nav {
@@ -6193,8 +6199,12 @@ html.light .finance-hub-tabs button {
   background: #0b1a12;
 }
 
-.student-app-shell.is-activity:not(.workout-immersive) .student-activity-dock {
-  bottom: var(--student-nav-offset);
+.student-app-shell.is-activity:not(.workout-immersive) .student-activity-dock,
+.student-app-shell.is-activity:not(.workout-immersive) .student-activity-sheet {
+  bottom: var(
+    --student-scroll-nav-clearance,
+    var(--student-bottom-nav-dock-height, var(--student-nav-offset))
+  );
 }
 
 .student-app-shell.is-activity .student-activity {
@@ -21530,8 +21540,12 @@ html.is-pwa-standalone:not(.has-portal-bottom-nav)
 /* Tab bar in-flow (Expo / WebView / PWA iOS instalado) */
 html.is-native-app .student-app-shell .student-bottom-nav,
 html.is-native-app .student-app-shell.is-play .student-bottom-nav,
-html.is-pwa-standalone.is-ios-pwa.has-student-app-shell .student-app-shell .student-bottom-nav,
-html.is-pwa-standalone.is-ios-pwa.has-student-app-shell .student-app-shell.is-play .student-bottom-nav,
+html.is-pwa-standalone.is-ios-pwa.has-student-app-shell:not(.has-portal-bottom-nav)
+  .student-app-shell
+  .student-bottom-nav,
+html.is-pwa-standalone.is-ios-pwa.has-student-app-shell:not(.has-portal-bottom-nav)
+  .student-app-shell.is-play
+  .student-bottom-nav,
 html.is-pwa-standalone:not(.is-ios-pwa) .student-app-shell .student-bottom-nav,
 html.is-pwa-standalone:not(.is-ios-pwa) .student-app-shell.is-play .student-bottom-nav {
   position: relative !important;
@@ -21672,8 +21686,12 @@ html.light.is-ios-pwa.has-student-app-shell #root {
   background-image: none !important;
 }
 
-html.is-pwa-standalone.has-student-app-shell .student-app-shell .student-bottom-nav,
-html.is-pwa-standalone.has-student-app-shell .student-app-shell.is-play .student-bottom-nav {
+html.is-pwa-standalone.has-student-app-shell:not(.has-portal-bottom-nav)
+  .student-app-shell
+  .student-bottom-nav,
+html.is-pwa-standalone.has-student-app-shell:not(.has-portal-bottom-nav)
+  .student-app-shell.is-play
+  .student-bottom-nav {
   flex: 0 0 auto !important;
   margin-top: auto !important;
   align-self: stretch !important;
@@ -27537,10 +27555,6 @@ html.light .student-activity-side {
   overflow: auto;
 }
 
-.student-app-shell.is-activity:not(.workout-immersive) .student-activity-sheet {
-  bottom: var(--student-nav-offset);
-}
-
 .student-activity-sheet header {
   display: flex;
   justify-content: space-between;
@@ -27824,7 +27838,7 @@ html.has-portal-bottom-nav
   bottom: var(
     --student-scroll-nav-clearance,
     var(--student-bottom-nav-dock-height, var(--student-nav-offset, 76px))
-  );
+  ) !important;
 }
 
 html.has-portal-bottom-nav

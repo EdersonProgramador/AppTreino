@@ -49,6 +49,7 @@ import {
   updateLapCrossing
 } from "../../lib/activity-geo";
 import { activityMapSrc, hasActivityMapProvider, mapsConfigMessage } from "../../lib/activity-map-src";
+import { STUDENT_NAV_DOCK_CHANGED } from "../../lib/mobile-viewport";
 import { WebGpsPipeline, fixFromGeolocation } from "../../lib/gps-filter";
 import {
   GPS_BACKGROUND_WARN_KEY,
@@ -711,15 +712,28 @@ export function StudentActivitySection({
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(push) : null;
     if (ro && mapEl) ro.observe(mapEl);
     if (ro && dockEl) ro.observe(dockEl);
+    const htmlMo =
+      typeof MutationObserver !== "undefined"
+        ? new MutationObserver(push)
+        : null;
+    htmlMo?.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "style"]
+    });
     window.addEventListener("resize", push);
+    window.addEventListener(STUDENT_NAV_DOCK_CHANGED, push);
     window.visualViewport?.addEventListener("resize", push);
     push();
     const raf = window.requestAnimationFrame(push);
+    const raf2 = window.requestAnimationFrame(() => window.requestAnimationFrame(push));
     return () => {
       ro?.disconnect();
+      htmlMo?.disconnect();
       window.removeEventListener("resize", push);
+      window.removeEventListener(STUDENT_NAV_DOCK_CHANGED, push);
       window.visualViewport?.removeEventListener("resize", push);
       window.cancelAnimationFrame(raf);
+      window.cancelAnimationFrame(raf2);
     };
   }, [running, paused]);
   useEffect(() => {

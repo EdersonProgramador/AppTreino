@@ -31,11 +31,22 @@ export function startPwaUpdateWatcher() {
       const check = () => {
         void registration.update().catch(() => undefined);
       };
+      const promptIfWaiting = () => {
+        if (!registration.waiting) return;
+        usePwaUpdateStore.getState().notifyUpdateAvailable(() => {
+          void updateSW(true);
+        });
+      };
       check();
       document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible") check();
+        if (document.visibilityState !== "visible") return;
+        check();
+        promptIfWaiting();
       });
-      window.addEventListener("focus", check);
+      window.addEventListener("focus", () => {
+        check();
+        promptIfWaiting();
+      });
     }
   });
 }

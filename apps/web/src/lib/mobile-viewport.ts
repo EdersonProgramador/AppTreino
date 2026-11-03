@@ -1,3 +1,5 @@
+export const STUDENT_NAV_DOCK_CHANGED = "atlly:student-nav-dock";
+
 export function getStudentBottomNavPortalRoot(): HTMLElement {
   if (typeof document === "undefined") {
     return null as unknown as HTMLElement;
@@ -231,15 +233,42 @@ function clearDockClearance() {
   html.style.removeProperty("--student-scroll-nav-clearance");
 }
 
+function readDockClearanceFallbackPx() {
+  const html = document.documentElement;
+  const styles = getComputedStyle(html);
+  const bar = parseFloat(styles.getPropertyValue("--student-nav-bar")) || 64;
+  const safe =
+    parseFloat(styles.getPropertyValue("--safe-bottom")) ||
+    parseFloat(styles.getPropertyValue("--expo-safe-bottom")) ||
+    16;
+  return Math.round(bar + 12 + safe);
+}
+
+function ensureDockClearanceFallback() {
+  const html = document.documentElement;
+  if (html.style.getPropertyValue("--student-scroll-nav-clearance").trim()) return;
+  const px = readDockClearanceFallbackPx();
+  html.style.setProperty("--student-scroll-nav-clearance", `${px}px`);
+  html.style.setProperty("--student-bottom-nav-dock-height", `${px}px`);
+}
+
+function dispatchDockClearanceChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(STUDENT_NAV_DOCK_CHANGED));
+}
+
 function publishDockClearance(root: HTMLElement) {
   const html = document.documentElement;
+  const prev = html.style.getPropertyValue("--student-scroll-nav-clearance");
   const dockHeight = Math.ceil(root.getBoundingClientRect().height);
   if (dockHeight > 0) {
     html.style.setProperty("--student-bottom-nav-dock-height", `${dockHeight}px`);
     html.style.setProperty("--student-scroll-nav-clearance", `${dockHeight}px`);
   } else {
-    clearDockClearance();
+    ensureDockClearanceFallback();
   }
+  const next = html.style.getPropertyValue("--student-scroll-nav-clearance");
+  if (prev !== next) dispatchDockClearanceChanged();
 }
 
 const DOCK_INLINE_PROPS = [
@@ -373,6 +402,7 @@ export function refreshStudentBottomNavDock() {
     html.classList.remove("has-student-nav-pinned");
     html.style.removeProperty("--student-nav-dock-padding-bottom");
     clearDockClearance();
+    if (html.classList.contains("has-portal-bottom-nav")) ensureDockClearanceFallback();
     syncMobileLayoutMetrics();
     return;
   }
@@ -402,28 +432,36 @@ export function refreshStudentBottomNavDock() {
 
 function wireStudentBottomNavPinObserver() {
   if (typeof document === "undefined" || navPinWired) return;
-  navPinWired = true;
 
-  const root = document.getElementById("atlly-student-nav-root");
-  if (!root) return;
+  const attach = () => {
+    if (navPinWired) return;
+    const root = document.getElementById("atlly-student-nav-root");
+    if (!root) return;
+    navPinWired = true;
 
-  const schedule = () => {
-    window.requestAnimationFrame(() => refreshStudentBottomNavDock());
+    const schedule = () => {
+      window.requestAnimationFrame(() => refreshStudentBottomNavDock());
+    };
+
+    navPinObserver = new MutationObserver(schedule);
+    navPinObserver.observe(root, { childList: true, subtree: true });
+
+    if (typeof ResizeObserver !== "undefined") {
+      navResizeObserver = new ResizeObserver(schedule);
+      navResizeObserver.observe(root);
+    }
+
+    window.addEventListener("resize", schedule);
+    window.addEventListener("orientationchange", () => window.setTimeout(schedule, 150));
+    window.visualViewport?.addEventListener("resize", schedule);
+    window.visualViewport?.addEventListener("scroll", schedule);
+    schedule();
   };
 
-  navPinObserver = new MutationObserver(schedule);
-  navPinObserver.observe(root, { childList: true, subtree: true });
-
-  if (typeof ResizeObserver !== "undefined") {
-    navResizeObserver = new ResizeObserver(schedule);
-    navResizeObserver.observe(root);
+  attach();
+  if (!navPinWired) {
+    document.addEventListener("DOMContentLoaded", attach, { once: true });
   }
-
-  window.addEventListener("resize", schedule);
-  window.addEventListener("orientationchange", () => window.setTimeout(schedule, 150));
-  window.visualViewport?.addEventListener("resize", schedule);
-  window.visualViewport?.addEventListener("scroll", schedule);
-  schedule();
 }
 
 /** Mobile / PWA: safe-area vars + observer do menu inferior. */
