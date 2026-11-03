@@ -27393,7 +27393,7 @@ html.light #atlly-student-nav-root {
 
 html.has-student-nav-pinned.light body,
 html.has-portal-bottom-nav.light body {
-  background-color: var(--app-bg) !important;
+  background-color: rgba(255, 255, 255, 0.98) !important;
 }
 
 #atlly-student-nav-root:empty {
@@ -27415,13 +27415,11 @@ nav.student-bottom-nav.student-bottom-nav--docked {
   min-height: var(--student-nav-bar, 64px) !important;
   height: auto !important;
   max-height: none !important;
-  padding: 6px max(12px, var(--safe-right, 0px)) 6px max(12px, var(--safe-left, 0px)) !important;
-  border-radius: 18px 18px 0 0 !important;
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.12) !important;
-  background:
-    linear-gradient(180deg, rgba(212, 175, 55, 0.04), transparent 28%),
-    var(--app-bg-soft) !important;
+  padding: 8px max(12px, var(--safe-right, 0px)) 8px max(12px, var(--safe-left, 0px)) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
   border-top: 1px solid rgba(212, 175, 55, 0.14) !important;
+  background: var(--app-bg-soft) !important;
   transform: none !important;
   pointer-events: auto;
   z-index: 120 !important;
@@ -27434,7 +27432,7 @@ nav.student-bottom-nav.student-bottom-nav--docked {
 html.light #atlly-student-nav-root > .student-bottom-nav,
 html.light nav.student-bottom-nav.student-bottom-nav--docked {
   background: rgba(255, 255, 255, 0.98) !important;
-  box-shadow: 0 -8px 28px rgba(45, 36, 24, 0.08) !important;
+  border-top-color: var(--app-border) !important;
 }
 
 html.has-portal-bottom-nav,

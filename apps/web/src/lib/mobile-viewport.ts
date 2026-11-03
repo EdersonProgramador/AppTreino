@@ -75,20 +75,38 @@ function readSafeAreaInsets() {
   };
 }
 
+/** iOS PWA/Safari often reports 0 from env() — fallback for home indicator. */
+function resolveIosBottomInset(measuredBottom: number) {
+  if (measuredBottom > 0) return measuredBottom;
+  if (!isAppleTouchDevice()) return 0;
+  if (/iPhone/.test(navigator.userAgent)) return 34;
+  if (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) return 20;
+  return 0;
+}
+
+function readSafeAreaInsetsResolved() {
+  const insets = readSafeAreaInsets();
+  const bottom = resolveIosBottomInset(insets.bottom);
+  return { ...insets, bottom };
+}
+
 /** Só grava px quando > 0 — zero quebra o fallback env() no CSS. */
-function applySafeAreaCssVars(insets: ReturnType<typeof readSafeAreaInsets>) {
+function applySafeAreaCssVars() {
   const root = document.documentElement;
-  const pairs: Array<[string, number]> = [
-    ["--expo-safe-top", insets.top],
-    ["--expo-safe-right", insets.right],
-    ["--expo-safe-bottom", insets.bottom],
-    ["--expo-safe-left", insets.left],
-    ["--safe-top", insets.top],
-    ["--safe-right", insets.right],
-    ["--safe-bottom", insets.bottom],
-    ["--safe-left", insets.left]
+  const resolved = isAppleTouchDevice()
+    ? readSafeAreaInsetsResolved()
+    : readSafeAreaInsets();
+  const resolvedPairs: Array<[string, number]> = [
+    ["--expo-safe-top", resolved.top],
+    ["--expo-safe-right", resolved.right],
+    ["--expo-safe-bottom", resolved.bottom],
+    ["--expo-safe-left", resolved.left],
+    ["--safe-top", resolved.top],
+    ["--safe-right", resolved.right],
+    ["--safe-bottom", resolved.bottom],
+    ["--safe-left", resolved.left]
   ];
-  for (const [name, px] of pairs) {
+  for (const [name, px] of resolvedPairs) {
     if (px > 0) root.style.setProperty(name, `${px}px`);
     else root.style.removeProperty(name);
   }
@@ -107,7 +125,7 @@ function syncIosLayoutMetrics() {
   if (!isIosDevice()) return;
 
   const html = document.documentElement;
-  const insets = readSafeAreaInsets();
+  const insets = readSafeAreaInsetsResolved();
   const visualBottom = visualViewportBottom();
   const layoutGap = Math.max(0, window.innerHeight - visualBottom);
   html.style.setProperty("--ios-layout-viewport-gap", `${Math.round(layoutGap)}px`);
@@ -142,24 +160,23 @@ function publishDockClearance(root: HTMLElement) {
 /** Cola o dock na borda inferior real (PWA iOS often leaves a gap with env() alone). */
 function sealStudentNavDockToScreenBottom(root: HTMLElement, attempt = 0) {
   const html = document.documentElement;
-  const insets = readSafeAreaInsets();
+  const insets = readSafeAreaInsetsResolved();
   const rect = root.getBoundingClientRect();
+  const visualBottom = visualViewportBottom();
   const layoutGap = Math.max(0, window.innerHeight - rect.bottom);
-  const safePad = Math.max(insets.bottom, 0);
-  const totalPad = Math.round(safePad + layoutGap);
+  const viewportGap = Math.max(0, window.innerHeight - visualBottom);
+  const safePad = insets.bottom;
+  const totalPad = Math.round(Math.max(safePad + layoutGap, safePad + viewportGap, safePad));
 
-  if (totalPad > 0) {
-    root.style.setProperty("padding-bottom", `${totalPad}px`, "important");
-    html.style.setProperty("--student-nav-dock-padding-bottom", `${totalPad}px`);
-  } else {
-    root.style.removeProperty("padding-bottom");
-    html.style.removeProperty("--student-nav-dock-padding-bottom");
-  }
+  root.style.setProperty("padding-bottom", `${totalPad}px`, "important");
+  html.style.setProperty("--student-nav-dock-padding-bottom", `${totalPad}px`);
 
-  if (attempt < 4) {
+  if (attempt < 5) {
     window.requestAnimationFrame(() => {
       const nextGap = Math.max(0, window.innerHeight - root.getBoundingClientRect().bottom);
-      if (nextGap > 0.75) sealStudentNavDockToScreenBottom(root, attempt + 1);
+      if (nextGap > 0.75 || (isAppleTouchDevice() && totalPad < 20)) {
+        sealStudentNavDockToScreenBottom(root, attempt + 1);
+      }
     });
   }
 }
@@ -226,7 +243,7 @@ export function refreshStudentBottomNavDock() {
   applyDockPinStyles(root, navEl);
 
   const measure = () => {
-    applySafeAreaCssVars(readSafeAreaInsets());
+    applySafeAreaCssVars();
     applyDockPinStyles(root, navEl);
     publishDockClearance(root);
   };
@@ -287,7 +304,7 @@ export function wireMobileStudentViewport() {
       root.classList.remove("is-mobile-student-layout");
       syncAppViewportHeight();
       if (isIos) {
-        applySafeAreaCssVars(readSafeAreaInsets());
+        applySafeAreaCssVars();
         syncIosLayoutMetrics();
       }
       return;
@@ -296,7 +313,7 @@ export function wireMobileStudentViewport() {
     root.classList.add("is-mobile-student-layout");
 
     syncAppViewportHeight();
-    applySafeAreaCssVars(readSafeAreaInsets());
+    applySafeAreaCssVars();
     syncIosLayoutMetrics();
 
     root.style.setProperty("--student-nav-bar", "64px");
